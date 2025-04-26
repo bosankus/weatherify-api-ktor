@@ -1,0 +1,11 @@
+runtime: java17
+entrypoint: 'java -jar weatherify-api-all.jar'
+
+readiness_check:
+  path: /
+  check_interval_sec: 5
+  timeout_sec: 2
+  failure_threshold: 2
+
+env_variables:
+  GCP_PROJECT_ID: "1017382896100"
