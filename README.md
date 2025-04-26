@@ -1,12 +1,16 @@
-# api
+# Ktor Backend API
 
-This project was created using the [Ktor Project Generator](https://start.ktor.io).
+Ktor-Kmongo Backend Feedback API for [Compose-Weatherify Android app](https://github.com/bosankus/Compose-Weatherify)
 
-Here are some useful links to get you started:
+## Table of Contents
 
-- [Ktor Documentation](https://ktor.io/docs/home.html)
-- [Ktor GitHub page](https://github.com/ktorio/ktor)
-- The [Ktor Slack chat](https://app.slack.com/client/T09229ZC6/C0A974TJ9). You'll need to [request an invite](https://surveys.jetbrains.com/s3/kotlin-slack-sign-up) to join.
+- [Introduction](#introduction)
+- [Features](#features)
+
+## Introduction
+
+- This is a playground project but fully working Ktor - Kmongo backend for [Compose-Weatherify Android app](https://github.com/bosankus/Compose-Weatherify)
+- JAR is deployed on GCP App Engine.
 
 ## Features
 
