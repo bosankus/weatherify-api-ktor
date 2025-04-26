@@ -1,4 +1,4 @@
-# Ktor Backend API
+# Weatherify- Ktor Backend API
 
 Ktor-Kmongo Backend Feedback API for [Compose-Weatherify Android app](https://github.com/bosankus/Compose-Weatherify)
 
