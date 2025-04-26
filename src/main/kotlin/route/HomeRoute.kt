@@ -1,18 +1,10 @@
 package bose.ankush.route
 
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.html.respondHtml
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
-import io.ktor.server.routing.route
-import kotlinx.html.body
-import kotlinx.html.h4
-import kotlinx.html.head
-import kotlinx.html.p
-import kotlinx.html.style
-import kotlinx.html.title
-import kotlinx.html.unsafe
+import io.ktor.http.*
+import io.ktor.server.html.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import kotlinx.html.*
 
 fun Route.homeRoute() {
     val name = "Androidplay API Portal"
@@ -20,9 +12,7 @@ fun Route.homeRoute() {
         get {
             call.respondHtml(HttpStatusCode.OK) {
                 head {
-                    title {
-                        +name
-                    }
+                    title { +name }
                     style {
                         unsafe {
                             raw(
