@@ -51,6 +51,7 @@ dependencies {
     implementation(libs.logback.classic)
     implementation(libs.kotlin.mongo.driver)
     implementation(libs.kotlin.mongo.bson)
+    implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.html)
     implementation(libs.gcp.secret.manager)
     implementation(libs.ktor.client.core)

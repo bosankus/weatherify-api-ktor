@@ -1,17 +1,22 @@
 package bose.ankush.data.model
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonIgnoreUnknownKeys
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
+@JsonIgnoreUnknownKeys
 data class Weather(
-    val id: Long,
+    val id: Long?=null,
     val alerts: List<Alert?>? = listOf(),
     val current: Current? = null,
     val daily: List<Daily?>? = listOf(),
     val hourly: List<Hourly?>? = listOf(),
 ) {
     @Serializable
+    @JsonIgnoreUnknownKeys
     data class Alert(
         val description: String?,
         val end: Int?,
@@ -21,6 +26,7 @@ data class Weather(
     )
 
     @Serializable
+    @JsonIgnoreUnknownKeys
     data class Current(
         val clouds: Int?,
         val dt: Long?,
@@ -37,13 +43,14 @@ data class Weather(
     )
 
     @Serializable
+    @JsonIgnoreUnknownKeys
     data class Daily(
         val clouds: Int?,
         @SerialName("dew_point") val dewPoint: Double?,
         val dt: Long?,
         val humidity: Int?,
         val pressure: Int?,
-        val rain: Double?,
+        val rain: Double? = null,
         val summary: String?,
         val sunrise: Int?,
         val sunset: Int?,
@@ -65,6 +72,7 @@ data class Weather(
     }
 
     @Serializable
+    @JsonIgnoreUnknownKeys
     data class Hourly(
         val clouds: Int?,
         val dt: Long?,
@@ -77,6 +85,6 @@ data class Weather(
 
 @Serializable
 data class WeatherData(
-    val description: String, val icon: String, val id: Int, val main: String
+    val description: String, val icon: String, val id: Int?=null, val main: String
 )
 
