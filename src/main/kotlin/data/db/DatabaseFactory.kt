@@ -37,7 +37,8 @@ object DatabaseFactory {
 
     suspend fun updateWeatherData(weather: Weather): Boolean {
         val query = Document("_id", weather.id)
-        return if (query.isEmpty()) {
+        val existingDocument = weatherCollection.find(query).firstOrNull()
+        return if (existingDocument != null) {
             val updateResult = weatherCollection.replaceOne(query, weather)
             updateResult.modifiedCount > 0
         } else {
