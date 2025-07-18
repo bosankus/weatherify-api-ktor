@@ -35,15 +35,7 @@ object DatabaseFactory {
         return feedbackCollection.deleteOne(query).wasAcknowledged()
     }
 
-    suspend fun updateWeatherData(weather: Weather): Boolean {
-        val query = Document("_id", weather.id)
-        val existingDocument = weatherCollection.find(query).firstOrNull()
-        return if (existingDocument != null) {
-            val updateResult = weatherCollection.replaceOne(query, weather)
-            updateResult.modifiedCount > 0
-        } else {
-            weatherCollection.insertOne(weather)
-            true
-        }
+    suspend fun saveWeatherData(weather: Weather) {
+        weatherCollection.insertOne(weather)
     }
 }
