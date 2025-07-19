@@ -8,6 +8,9 @@ import bose.ankush.route.common.*
 import io.ktor.http.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 /**
  * Routes for feedback functionality
@@ -54,12 +57,16 @@ fun Route.feedbackRoute() {
                             feedbackDescription = params["feedbackDescription"]!!
                         )
 
-                        val success = createOrUpdateFeedback(feedback)
-                        if (success) {
-                            RouteResult.success(feedback.id)
-                        } else {
-                            RouteResult.error("Failed to save feedback", HttpStatusCode.Conflict)
+                        // Return the feedback ID immediately and process database operation asynchronously
+                        // This improves performance by not blocking the request thread
+                        GlobalScope.launch(Dispatchers.IO) {
+                            val success = createOrUpdateFeedback(feedback)
+                            if (!success) {
+                                println("Failed to save feedback: ${feedback.id}")
+                            }
                         }
+
+                        RouteResult.success(feedback.id)
                     }
 
                     is RouteResult.Error -> requiredParams

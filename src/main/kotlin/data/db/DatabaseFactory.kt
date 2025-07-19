@@ -22,14 +22,13 @@ object DatabaseFactory {
     suspend fun createOrUpdateFeedback(feedback: Feedback): Boolean {
         val query = Document("_id", feedback.id)
         return try {
-            val existingFeedback = feedbackCollection.find(query).firstOrNull()
-            if (existingFeedback != null) {
-                val updateResult = feedbackCollection.replaceOne(query, feedback)
-                updateResult.modifiedCount > 0
-            } else {
-                feedbackCollection.insertOne(feedback)
-                true
-            }
+            // Use upsert operation to reduce database round trips
+            val updateResult = feedbackCollection.replaceOne(
+                filter = query,
+                replacement = feedback,
+                options = com.mongodb.client.model.ReplaceOptions().upsert(true)
+            )
+            updateResult.wasAcknowledged()
         } catch (_: Exception) {
             false
         }

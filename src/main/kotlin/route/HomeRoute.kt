@@ -804,6 +804,27 @@ fun Route.homeRoute() {
                                     }
                                 }
 
+                                /* Safari fallback animations */
+                                @keyframes fade-in {
+                                    from { opacity: 0; }
+                                    to { opacity: 1; }
+                                }
+
+                                @keyframes fade-out {
+                                    from { opacity: 1; }
+                                    to { opacity: 0; }
+                                }
+
+                                @-webkit-keyframes fade-in {
+                                    from { opacity: 0; }
+                                    to { opacity: 1; }
+                                }
+
+                                @-webkit-keyframes fade-out {
+                                    from { opacity: 1; }
+                                    to { opacity: 0; }
+                                }
+
                                 ::view-transition-old(root) {
                                     animation: reveal-out 0.5s ease-in-out forwards;
                                     -webkit-animation: reveal-out 0.5s ease-in-out forwards;
@@ -945,15 +966,23 @@ fun Route.homeRoute() {
                                             return;
                                         }
 
+                                        // Prepare modal content before showing
                                         modalTitle.textContent = title;
                                         modalContent.innerHTML = content;
+
+                                        // Set initial styles
+                                        modal.style.opacity = '0';
+                                        modalContentDiv.style.transform = 'translateY(20px)';
                                         modal.style.display = 'block';
 
-                                        // Trigger animation
-                                        setTimeout(() => {
-                                            modal.style.opacity = '1';
-                                            modalContentDiv.style.transform = 'translateY(0)';
-                                        }, 10);
+                                        // Force browser to process the display change before animation
+                                        requestAnimationFrame(() => {
+                                            // Use another requestAnimationFrame to ensure the first change was processed
+                                            requestAnimationFrame(() => {
+                                                modal.style.opacity = '1';
+                                                modalContentDiv.style.transform = 'translateY(0)';
+                                            });
+                                        });
 
                                         document.body.style.overflow = 'hidden';
 
@@ -974,20 +1003,60 @@ fun Route.homeRoute() {
                                             return;
                                         }
 
-                                        // Trigger animation
-                                        modal.style.opacity = '0';
-                                        modalContentDiv.style.transform = 'translateY(20px)';
+                                        // Get the computed transition duration to ensure we wait the right amount of time
+                                        const transitionDuration = getTransitionDuration(modal) || 300;
 
-                                        // Wait for animation to complete before hiding
-                                        setTimeout(() => {
-                                            modal.style.display = 'none';
-                                            document.body.style.overflow = 'auto';
-                                        }, 300);
+                                        // Trigger animation
+                                        requestAnimationFrame(() => {
+                                            modal.style.opacity = '0';
+                                            modalContentDiv.style.transform = 'translateY(20px)';
+
+                                            // Wait for animation to complete before hiding
+                                            setTimeout(() => {
+                                                modal.style.display = 'none';
+                                                document.body.style.overflow = 'auto';
+                                            }, transitionDuration);
+                                        });
 
                                         // Remove keyboard event listener
                                         document.removeEventListener('keydown', handleEscKey);
                                     } catch (error) {
                                         console.error('Error closing modal:', error);
+                                        // Fallback in case of error
+                                        try {
+                                            const modal = document.getElementById('apiModal');
+                                            if (modal) {
+                                                modal.style.display = 'none';
+                                                document.body.style.overflow = 'auto';
+                                            }
+                                        } catch (e) {
+                                            console.error('Critical error closing modal:', e);
+                                        }
+                                    }
+                                }
+
+                                /**
+                                 * Helper function to get transition duration from computed style
+                                 * @param {HTMLElement} element - The element to check
+                                 * @returns {number} - Transition duration in milliseconds
+                                 */
+                                function getTransitionDuration(element) {
+                                    if (!element) return 300;
+
+                                    try {
+                                        const style = window.getComputedStyle(element);
+                                        const duration = style.transitionDuration || '0.3s';
+
+                                        // Convert to milliseconds
+                                        if (duration.indexOf('ms') > -1) {
+                                            return parseFloat(duration);
+                                        } else if (duration.indexOf('s') > -1) {
+                                            return parseFloat(duration) * 1000;
+                                        }
+                                        return 300;
+                                    } catch (error) {
+                                        console.warn('Error getting transition duration:', error);
+                                        return 300;
                                     }
                                 }
 
@@ -1029,8 +1098,11 @@ fun Route.homeRoute() {
                                         htmlElement.style.setProperty('--x', x + 'px');
                                         htmlElement.style.setProperty('--y', y + 'px');
 
+                                        // Detect Safari
+                                        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
                                         // Apply theme with animation if supported
-                                        if (document.startViewTransition) {
+                                        if (document.startViewTransition && !isSafari) {
                                             document.startViewTransition(() => {
                                                 if (isDarkTheme) {
                                                     htmlElement.classList.add('light-theme');
@@ -1040,10 +1112,49 @@ fun Route.homeRoute() {
                                             });
                                         } else {
                                             // Fallback for browsers that don't support View Transitions API
-                                            if (isDarkTheme) {
-                                                htmlElement.classList.add('light-theme');
+                                            // Create a temporary overlay for fade animation
+                                            if (isSafari) {
+                                                const overlay = document.createElement('div');
+                                                overlay.style.position = 'fixed';
+                                                overlay.style.top = '0';
+                                                overlay.style.left = '0';
+                                                overlay.style.width = '100%';
+                                                overlay.style.height = '100%';
+                                                overlay.style.backgroundColor = isDarkTheme ? '#ffffff' : '#1a1a2e';
+                                                overlay.style.opacity = '0';
+                                                overlay.style.zIndex = '9999';
+                                                overlay.style.pointerEvents = 'none';
+                                                overlay.style.transition = 'opacity 0.3s ease';
+                                                document.body.appendChild(overlay);
+
+                                                // Fade in
+                                                requestAnimationFrame(() => {
+                                                    overlay.style.opacity = '0.2';
+
+                                                    // Change theme after a small delay
+                                                    setTimeout(() => {
+                                                        if (isDarkTheme) {
+                                                            htmlElement.classList.add('light-theme');
+                                                        } else {
+                                                            htmlElement.classList.remove('light-theme');
+                                                        }
+
+                                                        // Fade out and remove overlay
+                                                        overlay.style.opacity = '0';
+                                                        setTimeout(() => {
+                                                            if (document.body.contains(overlay)) {
+                                                                document.body.removeChild(overlay);
+                                                            }
+                                                        }, 300);
+                                                    }, 50);
+                                                });
                                             } else {
-                                                htmlElement.classList.remove('light-theme');
+                                                // Simple toggle for other browsers without animation
+                                                if (isDarkTheme) {
+                                                    htmlElement.classList.add('light-theme');
+                                                } else {
+                                                    htmlElement.classList.remove('light-theme');
+                                                }
                                             }
                                         }
 
@@ -1127,42 +1238,63 @@ fun Route.homeRoute() {
                                  * Initialize theme toggle functionality
                                  */
                                 function initializeTheme() {
-                                    const themeToggle = document.getElementById('theme-toggle');
-                                    if (!themeToggle) {
-                                        console.warn('Theme toggle element not found');
-                                        return;
-                                    }
-
-                                    // Check for saved preference or system preference
-                                    const savedTheme = localStorage.getItem('theme');
-                                    const prefersDark = window.matchMedia && 
-                                        window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-                                    // Apply saved theme or system preference
-                                    if (savedTheme === 'light' || (!savedTheme && !prefersDark)) {
-                                        document.documentElement.classList.add('light-theme');
-                                        themeToggle.checked = true;
-                                    }
-
-                                    // Add event listener for toggle
-                                    themeToggle.addEventListener('change', toggleTheme);
-
-                                    // Listen for system theme changes
-                                    if (window.matchMedia) {
-                                        const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-                                        if (colorSchemeQuery.addEventListener) {
-                                            colorSchemeQuery.addEventListener('change', (e) => {
-                                                if (!localStorage.getItem('theme')) {
-                                                    if (e.matches) {
-                                                        document.documentElement.classList.remove('light-theme');
-                                                        themeToggle.checked = false;
-                                                    } else {
-                                                        document.documentElement.classList.add('light-theme');
-                                                        themeToggle.checked = true;
-                                                    }
-                                                }
-                                            });
+                                    try {
+                                        const themeToggle = document.getElementById('theme-toggle');
+                                        if (!themeToggle) {
+                                            console.warn('Theme toggle element not found');
+                                            return;
                                         }
+
+                                        // Check for saved preference or system preference
+                                        const savedTheme = localStorage.getItem('theme');
+                                        const prefersDark = window.matchMedia && 
+                                            window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+                                        // Apply saved theme or system preference immediately
+                                        // This prevents flash of unstyled content (FOUC)
+                                        if (savedTheme === 'light' || (!savedTheme && !prefersDark)) {
+                                            document.documentElement.classList.add('light-theme');
+                                            if (themeToggle) themeToggle.checked = true;
+                                        } else {
+                                            document.documentElement.classList.remove('light-theme');
+                                            if (themeToggle) themeToggle.checked = false;
+                                        }
+
+                                        // Add event listener for toggle
+                                        themeToggle.addEventListener('change', toggleTheme);
+
+                                        // Listen for system theme changes
+                                        if (window.matchMedia) {
+                                            const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                                            if (colorSchemeQuery.addEventListener) {
+                                                colorSchemeQuery.addEventListener('change', (e) => {
+                                                    if (!localStorage.getItem('theme')) {
+                                                        if (e.matches) {
+                                                            document.documentElement.classList.remove('light-theme');
+                                                            themeToggle.checked = false;
+                                                        } else {
+                                                            document.documentElement.classList.add('light-theme');
+                                                            themeToggle.checked = true;
+                                                        }
+                                                    }
+                                                });
+                                            } else if (colorSchemeQuery.addListener) {
+                                                // Fallback for Safari
+                                                colorSchemeQuery.addListener((e) => {
+                                                    if (!localStorage.getItem('theme')) {
+                                                        if (e.matches) {
+                                                            document.documentElement.classList.remove('light-theme');
+                                                            themeToggle.checked = false;
+                                                        } else {
+                                                            document.documentElement.classList.add('light-theme');
+                                                            themeToggle.checked = true;
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    } catch (error) {
+                                        console.error('Error initializing theme:', error);
                                     }
                                 }
 
