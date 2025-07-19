@@ -37,7 +37,7 @@ data class Weather(
         val sunset: Int?,
         val temp: Double?,
         val uvi: Double?,
-        val weather: List<Weather?>? = listOf(),
+        val weather: List<WeatherData?>? = listOf(),
         val wind_gust: Double?,
         val wind_speed: Double?
     )
@@ -56,7 +56,7 @@ data class Weather(
         val sunset: Int?,
         val temp: Temp?,
         val uvi: Double?,
-        val weather: List<Weather?>? = listOf(),
+        val weather: List<WeatherData?>? = listOf(),
         @SerialName("wind_gust") val windGust: Double?,
         @SerialName("wind_speed") val windSpeed: Double?
     ) {

@@ -21,12 +21,17 @@ object DatabaseFactory {
 
     suspend fun createOrUpdateFeedback(feedback: Feedback): Boolean {
         val query = Document("_id", feedback.id)
-        return if (query.isEmpty()) {
-            val updateResult = feedbackCollection.replaceOne(query, feedback)
-            updateResult.modifiedCount > 0
-        } else {
-            feedbackCollection.insertOne(feedback)
-            true
+        return try {
+            val existingFeedback = feedbackCollection.find(query).firstOrNull()
+            if (existingFeedback != null) {
+                val updateResult = feedbackCollection.replaceOne(query, feedback)
+                updateResult.modifiedCount > 0
+            } else {
+                feedbackCollection.insertOne(feedback)
+                true
+            }
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -35,7 +40,12 @@ object DatabaseFactory {
         return feedbackCollection.deleteOne(query).wasAcknowledged()
     }
 
-    suspend fun saveWeatherData(weather: Weather) {
-        weatherCollection.insertOne(weather)
+    suspend fun saveWeatherData(weather: Weather): Boolean {
+        return try {
+            weatherCollection.insertOne(weather)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 }

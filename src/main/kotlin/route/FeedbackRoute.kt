@@ -4,118 +4,88 @@ import bose.ankush.data.db.DatabaseFactory.createOrUpdateFeedback
 import bose.ankush.data.db.DatabaseFactory.deleteFeedbackById
 import bose.ankush.data.db.DatabaseFactory.getFeedbackById
 import bose.ankush.data.model.Feedback
-import bose.ankush.data.model.FeedbackResponse
+import bose.ankush.route.common.*
 import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.serialization.json.Json
 
+/**
+ * Routes for feedback functionality
+ */
 fun Route.feedbackRoute() {
     install(ContentNegotiation) {
-        json(Json {
-            prettyPrint = true
-            isLenient = true
-            ignoreUnknownKeys = true
-            coerceInputValues = true
-            allowSpecialFloatingPointValues = true
-            useArrayPolymorphism = false
-        })
+        defaultJson()
     }
-    route("/get-feedback") {
+
+    route("/feedback") {
+        // Get feedback by ID
         get {
-            val feedbackId = call.request.queryParameters["id"]
-            val feedback = feedbackId?.let { id -> getFeedbackById(id = id) }
-                ?: call.respond(
-                    status = HttpStatusCode.OK,
-                    message = FeedbackResponse(
-                        status = false,
-                        message = "Incorrect or no data provided",
-                        data = Unit
-                    )
-                )
+            call.executeRoute("Feedback retrieved successfully") {
+                val result = call.getQueryParameter("id")
 
-            call.respond(
-                status = HttpStatusCode.OK,
-                message = FeedbackResponse(
-                    status = true,
-                    message = "Feedback retrieved successfully",
-                    data = feedback
-                )
-            )
+                when (result) {
+                    is RouteResult.Success -> {
+                        val feedbackId = result.data
+                        val feedback = getFeedbackById(feedbackId)
+                            ?: return@executeRoute RouteResult.error("Feedback not found", HttpStatusCode.NotFound)
+
+                        RouteResult.success(feedback)
+                    }
+
+                    is RouteResult.Error -> result
+                }
+            }
         }
-    }
 
-    route("/add-feedback") {
+        // Add new feedback
         post {
-            val request: Feedback = try {
-                val parameters = call.request.queryParameters
-                Feedback(
-                    deviceId = parameters["deviceId"].toString(),
-                    deviceOs = parameters["deviceOs"].toString(),
-                    feedbackTitle = parameters["feedbackTitle"].toString(),
-                    feedbackDescription = parameters["feedbackDescription"].toString()
+            call.executeRoute("Feedback submitted successfully") {
+                val requiredParams = call.getRequiredParameters(
+                    "deviceId", "deviceOs", "feedbackTitle", "feedbackDescription"
                 )
-            } catch (e: Exception) {
-                e.message
-                call.respond(
-                    status = HttpStatusCode.BadRequest,
-                    message = FeedbackResponse(
-                        status = false,
-                        message = HttpStatusCode.BadRequest.description,
-                        data = Unit
-                    )
-                )
-                return@post
-            }
 
-            if (createOrUpdateFeedback(request)) {
-                call.respond(
+                when (requiredParams) {
+                    is RouteResult.Success -> {
+                        val params = requiredParams.data
+                        val feedback = Feedback(
+                            deviceId = params["deviceId"]!!,
+                            deviceOs = params["deviceOs"]!!,
+                            feedbackTitle = params["feedbackTitle"]!!,
+                            feedbackDescription = params["feedbackDescription"]!!
+                        )
 
-                    status = HttpStatusCode.OK,
-                    message = FeedbackResponse(
-                        status = true,
-                        message = "Feedback submitted successfully",
-                        data = request.id
-                    )
-                )
-            } else {
-                call.respond(
-                    status = HttpStatusCode.Conflict,
-                    message = FeedbackResponse(
-                        status = true,
-                        message = HttpStatusCode.Conflict.description,
-                        data = Unit
-                    )
-                )
+                        val success = createOrUpdateFeedback(feedback)
+                        if (success) {
+                            RouteResult.success(feedback.id)
+                        } else {
+                            RouteResult.error("Failed to save feedback", HttpStatusCode.Conflict)
+                        }
+                    }
+
+                    is RouteResult.Error -> requiredParams
+                }
             }
         }
-    }
 
-    route("/remove-feedback") {
+        // Delete feedback
         delete {
-            val feedbackId = call.request.queryParameters["id"]
-            val isFeedbackDeleted = feedbackId?.let { id -> deleteFeedbackById(id) } ?: false
+            call.executeRoute("Feedback removed successfully") {
+                val result = call.getQueryParameter("id")
 
-            if (isFeedbackDeleted) {
-                call.respond(
-                    status = HttpStatusCode.OK,
-                    message = FeedbackResponse(
-                        status = true,
-                        message = "Feedback removed successfully",
-                        data = Unit
-                    )
-                )
-            } else {
-                call.respond(
-                    status = HttpStatusCode.OK,
-                    message = FeedbackResponse(
-                        status = true,
-                        message = "Non-existent feedback can't be removed",
-                        data = Unit
-                    )
-                )
+                when (result) {
+                    is RouteResult.Success -> {
+                        val feedbackId = result.data
+                        val deleted = deleteFeedbackById(feedbackId)
+
+                        if (deleted) {
+                            RouteResult.success(Unit)
+                        } else {
+                            RouteResult.error("Feedback not found or could not be removed", HttpStatusCode.NotFound)
+                        }
+                    }
+
+                    is RouteResult.Error -> result
+                }
             }
         }
     }

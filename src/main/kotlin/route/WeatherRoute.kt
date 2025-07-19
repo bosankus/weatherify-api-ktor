@@ -3,6 +3,8 @@ package bose.ankush.route
 import bose.ankush.data.db.DatabaseFactory.saveWeatherData
 import bose.ankush.data.model.Weather
 import bose.ankush.getSecretValue
+import bose.ankush.route.common.respondError
+import bose.ankush.route.common.respondSuccess
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -12,7 +14,6 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
@@ -20,7 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
-// Configure HttpClient
+/**
+ * Configure HttpClient with proper caching and serialization
+ */
 private val weatherClient = HttpClient(CIO) {
     install(HttpCache)
     install(ContentNegotiation) {
@@ -32,25 +35,35 @@ private val weatherClient = HttpClient(CIO) {
     }
 }
 
-// Initialize API keys and URLs
+// Initialize API keys and URLs through lazy initialization
 private val apiKey by lazy { getSecretValue("weather-data-secret") }
 private val weatherUrl by lazy { getSecretValue("weather-data-url") }
 private val airPollutionUrl by lazy { getSecretValue("air-pollution-url") }
 
-// Extract location parameters from request
+/**
+ * Extract location parameters from the request
+ * @return Pair of latitude and longitude or null if missing
+ */
 private suspend fun ApplicationCall.extractLocationParams(): Pair<String, String>? {
     val lat = request.queryParameters["lat"]
     val lon = request.queryParameters["lon"]
 
     if (lat.isNullOrBlank() || lon.isNullOrBlank()) {
-        respond(mapOf("error" to "Missing mandatory query parameters: lat and lon"))
+        respondError("Missing mandatory query parameters: lat and lon", Unit)
         return null
     }
 
     return Pair(lat, lon)
 }
 
-// Fetch weather data
+/**
+ * Generic function to fetch weather data from APIs
+ * @param url API endpoint URL
+ * @param lat Latitude
+ * @param lon Longitude
+ * @param additionalParams Additional query parameters
+ * @return Result containing the response or an exception
+ */
 private suspend inline fun <reified T> fetchWeatherData(
     url: String,
     lat: String,
@@ -62,17 +75,20 @@ private suspend inline fun <reified T> fetchWeatherData(
             parameter("lat", lat)
             parameter("lon", lon)
             parameter("appid", apiKey)
-            additionalParams.forEach { (key, value) ->
-                parameter(key, value)
-            }
+            additionalParams.forEach { (key, value) -> parameter(key, value) }
         }.body<T>()
     }
 }
 
+/**
+ * Weather API routes
+ */
 fun Route.weatherRoute() {
-    route("/get-weather") {
+    route("/weather") {
+        // Get weather data
         get {
-            val (lat, lon) = call.extractLocationParams() ?: return@get
+            val locationParams = call.extractLocationParams() ?: return@get
+            val (lat, lon) = locationParams
 
             fetchWeatherData<Weather>(
                 url = weatherUrl,
@@ -80,34 +96,34 @@ fun Route.weatherRoute() {
                 lon = lon,
                 additionalParams = mapOf("exclude" to "minutely")
             ).onSuccess { weatherData ->
-                call.respond(weatherData)
+                call.respondSuccess("Weather data retrieved successfully", weatherData)
 
-                // Save data
+                // Save data asynchronously
                 withContext(Dispatchers.IO) {
-                    try {
-                        saveWeatherData(weatherData)
-                    } catch (e: Exception) {
-                        println("Error saving weather data: ${e.message}")
+                    val saved = saveWeatherData(weatherData)
+                    if (!saved) {
+                        println("Failed to save weather data")
                     }
                 }
             }.onFailure { e ->
-                call.respond(mapOf("error" to e.message))
+                call.respondError("Failed to fetch weather data: ${e.message}", Unit)
             }
         }
     }
 
-    route("/get-air-pollution") {
+    route("/air-pollution") {
         get {
-            val (lat, lon) = call.extractLocationParams() ?: return@get
+            val locationParams = call.extractLocationParams() ?: return@get
+            val (lat, lon) = locationParams
 
             fetchWeatherData<String>(
                 url = airPollutionUrl,
                 lat = lat,
                 lon = lon
             ).onSuccess { response ->
-                call.respond(response)
+                call.respondSuccess("Air pollution data retrieved successfully", response)
             }.onFailure { e ->
-                call.respond(mapOf("error" to e.message))
+                call.respondError("Failed to fetch air pollution data: ${e.message}", Unit)
             }
         }
     }
