@@ -4,13 +4,20 @@ import bose.ankush.data.db.DatabaseFactory.createOrUpdateFeedback
 import bose.ankush.data.db.DatabaseFactory.deleteFeedbackById
 import bose.ankush.data.db.DatabaseFactory.getFeedbackById
 import bose.ankush.data.model.Feedback
-import bose.ankush.route.common.*
-import io.ktor.http.*
-import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.routing.*
+import bose.ankush.route.common.RouteResult
+import bose.ankush.route.common.defaultJson
+import bose.ankush.route.common.executeRoute
+import bose.ankush.route.common.getQueryParameter
+import bose.ankush.route.common.getRequiredParameters
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.route
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Routes for feedback functionality
@@ -30,7 +37,10 @@ fun Route.feedbackRoute() {
                     is RouteResult.Success -> {
                         val feedbackId = result.data
                         val feedback = getFeedbackById(feedbackId)
-                            ?: return@executeRoute RouteResult.error("Feedback not found", HttpStatusCode.NotFound)
+                            ?: return@executeRoute RouteResult.error(
+                                "Feedback not found",
+                                HttpStatusCode.NotFound
+                            )
 
                         RouteResult.success(feedback)
                     }
@@ -56,10 +66,9 @@ fun Route.feedbackRoute() {
                             feedbackTitle = params["feedbackTitle"]!!,
                             feedbackDescription = params["feedbackDescription"]!!
                         )
-
                         // Return the feedback ID immediately and process database operation asynchronously
                         // This improves performance by not blocking the request thread
-                        GlobalScope.launch(Dispatchers.IO) {
+                        withContext(Dispatchers.IO) {
                             val success = createOrUpdateFeedback(feedback)
                             if (!success) {
                                 println("Failed to save feedback: ${feedback.id}")
@@ -87,7 +96,10 @@ fun Route.feedbackRoute() {
                         if (deleted) {
                             RouteResult.success(Unit)
                         } else {
-                            RouteResult.error("Feedback not found or could not be removed", HttpStatusCode.NotFound)
+                            RouteResult.error(
+                                "Feedback not found or could not be removed",
+                                HttpStatusCode.NotFound
+                            )
                         }
                     }
 

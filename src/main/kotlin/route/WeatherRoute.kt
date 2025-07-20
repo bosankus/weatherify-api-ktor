@@ -5,7 +5,7 @@ import bose.ankush.data.model.Weather
 import bose.ankush.getSecretValue
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
-import data.model.AirQuality
+import bose.ankush.data.model.AirQuality
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO

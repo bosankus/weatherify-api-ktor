@@ -1,4 +1,4 @@
-package data.model
+package bose.ankush.data.model
 
 
 import kotlinx.serialization.SerialName
