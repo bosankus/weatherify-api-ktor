@@ -11,6 +11,7 @@ fun Route.homeRoute() {
     route("/") {
         get {
             call.respondHtml(HttpStatusCode.OK) {
+                attributes["lang"] = "en"
                 head {
                     title { +pageName }
                     meta {
@@ -191,9 +192,8 @@ fun Route.homeRoute() {
                                 }
 
                                 @keyframes fadeIn {
-                                    to {
-                                        opacity: 1;
-                                    }
+                                    from { opacity: 0; }
+                                    to { opacity: 1; }
                                 }
 
                                 .brand-text {
@@ -207,8 +207,9 @@ fun Route.homeRoute() {
                                     font-weight: 700;
                                     background: linear-gradient(135deg, #6b7dbb, #3b4f7d);
                                     -webkit-background-clip: text;
-                                    -webkit-text-fill-color: transparent;
                                     background-clip: text;
+                                    -webkit-text-fill-color: transparent;
+                                    color: transparent;
                                     letter-spacing: -0.01em;
                                     position: relative;
                                     transition: all 0.3s ease;
@@ -232,12 +233,6 @@ fun Route.homeRoute() {
                                     background: rgba(59, 79, 125, 0.1);
                                 }
 
-                                @keyframes fadeIn {
-                                    to {
-                                        opacity: 1;
-                                    }
-                                }
-
                                 .tagline {
                                     font-size: 1.25rem;
                                     color: #b0b0b0;
@@ -259,10 +254,18 @@ fun Route.homeRoute() {
                                     margin-bottom: 4rem;
                                 }
 
+                                /* @supports feature query for backdrop-filter */
+                                @supports not (backdrop-filter: blur(10px)) and not (-webkit-backdrop-filter: blur(10px)) {
+                                    .card {
+                                        background: var(--bg-gradient-1); /* Solid background fallback */
+                                        border: 1px solid var(--card-border);
+                                    }
+                                }
+
                                 .card {
                                     background: var(--card-bg);
-                                    backdrop-filter: blur(10px);
                                     -webkit-backdrop-filter: blur(10px); /* Safari support */
+                                    backdrop-filter: blur(10px);
                                     border: 1px solid var(--card-border);
                                     border-radius: 12px;
                                     padding: 2rem;
@@ -275,6 +278,7 @@ fun Route.homeRoute() {
                                     flex-direction: column;
                                     justify-content: space-between;
                                     box-shadow: 0 4px 12px var(--card-shadow);
+                                    -webkit-user-select: none;
                                     user-select: none;
                                 }
 
@@ -435,6 +439,13 @@ fun Route.homeRoute() {
 
 
 
+                                /* @supports feature query for modal backdrop-filter */
+                                @supports not (backdrop-filter: blur(10px)) and not (-webkit-backdrop-filter: blur(10px)) {
+                                    .modal {
+                                        background-color: rgba(0, 0, 0, 0.9); /* Darker background as fallback */
+                                    }
+                                }
+
                                 .modal {
                                     display: none;
                                     position: fixed;
@@ -444,15 +455,23 @@ fun Route.homeRoute() {
                                     width: 100%;
                                     height: 100%;
                                     background-color: rgba(0, 0, 0, 0.8);
+                                    -webkit-backdrop-filter: blur(10px); /* Safari support */
                                     backdrop-filter: blur(10px);
                                     opacity: 0;
                                     transition: opacity 0.3s ease;
                                 }
 
+                                /* @supports feature query for modal-content backdrop-filter */
+                                @supports not (backdrop-filter: blur(20px)) and not (-webkit-backdrop-filter: blur(20px)) {
+                                    .modal-content {
+                                        background: var(--bg-gradient-3); /* Solid background fallback */
+                                    }
+                                }
+
                                 .modal-content {
                                     background: var(--modal-bg);
-                                    backdrop-filter: blur(20px);
                                     -webkit-backdrop-filter: blur(20px); /* Safari support */
+                                    backdrop-filter: blur(20px);
                                     border: 1px solid var(--modal-border);
                                     border-radius: 12px;
                                     margin: 5% auto;
@@ -531,6 +550,60 @@ fun Route.homeRoute() {
                                     white-space: pre-wrap;
                                 }
 
+                                /* Styled model containers */
+                                .model-container {
+                                    margin-bottom: 1.5rem;
+                                    border: 1px solid var(--response-border);
+                                    border-radius: 8px;
+                                    overflow: hidden;
+                                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                                    transition: transform 0.2s ease, box-shadow 0.2s ease;
+                                }
+
+                                .model-container:hover {
+                                    transform: translateY(-2px);
+                                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                                }
+
+                                .model-header {
+                                    background: linear-gradient(135deg, #3b4f7d, #2d3748);
+                                    color: white;
+                                    padding: 0.75rem 1.25rem;
+                                    font-weight: 600;
+                                    font-size: 1rem;
+                                    border-bottom: 1px solid var(--response-border);
+                                }
+
+                                .model-content {
+                                    padding: 1.25rem;
+                                    margin: 0;
+                                    background: var(--response-bg);
+                                }
+
+                                /* Parameter and description labels */
+                                .param-label, .desc-label {
+                                    display: inline-block;
+                                    font-weight: 600;
+                                    margin-right: 0.5rem;
+                                }
+
+                                .param-label {
+                                    color: #6b7dbb;
+                                }
+
+                                .desc-label {
+                                    color: #8ab4f8;
+                                    margin-top: 0.5rem;
+                                }
+
+                                /* Code styling */
+                                code {
+                                    background: rgba(0, 0, 0, 0.2);
+                                    padding: 0.2rem 0.4rem;
+                                    border-radius: 4px;
+                                    font-size: 0.85em;
+                                }
+
                                 .status {
                                     display: inline-flex;
                                     align-items: center;
@@ -573,16 +646,16 @@ fun Route.homeRoute() {
                                     background-color: rgba(0, 0, 0, 0.1);
                                 }
 
-                                @keyframes ripple {
+                                @-webkit-keyframes ripple {
                                     to {
-                                        transform: scale(2);
+                                        -webkit-transform: scale(2);
                                         opacity: 0;
                                     }
                                 }
 
-                                @-webkit-keyframes ripple {
+                                @keyframes ripple {
                                     to {
-                                        -webkit-transform: scale(2);
+                                        transform: scale(2);
                                         opacity: 0;
                                     }
                                 }
@@ -767,31 +840,21 @@ fun Route.homeRoute() {
                                 }
 
                                 /* View Transitions API animations */
-                                @keyframes reveal-in {
-                                    from {
-                                        clip-path: circle(0% at var(--x) var(--y));
-                                    }
-                                    to {
-                                        clip-path: circle(150% at var(--x) var(--y));
-                                    }
-                                }
-
-                                @keyframes reveal-out {
-                                    from {
-                                        clip-path: circle(150% at var(--x) var(--y));
-                                    }
-                                    to {
-                                        clip-path: circle(0% at var(--x) var(--y));
-                                    }
-                                }
-
-                                /* Add vendor prefixes for better browser support */
                                 @-webkit-keyframes reveal-in {
                                     from {
                                         -webkit-clip-path: circle(0% at var(--x) var(--y));
                                     }
                                     to {
                                         -webkit-clip-path: circle(150% at var(--x) var(--y));
+                                    }
+                                }
+
+                                @keyframes reveal-in {
+                                    from {
+                                        clip-path: circle(0% at var(--x) var(--y));
+                                    }
+                                    to {
+                                        clip-path: circle(150% at var(--x) var(--y));
                                     }
                                 }
 
@@ -804,18 +867,22 @@ fun Route.homeRoute() {
                                     }
                                 }
 
+                                @keyframes reveal-out {
+                                    from {
+                                        clip-path: circle(150% at var(--x) var(--y));
+                                    }
+                                    to {
+                                        clip-path: circle(0% at var(--x) var(--y));
+                                    }
+                                }
+
                                 /* Safari fallback animations */
-                                @keyframes fade-in {
+                                @-webkit-keyframes fade-in {
                                     from { opacity: 0; }
                                     to { opacity: 1; }
                                 }
 
-                                @keyframes fade-out {
-                                    from { opacity: 1; }
-                                    to { opacity: 0; }
-                                }
-
-                                @-webkit-keyframes fade-in {
+                                @keyframes fade-in {
                                     from { opacity: 0; }
                                     to { opacity: 1; }
                                 }
@@ -825,14 +892,19 @@ fun Route.homeRoute() {
                                     to { opacity: 0; }
                                 }
 
+                                @keyframes fade-out {
+                                    from { opacity: 1; }
+                                    to { opacity: 0; }
+                                }
+
                                 ::view-transition-old(root) {
-                                    animation: reveal-out 0.5s ease-in-out forwards;
                                     -webkit-animation: reveal-out 0.5s ease-in-out forwards;
+                                    animation: reveal-out 0.5s ease-in-out forwards;
                                 }
 
                                 ::view-transition-new(root) {
-                                    animation: reveal-in 0.5s ease-in-out forwards;
                                     -webkit-animation: reveal-in 0.5s ease-in-out forwards;
+                                    animation: reveal-in 0.5s ease-in-out forwards;
                                 }
 
                                 ::view-transition-image-pair(root) {
@@ -1114,7 +1186,9 @@ fun Route.homeRoute() {
                                             // Fallback for browsers that don't support View Transitions API
                                             // Create a temporary overlay for fade animation
                                             if (isSafari) {
+                                                // Create and add the overlay before changing the theme
                                                 const overlay = document.createElement('div');
+                                                overlay.id = 'theme-transition-overlay';
                                                 overlay.style.position = 'fixed';
                                                 overlay.style.top = '0';
                                                 overlay.style.left = '0';
@@ -1124,29 +1198,58 @@ fun Route.homeRoute() {
                                                 overlay.style.opacity = '0';
                                                 overlay.style.zIndex = '9999';
                                                 overlay.style.pointerEvents = 'none';
-                                                overlay.style.transition = 'opacity 0.3s ease';
+
+                                                // Add both standard and webkit-prefixed transitions for Safari
+                                                overlay.style.webkitTransition = 'opacity 0.5s ease';
+                                                overlay.style.transition = 'opacity 0.5s ease';
+
+                                                // Add clip-path for circular reveal effect
+                                                const xPos = x + 'px';
+                                                const yPos = y + 'px';
+                                                overlay.style.webkitClipPath = 'circle(0% at ' + xPos + ' ' + yPos + ')';
+                                                overlay.style.clipPath = 'circle(0% at ' + xPos + ' ' + yPos + ')';
+
+                                                // Remove any existing overlay first to prevent duplicates
+                                                const existingOverlay = document.getElementById('theme-transition-overlay');
+                                                if (existingOverlay) {
+                                                    document.body.removeChild(existingOverlay);
+                                                }
+
                                                 document.body.appendChild(overlay);
 
-                                                // Fade in
+                                                // Force browser to process the DOM changes
+                                                overlay.getBoundingClientRect();
+
+                                                // Use requestAnimationFrame for smoother animation
                                                 requestAnimationFrame(() => {
-                                                    overlay.style.opacity = '0.2';
+                                                    // First make the overlay visible
+                                                    overlay.style.opacity = '0.7';
 
-                                                    // Change theme after a small delay
-                                                    setTimeout(() => {
-                                                        if (isDarkTheme) {
-                                                            htmlElement.classList.add('light-theme');
-                                                        } else {
-                                                            htmlElement.classList.remove('light-theme');
-                                                        }
+                                                    // Then expand the clip-path
+                                                    requestAnimationFrame(() => {
+                                                        overlay.style.webkitClipPath = 'circle(150% at ' + xPos + ' ' + yPos + ')';
+                                                        overlay.style.clipPath = 'circle(150% at ' + xPos + ' ' + yPos + ')';
 
-                                                        // Fade out and remove overlay
-                                                        overlay.style.opacity = '0';
+                                                        // Apply theme change after animation starts
                                                         setTimeout(() => {
-                                                            if (document.body.contains(overlay)) {
-                                                                document.body.removeChild(overlay);
+                                                            if (isDarkTheme) {
+                                                                htmlElement.classList.add('light-theme');
+                                                            } else {
+                                                                htmlElement.classList.remove('light-theme');
                                                             }
-                                                        }, 300);
-                                                    }, 50);
+
+                                                            // Fade out and remove overlay
+                                                            setTimeout(() => {
+                                                                overlay.style.opacity = '0';
+
+                                                                setTimeout(() => {
+                                                                    if (document.body.contains(overlay)) {
+                                                                        document.body.removeChild(overlay);
+                                                                    }
+                                                                }, 500);
+                                                            }, 300);
+                                                        }, 200);
+                                                    });
                                                 });
                                             } else {
                                                 // Simple toggle for other browsers without animation
@@ -1229,10 +1332,47 @@ fun Route.homeRoute() {
 
                                         // Initialize background music
                                         initializeBackgroundMusic();
+
+                                        // Initialize event listeners for interactive elements
+                                        initializeEventListeners();
                                     } catch (error) {
                                         console.error('Error during initialization:', error);
                                     }
                                 });
+
+                                /**
+                                 * Initialize event listeners for interactive elements
+                                 */
+                                function initializeEventListeners() {
+                                    // GitHub link
+                                    const githubLink = document.getElementById('github-link');
+                                    if (githubLink) {
+                                        githubLink.addEventListener('click', function() {
+                                            const url = this.getAttribute('data-url');
+                                            if (url) {
+                                                window.open(url, '_blank');
+                                            }
+                                        });
+                                    }
+
+                                    // Modal close button
+                                    const modalClose = document.getElementById('modal-close');
+                                    if (modalClose) {
+                                        modalClose.addEventListener('click', closeModal);
+                                    }
+
+                                    // API cards
+                                    const apiCards = document.querySelectorAll('.card[data-title][data-content]');
+                                    apiCards.forEach(card => {
+                                        card.addEventListener('click', function() {
+                                            const title = this.getAttribute('data-title');
+                                            const content = this.getAttribute('data-content');
+                                            if (title && content) {
+                                                showModal(title, content);
+                                            }
+                                        });
+                                    });
+                                }
 
                                 /**
                                  * Initialize theme toggle functionality
@@ -1384,8 +1524,9 @@ fun Route.homeRoute() {
 
                                 // GitHub icon
                                 span {
-                                    classes = setOf("material-icons", "nav-icon")
-                                    attributes["onclick"] = "window.open('https://github.com/bosankus/weatherify-api-ktor', '_blank')"
+                                    classes = setOf("material-icons", "nav-icon", "github-link")
+                                    id = "github-link"
+                                    attributes["data-url"] = "https://github.com/bosankus/weatherify-api-ktor"
                                     +"code"
                                 }
                             }
@@ -1395,55 +1536,152 @@ fun Route.homeRoute() {
                             classes = setOf("content")
                             div {
                                 classes = setOf("card")
-                                attributes["onclick"] = "showModal('Weather API', `" +
-                                    "<h3>Weather API Endpoints</h3>" +
+                                id = "weather-api-card"
+                                attributes["data-title"] = "Weather API"
+                                attributes["data-content"] = "<h3>Weather API Endpoints</h3>" +
                                     "<div class='response-example'>" +
                                     "<strong>GET /weather</strong><br>" +
-                                    "Parameters: lat, lon<br>" +
-                                    "Returns weather data for specified coordinates" +
+                                    "<span class='param-label'>Parameters:</span> <code>lat</code> (latitude), <code>lon</code> (longitude)<br>" +
+                                    "<span class='desc-label'>Description:</span> Returns comprehensive weather data including current conditions, hourly and daily forecasts, and weather alerts" +
                                     "</div>" +
                                     "<div class='response-example'>" +
                                     "<strong>GET /air-pollution</strong><br>" +
-                                    "Parameters: lat, lon<br>" +
-                                    "Returns air pollution data for specified coordinates" +
+                                    "<span class='param-label'>Parameters:</span> <code>lat</code> (latitude), <code>lon</code> (longitude)<br>" +
+                                    "<span class='desc-label'>Description:</span> Returns detailed air quality information including AQI and pollutant concentrations" +
                                     "</div>" +
                                     "<h4>Weather Response Model:</h4>" +
-                                    "<div class='response-example'><pre>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Weather</div>" +
+                                    "<pre class='model-content'>" +
                                     "{\n" +
-                                    "  \"id\": Long,\n" +
-                                    "  \"alerts\": [Alert],\n" +
-                                    "  \"current\": Current,\n" +
-                                    "  \"daily\": [Daily],\n" +
-                                    "  \"hourly\": [Hourly]\n" +
-                                    "}\n\n" +
-                                    "Alert: {\n" +
-                                    "  \"description\": String,\n" +
-                                    "  \"end\": Int,\n" +
-                                    "  \"event\": String,\n" +
-                                    "  \"sender_name\": String,\n" +
-                                    "  \"start\": Int\n" +
-                                    "}\n\n" +
-                                    "Current: {\n" +
-                                    "  \"clouds\": Int,\n" +
-                                    "  \"dt\": Long,\n" +
-                                    "  \"feels_like\": Double,\n" +
-                                    "  \"humidity\": Int,\n" +
-                                    "  \"pressure\": Int,\n" +
-                                    "  \"sunrise\": Int,\n" +
-                                    "  \"sunset\": Int,\n" +
-                                    "  \"temp\": Double,\n" +
-                                    "  \"uvi\": Double,\n" +
-                                    "  \"weather\": [WeatherData],\n" +
-                                    "  \"wind_gust\": Double,\n" +
-                                    "  \"wind_speed\": Double\n" +
-                                    "}\n\n" +
-                                    "WeatherData: {\n" +
+                                    "  \"id\": Long?,\n" +
+                                    "  \"alerts\": List&lt;Alert?&gt;?,\n" +
+                                    "  \"current\": Current?,\n" +
+                                    "  \"daily\": List&lt;Daily?&gt;?,\n" +
+                                    "  \"hourly\": List&lt;Hourly?&gt;?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Alert</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"description\": String?,\n" +
+                                    "  \"end\": Int?,\n" +
+                                    "  \"event\": String?,\n" +
+                                    "  \"senderName\": String?,\n" +
+                                    "  \"start\": Int?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Current</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"clouds\": Int?,\n" +
+                                    "  \"dt\": Long?,\n" +
+                                    "  \"feelsLike\": Double?,\n" +
+                                    "  \"humidity\": Int?,\n" +
+                                    "  \"pressure\": Int?,\n" +
+                                    "  \"sunrise\": Int?,\n" +
+                                    "  \"sunset\": Int?,\n" +
+                                    "  \"temp\": Double?,\n" +
+                                    "  \"uvi\": Double?,\n" +
+                                    "  \"weather\": List&lt;WeatherData?&gt;?,\n" +
+                                    "  \"wind_gust\": Double?,\n" +
+                                    "  \"wind_speed\": Double?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Daily</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"clouds\": Int?,\n" +
+                                    "  \"dewPoint\": Double?,\n" +
+                                    "  \"dt\": Long?,\n" +
+                                    "  \"humidity\": Int?,\n" +
+                                    "  \"pressure\": Int?,\n" +
+                                    "  \"rain\": Double?,\n" +
+                                    "  \"summary\": String?,\n" +
+                                    "  \"sunrise\": Int?,\n" +
+                                    "  \"sunset\": Int?,\n" +
+                                    "  \"temp\": Temp?,\n" +
+                                    "  \"uvi\": Double?,\n" +
+                                    "  \"weather\": List&lt;WeatherData?&gt;?,\n" +
+                                    "  \"windGust\": Double?,\n" +
+                                    "  \"windSpeed\": Double?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Temp</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"day\": Double?,\n" +
+                                    "  \"eve\": Double?,\n" +
+                                    "  \"max\": Double?,\n" +
+                                    "  \"min\": Double?,\n" +
+                                    "  \"morn\": Double?,\n" +
+                                    "  \"night\": Double?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Hourly</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"clouds\": Int?,\n" +
+                                    "  \"dt\": Long?,\n" +
+                                    "  \"feelsLike\": Double?,\n" +
+                                    "  \"humidity\": Int?,\n" +
+                                    "  \"temp\": Double?,\n" +
+                                    "  \"weather\": List&lt;WeatherData?&gt;?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>WeatherData</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
                                     "  \"description\": String,\n" +
                                     "  \"icon\": String,\n" +
-                                    "  \"id\": Int,\n" +
+                                    "  \"id\": Int?,\n" +
                                     "  \"main\": String\n" +
-                                    "}</pre></div>" +
-                                    "`)"
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<h4>Air Quality Response Model:</h4>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>AirQuality</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"list\": List&lt;QualityDetails?&gt;?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>QualityDetails</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"components\": Components?,\n" +
+                                    "  \"dt\": Int?,\n" +
+                                    "  \"main\": Main?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Components</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"co\": Double?,\n" +
+                                    "  \"nh3\": Double?,\n" +
+                                    "  \"no\": Double?,\n" +
+                                    "  \"no2\": Double?,\n" +
+                                    "  \"o3\": Double?,\n" +
+                                    "  \"pm10\": Double?,\n" +
+                                    "  \"pm25\": Double?,\n" +
+                                    "  \"so2\": Double?\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Main</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"aqi\": Int?\n" +
+                                    "}</pre>" +
+                                    "</div>"
                                 div {
                                     classes = setOf("card-header")
                                     div {
@@ -1491,25 +1729,28 @@ fun Route.homeRoute() {
 
                             div {
                                 classes = setOf("card")
-                                attributes["onclick"] = "showModal('Feedback API', `" +
-                                        "<h3>Feedback API Endpoints</h3>" +
+                                id = "feedback-api-card"
+                                attributes["data-title"] = "Feedback API"
+                                attributes["data-content"] = "<h3>Feedback API Endpoints</h3>" +
                                         "<div class='response-example'>" +
                                         "<strong>GET /feedback</strong><br>" +
-                                        "Parameters: id<br>" +
-                                        "Returns feedback by ID" +
+                                        "<span class='param-label'>Parameters:</span> <code>id</code> (feedback ID)<br>" +
+                                        "<span class='desc-label'>Description:</span> Returns feedback details for the specified ID" +
                                         "</div>" +
                                         "<div class='response-example'>" +
                                         "<strong>POST /feedback</strong><br>" +
-                                        "Parameters: deviceId, deviceOs, feedbackTitle, feedbackDescription<br>" +
-                                        "Creates new feedback" +
+                                        "<span class='param-label'>Parameters:</span> <code>deviceId</code>, <code>deviceOs</code>, <code>feedbackTitle</code>, <code>feedbackDescription</code><br>" +
+                                        "<span class='desc-label'>Description:</span> Creates a new feedback entry and returns the ID" +
                                         "</div>" +
                                         "<div class='response-example'>" +
                                         "<strong>DELETE /feedback</strong><br>" +
-                                        "Parameters: id<br>" +
-                                        "Deletes feedback by ID" +
+                                        "<span class='param-label'>Parameters:</span> <code>id</code> (feedback ID)<br>" +
+                                        "<span class='desc-label'>Description:</span> Deletes the feedback with the specified ID" +
                                         "</div>" +
                                         "<h4>Feedback Model:</h4>" +
-                                        "<div class='response-example'><pre>" +
+                                        "<div class='response-example model-container'>" +
+                                        "<div class='model-header'>Feedback</div>" +
+                                        "<pre class='model-content'>" +
                                         "{\n" +
                                         "  \"_id\": String,\n" +
                                         "  \"deviceId\": String,\n" +
@@ -1517,15 +1758,18 @@ fun Route.homeRoute() {
                                         "  \"feedbackTitle\": String,\n" +
                                         "  \"feedbackDescription\": String,\n" +
                                         "  \"timestamp\": String\n" +
-                                        "}</pre></div>" +
+                                        "}</pre>" +
+                                        "</div>" +
                                         "<h4>Response Format:</h4>" +
-                                        "<div class='response-example'><pre>" +
+                                        "<div class='response-example model-container'>" +
+                                        "<div class='model-header'>ApiResponse</div>" +
+                                        "<pre class='model-content'>" +
                                         "{\n" +
                                         "  \"status\": Boolean,\n" +
                                         "  \"message\": String,\n" +
                                         "  \"data\": T\n" +
-                                        "}</pre></div>" +
-                                        "`)"
+                                        "}</pre>" +
+                                        "</div>"
                                 div {
                                     classes = setOf("card-header")
                                     div {
@@ -1594,7 +1838,7 @@ fun Route.homeRoute() {
                                 classes = setOf("modal-content")
                                 span {
                                     classes = setOf("close")
-                                    attributes["onclick"] = "closeModal()"
+                                    id = "modal-close"
                                     +"×"
                                 }
                                 h2 {
@@ -1614,7 +1858,7 @@ fun Route.homeRoute() {
                             div {
                                 classes = setOf("footer-content")
                                 p {
-                                    +"© 2025 Androidplay API Portal. All rights reserved."
+                                    +"© 2025 Androidplay. All rights reserved."
                                 }
                             }
                         }
@@ -1627,9 +1871,9 @@ fun Route.homeRoute() {
                                 width = "560"
                                 height = "315"
                                 src = "https://www.youtube.com/embed/QoECZE6xTr0?autoplay=1&loop=1&playlist=QoECZE6xTr0"
-                                attributes["frameborder"] = "0"
+                                style = "border: none;"
                                 attributes["allow"] = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                attributes["allowfullscreen"] = "true"
+                                attributes["allowfullscreen"] = ""
                             }
                         }
                     }
