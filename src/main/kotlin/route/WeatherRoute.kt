@@ -1,45 +1,19 @@
 package bose.ankush.route
 
 import bose.ankush.data.db.DatabaseFactory.saveWeatherData
+import bose.ankush.data.model.AirQuality
 import bose.ankush.data.model.Weather
-import bose.ankush.getSecretValue
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
-import bose.ankush.data.model.AirQuality
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.cache.HttpCache
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-
-/**
- * Configure HttpClient with proper caching and serialization
- */
-private val weatherClient = HttpClient(CIO) {
-    install(HttpCache)
-    install(ContentNegotiation) {
-        json(Json {
-            isLenient = true
-            ignoreUnknownKeys = true
-            coerceInputValues = true
-        })
-    }
-}
-
-// Initialize API keys and URLs through lazy initialization
-private val apiKey by lazy { getSecretValue("weather-data-secret") }
-private val weatherUrl by lazy { getSecretValue("weather-data-url") }
-private val airPollutionUrl by lazy { getSecretValue("air-pollution-url") }
 
 /**
  * Extract location parameters from the request
@@ -72,10 +46,10 @@ private suspend inline fun <reified T> fetchWeatherData(
     additionalParams: Map<String, String> = emptyMap()
 ): Result<T> {
     return runCatching {
-        weatherClient.get(url) {
+        WeatherCache.getWeatherClient().get(url) {
             parameter("lat", lat)
             parameter("lon", lon)
-            parameter("appid", apiKey)
+            parameter("appid", WeatherCache.getApiKey())
             additionalParams.forEach { (key, value) -> parameter(key, value) }
         }.body<T>()
     }
@@ -92,7 +66,7 @@ fun Route.weatherRoute() {
             val (lat, lon) = locationParams
 
             fetchWeatherData<Weather>(
-                url = weatherUrl,
+                url = WeatherCache.getWeatherUrl(),
                 lat = lat,
                 lon = lon,
                 additionalParams = mapOf("exclude" to "minutely")
@@ -118,7 +92,7 @@ fun Route.weatherRoute() {
             val (lat, lon) = locationParams
 
             fetchWeatherData<AirQuality>(
-                url = airPollutionUrl,
+                url = WeatherCache.getAirPollutionUrl(),
                 lat = lat,
                 lon = lon
             ).onSuccess { response ->
