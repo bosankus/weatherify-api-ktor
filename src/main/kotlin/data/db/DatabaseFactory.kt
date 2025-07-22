@@ -1,5 +1,6 @@
 package bose.ankush.data.db
 
+import bose.ankush.config.Environment
 import bose.ankush.data.model.Feedback
 import bose.ankush.data.model.Weather
 import bose.ankush.getSecretValue
@@ -10,7 +11,7 @@ import org.bson.Document
 object DatabaseFactory {
     private val connectionString = getSecretValue("db-connection-string")
     private val dbClient = MongoClient.create(connectionString)
-    private val database = dbClient.getDatabase(getSecretValue("db-name"))
+    private val database = dbClient.getDatabase(Environment.getDbName())
     private val feedbackCollection = database.getCollection<Feedback>("feedback")
     private val weatherCollection = database.getCollection<Weather>("weather")
 

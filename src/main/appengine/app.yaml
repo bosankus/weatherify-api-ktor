@@ -9,3 +9,6 @@ readiness_check:
 
 env_variables:
   GCP_PROJECT_ID: "1017382896100"
+  DB_NAME: "weatherify-app-db"
+  WEATHER_URL: "https://api.openweathermap.org/data/3.0/onecall"
+  AIR_POLLUTION_URL: "https://api.openweathermap.org/data/2.5/air_pollution"
