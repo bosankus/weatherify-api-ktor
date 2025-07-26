@@ -1,14 +1,37 @@
 package bose.ankush.route
 
-import io.ktor.http.*
-import io.ktor.server.html.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import kotlinx.html.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.html.respondHtml
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
+import io.ktor.server.routing.route
+import kotlinx.html.InputType
+import kotlinx.html.body
+import kotlinx.html.classes
+import kotlinx.html.div
+import kotlinx.html.footer
+import kotlinx.html.h1
+import kotlinx.html.h2
+import kotlinx.html.h3
+import kotlinx.html.head
+import kotlinx.html.id
+import kotlinx.html.iframe
+import kotlinx.html.input
+import kotlinx.html.label
+import kotlinx.html.link
+import kotlinx.html.meta
+import kotlinx.html.p
+import kotlinx.html.script
+import kotlinx.html.span
+import kotlinx.html.style
+import kotlinx.html.title
+import kotlinx.html.unsafe
+import util.Constants
 
 fun Route.homeRoute() {
     val pageName = "Androidplay API Portal"
-    route("/") {
+    route(Constants.Api.HOME_ENDPOINT) {
         get {
             call.respondHtml(HttpStatusCode.OK) {
                 attributes["lang"] = "en"

@@ -14,31 +14,22 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import util.Constants
 
-/**
- * Extract location parameters from the request
- * @return Pair of latitude and longitude or null if missing
- */
+/** Extract latitude and longitude from request */
 private suspend fun ApplicationCall.extractLocationParams(): Pair<String, String>? {
-    val lat = request.queryParameters["lat"]
-    val lon = request.queryParameters["lon"]
+    val lat = request.queryParameters[Constants.Api.PARAM_LAT]
+    val lon = request.queryParameters[Constants.Api.PARAM_LON]
 
     if (lat.isNullOrBlank() || lon.isNullOrBlank()) {
-        respondError("Missing mandatory query parameters: lat and lon", Unit)
+        respondError(Constants.Messages.MISSING_LOCATION_PARAMS, Unit)
         return null
     }
 
     return Pair(lat, lon)
 }
 
-/**
- * Generic function to fetch weather data from APIs
- * @param url API endpoint URL
- * @param lat Latitude
- * @param lon Longitude
- * @param additionalParams Additional query parameters
- * @return Result containing the response or an exception
- */
+/** Generic function to fetch weather data from APIs */
 private suspend inline fun <reified T> fetchWeatherData(
     url: String,
     lat: String,
@@ -47,19 +38,17 @@ private suspend inline fun <reified T> fetchWeatherData(
 ): Result<T> {
     return runCatching {
         WeatherCache.getWeatherClient().get(url) {
-            parameter("lat", lat)
-            parameter("lon", lon)
-            parameter("appid", WeatherCache.getApiKey())
+            parameter(Constants.Api.PARAM_LAT, lat)
+            parameter(Constants.Api.PARAM_LON, lon)
+            parameter(Constants.Api.PARAM_APP_ID, WeatherCache.getApiKey())
             additionalParams.forEach { (key, value) -> parameter(key, value) }
         }.body<T>()
     }
 }
 
-/**
- * Weather API routes
- */
+/** Weather API routes */
 fun Route.weatherRoute() {
-    route("/weather") {
+    route(Constants.Api.WEATHER_ENDPOINT) {
         // Get weather data
         get {
             val locationParams = call.extractLocationParams() ?: return@get
@@ -69,24 +58,24 @@ fun Route.weatherRoute() {
                 url = WeatherCache.getWeatherUrl(),
                 lat = lat,
                 lon = lon,
-                additionalParams = mapOf("exclude" to "minutely")
+                additionalParams = mapOf(Constants.Api.PARAM_EXCLUDE to Constants.Api.EXCLUDE_MINUTELY)
             ).onSuccess { weatherData ->
-                call.respondSuccess("Weather data retrieved successfully", weatherData)
+                call.respondSuccess(Constants.Messages.WEATHER_RETRIEVED, weatherData)
 
                 // Save data asynchronously
                 withContext(Dispatchers.IO) {
                     val saved = saveWeatherData(weatherData)
                     if (!saved) {
-                        println("Failed to save weather data")
+                        println(Constants.Messages.FAILED_SAVE_WEATHER)
                     }
                 }
             }.onFailure { e ->
-                call.respondError("Failed to fetch weather data: ${e.message}", Unit)
+                call.respondError("${Constants.Messages.FAILED_FETCH_WEATHER}: ${e.message}", Unit)
             }
         }
     }
 
-    route("/air-pollution") {
+    route(Constants.Api.AIR_POLLUTION_ENDPOINT) {
         get {
             val locationParams = call.extractLocationParams() ?: return@get
             val (lat, lon) = locationParams
@@ -96,9 +85,12 @@ fun Route.weatherRoute() {
                 lat = lat,
                 lon = lon
             ).onSuccess { response ->
-                call.respondSuccess("Air pollution data retrieved successfully", response)
+                call.respondSuccess(Constants.Messages.AIR_POLLUTION_RETRIEVED, response)
             }.onFailure { e ->
-                call.respondError("Failed to fetch air pollution data: ${e.message}", Unit)
+                call.respondError(
+                    "${Constants.Messages.FAILED_FETCH_AIR_POLLUTION}: ${e.message}",
+                    Unit
+                )
             }
         }
     }

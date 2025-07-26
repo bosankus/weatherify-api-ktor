@@ -1,14 +1,12 @@
 package bose.ankush.route.common
 
-import io.ktor.http.*
-import io.ktor.server.application.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
-/**
- * Result type for handling route operations
- */
+/** Result type for route operations */
 sealed class RouteResult<out T> {
     data class Success<T>(val data: T) : RouteResult<T>()
     data class Error(val message: String, val statusCode: HttpStatusCode = HttpStatusCode.BadRequest) :
@@ -21,11 +19,7 @@ sealed class RouteResult<out T> {
     }
 }
 
-/**
- * Extension function to extract a query parameter safely
- * @param name Name of the parameter to extract
- * @return RouteResult with the parameter value or error
- */
+/** Extract a query parameter safely */
 fun ApplicationCall.getQueryParameter(name: String): RouteResult<String> {
     val value = request.queryParameters[name]
     return if (value.isNullOrBlank()) {
@@ -35,11 +29,7 @@ fun ApplicationCall.getQueryParameter(name: String): RouteResult<String> {
     }
 }
 
-/**
- * Extension function to extract multiple required query parameters
- * @param names Names of required parameters
- * @return RouteResult with a map of parameter names to values, or error if any are missing
- */
+/** Extract multiple required query parameters */
 fun ApplicationCall.getRequiredParameters(vararg names: String): RouteResult<Map<String, String>> {
     val params = mutableMapOf<String, String>()
 
@@ -53,11 +43,7 @@ fun ApplicationCall.getRequiredParameters(vararg names: String): RouteResult<Map
     return RouteResult.success(params)
 }
 
-/**
- * Handle the result of a route operation and respond accordingly
- * @param result RouteResult to process
- * @param successMessage Message to send on success
- */
+/** Handle the result of a route operation and respond accordingly */
 suspend inline fun <reified T> ApplicationCall.handleRouteResult(
     result: RouteResult<T>, successMessage: String
 ) {
@@ -67,11 +53,7 @@ suspend inline fun <reified T> ApplicationCall.handleRouteResult(
     }
 }
 
-/**
- * Execute a block that returns a RouteResult and handle the response
- * @param successMessage Message to send on success
- * @param block Block that returns a RouteResult
- */
+/** Execute a block that returns a RouteResult and handle the response */
 @OptIn(ExperimentalContracts::class)
 suspend inline fun <reified T> ApplicationCall.executeRoute(
     successMessage: String,

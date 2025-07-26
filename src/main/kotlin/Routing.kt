@@ -1,5 +1,6 @@
 package bose.ankush
 
+import bose.ankush.route.authRoute
 import bose.ankush.route.feedbackRoute
 import bose.ankush.route.homeRoute
 import bose.ankush.route.weatherRoute
@@ -11,5 +12,6 @@ fun Application.configureRouting() {
         homeRoute()
         weatherRoute()
         feedbackRoute()
+        authRoute()
     }
 }

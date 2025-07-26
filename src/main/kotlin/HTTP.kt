@@ -1,7 +1,11 @@
 package bose.ankush
 
-import io.ktor.server.application.*
-import io.ktor.server.plugins.defaultheaders.*
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.Application
+import io.ktor.server.application.install
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.defaultheaders.DefaultHeaders
+import kotlinx.serialization.json.Json
 
 fun Application.configureHTTP() {
     install(DefaultHeaders) {
@@ -11,5 +15,17 @@ fun Application.configureHTTP() {
         header("X-Frame-Options", "DENY") // Prevent clickjacking
         header("X-XSS-Protection", "1; mode=block") // Enable XSS protection
         header("Strict-Transport-Security", "max-age=31536000; includeSubDomains") // Enforce HTTPS
+    }
+
+    // Install ContentNegotiation with default JSON configuration
+    install(ContentNegotiation) {
+        json(Json {
+            prettyPrint = true
+            isLenient = true
+            ignoreUnknownKeys = true
+            coerceInputValues = true
+            allowSpecialFloatingPointValues = true
+            useArrayPolymorphism = false
+        })
     }
 }

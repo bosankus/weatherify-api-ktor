@@ -1,28 +1,18 @@
 package bose.ankush.route
 
-import bose.ankush.config.Environment
-import bose.ankush.getSecretValue
+import bose.ankush.util.getSecretValue
+import config.Environment
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.cache.HttpCache
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
-import kotlinx.serialization.json.Json
 
 /**
- * Cache for weather-related resources with 1-hour validity.
- * 
- * This object provides cached access to:
- * - HttpClient for weather API requests
- * - Weather API key
- * - Weather data URL
- * - Air pollution data URL
- * 
- * All cached resources have a 1-hour expiration time.
+ * Cache for weather-related resources with 10-minute expiration.
+ * Provides cached access to HttpClient, API key, and URLs.
  */
 object WeatherCache {
-    // Cache expiration time in milliseconds (1 hour)
-    private const val CACHE_EXPIRATION_TIME = 3600000L
+    // Cache expiration time in milliseconds (10 minutes)
+    private const val CACHE_EXPIRATION_TIME = 600000L
 
     // Cache for HttpClient
     private var cachedWeatherClient: HttpClient? = null
@@ -46,16 +36,7 @@ object WeatherCache {
             // Dispose previous client if exists
             cachedWeatherClient?.close()
 
-            cachedWeatherClient = HttpClient(CIO) {
-                install(HttpCache)
-                install(ContentNegotiation) {
-                    json(Json {
-                        isLenient = true
-                        ignoreUnknownKeys = true
-                        coerceInputValues = true
-                    })
-                }
-            }
+            cachedWeatherClient = HttpClient(CIO) { install(HttpCache) }
             weatherClientExpiration = currentTime + CACHE_EXPIRATION_TIME
         }
 

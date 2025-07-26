@@ -3,7 +3,6 @@
 [![Kotlin](https://img.shields.io/badge/kotlin-1.9.0-blue.svg)](https://kotlinlang.org)
 [![Ktor](https://img.shields.io/badge/ktor-2.3.3-orange.svg)](https://ktor.io)
 [![KMongo](https://img.shields.io/badge/kmongo-4.9.0-green.svg)](https://litote.org/kmongo/)
-[![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
 
 A robust Ktor-KMongo backend API for the [Compose-Weatherify Android app](https://github.com/bosankus/Compose-Weatherify), providing weather data, feedback management, and more.
 
@@ -16,9 +15,9 @@ A robust Ktor-KMongo backend API for the [Compose-Weatherify Android app](https:
 - [Features](#features)
 - [API Endpoints](#api-endpoints)
 - [Technologies](#technologies)
+- [Code Organization](#code-organization)
 - [Building & Running](#building--running)
 - [Contributing](#contributing)
-- [License](#license)
 
 ## Introduction
 
@@ -26,6 +25,7 @@ Weatherify Backend API is a fully functional Ktor-KMongo backend service that po
 
 - Real-time weather data and air pollution information
 - User feedback submission and management
+- Secure user authentication with JWT
 - Interactive web UI for API documentation and testing
 - Resume viewing functionality
 
@@ -80,8 +80,16 @@ The API provides the following endpoints:
   - Query parameters: `id` (feedback ID)
   - Response: Success or error message
 
-### Resume
-- `GET /resume` - View the developer's resume in an interactive HTML format
+### Authentication
+
+- `POST /register` - Register a new user
+  - Request body: JSON with `email` and `password`
+  - Password requirements: Min 8 chars, uppercase, lowercase, digit, special char
+  - Response: Success message with 201 status code
+- `POST /login` - Authenticate a user
+  - Request body: JSON with `email` and `password`
+  - Response: JWT token (valid for 24 hours) in response body and Authorization header
+  - Token contains user email as subject and appropriate claims
 
 ## Technologies
 
@@ -93,6 +101,63 @@ This project is built with the following technologies:
 - **[kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)** - JSON serialization library
 - **[kotlinx.html](https://github.com/Kotlin/kotlinx.html)** - DSL for building HTML
 - **[Google Cloud Platform](https://cloud.google.com/)** - Cloud hosting platform
+
+## Code Organization
+
+The project follows a clean, modular architecture with a focus on maintainability and scalability:
+
+### Package Structure
+
+The codebase is organized into the following packages:
+
+| Package  | Description                                                               |
+|----------|---------------------------------------------------------------------------|
+| `root`   | Main application files (Application.kt, Authentication.kt, HTTP.kt, etc.) |
+| `config` | Configuration classes for environment variables, JWT, etc.                |
+| `data`   | Data models and database-related code                                     |
+| `route`  | API route handlers for different endpoints                                |
+| `util`   | Utility classes including constants and helper functions                  |
+
+This organization separates concerns and makes the codebase easier to navigate and maintain.
+
+### Constants Management
+
+All string constants are centralized in a single `Constants.kt` file located in the `util` package.
+This approach offers several benefits:
+
+- **Maintainability**: Easier to update values in one place
+- **Consistency**: Prevents duplication and inconsistencies
+- **Readability**: Improves code clarity with meaningful constant names
+- **Type Safety**: Reduces errors from typos in string literals
+
+The constants are organized into logical categories:
+
+| Category   | Description                              | Examples                                       |
+|------------|------------------------------------------|------------------------------------------------|
+| `Database` | Database names, collections, field names | `USERS_COLLECTION`, `EMAIL_FIELD`              |
+| `Auth`     | JWT configuration, validation messages   | `JWT_SECRET_NAME`, `INVALID_PASSWORD_STRENGTH` |
+| `Api`      | Endpoints, URLs, query parameters        | `WEATHER_ENDPOINT`, `PARAM_LAT`                |
+| `Messages` | Response messages for different features | `REGISTRATION_SUCCESS`, `WEATHER_RETRIEVED`    |
+| `Env`      | Environment variable names               | `JWT_EXPIRATION`, `WEATHER_URL`                |
+
+### Usage Example
+
+Instead of hardcoding strings:
+
+```kotlin
+// Before
+val collection = database.getCollection<User>("users")
+```
+
+Use the constants:
+
+```kotlin
+// After
+val collection = database.getCollection<User>(Constants.Database.USERS_COLLECTION)
+```
+
+This approach makes the codebase more maintainable and less prone to errors from typos or
+inconsistent string values.
 
 ## Building & Running
 
@@ -124,7 +189,3 @@ Contributions are welcome! If you'd like to contribute to this project, please f
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
