@@ -63,17 +63,20 @@ fun Route.authRoute() {
             if (success) {
                 call.respondSuccess(
                     Constants.Messages.REGISTRATION_SUCCESS,
+                    Unit,
                     HttpStatusCode.Created
                 )
             } else {
                 call.respondError(
                     Constants.Messages.FAILED_REGISTER,
+                    Unit,
                     HttpStatusCode.InternalServerError
                 )
             }
         } catch (e: Exception) {
             call.respondError(
                 "${Constants.Messages.INTERNAL_SERVER_ERROR}: ${e.localizedMessage}",
+                Unit,
                 HttpStatusCode.InternalServerError
             )
         }
@@ -94,6 +97,7 @@ fun Route.authRoute() {
             if (user == null) {
                 call.respondError(
                     Constants.Messages.USER_NOT_REGISTERED,
+                    Unit,
                     HttpStatusCode.Unauthorized
                 )
                 return@post
@@ -103,6 +107,7 @@ fun Route.authRoute() {
             if (!PasswordUtil.verifyPassword(request.password, user.passwordHash)) {
                 call.respondError(
                     Constants.Messages.INVALID_CREDENTIALS,
+                    Unit,
                     HttpStatusCode.Unauthorized
                 )
                 return@post
@@ -110,7 +115,11 @@ fun Route.authRoute() {
 
             // Check if user is active
             if (!user.isActive) {
-                call.respondError(Constants.Messages.ACCOUNT_INACTIVE, HttpStatusCode.Forbidden)
+                call.respondError(
+                    Constants.Messages.ACCOUNT_INACTIVE,
+                    Unit,
+                    HttpStatusCode.Forbidden
+                )
                 return@post
             }
 
@@ -126,7 +135,8 @@ fun Route.authRoute() {
         } catch (e: Exception) {
             call.respondError(
                 "${Constants.Messages.INTERNAL_SERVER_ERROR}: ${e.localizedMessage}",
-                HttpStatusCode.InternalServerError,
+                Unit,
+                HttpStatusCode.InternalServerError
             )
         }
     }
