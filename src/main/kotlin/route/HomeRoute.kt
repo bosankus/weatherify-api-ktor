@@ -1,5 +1,6 @@
 package bose.ankush.route
 
+import bose.ankush.route.common.WebResources
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.html.respondHtml
 import io.ktor.server.response.respondText
@@ -61,6 +62,11 @@ fun Route.homeRoute() {
                         rel = "stylesheet"
                         href = "https://fonts.googleapis.com/icon?family=Material+Icons"
                     }
+
+                    // Include shared CSS
+                    WebResources.includeSharedCss(this)
+
+                    // Include page-specific CSS
                     style {
                         unsafe {
                             raw(
@@ -787,7 +793,7 @@ fun Route.homeRoute() {
                                     transition: opacity 0.1s ease;
                                 }
 
-                                /* Theme toggle styles */
+                                /* Toggle styles (shared for theme and music) */
                                 .toggle {
                                     position: relative;
                                     display: inline-block;
@@ -797,6 +803,99 @@ fun Route.homeRoute() {
                                     display: flex;
                                     align-items: center;
                                     justify-content: center;
+                                }
+                                
+                                /* Music toggle styles */
+                                .music-toggle {
+                                    position: relative;
+                                    display: inline-block;
+                                    z-index: 10;
+                                    width: 24px;
+                                    height: 24px;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    cursor: pointer;
+                                }
+                                
+                                .music-toggle input {
+                                    display: none;
+                                }
+                                
+                                .music-toggle .icon {
+                                    width: 24px;
+                                    height: 24px;
+                                    position: relative;
+                                    color: var(--icon-color);
+                                }
+                                
+                                .music-toggle .icon::before,
+                                .music-toggle .icon::after {
+                                    content: '';
+                                    position: absolute;
+                                    background: currentColor;
+                                    transition: all 0.3s ease;
+                                }
+                                
+                                /* Music playing icon (bars) */
+                                .music-toggle .icon span {
+                                    position: absolute;
+                                    bottom: 5px;
+                                    width: 4px;
+                                    background: currentColor;
+                                    transition: all 0.3s ease;
+                                }
+                                
+                                .music-toggle .icon span:nth-child(1) {
+                                    height: 8px;
+                                    left: 4px;
+                                    animation: musicBar1 1s infinite alternate;
+                                }
+                                
+                                .music-toggle .icon span:nth-child(2) {
+                                    height: 14px;
+                                    left: 10px;
+                                    animation: musicBar2 1.3s infinite alternate;
+                                }
+                                
+                                .music-toggle .icon span:nth-child(3) {
+                                    height: 10px;
+                                    left: 16px;
+                                    animation: musicBar3 0.8s infinite alternate;
+                                }
+                                
+                                /* Music paused icon (pause symbol) */
+                                .music-toggle input:checked + .icon span {
+                                    animation: none;
+                                    height: 14px;
+                                    bottom: 5px;
+                                }
+                                
+                                .music-toggle input:checked + .icon span:nth-child(1) {
+                                    left: 6px;
+                                }
+                                
+                                .music-toggle input:checked + .icon span:nth-child(2) {
+                                    left: 14px;
+                                }
+                                
+                                .music-toggle input:checked + .icon span:nth-child(3) {
+                                    opacity: 0;
+                                }
+                                
+                                @keyframes musicBar1 {
+                                    0% { height: 8px; }
+                                    100% { height: 14px; }
+                                }
+                                
+                                @keyframes musicBar2 {
+                                    0% { height: 14px; }
+                                    100% { height: 6px; }
+                                }
+                                
+                                @keyframes musicBar3 {
+                                    0% { height: 10px; }
+                                    100% { height: 16px; }
                                 }
 
                                 .toggle input {
@@ -1042,6 +1141,10 @@ fun Route.homeRoute() {
                             )
                         }
                     }
+                    // Include shared JavaScript
+                    WebResources.includeSharedJs(this)
+
+                    // Include page-specific JavaScript
                     script {
                         unsafe {
                             raw(
@@ -1130,31 +1233,6 @@ fun Route.homeRoute() {
                                     }
                                 }
 
-                                /**
-                                 * Helper function to get transition duration from computed style
-                                 * @param {HTMLElement} element - The element to check
-                                 * @returns {number} - Transition duration in milliseconds
-                                 */
-                                function getTransitionDuration(element) {
-                                    if (!element) return 300;
-
-                                    try {
-                                        const style = window.getComputedStyle(element);
-                                        const duration = style.transitionDuration || '0.3s';
-
-                                        // Convert to milliseconds
-                                        if (duration.indexOf('ms') > -1) {
-                                            return parseFloat(duration);
-                                        } else if (duration.indexOf('s') > -1) {
-                                            return parseFloat(duration) * 1000;
-                                        }
-                                        return 300;
-                                    } catch (error) {
-                                        console.warn('Error getting transition duration:', error);
-                                        return 300;
-                                    }
-                                }
-
                                 function handleEscKey(event) {
                                     if (event.key === 'Escape') {
                                         closeModal();
@@ -1168,200 +1246,6 @@ fun Route.homeRoute() {
                                         closeModal();
                                     }
                                 }
-
-                                /**
-                                 * Theme toggle functionality
-                                 * Handles switching between light and dark themes with animation
-                                 */
-                                function toggleTheme() {
-                                    try {
-                                        const htmlElement = document.documentElement;
-                                        const isDarkTheme = !htmlElement.classList.contains('light-theme');
-
-                                        // Get toggle position for animation
-                                        const toggleElement = document.querySelector('.toggle');
-                                        let x = window.innerWidth / 2;
-                                        let y = window.innerHeight / 2;
-
-                                        if (toggleElement) {
-                                            const rect = toggleElement.getBoundingClientRect();
-                                            x = rect.left + rect.width / 2;
-                                            y = rect.top + rect.height / 2;
-                                        }
-
-                                        // Set animation variables
-                                        htmlElement.style.setProperty('--x', x + 'px');
-                                        htmlElement.style.setProperty('--y', y + 'px');
-
-                                        // Detect Safari
-                                        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-                                        // Apply theme with animation if supported
-                                        if (document.startViewTransition && !isSafari) {
-                                            document.startViewTransition(() => {
-                                                if (isDarkTheme) {
-                                                    htmlElement.classList.add('light-theme');
-                                                } else {
-                                                    htmlElement.classList.remove('light-theme');
-                                                }
-                                            });
-                                        } else {
-                                            // Fallback for browsers that don't support View Transitions API
-                                            // Create a temporary overlay for fade animation
-                                            if (isSafari) {
-                                                // Create and add the overlay before changing the theme
-                                                const overlay = document.createElement('div');
-                                                overlay.id = 'theme-transition-overlay';
-                                                overlay.style.position = 'fixed';
-                                                overlay.style.top = '0';
-                                                overlay.style.left = '0';
-                                                overlay.style.width = '100%';
-                                                overlay.style.height = '100%';
-                                                overlay.style.backgroundColor = isDarkTheme ? '#ffffff' : '#1a1a2e';
-                                                overlay.style.opacity = '0';
-                                                overlay.style.zIndex = '9999';
-                                                overlay.style.pointerEvents = 'none';
-
-                                                // Add both standard and webkit-prefixed transitions for Safari
-                                                overlay.style.webkitTransition = 'opacity 0.5s ease';
-                                                overlay.style.transition = 'opacity 0.5s ease';
-
-                                                // Add clip-path for circular reveal effect
-                                                const xPos = x + 'px';
-                                                const yPos = y + 'px';
-                                                overlay.style.webkitClipPath = 'circle(0% at ' + xPos + ' ' + yPos + ')';
-                                                overlay.style.clipPath = 'circle(0% at ' + xPos + ' ' + yPos + ')';
-
-                                                // Remove any existing overlay first to prevent duplicates
-                                                const existingOverlay = document.getElementById('theme-transition-overlay');
-                                                if (existingOverlay) {
-                                                    document.body.removeChild(existingOverlay);
-                                                }
-
-                                                document.body.appendChild(overlay);
-
-                                                // Force browser to process the DOM changes
-                                                overlay.getBoundingClientRect();
-
-                                                // Use requestAnimationFrame for smoother animation
-                                                requestAnimationFrame(() => {
-                                                    // First make the overlay visible
-                                                    overlay.style.opacity = '0.7';
-
-                                                    // Then expand the clip-path
-                                                    requestAnimationFrame(() => {
-                                                        overlay.style.webkitClipPath = 'circle(150% at ' + xPos + ' ' + yPos + ')';
-                                                        overlay.style.clipPath = 'circle(150% at ' + xPos + ' ' + yPos + ')';
-
-                                                        // Apply theme change after animation starts
-                                                        setTimeout(() => {
-                                                            if (isDarkTheme) {
-                                                                htmlElement.classList.add('light-theme');
-                                                            } else {
-                                                                htmlElement.classList.remove('light-theme');
-                                                            }
-
-                                                            // Fade out and remove overlay
-                                                            setTimeout(() => {
-                                                                overlay.style.opacity = '0';
-
-                                                                setTimeout(() => {
-                                                                    if (document.body.contains(overlay)) {
-                                                                        document.body.removeChild(overlay);
-                                                                    }
-                                                                }, 500);
-                                                            }, 300);
-                                                        }, 200);
-                                                    });
-                                                });
-                                            } else {
-                                                // Simple toggle for other browsers without animation
-                                                if (isDarkTheme) {
-                                                    htmlElement.classList.add('light-theme');
-                                                } else {
-                                                    htmlElement.classList.remove('light-theme');
-                                                }
-                                            }
-                                        }
-
-                                        // Save preference to localStorage
-                                        localStorage.setItem('theme', isDarkTheme ? 'light' : 'dark');
-                                    } catch (error) {
-                                        console.error('Error toggling theme:', error);
-                                        // Fallback to basic theme toggle without animation
-                                        try {
-                                            const htmlElement = document.documentElement;
-                                            const isDarkTheme = !htmlElement.classList.contains('light-theme');
-                                            if (isDarkTheme) {
-                                                htmlElement.classList.add('light-theme');
-                                            } else {
-                                                htmlElement.classList.remove('light-theme');
-                                            }
-                                        } catch (e) {
-                                            console.error('Critical error in theme toggle:', e);
-                                        }
-                                    }
-                                }
-
-                                /**
-                                 * Add ripple effect for click feedback
-                                 * @param {HTMLElement} element - The element to add click feedback to
-                                 */
-                                function addClickFeedback(element) {
-                                    if (!element) return;
-
-                                    element.addEventListener('click', function(e) {
-                                        try {
-                                            // Create ripple element
-                                            const ripple = document.createElement('div');
-                                            ripple.className = 'ripple';
-
-                                            // Position the ripple
-                                            const rect = element.getBoundingClientRect();
-                                            const size = Math.max(rect.width, rect.height);
-                                            const x = e.clientX - rect.left - size / 2;
-                                            const y = e.clientY - rect.top - size / 2;
-
-                                            ripple.style.width = ripple.style.height = size + 'px';
-                                            ripple.style.left = x + 'px';
-                                            ripple.style.top = y + 'px';
-
-                                            // Add ripple to element
-                                            element.appendChild(ripple);
-
-                                            // Remove ripple after animation
-                                            setTimeout(() => {
-                                                if (ripple.parentNode === element) {
-                                                    element.removeChild(ripple);
-                                                }
-                                            }, 600);
-                                        } catch (error) {
-                                            console.error('Error adding click feedback:', error);
-                                        }
-                                    });
-                                }
-
-                                /**
-                                 * Initialize the application
-                                 * Sets up theme toggle, click feedback, and background music
-                                 */
-                                document.addEventListener('DOMContentLoaded', function() {
-                                    try {
-                                        // Initialize theme
-                                        initializeTheme();
-
-                                        // Add click feedback to all clickable elements
-                                        initializeClickFeedback();
-
-                                        // Initialize background music
-                                        initializeBackgroundMusic();
-
-                                        // Initialize event listeners for interactive elements
-                                        initializeEventListeners();
-                                    } catch (error) {
-                                        console.error('Error during initialization:', error);
-                                    }
-                                });
 
                                 /**
                                  * Initialize event listeners for interactive elements
@@ -1397,112 +1281,11 @@ fun Route.homeRoute() {
                                     });
                                 }
 
-                                /**
-                                 * Initialize theme toggle functionality
-                                 */
-                                function initializeTheme() {
-                                    try {
-                                        const themeToggle = document.getElementById('theme-toggle');
-                                        if (!themeToggle) {
-                                            console.warn('Theme toggle element not found');
-                                            return;
-                                        }
+                                // Initialize theme toggle functionality is now handled by shared resources
 
-                                        // Check for saved preference or system preference
-                                        const savedTheme = localStorage.getItem('theme');
-                                        const prefersDark = window.matchMedia && 
-                                            window.matchMedia('(prefers-color-scheme: dark)').matches;
+                                // Initialize click feedback for interactive elements is now handled by shared resources
 
-                                        // Apply saved theme or system preference immediately
-                                        // This prevents flash of unstyled content (FOUC)
-                                        if (savedTheme === 'light' || (!savedTheme && !prefersDark)) {
-                                            document.documentElement.classList.add('light-theme');
-                                            if (themeToggle) themeToggle.checked = true;
-                                        } else {
-                                            document.documentElement.classList.remove('light-theme');
-                                            if (themeToggle) themeToggle.checked = false;
-                                        }
-
-                                        // Add event listener for toggle
-                                        themeToggle.addEventListener('change', toggleTheme);
-
-                                        // Listen for system theme changes
-                                        if (window.matchMedia) {
-                                            const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-                                            if (colorSchemeQuery.addEventListener) {
-                                                colorSchemeQuery.addEventListener('change', (e) => {
-                                                    if (!localStorage.getItem('theme')) {
-                                                        if (e.matches) {
-                                                            document.documentElement.classList.remove('light-theme');
-                                                            themeToggle.checked = false;
-                                                        } else {
-                                                            document.documentElement.classList.add('light-theme');
-                                                            themeToggle.checked = true;
-                                                        }
-                                                    }
-                                                });
-                                            } else if (colorSchemeQuery.addListener) {
-                                                // Fallback for Safari
-                                                colorSchemeQuery.addListener((e) => {
-                                                    if (!localStorage.getItem('theme')) {
-                                                        if (e.matches) {
-                                                            document.documentElement.classList.remove('light-theme');
-                                                            themeToggle.checked = false;
-                                                        } else {
-                                                            document.documentElement.classList.add('light-theme');
-                                                            themeToggle.checked = true;
-                                                        }
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    } catch (error) {
-                                        console.error('Error initializing theme:', error);
-                                    }
-                                }
-
-                                /**
-                                 * Initialize click feedback for interactive elements
-                                 */
-                                function initializeClickFeedback() {
-                                    const clickableElements = document.querySelectorAll(
-                                        '.card, .endpoint, .nav-icon, .close'
-                                    );
-
-                                    if (clickableElements.length === 0) {
-                                        console.warn('No clickable elements found for feedback');
-                                    }
-
-                                    clickableElements.forEach(addClickFeedback);
-                                }
-
-                                /**
-                                 * Initialize background music
-                                 */
-                                function initializeBackgroundMusic() {
-                                    const musicContainer = document.getElementById('music-container');
-                                    if (!musicContainer) {
-                                        console.warn('Music container not found');
-                                        return;
-                                    }
-
-                                    console.log('Background music should start playing automatically.');
-
-                                    // Add a user interaction listener to help with autoplay restrictions
-                                    document.addEventListener('click', function musicStartHandler() {
-                                        try {
-                                            const iframe = musicContainer.querySelector('iframe');
-                                            if (iframe && iframe.contentWindow) {
-                                                // Try to interact with the iframe to help with autoplay
-                                                iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-                                            }
-                                            // Remove the listener after first interaction
-                                            document.removeEventListener('click', musicStartHandler);
-                                        } catch (error) {
-                                            console.warn('Could not interact with music iframe:', error);
-                                        }
-                                    }, { once: false });
-                                }
+                                // Background music functionality is now handled by shared resources
                                 """
                             )
                         }
@@ -1545,6 +1328,25 @@ fun Route.homeRoute() {
                                     }
                                 }
 
+                                // Music toggle
+                                label {
+                                    classes = setOf("music-toggle")
+                                    style =
+                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
+
+                                    input {
+                                        type = InputType.checkBox
+                                        id = "music-toggle"
+                                    }
+
+                                    div {
+                                        classes = setOf("icon")
+                                        span {}
+                                        span {}
+                                        span {}
+                                    }
+                                }
+
                                 // GitHub icon
                                 span {
                                     classes = setOf("material-icons", "nav-icon", "github-link")
@@ -1555,6 +1357,22 @@ fun Route.homeRoute() {
                             }
                         }
 
+                        // Hidden audio element for background music
+                        div {
+                            id = "music-container"
+                            style = "display: none;"
+                            unsafe {
+                                raw(
+                                    """
+                                    <audio id="background-music" loop preload="auto">
+                                        <source src="https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3" type="audio/mpeg">
+                                        Your browser does not support the audio element.
+                                    </audio>
+                                """
+                                )
+                            }
+                        }
+                        
                         div {
                             classes = setOf("content")
                             div {
