@@ -22,7 +22,11 @@ private suspend fun ApplicationCall.extractLocationParams(): Pair<String, String
     val lon = request.queryParameters[Constants.Api.PARAM_LON]
 
     if (lat.isNullOrBlank() || lon.isNullOrBlank()) {
-        respondError(Constants.Messages.MISSING_LOCATION_PARAMS, Unit)
+        respondError(
+            Constants.Messages.MISSING_LOCATION_PARAMS,
+            Unit,
+            io.ktor.http.HttpStatusCode.BadRequest
+        )
         return null
     }
 
@@ -60,7 +64,11 @@ fun Route.weatherRoute() {
                 lon = lon,
                 additionalParams = mapOf(Constants.Api.PARAM_EXCLUDE to Constants.Api.EXCLUDE_MINUTELY)
             ).onSuccess { weatherData ->
-                call.respondSuccess(Constants.Messages.WEATHER_RETRIEVED, weatherData)
+                call.respondSuccess(
+                    Constants.Messages.WEATHER_RETRIEVED,
+                    weatherData,
+                    io.ktor.http.HttpStatusCode.OK
+                )
 
                 // Save data asynchronously
                 withContext(Dispatchers.IO) {
@@ -70,7 +78,11 @@ fun Route.weatherRoute() {
                     }
                 }
             }.onFailure { e ->
-                call.respondError("${Constants.Messages.FAILED_FETCH_WEATHER}: ${e.message}", Unit)
+                call.respondError(
+                    "${Constants.Messages.FAILED_FETCH_WEATHER}: ${e.message}",
+                    Unit,
+                    io.ktor.http.HttpStatusCode.InternalServerError
+                )
             }
         }
     }
@@ -85,11 +97,16 @@ fun Route.weatherRoute() {
                 lat = lat,
                 lon = lon
             ).onSuccess { response ->
-                call.respondSuccess(Constants.Messages.AIR_POLLUTION_RETRIEVED, response)
+                call.respondSuccess(
+                    Constants.Messages.AIR_POLLUTION_RETRIEVED,
+                    response,
+                    io.ktor.http.HttpStatusCode.OK
+                )
             }.onFailure { e ->
                 call.respondError(
                     "${Constants.Messages.FAILED_FETCH_AIR_POLLUTION}: ${e.message}",
-                    Unit
+                    Unit,
+                    io.ktor.http.HttpStatusCode.InternalServerError
                 )
             }
         }

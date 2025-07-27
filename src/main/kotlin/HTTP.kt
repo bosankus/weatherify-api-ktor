@@ -1,11 +1,13 @@
 package bose.ankush
 
+import bose.ankush.data.model.UnitSerializer
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
 
 fun Application.configureHTTP() {
     install(DefaultHeaders) {
@@ -17,7 +19,12 @@ fun Application.configureHTTP() {
         header("Strict-Transport-Security", "max-age=31536000; includeSubDomains") // Enforce HTTPS
     }
 
-    // Install ContentNegotiation with default JSON configuration
+    // Create a serializers module with the UnitSerializer
+    val module = SerializersModule {
+        contextual(Unit::class, UnitSerializer)
+    }
+
+    // Install ContentNegotiation with custom JSON configuration
     install(ContentNegotiation) {
         json(Json {
             prettyPrint = true
@@ -26,6 +33,7 @@ fun Application.configureHTTP() {
             coerceInputValues = true
             allowSpecialFloatingPointValues = true
             useArrayPolymorphism = false
+            serializersModule = module
         })
     }
 }

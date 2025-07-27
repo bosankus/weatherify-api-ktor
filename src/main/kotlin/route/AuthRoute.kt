@@ -31,7 +31,11 @@ fun Route.authRoute() {
 
             // Validate email format
             if (!PasswordUtil.validateEmailFormat(request.email)) {
-                call.respondError(Constants.Auth.INVALID_EMAIL_FORMAT, HttpStatusCode.BadRequest)
+                call.respondError(
+                    Constants.Auth.INVALID_EMAIL_FORMAT,
+                    Unit,
+                    HttpStatusCode.BadRequest
+                )
                 return@post
             }
 
@@ -39,6 +43,7 @@ fun Route.authRoute() {
             if (!PasswordUtil.validatePasswordStrength(request.password)) {
                 call.respondError(
                     Constants.Auth.INVALID_PASSWORD_STRENGTH,
+                    Unit,
                     HttpStatusCode.BadRequest
                 )
                 return@post
@@ -47,7 +52,11 @@ fun Route.authRoute() {
             // Check if user already exists
             val existingUser = DatabaseFactory.findUserByEmail(request.email)
             if (existingUser != null) {
-                call.respondError(Constants.Messages.USER_ALREADY_EXISTS, HttpStatusCode.Conflict)
+                call.respondError(
+                    Constants.Messages.USER_ALREADY_EXISTS,
+                    Unit,
+                    HttpStatusCode.Conflict
+                )
                 return@post
             }
 

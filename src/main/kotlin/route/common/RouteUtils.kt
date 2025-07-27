@@ -1,6 +1,6 @@
 package bose.ankush.route.common
 
-import bose.ankush.data.model.FeedbackResponse
+import bose.ankush.data.model.ApiResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
@@ -15,7 +15,7 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
 ) {
     respond(
         status = status,
-        message = FeedbackResponse(
+        message = ApiResponse(
             status = true,
             message = message,
             data = data
@@ -33,7 +33,7 @@ suspend inline fun <reified T> ApplicationCall.respondError(
 ) {
     respond(
         status = status,
-        message = FeedbackResponse(
+        message = ApiResponse(
             status = false,
             message = message,
             data = data
