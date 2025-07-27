@@ -1,4 +1,4 @@
-package bose.ankush
+package bose.ankush.base
 
 import bose.ankush.route.authRoute
 import bose.ankush.route.feedbackRoute

@@ -1,4 +1,4 @@
-package bose.ankush
+package bose.ankush.base
 
 import bose.ankush.data.model.UnitSerializer
 import io.ktor.serialization.kotlinx.json.json

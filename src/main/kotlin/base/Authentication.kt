@@ -1,4 +1,4 @@
-package bose.ankush
+package bose.ankush.base
 
 import config.Environment
 import config.JwtConfig

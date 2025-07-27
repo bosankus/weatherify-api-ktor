@@ -35,7 +35,24 @@ The application implements several key data flows:
 Detailed sequence diagrams for these flows are available in
 the [Data Flows Documentation](docs/data-flows.md).
 
+## Documentation
+
+The project includes the following documentation files:
+
+- **[README.md](README.md)**: This file - provides an overview of the project, setup instructions,
+  and basic usage information.
+- **[API Reference](docs/api-reference.md)**: Comprehensive documentation of all API endpoints,
+  request parameters, response formats, and authentication requirements.
+- **[Architecture Diagram](docs/architecture.md)**: Visual representation of the system components
+  and their relationships.
+- **[Data Flows Documentation](docs/data-flows.md)**: Detailed sequence diagrams for key data flows
+  in the application.
+
 ## API Endpoints
+
+The API provides endpoints for weather data, authentication, and feedback management. For detailed
+documentation of all endpoints, request parameters, response formats, and examples, see
+the [API Reference](docs/api-reference.md).
 
 ### Weather
 

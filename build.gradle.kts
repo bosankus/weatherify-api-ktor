@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.plugin.serialization)
     alias(libs.plugins.shadow)
     alias(libs.plugins.gcloud.appengine)
+    jacoco
 }
 
 group = "bose.ankush"
@@ -60,6 +61,47 @@ dependencies {
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
 
+    // Koin for dependency injection
+    implementation(libs.koin.core)
+    implementation(libs.koin.ktor)
+    implementation(libs.koin.logger.slf4j)
+
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
+}
+
+jacoco {
+    toolVersion = "0.8.8"
+}
+
+tasks.test {
+    // Force tests to always run and not be skipped as up-to-date
+    outputs.upToDateWhen { false }
+
+    // Enable JaCoCo agent for test coverage
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        csv.required.set(false)
+        html.required.set(true)
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco"))
+    }
+
+    // Ensure the report is always generated
+    outputs.upToDateWhen { false }
+
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) {
+                exclude(
+                    "**/data/model/**",
+                    "**/Application*"
+                )
+            }
+        })
+    )
 }
