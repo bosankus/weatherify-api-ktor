@@ -1,0 +1,105 @@
+/* Base CSS for Weatherify web pages */
+
+:root {
+    /* Light theme variables */
+    --bg-gradient-light-1: #f8f9fa;
+    --bg-gradient-light-2: #e9ecef;
+    --bg-gradient-light-3: #dee2e6;
+    --text-color-light: #212529;
+    --text-secondary-light: #4a5568;
+    --card-bg-light: rgba(255, 255, 255, 0.7);
+    --card-border-light: rgba(0, 0, 0, 0.1);
+    --card-hover-bg-light: rgba(255, 255, 255, 0.9);
+    --card-hover-border-light: rgba(0, 0, 0, 0.2);
+    --card-shadow-light: rgba(0, 0, 0, 0.1);
+    --header-border-light: rgba(0, 0, 0, 0.1);
+    --content-bg-light: rgba(245, 245, 250, 0.7);
+    --content-border-light: rgba(0, 0, 0, 0.1);
+    --icon-color-light: #4a5568;
+    --heading-color-light: #2d3748;
+
+    /* Dark theme variables */
+    --bg-gradient-dark-1: #121218;
+    --bg-gradient-dark-2: #1a1a2c;
+    --bg-gradient-dark-3: #151520;
+    --text-color-dark: #f0f0f0;
+    --text-secondary-dark: #a0a0b0;
+    --card-bg-dark: rgba(30, 30, 45, 0.5);
+    --card-border-dark: rgba(60, 60, 80, 0.2);
+    --card-hover-bg-dark: rgba(40, 40, 60, 0.7);
+    --card-hover-border-dark: rgba(80, 80, 120, 0.4);
+    --card-shadow-dark: rgba(0, 0, 0, 0.15);
+    --header-border-dark: rgba(60, 60, 80, 0.2);
+    --content-bg-dark: rgba(25, 25, 40, 0.3);
+    --content-border-dark: rgba(60, 60, 80, 0.2);
+    --icon-color-dark: #8ab4f8;
+    --heading-color-dark: #ffffff;
+
+    /* Default to dark theme */
+    --bg-gradient-1: var(--bg-gradient-dark-1);
+    --bg-gradient-2: var(--bg-gradient-dark-2);
+    --bg-gradient-3: var(--bg-gradient-dark-3);
+    --text-color: var(--text-color-dark);
+    --text-secondary: var(--text-secondary-dark);
+    --card-bg: var(--card-bg-dark);
+    --card-border: var(--card-border-dark);
+    --card-hover-bg: var(--card-hover-bg-dark);
+    --card-hover-border: var(--card-hover-border-dark);
+    --card-shadow: var(--card-shadow-dark);
+    --header-border: var(--header-border-dark);
+    --content-bg: var(--content-bg-dark);
+    --content-border: var(--content-border-dark);
+    --icon-color: var(--icon-color-dark);
+    --heading-color: var(--heading-color-dark);
+
+    /* Animation variables */
+    --x: 50%;
+    --y: 50%;
+}
+
+/* Light theme class */
+html.light-theme {
+    --bg-gradient-1: var(--bg-gradient-light-1);
+    --bg-gradient-2: var(--bg-gradient-light-2);
+    --bg-gradient-3: var(--bg-gradient-light-3);
+    --text-color: var(--text-color-light);
+    --text-secondary: var(--text-secondary-light);
+    --card-bg: var(--card-bg-light);
+    --card-border: var(--card-border-light);
+    --card-hover-bg: var(--card-hover-bg-light);
+    --card-hover-border: var(--card-hover-border-light);
+    --card-shadow: var(--card-shadow-light);
+    --header-border: var(--header-border-light);
+    --content-bg: var(--content-bg-light);
+    --content-border: var(--content-border-light);
+    --icon-color: var(--icon-color-light);
+    --heading-color: var(--heading-color-light);
+}
+
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 50%, var(--bg-gradient-3) 100%);
+    color: var(--text-color);
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    transition: background 0.3s ease, color 0.3s ease;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}

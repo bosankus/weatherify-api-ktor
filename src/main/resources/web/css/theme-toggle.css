@@ -1,0 +1,160 @@
+/* Theme toggle styles for Weatherify web pages */
+
+/* Toggle container */
+.toggle {
+    position: relative;
+    display: inline-block;
+    z-index: 10;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+/* Hide the checkbox */
+.toggle input {
+    display: none;
+}
+
+/* Toggle button appearance */
+.toggle input + div {
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    position: relative;
+    border: 2px solid var(--icon-color);
+    box-shadow: inset 8px -8px 0 0 var(--icon-color);
+    transform: scale(1) rotate(-2deg);
+    transition: box-shadow .5s ease 0s, transform .4s ease .1s;
+}
+
+.toggle input + div:before {
+    content: '';
+    width: inherit;
+    height: inherit;
+    border-radius: inherit;
+    position: absolute;
+    left: 0;
+    top: 0;
+    transition: background .3s ease;
+}
+
+.toggle input + div:after {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    margin: -2.5px 0 0 -2.5px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    box-shadow: 0 -14px 0 var(--icon-color),
+        0 14px 0 var(--icon-color),
+        14px 0 0 var(--icon-color),
+        -14px 0 0 var(--icon-color),
+        10px 10px 0 var(--icon-color),
+        -10px 10px 0 var(--icon-color),
+        10px -10px 0 var(--icon-color),
+        -10px -10px 0 var(--icon-color);
+    transform: scale(0);
+    transition: all .3s ease;
+}
+
+/* Toggle checked state */
+.toggle input:checked + div {
+    box-shadow: inset 16px -16px 0 0 var(--bg-gradient-1);
+    transform: scale(.6) rotate(0deg);
+    transition: transform .3s ease .1s, box-shadow .2s ease 0s;
+}
+
+.toggle input:checked + div:before {
+    background: var(--icon-color);
+    transition: background .3s ease .1s;
+}
+
+.toggle input:checked + div:after {
+    transform: scale(1.5);
+    transition: transform .5s ease .15s;
+}
+
+/* View Transitions API animations */
+@-webkit-keyframes reveal-in {
+    from {
+        -webkit-clip-path: circle(0% at var(--x) var(--y));
+    }
+    to {
+        -webkit-clip-path: circle(150% at var(--x) var(--y));
+    }
+}
+
+@keyframes reveal-in {
+    from {
+        clip-path: circle(0% at var(--x) var(--y));
+    }
+    to {
+        clip-path: circle(150% at var(--x) var(--y));
+    }
+}
+
+@-webkit-keyframes reveal-out {
+    from {
+        -webkit-clip-path: circle(150% at var(--x) var(--y));
+    }
+    to {
+        -webkit-clip-path: circle(0% at var(--x) var(--y));
+    }
+}
+
+@keyframes reveal-out {
+    from {
+        clip-path: circle(150% at var(--x) var(--y));
+    }
+    to {
+        clip-path: circle(0% at var(--x) var(--y));
+    }
+}
+
+/* Safari fallback animations */
+@-webkit-keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@-webkit-keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+/* View transition animations */
+::view-transition-old(root) {
+    -webkit-animation: reveal-out 0.5s ease-in-out forwards;
+    animation: reveal-out 0.5s ease-in-out forwards;
+}
+
+::view-transition-new(root) {
+    -webkit-animation: reveal-in 0.5s ease-in-out forwards;
+    animation: reveal-in 0.5s ease-in-out forwards;
+}
+
+::view-transition-image-pair(root) {
+    isolation: isolate;
+}
+
+/* Responsive adjustments for toggle */
+@media (max-width: 480px) {
+    .toggle {
+        transform: scale(0.8);
+    }
+}

@@ -1,0 +1,193 @@
+/* Common component styles for Weatherify web pages */
+
+/* Header styles */
+.header {
+    text-align: left;
+    margin-bottom: 3rem;
+    position: relative;
+    padding: 1.5rem 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    background: transparent;
+    border-bottom: 1px solid var(--header-border);
+    margin-top: 1rem;
+}
+
+.brand-text {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+.logo {
+    font-size: 1.75rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #6b7dbb, #3b4f7d);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    letter-spacing: -0.01em;
+    position: relative;
+    transition: all 0.3s ease;
+    margin-right: 1rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(59, 79, 125, 0.1);
+}
+
+/* Content area styles */
+.content-area {
+    background: var(--content-bg);
+    border: 1px solid var(--content-border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 3rem;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    box-shadow: 0 4px 12px var(--card-shadow);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+/* Terms content specific styles */
+.terms-content {
+    composes: content-area;
+}
+
+.terms-content h1 {
+    color: var(--heading-color);
+    margin-bottom: 1rem;
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.terms-content h2 {
+    color: var(--heading-color);
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.terms-content h3 {
+    color: var(--heading-color);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.terms-content p {
+    margin-bottom: 1rem;
+    line-height: 1.7;
+}
+
+.terms-content .last-updated {
+    font-style: italic;
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+}
+
+/* Footer styles */
+.footer {
+    text-align: center;
+    padding: 2rem 0;
+    margin-top: auto;
+    color: #a0a0b0;
+    font-size: 0.9rem;
+    border-top: 1px solid rgba(60, 60, 80, 0.2);
+    padding-top: 2rem;
+}
+
+.footer a {
+    color: #6b7280;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.footer a:hover {
+    color: #8b93a8;
+    text-decoration: underline;
+}
+
+.footer-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Responsive styles for components */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 1rem;
+    }
+
+    .header {
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+    }
+
+    .brand-text {
+        align-items: center;
+    }
+
+    .logo {
+        font-size: 1.5rem;
+        margin-right: 0.5rem;
+    }
+
+    .subtitle {
+        font-size: 0.75rem;
+    }
+
+    .content-area {
+        padding: 1.5rem;
+    }
+
+    .terms-content h2 {
+        font-size: 1.35rem;
+    }
+
+    .terms-content h3 {
+        font-size: 1.15rem;
+    }
+}
+
+/* Small mobile devices */
+@media (max-width: 480px) {
+    .header {
+        justify-content: space-between;
+    }
+
+    .brand-text {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .logo {
+        margin-right: 0;
+        margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+        font-size: 0.7rem;
+    }
+
+    .content-area {
+        padding: 1.25rem;
+    }
+}

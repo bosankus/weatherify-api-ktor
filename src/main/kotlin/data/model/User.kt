@@ -46,3 +46,9 @@ data class LoginResponse(
     val token: String,
     val email: String
 )
+
+/** Token refresh request data */
+@Serializable
+data class TokenRefreshRequest(
+    val token: String
+)

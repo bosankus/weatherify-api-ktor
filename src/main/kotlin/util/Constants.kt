@@ -55,6 +55,7 @@ object Constants {
         const val FEEDBACK_ENDPOINT = "/feedback"
         const val LOGIN_ENDPOINT = "/login"
         const val REGISTER_ENDPOINT = "/register"
+        const val REFRESH_TOKEN_ENDPOINT = "/refresh-token"
         const val HOME_ENDPOINT = "/"
 
         // API URLs
@@ -84,6 +85,9 @@ object Constants {
         // Auth messages
         const val REGISTRATION_SUCCESS = "User registered successfully"
         const val LOGIN_SUCCESS = "Login successful"
+        const val TOKEN_REFRESH_SUCCESS = "Token refreshed successfully"
+        const val TOKEN_NOT_EXPIRED = "Token is still valid and does not need to be refreshed"
+        const val TOKEN_INVALID = "Invalid token provided for refresh"
         const val INVALID_CREDENTIALS = "Invalid credentials"
         const val USER_ALREADY_EXISTS = "User already exists"
         const val FAILED_REGISTER = "Failed to register user"

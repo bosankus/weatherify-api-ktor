@@ -2,6 +2,7 @@ package bose.ankush.route
 
 import bose.ankush.data.db.DatabaseFactory
 import bose.ankush.data.model.LoginResponse
+import bose.ankush.data.model.TokenRefreshRequest
 import bose.ankush.data.model.User
 import bose.ankush.data.model.UserLoginRequest
 import bose.ankush.data.model.UserRegistrationRequest
@@ -16,7 +17,7 @@ import io.ktor.server.routing.post
 import util.Constants
 
 /**
- * Authentication routes for user registration and login
+ * Authentication routes for user registration, login, and token refresh
  */
 fun Route.authRoute() {
     /**
@@ -146,6 +147,78 @@ fun Route.authRoute() {
             call.respondSuccess(
                 Constants.Messages.LOGIN_SUCCESS,
                 LoginResponse(token = token, email = user.email),
+                HttpStatusCode.OK
+            )
+        } catch (e: Exception) {
+            call.respondError(
+                "${Constants.Messages.INTERNAL_SERVER_ERROR}: ${e.localizedMessage}",
+                Unit,
+                HttpStatusCode.InternalServerError
+            )
+        }
+    }
+
+    /**
+     * Refresh an expired JWT token
+     * POST /refresh-token with expired token in request body
+     * Returns 200 OK with new JWT token on success, various error codes on failure
+     */
+    post(Constants.Api.REFRESH_TOKEN_ENDPOINT) {
+        try {
+            // Parse request body
+            val request = call.receive<TokenRefreshRequest>()
+
+            // Validate the expired token and extract email
+            val email = JwtConfig.validateExpiredTokenAndExtractEmail(request.token)
+
+            if (email == null) {
+                // Check if token is still valid (not expired)
+                try {
+                    JwtConfig.verifier.verify(request.token)
+                    call.respondError(
+                        Constants.Messages.TOKEN_NOT_EXPIRED,
+                        Unit,
+                        HttpStatusCode.BadRequest
+                    )
+                } catch (_: Exception) {
+                    // Token is invalid for some other reason
+                    call.respondError(
+                        Constants.Messages.TOKEN_INVALID,
+                        Unit,
+                        HttpStatusCode.BadRequest
+                    )
+                }
+                return@post
+            }
+
+            // Find user by email to ensure they still exist and are active
+            val user = DatabaseFactory.findUserByEmail(email)
+            if (user == null) {
+                call.respondError(
+                    Constants.Messages.USER_NOT_REGISTERED,
+                    Unit,
+                    HttpStatusCode.Unauthorized
+                )
+                return@post
+            }
+
+            // Check if user is active
+            if (!user.isActive) {
+                call.respondError(
+                    Constants.Messages.ACCOUNT_INACTIVE,
+                    Unit,
+                    HttpStatusCode.Forbidden
+                )
+                return@post
+            }
+
+            // Generate new JWT token
+            val newToken = JwtConfig.generateToken(email)
+
+            // Return new token in response body
+            call.respondSuccess(
+                Constants.Messages.TOKEN_REFRESH_SUCCESS,
+                LoginResponse(token = newToken, email = email),
                 HttpStatusCode.OK
             )
         } catch (e: Exception) {
