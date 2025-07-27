@@ -1,188 +1,159 @@
-# Weatherify - Ktor Backend API
+# Weatherify API
 
-[![Kotlin](https://img.shields.io/badge/kotlin-1.9.0-blue.svg)](https://kotlinlang.org)
-[![Ktor](https://img.shields.io/badge/ktor-2.3.3-orange.svg)](https://ktor.io)
-[![KMongo](https://img.shields.io/badge/kmongo-4.9.0-green.svg)](https://litote.org/kmongo/)
+[![Kotlin](https://img.shields.io/badge/kotlin-2.2.0-blue.svg)](https://kotlinlang.org)
+[![Ktor](https://img.shields.io/badge/ktor-3.2.2-orange.svg)](https://ktor.io)
+[![MongoDB](https://img.shields.io/badge/mongodb-5.5.1-green.svg)](https://mongodb.com)
 
-A robust Ktor-KMongo backend API for the [Compose-Weatherify Android app](https://github.com/bosankus/Compose-Weatherify), providing weather data, feedback management, and more.
+A Ktor backend API for
+the [Compose-Weatherify Android app](https://github.com/bosankus/Compose-Weatherify), providing
+weather data, user authentication, and feedback management.
 
-<!-- If you have a banner image for the API, uncomment and update the URL below -->
-<!-- ![Weatherify Banner](URL_TO_YOUR_BANNER_IMAGE) -->
+## Overview
 
-## Table of Contents
+Weatherify API is a Kotlin-based backend service built with Ktor and MongoDB. It provides:
 
-- [Introduction](#introduction)
-- [Features](#features)
-- [API Endpoints](#api-endpoints)
-- [Technologies](#technologies)
-- [Code Organization](#code-organization)
-- [Building & Running](#building--running)
-- [Contributing](#contributing)
+- Real-time weather and air pollution data
+- User authentication with JWT
+- Feedback submission and management
+- Interactive API documentation UI
 
-## Introduction
+## Architecture
 
-Weatherify Backend API is a fully functional Ktor-KMongo backend service that powers the [Compose-Weatherify Android app](https://github.com/bosankus/Compose-Weatherify). This API provides:
+The application follows a modular architecture with clear separation of concerns. See
+the [Architecture Diagram](docs/architecture.md) for a visual representation of the system
+components and their relationships.
 
-- Real-time weather data and air pollution information
-- User feedback submission and management
-- Secure user authentication with JWT
-- Interactive web UI for API documentation and testing
-- Resume viewing functionality
+### Data Flows
 
-The service is deployed on Google Cloud Platform (GCP) App Engine for reliable, scalable hosting.
+The application implements several key data flows:
 
-## Features
+1. **Weather Data Retrieval** - How weather data is fetched from external APIs and returned to
+   clients
+2. **Authentication** - User registration and login processes
+3. **Feedback Submission** - How feedback is submitted and stored
 
-Here's a list of Ktor features included in this project:
-
-| Name                                                                   | Description                                                                        |
-| ------------------------------------------------------------------------|------------------------------------------------------------------------------------ |
-| [Call Logging](https://start.ktor.io/p/call-logging)                   | Logs client requests for monitoring and debugging                                  |
-| [Default Headers](https://start.ktor.io/p/default-headers)             | Adds a default set of headers to HTTP responses                                    |
-| [Content Negotiation](https://start.ktor.io/p/content-negotiation)     | Provides automatic content conversion according to Content-Type and Accept headers |
-| [Routing](https://start.ktor.io/p/routing)                             | Provides a structured routing DSL for organizing endpoints                         |
-| [kotlinx.serialization](https://start.ktor.io/p/kotlinx-serialization) | Handles JSON serialization using kotlinx.serialization library                     |
+Detailed sequence diagrams for these flows are available in
+the [Data Flows Documentation](docs/data-flows.md).
 
 ## API Endpoints
 
-The API provides the following endpoints:
-
-### Home
-- `GET /` - Interactive HTML documentation page for exploring the API
-
 ### Weather
-- `GET /weather` - Get weather data for a location
-  - Query parameters: `lat` (latitude), `lon` (longitude)
-  - Response: Comprehensive weather data including current conditions, hourly forecasts, daily forecasts, and weather alerts
-  - Response model includes:
-    - Current weather (temperature, humidity, wind, etc.)
-    - Hourly forecasts (up to 48 hours)
-    - Daily forecasts (up to 7 days)
-    - Weather alerts (if available)
 
-### Air Pollution
-- `GET /air-pollution` - Get air pollution data for a location
-  - Query parameters: `lat` (latitude), `lon` (longitude)
-  - Response: Detailed air quality information for the specified location
-  - Response model includes:
-    - Air Quality Index (AQI)
-    - Concentration of pollutants (CO, NO2, O3, SO2, PM2.5, PM10, etc.)
-    - Timestamp of measurement
+```
+GET /weather?lat={latitude}&lon={longitude}
+```
 
-### Feedback
-- `GET /feedback` - Get feedback by ID
-  - Query parameters: `id` (feedback ID)
-  - Response: Feedback details if found
-- `POST /feedback` - Submit new feedback
-  - Required parameters: `deviceId`, `deviceOs`, `feedbackTitle`, `feedbackDescription`
-  - Response: ID of the created feedback
-- `DELETE /feedback` - Delete feedback by ID
-  - Query parameters: `id` (feedback ID)
-  - Response: Success or error message
+Returns comprehensive weather data including current conditions, hourly and daily forecasts.
+
+```
+GET /air-pollution?lat={latitude}&lon={longitude}
+```
+
+Returns air quality information for the specified location.
 
 ### Authentication
 
-- `POST /register` - Register a new user
-  - Request body: JSON with `email` and `password`
-  - Password requirements: Min 8 chars, uppercase, lowercase, digit, special char
-  - Response: Success message with 201 status code
-- `POST /login` - Authenticate a user
-  - Request body: JSON with `email` and `password`
-  - Response: JWT token (valid for 24 hours) in response body and Authorization header
-  - Token contains user email as subject and appropriate claims
+```
+POST /register
+```
+
+Registers a new user. Requires email and password in request body.
+
+```
+POST /login
+```
+
+Authenticates a user and returns a JWT token. Requires email and password in request body.
+
+### Feedback
+
+```
+GET /feedback?id={feedbackId}
+```
+
+Retrieves feedback by ID.
+
+```
+POST /feedback
+```
+
+Submits new feedback. Requires deviceId, deviceOs, feedbackTitle, and feedbackDescription.
+
+```
+DELETE /feedback?id={feedbackId}
+```
+
+Deletes feedback by ID.
+
+## Setup & Installation
+
+### Prerequisites
+
+- JDK 17+
+- MongoDB (local or remote)
+- OpenWeatherMap API key (for weather data)
+
+### Environment Variables
+
+- `WEATHER_URL`: Weather data API URL
+- `AIR_POLLUTION_URL`: Air pollution data API URL
+- `DB_NAME`: MongoDB database name
+- `JWT_EXPIRATION`: JWT token expiration time in milliseconds
+- `JWT_AUDIENCE`: JWT audience
+- `JWT_ISSUER`: JWT issuer
+- `JWT_REALM`: JWT realm
+- `WEATHER_API_KEY`: OpenWeatherMap API key (for local development)
+- `DB_CONNECTION_STRING`: MongoDB connection string (for local development)
+
+### Running Locally
+
+```bash
+# Build the project
+./gradlew build
+
+# Run the server
+./gradlew run
+```
+
+The server will start at http://0.0.0.0:8080
+
+### Deployment
+
+The application is configured for deployment to Google Cloud Platform App Engine:
+
+```bash
+./gradlew appengineDeploy
+```
+
+## Project Structure
+
+```
+src/
+├── main/
+│   ├── kotlin/
+│   │   ├── Application.kt         # Main application entry point
+│   │   ├── Authentication.kt      # JWT authentication configuration
+│   │   ├── HTTP.kt                # HTTP configuration
+│   │   ├── Monitoring.kt          # Logging and monitoring
+│   │   ├── Routing.kt             # API route configuration
+│   │   ├── config/                # Environment and JWT configuration
+│   │   ├── data/                  # Data models and database access
+│   │   ├── route/                 # API route handlers
+│   │   └── util/                  # Utility classes and constants
+│   └── resources/                 # Static resources and configuration
+└── test/                          # Test classes
+```
 
 ## Technologies
 
-This project is built with the following technologies:
-
-- **[Kotlin](https://kotlinlang.org/)** - Modern, concise programming language
-- **[Ktor](https://ktor.io/)** - Lightweight framework for building asynchronous servers
-- **[KMongo](https://litote.org/kmongo/)** - Kotlin toolkit for MongoDB
-- **[kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)** - JSON serialization library
-- **[kotlinx.html](https://github.com/Kotlin/kotlinx.html)** - DSL for building HTML
-- **[Google Cloud Platform](https://cloud.google.com/)** - Cloud hosting platform
-
-## Code Organization
-
-The project follows a clean, modular architecture with a focus on maintainability and scalability:
-
-### Package Structure
-
-The codebase is organized into the following packages:
-
-| Package  | Description                                                               |
-|----------|---------------------------------------------------------------------------|
-| `root`   | Main application files (Application.kt, Authentication.kt, HTTP.kt, etc.) |
-| `config` | Configuration classes for environment variables, JWT, etc.                |
-| `data`   | Data models and database-related code                                     |
-| `route`  | API route handlers for different endpoints                                |
-| `util`   | Utility classes including constants and helper functions                  |
-
-This organization separates concerns and makes the codebase easier to navigate and maintain.
-
-### Constants Management
-
-All string constants are centralized in a single `Constants.kt` file located in the `util` package.
-This approach offers several benefits:
-
-- **Maintainability**: Easier to update values in one place
-- **Consistency**: Prevents duplication and inconsistencies
-- **Readability**: Improves code clarity with meaningful constant names
-- **Type Safety**: Reduces errors from typos in string literals
-
-The constants are organized into logical categories:
-
-| Category   | Description                              | Examples                                       |
-|------------|------------------------------------------|------------------------------------------------|
-| `Database` | Database names, collections, field names | `USERS_COLLECTION`, `EMAIL_FIELD`              |
-| `Auth`     | JWT configuration, validation messages   | `JWT_SECRET_NAME`, `INVALID_PASSWORD_STRENGTH` |
-| `Api`      | Endpoints, URLs, query parameters        | `WEATHER_ENDPOINT`, `PARAM_LAT`                |
-| `Messages` | Response messages for different features | `REGISTRATION_SUCCESS`, `WEATHER_RETRIEVED`    |
-| `Env`      | Environment variable names               | `JWT_EXPIRATION`, `WEATHER_URL`                |
-
-### Usage Example
-
-Instead of hardcoding strings:
-
-```kotlin
-// Before
-val collection = database.getCollection<User>("users")
-```
-
-Use the constants:
-
-```kotlin
-// After
-val collection = database.getCollection<User>(Constants.Database.USERS_COLLECTION)
-```
-
-This approach makes the codebase more maintainable and less prone to errors from typos or
-inconsistent string values.
-
-## Building & Running
-
-To build or run the project, use one of the following tasks:
-
-| Task                          | Description                                                          |
-| -------------------------------|---------------------------------------------------------------------- |
-| `./gradlew test`              | Run the tests                                                        |
-| `./gradlew build`             | Build everything                                                     |
-| `buildFatJar`                 | Build an executable JAR of the server with all dependencies included |
-| `buildImage`                  | Build the docker image to use with the fat JAR                       |
-| `publishImageToLocalRegistry` | Publish the docker image locally                                     |
-| `run`                         | Run the server                                                       |
-| `runDocker`                   | Run using the local docker image                                     |
-
-If the server starts successfully, you'll see the following output:
-
-```
-2024-12-04 14:32:45.584 [main] INFO  Application - Application started in 0.303 seconds.
-2024-12-04 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
-```
+- **[Kotlin](https://kotlinlang.org/)**: Modern JVM language
+- **[Ktor](https://ktor.io/)**: Lightweight asynchronous web framework
+- **[MongoDB](https://www.mongodb.com/)**: NoSQL database
+- **[kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)**: JSON serialization
+- **[kotlinx.html](https://github.com/Kotlin/kotlinx.html)**: HTML DSL
+- **[Google Cloud Platform](https://cloud.google.com/)**: Hosting platform
 
 ## Contributing
-
-Contributions are welcome! If you'd like to contribute to this project, please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)

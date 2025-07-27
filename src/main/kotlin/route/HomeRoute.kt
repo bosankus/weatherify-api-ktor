@@ -1850,6 +1850,101 @@ fun Route.homeRoute() {
 
                             }
 
+                            div {
+                                classes = setOf("card")
+                                id = "auth-api-card"
+                                attributes["data-title"] = "Authentication API"
+                                attributes["data-content"] =
+                                    "<h3>Authentication API Endpoints</h3>" +
+                                            "<div class='response-example'>" +
+                                            "<strong>POST /register</strong><br>" +
+                                            "<span class='param-label'>Parameters:</span> <code>email</code>, <code>password</code><br>" +
+                                            "<span class='desc-label'>Description:</span> Registers a new user with email and password. Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character." +
+                                            "</div>" +
+                                            "<div class='response-example'>" +
+                                            "<strong>POST /login</strong><br>" +
+                                            "<span class='param-label'>Parameters:</span> <code>email</code>, <code>password</code><br>" +
+                                            "<span class='desc-label'>Description:</span> Authenticates a user and returns a JWT token for accessing protected resources." +
+                                            "</div>" +
+                                            "<h4>Request Models:</h4>" +
+                                            "<div class='response-example model-container'>" +
+                                            "<div class='model-header'>UserRegistrationRequest</div>" +
+                                            "<pre class='model-content'>" +
+                                            "{\n" +
+                                            "  \"email\": String,\n" +
+                                            "  \"password\": String\n" +
+                                            "}</pre>" +
+                                            "</div>" +
+                                            "<div class='response-example model-container'>" +
+                                            "<div class='model-header'>UserLoginRequest</div>" +
+                                            "<pre class='model-content'>" +
+                                            "{\n" +
+                                            "  \"email\": String,\n" +
+                                            "  \"password\": String\n" +
+                                            "}</pre>" +
+                                            "</div>" +
+                                            "<h4>Response Models:</h4>" +
+                                            "<div class='response-example model-container'>" +
+                                            "<div class='model-header'>LoginResponse</div>" +
+                                            "<pre class='model-content'>" +
+                                            "{\n" +
+                                            "  \"token\": String,\n" +
+                                            "  \"email\": String\n" +
+                                            "}</pre>" +
+                                            "</div>" +
+                                            "<div class='response-example model-container'>" +
+                                            "<div class='model-header'>ApiResponse</div>" +
+                                            "<pre class='model-content'>" +
+                                            "{\n" +
+                                            "  \"status\": Boolean,\n" +
+                                            "  \"message\": String,\n" +
+                                            "  \"data\": T\n" +
+                                            "}</pre>" +
+                                            "</div>"
+                                div {
+                                    classes = setOf("card-header")
+                                    div {
+                                        classes = setOf("card-icon")
+                                        span {
+                                            classes = setOf("material-icons")
+                                            +"security"
+                                        }
+                                    }
+                                    h3 {
+                                        classes = setOf("card-title")
+                                        +"Authentication API"
+                                    }
+                                }
+                                p {
+                                    classes = setOf("card-description")
+                                    +"Secure user authentication with JWT tokens for protected resource access and comprehensive validation."
+                                }
+                                div {
+                                    classes = setOf("endpoints-container")
+                                    div {
+                                        classes = setOf("endpoint")
+                                        span {
+                                            classes = setOf("method", "post")
+                                            +"POST"
+                                        }
+                                        span {
+                                            classes = setOf("endpoint-path")
+                                            +"/register"
+                                        }
+                                    }
+                                    div {
+                                        classes = setOf("endpoint")
+                                        span {
+                                            classes = setOf("method", "post")
+                                            +"POST"
+                                        }
+                                        span {
+                                            classes = setOf("endpoint-path")
+                                            +"/login"
+                                        }
+                                    }
+                                }
+                            }
 
                         }
 

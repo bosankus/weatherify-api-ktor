@@ -5,6 +5,9 @@ import config.Environment
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.cache.HttpCache
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.json.Json
 
 /**
  * Cache for weather-related resources with 10-minute expiration.
@@ -36,7 +39,16 @@ object WeatherCache {
             // Dispose previous client if exists
             cachedWeatherClient?.close()
 
-            cachedWeatherClient = HttpClient(CIO) { install(HttpCache) }
+            cachedWeatherClient = HttpClient(CIO) {
+                install(HttpCache)
+                install(ContentNegotiation) {
+                    json(Json {
+                        prettyPrint = true
+                        isLenient = true
+                        ignoreUnknownKeys = true
+                    })
+                }
+            }
             weatherClientExpiration = currentTime + CACHE_EXPIRATION_TIME
         }
 

@@ -1,8 +1,8 @@
 [versions]
 kotlin-version = "2.2.0"
 ktor-version = "3.2.2"
-logback-version = "1.4.14"
-kotlin-mongo-driver-version = "5.4.0"
+logback-version = "1.5.18"
+kotlin-mongo-driver-version = "5.5.1"
 gcp-secret-manager-version = "2.60.0"
 bcrypt-version = "0.10.2"
 
