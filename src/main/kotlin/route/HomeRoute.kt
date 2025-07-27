@@ -17,7 +17,6 @@ import kotlinx.html.h2
 import kotlinx.html.h3
 import kotlinx.html.head
 import kotlinx.html.id
-import kotlinx.html.iframe
 import kotlinx.html.input
 import kotlinx.html.label
 import kotlinx.html.link
@@ -1796,20 +1795,6 @@ fun Route.homeRoute() {
                                 p {
                                     +"© 2025 Androidplay. All rights reserved."
                                 }
-                            }
-                        }
-
-                        // Background Music
-                        div {
-                            id = "music-container"
-                            style = "position: fixed; bottom: -1000px; opacity: 0.1;"
-                            iframe {
-                                width = "560"
-                                height = "315"
-                                src = "https://www.youtube.com/embed/QoECZE6xTr0?autoplay=1&loop=1&playlist=QoECZE6xTr0"
-                                style = "border: none;"
-                                attributes["allow"] = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                attributes["allowfullscreen"] = ""
                             }
                         }
                     }

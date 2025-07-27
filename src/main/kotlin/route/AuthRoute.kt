@@ -64,7 +64,14 @@ fun Route.authRoute() {
             val passwordHash = PasswordUtil.hashPassword(request.password)
             val user = User(
                 email = request.email,
-                passwordHash = passwordHash
+                passwordHash = passwordHash,
+                timestampOfRegistration = request.timestampOfRegistration,
+                deviceModel = request.deviceModel,
+                operatingSystem = request.operatingSystem,
+                osVersion = request.osVersion,
+                appVersion = request.appVersion,
+                ipAddress = request.ipAddress,
+                registrationSource = request.registrationSource
             )
 
             // Save user to database

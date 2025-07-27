@@ -3,6 +3,7 @@ package bose.ankush.base
 import bose.ankush.route.authRoute
 import bose.ankush.route.feedbackRoute
 import bose.ankush.route.homeRoute
+import bose.ankush.route.privacyPolicyRoute
 import bose.ankush.route.termsAndConditionsRoute
 import bose.ankush.route.weatherRoute
 import io.ktor.server.application.Application
@@ -15,5 +16,6 @@ fun Application.configureRouting() {
         feedbackRoute()
         authRoute()
         termsAndConditionsRoute()
+        privacyPolicyRoute()
     }
 }
