@@ -1,6 +1,5 @@
 package bose.ankush.base
 
-import bose.ankush.route.adminRoute
 import bose.ankush.route.authRoute
 import bose.ankush.route.feedbackRoute
 import bose.ankush.route.handleNotFound
@@ -26,7 +25,6 @@ fun Application.configureRouting() {
         weatherRoute()
         feedbackRoute()
         authRoute()
-        adminRoute()
         termsAndConditionsRoute()
         privacyPolicyRoute()
 

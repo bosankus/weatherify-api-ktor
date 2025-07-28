@@ -14,12 +14,15 @@ import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import util.Constants
 
 /**
  * Configure authentication for the application
  */
 fun Application.configureAuthentication() {
+    val logger = LoggerFactory.getLogger("Authentication")
+
     install(Authentication) {
         jwt("jwt-auth") {
             realm = Environment.getJwtRealm()
@@ -27,21 +30,28 @@ fun Application.configureAuthentication() {
 
             validate { credential ->
                 try {
-                    // Extract email from JWT token
-                    val email = credential.payload.getClaim("email").asString()
+                    // Extract email from JWT token using the constant
+                    val email =
+                        credential.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
                     if (email.isNotEmpty()) {
                         // Create a JWTPrincipal with the token's payload
+                        logger.debug("Authentication successful for user: $email")
                         JWTPrincipal(credential.payload)
                     } else {
+                        logger.warn("Authentication failed: Empty email claim in token")
                         null
                     }
-                } catch (_: Exception) {
-                    // Log the exception if needed
+                } catch (e: Exception) {
+                    // Log the exception
+                    logger.error("Authentication failed: ${e.message}")
                     null
                 }
             }
 
             challenge { defaultScheme, realm ->
+                // Log the authentication challenge
+                logger.warn("Authentication challenge triggered - JWT authentication failed")
+
                 // Set the response status to 401 Unauthorized
                 call.response.status(HttpStatusCode.Unauthorized)
                 call.response.header(HttpHeaders.WWWAuthenticate, "$defaultScheme realm=\"$realm\"")
@@ -56,6 +66,9 @@ fun Application.configureAuthentication() {
                         "requestFormat" to "{ \"token\": \"your-expired-token\" }"
                     )
                 )
+
+                // Log the response details
+                logger.debug("Sending 401 Unauthorized response with refresh token info")
 
                 // Respond with the JSON-encoded ApiResponse
                 call.respondText(
