@@ -34,6 +34,7 @@ object Constants {
 
         // JWT claims
         const val JWT_CLAIM_EMAIL = "email"
+        const val JWT_CLAIM_ROLE = "role"
 
         // Secret names
         const val JWT_SECRET_NAME = "jwt-secret"
@@ -42,7 +43,7 @@ object Constants {
         // Password validation messages
         const val INVALID_EMAIL_FORMAT = "Invalid email format"
         const val INVALID_PASSWORD_STRENGTH =
-            "Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character"
+            "Password must be at least 8 characters long and contain uppercase, lowercase, digit, and at least one special character (!@#$%^&*()_-+=<>?/[]{}|)"
     }
 
     /**
@@ -112,6 +113,14 @@ object Constants {
 
         // Error messages
         const val INTERNAL_SERVER_ERROR = "Internal server error"
+        const val DATABASE_ERROR = "Database operation failed"
+        const val AUTHENTICATION_ERROR = "Authentication process failed"
+        const val VALIDATION_ERROR = "Validation process failed"
+        const val NETWORK_ERROR = "Network operation failed"
+        const val UNKNOWN_ERROR = "An unexpected error occurred"
+
+        // Out of scope messages
+        const val ENDPOINT_NOT_FOUND = "The requested endpoint does not exist"
     }
 
     /**

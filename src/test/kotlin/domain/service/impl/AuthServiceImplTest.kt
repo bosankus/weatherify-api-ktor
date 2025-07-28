@@ -17,6 +17,15 @@ class AuthServiceImplTest {
 
         override suspend fun updateUser(user: bose.ankush.data.model.User) =
             throw NotImplementedError("Not needed for these tests")
+
+        override suspend fun getAllUsers(
+            filter: Map<String, Any>?,
+            sortBy: String?,
+            sortOrder: Int?,
+            page: Int?,
+            pageSize: Int?
+        ): domain.model.Result<Pair<List<bose.ankush.data.model.User>, Long>> =
+            throw NotImplementedError("Not needed for these tests")
     }
 
     // Create an instance of AuthServiceImpl with the mock repository

@@ -9,7 +9,14 @@ sealed class Result<out T> {
     data class Error(val message: String, val exception: Exception? = null) : Result<Nothing>()
 
     companion object {
+        /**
+         * Creates a Success result with the given data.
+         */
         fun <T> success(data: T): Result<T> = Success(data)
+
+        /**
+         * Creates an Error result with the given message and optional exception.
+         */
         fun error(message: String, exception: Exception? = null): Result<Nothing> =
             Error(message, exception)
     }
@@ -35,24 +42,20 @@ sealed class Result<out T> {
     /**
      * Maps the success value using the given transform function.
      */
-    /*inline fun <R> map(transform: (T) -> R): Result<R> = when (this) {
+    inline fun <R> map(transform: (T) -> R): Result<R> = when (this) {
         is Success -> success(transform(data))
         is Error -> this
-    }*/
+    }
 
     /**
-     * Performs the given action on the success value.
+     * Maps the error message and exception using the given transform function.
      */
-    /*inline fun onSuccess(action: (T) -> Unit): Result<T> {
-        if (this is Success) action(data)
-        return this
-    }*/
-
-    /**
-     * Performs the given action on the error.
-     */
-    /*inline fun onError(action: (Error) -> Unit): Result<T> {
-        if (this is Error) action(this)
-        return this
-    }*/
+    inline fun mapError(transform: (String, Exception?) -> Pair<String, Exception?>): Result<T> =
+        when (this) {
+            is Success -> this
+            is Error -> {
+                val (newMessage, newException) = transform(message, exception)
+                error(newMessage, newException)
+            }
+        }
 }

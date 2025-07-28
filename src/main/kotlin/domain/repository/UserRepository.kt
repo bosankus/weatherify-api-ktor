@@ -28,4 +28,21 @@ interface UserRepository {
      * @return Result indicating success or failure.
      */
     suspend fun updateUser(user: User): Result<Boolean>
+
+    /**
+     * Get all users with optional filtering, sorting, and pagination.
+     * @param filter Optional filter criteria (e.g., by email, role, isActive)
+     * @param sortBy Optional field to sort by
+     * @param sortOrder Optional sort order (ascending or descending)
+     * @param page Optional page number for pagination
+     * @param pageSize Optional page size for pagination
+     * @return Result containing a list of users and total count
+     */
+    suspend fun getAllUsers(
+        filter: Map<String, Any>? = null,
+        sortBy: String? = null,
+        sortOrder: Int? = null,
+        page: Int? = null,
+        pageSize: Int? = null
+    ): Result<Pair<List<User>, Long>>
 }

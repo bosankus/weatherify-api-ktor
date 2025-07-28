@@ -16,13 +16,31 @@ object PasswordUtil {
 
     /** Hash a password using BCrypt */
     fun hashPassword(password: String): String {
-        return BCrypt.withDefaults().hashToString(COST_FACTOR, password.toCharArray())
+        try {
+            return BCrypt.withDefaults().hashToString(COST_FACTOR, password.toCharArray())
+        } catch (e: Exception) {
+            // Log the error
+            System.err.println("Error hashing password: ${e.message}")
+            e.printStackTrace()
+
+            // Rethrow as a more specific exception with a clearer message
+            throw IllegalArgumentException("Failed to hash password: ${e.message}", e)
+        }
     }
 
     /** Verify a password against a hash */
     fun verifyPassword(password: String, hash: String): Boolean {
-        val result = BCrypt.verifyer().verify(password.toCharArray(), hash)
-        return result.verified
+        try {
+            val result = BCrypt.verifyer().verify(password.toCharArray(), hash)
+            return result.verified
+        } catch (e: Exception) {
+            // Log the error
+            System.err.println("Error verifying password: ${e.message}")
+            e.printStackTrace()
+
+            // Rethrow as a more specific exception with a clearer message
+            throw IllegalArgumentException("Failed to verify password: ${e.message}", e)
+        }
     }
 
     /** Validate password strength */

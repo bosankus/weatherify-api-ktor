@@ -14,11 +14,9 @@ object WebResources {
     private val baseCss = readResourceFile("/web/css/base.css")
     private val componentsCss = readResourceFile("/web/css/components.css")
     private val themeToggleCss = readResourceFile("/web/css/theme-toggle.css")
-    private val musicPlayerCss = readResourceFile("/web/css/music-player.css")
 
     // JavaScript file contents
     private val themeJs = readResourceFile("/web/js/theme.js")
-    private val musicPlayerJs = readResourceFile("/web/js/music-player.js")
     private val utilsJs = readResourceFile("/web/js/utils.js")
 
     /**
@@ -52,7 +50,6 @@ object WebResources {
                 raw(baseCss)
                 raw(componentsCss)
                 raw(themeToggleCss)
-                raw(musicPlayerCss)
             }
         }
     }
@@ -66,7 +63,6 @@ object WebResources {
         head.script {
             unsafe {
                 raw(themeJs)
-                raw(musicPlayerJs)
                 raw(utilsJs)
 
                 // Initialize the app with a single DOMContentLoaded event listener
@@ -74,36 +70,9 @@ object WebResources {
                     """
                     // Single initialization point for the entire application
                     document.addEventListener('DOMContentLoaded', function() {
-                        // Ensure music container exists before initializing
-                        ensureMusicContainerExists();
-                        
                         // Initialize all application components
                         initializeApp();
                     });
-                    
-                    // Function to ensure music container exists
-                    function ensureMusicContainerExists() {
-                        if (!document.getElementById('music-container')) {
-                            const musicContainer = document.createElement('div');
-                            musicContainer.id = 'music-container';
-                            musicContainer.style.display = 'none';
-                            
-                            const audioElement = document.createElement('audio');
-                            audioElement.id = 'background-music';
-                            audioElement.loop = true;
-                            audioElement.preload = 'auto';
-                            
-                            const sourceElement = document.createElement('source');
-                            sourceElement.src = 'https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3';
-                            sourceElement.type = 'audio/mpeg';
-                            
-                            audioElement.appendChild(sourceElement);
-                            musicContainer.appendChild(audioElement);
-                            document.body.appendChild(musicContainer);
-                            
-                            console.log('Music container created');
-                        }
-                    }
                 """
                 )
             }

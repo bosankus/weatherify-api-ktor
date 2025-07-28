@@ -1327,24 +1327,6 @@ fun Route.homeRoute() {
                                     }
                                 }
 
-                                // Music toggle
-                                label {
-                                    classes = setOf("music-toggle")
-                                    style =
-                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
-
-                                    input {
-                                        type = InputType.checkBox
-                                        id = "music-toggle"
-                                    }
-
-                                    div {
-                                        classes = setOf("icon")
-                                        span {}
-                                        span {}
-                                        span {}
-                                    }
-                                }
 
                                 // GitHub icon
                                 span {
@@ -1356,21 +1338,6 @@ fun Route.homeRoute() {
                             }
                         }
 
-                        // Hidden audio element for background music
-                        div {
-                            id = "music-container"
-                            style = "display: none;"
-                            unsafe {
-                                raw(
-                                    """
-                                    <audio id="background-music" loop preload="auto">
-                                        <source src="https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3" type="audio/mpeg">
-                                        Your browser does not support the audio element.
-                                    </audio>
-                                """
-                                )
-                            }
-                        }
                         
                         div {
                             classes = setOf("content")

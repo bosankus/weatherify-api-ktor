@@ -100,7 +100,7 @@ fun Route.termsAndConditionsRoute() {
                                 classes = setOf("brand-text")
                                 h1 {
                                     classes = setOf("logo")
-                                    +"Weatherify"
+                                    +"Androidplay"
                                 }
                                 span {
                                     classes = setOf("subtitle")
@@ -129,42 +129,17 @@ fun Route.termsAndConditionsRoute() {
                                     }
                                 }
 
-                                // Music toggle
-                                label {
-                                    classes = setOf("music-toggle")
-                                    style =
-                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
-
-                                    input {
-                                        type = InputType.checkBox
-                                        id = "music-toggle"
-                                    }
-
-                                    div {
-                                        classes = setOf("icon")
-                                        span {}
-                                        span {}
-                                        span {}
-                                    }
+                                // GitHub icon
+                                span {
+                                    classes = setOf("material-icons", "nav-icon", "github-link")
+                                    id = "github-link"
+                                    attributes["data-url"] =
+                                        "https://github.com/bosankus/weatherify-api-ktor"
+                                    +"code"
                                 }
                             }
                         }
 
-                        // Hidden audio element for background music
-                        div {
-                            id = "music-container"
-                            style = "display: none;"
-                            unsafe {
-                                raw(
-                                    """
-                                    <audio id="background-music" loop preload="auto">
-                                        <source src="https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3" type="audio/mpeg">
-                                        Your browser does not support the audio element.
-                                    </audio>
-                                """
-                                )
-                            }
-                        }
 
                         // Terms and Conditions content
                         div {

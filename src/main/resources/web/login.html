@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Androidplay Weather API</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/theme-toggle.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <style>
+        /* Login form styles */
+        .login-container {
+            max-width: 450px;
+            margin: 3rem auto;
+            padding: 2.5rem;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px var(--card-shadow);
+        }
+        
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        
+        .form-group label {
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 1.05rem;
+        }
+        
+        .form-group input {
+            padding: 0.85rem 1.2rem;
+            border: 1px solid var(--input-border);
+            border-radius: 8px;
+            background: var(--input-bg);
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        .form-group input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+            outline: none;
+        }
+        
+        .login-button {
+            position: relative;
+            padding: 0.85rem 1.2rem;
+            background: linear-gradient(135deg, #3b4f7d, #2d3748);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1.05rem;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+            overflow: hidden;
+        }
+        
+        .login-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .login-button:active {
+            transform: translateY(0);
+        }
+        
+        .login-button.loading {
+            pointer-events: none;
+            opacity: 0.8;
+        }
+        
+        .login-button.loading::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            background-color: rgba(220, 38, 38, 0.1);
+            color: #dc2626;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            font-size: 0.95rem;
+            display: none;
+        }
+        
+        .error-message.visible {
+            display: block;
+        }
+        
+        .register-link {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+        
+        .register-link a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .register-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="brand-text">
+                <h1 class="logo">Androidplay</h1>
+                <span class="subtitle">Weather API</span>
+            </div>
+            <div style="flex-grow: 1;"></div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <!-- Theme toggle -->
+                <label class="toggle" style="position: relative; cursor: pointer; margin-right: 0.5rem;">
+                    <input type="checkbox" id="theme-toggle">
+                    <div></div>
+                </label>
+            </div>
+        </div>
+        
+        <div class="login-container">
+            <h2 style="margin-top: 0; margin-bottom: 1.5rem; text-align: center;">Login</h2>
+            
+            <div id="error-message" class="error-message"></div>
+            
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required autocomplete="email">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                </div>
+                
+                <button type="submit" id="login-button" class="login-button">Login</button>
+            </form>
+            
+            <div class="register-link">
+                Don't have an account? <a href="/register.html">Register</a>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/theme.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginForm = document.getElementById('login-form');
+            const loginButton = document.getElementById('login-button');
+            const errorMessage = document.getElementById('error-message');
+            
+            // Check URL parameters for error messages
+            const urlParams = new URLSearchParams(window.location.search);
+            const errorParam = urlParams.get('error');
+            
+            if (errorParam) {
+                if (errorParam === 'auth_required') {
+                    showError('Please login to access that page');
+                } else if (errorParam === 'session_expired') {
+                    showError('Your session has expired. Please login again.');
+                }
+            }
+            
+            // Check if already logged in
+            if (isAuthenticated()) {
+                // Redirect to dashboard
+                window.location.href = '/weather.html';
+            }
+            
+            // Handle form submission
+            loginForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                // Validate inputs
+                if (!email || !password) {
+                    showError('Please enter both email and password');
+                    return;
+                }
+                
+                // Show loading state
+                loginButton.classList.add('loading');
+                
+                // Use the login function from auth.js
+                login(email, password)
+                    .then(success => {
+                        if (!success) {
+                            // Login failed
+                            loginButton.classList.remove('loading');
+                            showError('Invalid email or password');
+                        }
+                        // If successful, the login function will redirect
+                    })
+                    .catch(error => {
+                        // Remove loading state
+                        loginButton.classList.remove('loading');
+                        showError('An error occurred. Please try again.');
+                        console.error('Login error:', error);
+                    });
+            });
+            
+            // Helper function to show error message
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.classList.add('visible');
+                
+                // Hide error after 5 seconds
+                setTimeout(() => {
+                    errorMessage.classList.remove('visible');
+                }, 5000);
+            }
+            
+            // Initialize theme
+            if (typeof initializeTheme === 'function') {
+                initializeTheme();
+            }
+            
+            // Initialize app
+            if (typeof initializeApp === 'function') {
+                initializeApp();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -28,7 +28,7 @@ class ConstantsTest {
         assertEquals("db-connection-string", Constants.Auth.DB_CONNECTION_STRING_SECRET)
         assertEquals("Invalid email format", Constants.Auth.INVALID_EMAIL_FORMAT)
         assertEquals(
-            "Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character",
+            "Password must be at least 8 characters long and contain uppercase, lowercase, digit, and at least one special character (!@#$%^&*()_-+=<>?/[]{}|)",
             Constants.Auth.INVALID_PASSWORD_STRENGTH
         )
     }

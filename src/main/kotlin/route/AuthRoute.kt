@@ -1,6 +1,5 @@
 package bose.ankush.route
 
-import bose.ankush.data.db.DatabaseFactory
 import bose.ankush.data.model.LoginResponse
 import bose.ankush.data.model.TokenRefreshRequest
 import bose.ankush.data.model.User
@@ -10,16 +9,24 @@ import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
+import domain.model.Result
+import domain.repository.UserRepository
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.application
 import io.ktor.server.routing.post
+import org.koin.ktor.ext.inject
+import org.slf4j.LoggerFactory
 import util.Constants
 
 /**
  * Authentication routes for user registration, login, and token refresh
  */
 fun Route.authRoute() {
+    val userRepository: UserRepository by application.inject()
+    val logger = LoggerFactory.getLogger("AuthRoute")
+
     /**
      * Register a new user
      * POST /register with email and password in request body
@@ -29,9 +36,11 @@ fun Route.authRoute() {
         try {
             // Parse request body
             val request = call.receive<UserRegistrationRequest>()
+            logger.info("Registration request received for email: ${request.email}")
 
             // Validate email format
             if (!PasswordUtil.validateEmailFormat(request.email)) {
+                logger.warn("Invalid email format: ${request.email}")
                 call.respondError(
                     Constants.Auth.INVALID_EMAIL_FORMAT,
                     Unit,
@@ -42,6 +51,7 @@ fun Route.authRoute() {
 
             // Validate password strength
             if (!PasswordUtil.validatePasswordStrength(request.password)) {
+                logger.warn("Invalid password strength for email: ${request.email}")
                 call.respondError(
                     Constants.Auth.INVALID_PASSWORD_STRENGTH,
                     Unit,
@@ -51,14 +61,56 @@ fun Route.authRoute() {
             }
 
             // Check if user already exists
-            val existingUser = DatabaseFactory.findUserByEmail(request.email)
-            if (existingUser != null) {
-                call.respondError(
-                    Constants.Messages.USER_ALREADY_EXISTS,
-                    Unit,
-                    HttpStatusCode.Conflict
-                )
-                return@post
+            val existingUserResult = userRepository.findUserByEmail(request.email)
+
+            when (existingUserResult) {
+                is Result.Success -> {
+                    if (existingUserResult.data != null) {
+                        logger.warn("User already exists: ${request.email}")
+                        call.respondError(
+                            Constants.Messages.USER_ALREADY_EXISTS,
+                            Unit,
+                            HttpStatusCode.Conflict
+                        )
+                        return@post
+                    }
+                }
+
+                is Result.Error -> {
+                    logger.error("Error checking if user exists: ${existingUserResult.message}")
+
+                    // Determine the type of error based on the message
+                    val errorMessage = when {
+                        existingUserResult.message.contains(
+                            "database",
+                            ignoreCase = true
+                        ) -> Constants.Messages.DATABASE_ERROR
+
+                        existingUserResult.message.contains(
+                            "validation",
+                            ignoreCase = true
+                        ) -> Constants.Messages.VALIDATION_ERROR
+
+                        existingUserResult.message.contains(
+                            "network",
+                            ignoreCase = true
+                        ) -> Constants.Messages.NETWORK_ERROR
+
+                        existingUserResult.message.contains(
+                            "auth",
+                            ignoreCase = true
+                        ) -> Constants.Messages.AUTHENTICATION_ERROR
+
+                        else -> Constants.Messages.DATABASE_ERROR // Most likely a database error in this context
+                    }
+
+                    call.respondError(
+                        "$errorMessage: Failed to check if user exists - ${existingUserResult.message}",
+                        mapOf("errorType" to errorMessage.substringBefore(":")),
+                        HttpStatusCode.InternalServerError
+                    )
+                    return@post
+                }
             }
 
             // Hash password and create user
@@ -76,26 +128,149 @@ fun Route.authRoute() {
             )
 
             // Save user to database
-            val success = DatabaseFactory.createUser(user)
-            if (success) {
-                call.respondSuccess(
-                    Constants.Messages.REGISTRATION_SUCCESS,
-                    Unit,
-                    HttpStatusCode.Created
-                )
-            } else {
+            val createResult = userRepository.createUser(user)
+
+            when (createResult) {
+                is Result.Success -> {
+                    if (createResult.data) {
+                        logger.info("User registered successfully: ${request.email}")
+                        call.respondSuccess(
+                            Constants.Messages.REGISTRATION_SUCCESS,
+                            Unit,
+                            HttpStatusCode.Created
+                        )
+                    } else {
+                        logger.error("Failed to register user: ${request.email}")
+                        call.respondError(
+                            Constants.Messages.FAILED_REGISTER,
+                            Unit,
+                            HttpStatusCode.InternalServerError
+                        )
+                    }
+                }
+
+                is Result.Error -> {
+                    logger.error("Error registering user: ${createResult.message}")
+
+                    // Determine the type of error based on the message
+                    val errorMessage = when {
+                        createResult.message.contains(
+                            "database",
+                            ignoreCase = true
+                        ) -> Constants.Messages.DATABASE_ERROR
+
+                        createResult.message.contains(
+                            "validation",
+                            ignoreCase = true
+                        ) -> Constants.Messages.VALIDATION_ERROR
+
+                        createResult.message.contains(
+                            "network",
+                            ignoreCase = true
+                        ) -> Constants.Messages.NETWORK_ERROR
+
+                        createResult.message.contains(
+                            "auth",
+                            ignoreCase = true
+                        ) -> Constants.Messages.AUTHENTICATION_ERROR
+
+                        else -> Constants.Messages.DATABASE_ERROR // Most likely a database error in this context
+                    }
+
+                    call.respondError(
+                        "$errorMessage: Failed to register user - ${createResult.message}",
+                        mapOf("errorType" to errorMessage.substringBefore(":")),
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Exception during registration: ${e.message}", e)
+
+            // Print stack trace for better debugging
+            e.printStackTrace()
+
+            // Determine the type of error based on the exception
+            val errorMessage = when {
+                e is IllegalArgumentException -> Constants.Messages.VALIDATION_ERROR
+                e.message?.contains(
+                    "database",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.DATABASE_ERROR
+
+                e.message?.contains(
+                    "validation",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "network",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.NETWORK_ERROR
+
+                e.message?.contains(
+                    "auth",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "password",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "email",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "secret",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "token",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "mongo",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.DATABASE_ERROR
+
+                e.message?.contains(
+                    "connection",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.NETWORK_ERROR
+
+                else -> Constants.Messages.UNKNOWN_ERROR
+            }
+
+            // Create a more detailed error response
+            val errorDetails = mapOf(
+                "errorType" to errorMessage.substringBefore(":"),
+                "errorMessage" to e.message,
+                "errorClass" to e.javaClass.simpleName
+            )
+
+            try {
                 call.respondError(
-                    Constants.Messages.FAILED_REGISTER,
-                    Unit,
+                    "$errorMessage: ${e.message}",
+                    errorDetails,
+                    HttpStatusCode.InternalServerError
+                )
+            } catch (respondException: Exception) {
+                // If responding with error details fails, try a simpler response
+                logger.error(
+                    "Failed to send error response: ${respondException.message}",
+                    respondException
+                )
+                call.respondError(
+                    "Internal server error",
+                    mapOf("error" to "Failed to process request"),
                     HttpStatusCode.InternalServerError
                 )
             }
-        } catch (e: Exception) {
-            call.respondError(
-                "${Constants.Messages.INTERNAL_SERVER_ERROR}: ${e.localizedMessage}",
-                Unit,
-                HttpStatusCode.InternalServerError
-            )
         }
     }
 
@@ -108,53 +283,185 @@ fun Route.authRoute() {
         try {
             // Parse request body
             val request = call.receive<UserLoginRequest>()
+            logger.info("Login request received for email: ${request.email}")
 
             // Find user by email
-            val user = DatabaseFactory.findUserByEmail(request.email)
-            if (user == null) {
-                call.respondError(
-                    Constants.Messages.USER_NOT_REGISTERED,
-                    Unit,
-                    HttpStatusCode.Unauthorized
-                )
-                return@post
+            val userResult = userRepository.findUserByEmail(request.email)
+
+            when (userResult) {
+                is Result.Success -> {
+                    val user = userResult.data
+                    if (user == null) {
+                        logger.warn("User not found: ${request.email}")
+                        call.respondError(
+                            Constants.Messages.USER_NOT_REGISTERED,
+                            Unit,
+                            HttpStatusCode.Unauthorized
+                        )
+                        return@post
+                    }
+
+                    // Verify password
+                    if (!PasswordUtil.verifyPassword(request.password, user.passwordHash)) {
+                        logger.warn("Invalid password for user: ${request.email}")
+                        call.respondError(
+                            Constants.Messages.INVALID_CREDENTIALS,
+                            Unit,
+                            HttpStatusCode.Unauthorized
+                        )
+                        return@post
+                    }
+
+                    // Check if user is active
+                    if (!user.isActive) {
+                        logger.warn("Account is inactive: ${request.email}")
+                        call.respondError(
+                            Constants.Messages.ACCOUNT_INACTIVE,
+                            Unit,
+                            HttpStatusCode.Forbidden
+                        )
+                        return@post
+                    }
+
+                    // Generate JWT token with user's role
+                    val token = JwtConfig.generateToken(user.email, user.role)
+                    logger.info("Login successful for user: ${request.email}")
+
+                    // Return token and user info in response body
+                    call.respondSuccess(
+                        Constants.Messages.LOGIN_SUCCESS,
+                        LoginResponse(
+                            token = token,
+                            email = user.email,
+                            role = user.role,
+                            isActive = user.isActive
+                        ),
+                        HttpStatusCode.OK
+                    )
+                }
+
+                is Result.Error -> {
+                    logger.error("Error finding user: ${userResult.message}")
+
+                    // Determine the type of error based on the message
+                    val errorMessage = when {
+                        userResult.message.contains(
+                            "database",
+                            ignoreCase = true
+                        ) -> Constants.Messages.DATABASE_ERROR
+
+                        userResult.message.contains(
+                            "validation",
+                            ignoreCase = true
+                        ) -> Constants.Messages.VALIDATION_ERROR
+
+                        userResult.message.contains(
+                            "network",
+                            ignoreCase = true
+                        ) -> Constants.Messages.NETWORK_ERROR
+
+                        userResult.message.contains(
+                            "auth",
+                            ignoreCase = true
+                        ) -> Constants.Messages.AUTHENTICATION_ERROR
+
+                        else -> Constants.Messages.DATABASE_ERROR // Most likely a database error in this context
+                    }
+
+                    call.respondError(
+                        "$errorMessage: Failed to find user - ${userResult.message}",
+                        mapOf("errorType" to errorMessage.substringBefore(":")),
+                        HttpStatusCode.InternalServerError
+                    )
+                }
             }
-
-            // Verify password
-            if (!PasswordUtil.verifyPassword(request.password, user.passwordHash)) {
-                call.respondError(
-                    Constants.Messages.INVALID_CREDENTIALS,
-                    Unit,
-                    HttpStatusCode.Unauthorized
-                )
-                return@post
-            }
-
-            // Check if user is active
-            if (!user.isActive) {
-                call.respondError(
-                    Constants.Messages.ACCOUNT_INACTIVE,
-                    Unit,
-                    HttpStatusCode.Forbidden
-                )
-                return@post
-            }
-
-            // Generate JWT token
-            val token = JwtConfig.generateToken(user.email)
-
-            // Return token in response body
-            call.respondSuccess(
-                Constants.Messages.LOGIN_SUCCESS,
-                LoginResponse(token = token, email = user.email),
-                HttpStatusCode.OK
-            )
         } catch (e: Exception) {
-            call.respondError(
-                "${Constants.Messages.INTERNAL_SERVER_ERROR}: ${e.localizedMessage}",
-                Unit,
-                HttpStatusCode.InternalServerError
+            logger.error("Exception during login: ${e.message}", e)
+
+            // Print stack trace for better debugging
+            e.printStackTrace()
+
+            // Determine the type of error based on the exception
+            val errorMessage = when {
+                e is IllegalArgumentException -> Constants.Messages.VALIDATION_ERROR
+                e.message?.contains(
+                    "database",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.DATABASE_ERROR
+
+                e.message?.contains(
+                    "validation",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "network",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.NETWORK_ERROR
+
+                e.message?.contains(
+                    "auth",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "password",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "email",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "secret",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "token",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "mongo",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.DATABASE_ERROR
+
+                e.message?.contains(
+                    "connection",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.NETWORK_ERROR
+
+                else -> Constants.Messages.UNKNOWN_ERROR
+            }
+
+            // Create a more detailed error response
+            val errorDetails = mapOf(
+                "errorType" to errorMessage.substringBefore(":"),
+                "errorMessage" to e.message,
+                "errorClass" to e.javaClass.simpleName
             )
+
+            try {
+                call.respondError(
+                    "$errorMessage: ${e.message}",
+                    errorDetails,
+                    HttpStatusCode.InternalServerError
+                )
+            } catch (respondException: Exception) {
+                // If responding with error details fails, try a simpler response
+                logger.error(
+                    "Failed to send error response: ${respondException.message}",
+                    respondException
+                )
+                call.respondError(
+                    "Internal server error",
+                    mapOf("error" to "Failed to process request"),
+                    HttpStatusCode.InternalServerError
+                )
+            }
         }
     }
 
@@ -167,6 +474,7 @@ fun Route.authRoute() {
         try {
             // Parse request body
             val request = call.receive<TokenRefreshRequest>()
+            logger.info("Token refresh request received")
 
             // Validate the expired token and extract email
             val email = JwtConfig.validateExpiredTokenAndExtractEmail(request.token)
@@ -175,6 +483,7 @@ fun Route.authRoute() {
                 // Check if token is still valid (not expired)
                 try {
                     JwtConfig.verifier.verify(request.token)
+                    logger.warn("Token not expired, refresh rejected")
                     call.respondError(
                         Constants.Messages.TOKEN_NOT_EXPIRED,
                         Unit,
@@ -182,6 +491,7 @@ fun Route.authRoute() {
                     )
                 } catch (_: Exception) {
                     // Token is invalid for some other reason
+                    logger.warn("Invalid token provided for refresh")
                     call.respondError(
                         Constants.Messages.TOKEN_INVALID,
                         Unit,
@@ -192,41 +502,175 @@ fun Route.authRoute() {
             }
 
             // Find user by email to ensure they still exist and are active
-            val user = DatabaseFactory.findUserByEmail(email)
-            if (user == null) {
-                call.respondError(
-                    Constants.Messages.USER_NOT_REGISTERED,
-                    Unit,
-                    HttpStatusCode.Unauthorized
-                )
-                return@post
+            val userResult = userRepository.findUserByEmail(email)
+
+            when (userResult) {
+                is Result.Success -> {
+                    val user = userResult.data
+                    if (user == null) {
+                        logger.warn("User not found during token refresh: $email")
+                        call.respondError(
+                            Constants.Messages.USER_NOT_REGISTERED,
+                            Unit,
+                            HttpStatusCode.Unauthorized
+                        )
+                        return@post
+                    }
+
+                    // Check if user is active
+                    if (!user.isActive) {
+                        logger.warn("Account is inactive during token refresh: $email")
+                        call.respondError(
+                            Constants.Messages.ACCOUNT_INACTIVE,
+                            Unit,
+                            HttpStatusCode.Forbidden
+                        )
+                        return@post
+                    }
+
+                    // Generate new JWT token with user's role
+                    val newToken = JwtConfig.generateToken(email, user.role)
+                    logger.info("Token refreshed successfully for user: $email")
+
+                    // Return new token and user info in response body
+                    call.respondSuccess(
+                        Constants.Messages.TOKEN_REFRESH_SUCCESS,
+                        LoginResponse(
+                            token = newToken,
+                            email = email,
+                            role = user.role,
+                            isActive = user.isActive
+                        ),
+                        HttpStatusCode.OK
+                    )
+                }
+
+                is Result.Error -> {
+                    logger.error("Error finding user during token refresh: ${userResult.message}")
+
+                    // Determine the type of error based on the message
+                    val errorMessage = when {
+                        userResult.message.contains(
+                            "database",
+                            ignoreCase = true
+                        ) -> Constants.Messages.DATABASE_ERROR
+
+                        userResult.message.contains(
+                            "validation",
+                            ignoreCase = true
+                        ) -> Constants.Messages.VALIDATION_ERROR
+
+                        userResult.message.contains(
+                            "network",
+                            ignoreCase = true
+                        ) -> Constants.Messages.NETWORK_ERROR
+
+                        userResult.message.contains(
+                            "auth",
+                            ignoreCase = true
+                        ) || userResult.message.contains(
+                            "token",
+                            ignoreCase = true
+                        ) -> Constants.Messages.AUTHENTICATION_ERROR
+
+                        else -> Constants.Messages.DATABASE_ERROR // Most likely a database error in this context
+                    }
+
+                    call.respondError(
+                        "$errorMessage: Failed to find user during token refresh - ${userResult.message}",
+                        mapOf("errorType" to errorMessage.substringBefore(":")),
+                        HttpStatusCode.InternalServerError
+                    )
+                }
             }
-
-            // Check if user is active
-            if (!user.isActive) {
-                call.respondError(
-                    Constants.Messages.ACCOUNT_INACTIVE,
-                    Unit,
-                    HttpStatusCode.Forbidden
-                )
-                return@post
-            }
-
-            // Generate new JWT token
-            val newToken = JwtConfig.generateToken(email)
-
-            // Return new token in response body
-            call.respondSuccess(
-                Constants.Messages.TOKEN_REFRESH_SUCCESS,
-                LoginResponse(token = newToken, email = email),
-                HttpStatusCode.OK
-            )
         } catch (e: Exception) {
-            call.respondError(
-                "${Constants.Messages.INTERNAL_SERVER_ERROR}: ${e.localizedMessage}",
-                Unit,
-                HttpStatusCode.InternalServerError
+            logger.error("Exception during token refresh: ${e.message}", e)
+
+            // Print stack trace for better debugging
+            e.printStackTrace()
+
+            // Determine the type of error based on the exception
+            val errorMessage = when {
+                e is IllegalArgumentException -> Constants.Messages.VALIDATION_ERROR
+                e.message?.contains(
+                    "database",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.DATABASE_ERROR
+
+                e.message?.contains(
+                    "validation",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "network",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.NETWORK_ERROR
+
+                e.message?.contains(
+                    "auth",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "password",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "email",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.VALIDATION_ERROR
+
+                e.message?.contains(
+                    "secret",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "token",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains(
+                    "mongo",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.DATABASE_ERROR
+
+                e.message?.contains(
+                    "connection",
+                    ignoreCase = true
+                ) == true -> Constants.Messages.NETWORK_ERROR
+
+                else -> Constants.Messages.UNKNOWN_ERROR
+            }
+
+            // Create a more detailed error response
+            val errorDetails = mapOf(
+                "errorType" to errorMessage.substringBefore(":"),
+                "errorMessage" to e.message,
+                "errorClass" to e.javaClass.simpleName,
+                "endpoint" to "refresh-token"
             )
+
+            try {
+                call.respondError(
+                    "$errorMessage: ${e.message}",
+                    errorDetails,
+                    HttpStatusCode.InternalServerError
+                )
+            } catch (respondException: Exception) {
+                // If responding with error details fails, try a simpler response
+                logger.error(
+                    "Failed to send error response: ${respondException.message}",
+                    respondException
+                )
+                call.respondError(
+                    "Internal server error",
+                    mapOf("error" to "Failed to process request"),
+                    HttpStatusCode.InternalServerError
+                )
+            }
         }
     }
 }

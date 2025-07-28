@@ -10,6 +10,7 @@ data class User(
     val passwordHash: String,
     val createdAt: String = Instant.now().toString(),
     val isActive: Boolean = true,
+    val role: UserRole = UserRole.USER,
     val timestampOfRegistration: String? = null,
     val deviceModel: String? = null,
     val operatingSystem: String? = null,
@@ -18,6 +19,14 @@ data class User(
     val ipAddress: String? = null,
     val registrationSource: String? = null
 )
+
+/** User roles for access control */
+@Serializable
+enum class UserRole {
+    USER,
+    MODERATOR,
+    ADMIN
+}
 
 /** User registration request data */
 @Serializable
@@ -40,11 +49,13 @@ data class UserLoginRequest(
     val password: String
 )
 
-/** Login response with authentication token */
+/** Login response with authentication token and user information */
 @Serializable
 data class LoginResponse(
     val token: String,
-    val email: String
+    val email: String,
+    val role: UserRole = UserRole.USER,
+    val isActive: Boolean = true
 )
 
 /** Token refresh request data */
