@@ -255,7 +255,6 @@
                 <!-- Theme toggle -->
                 <label class="toggle" style="position: relative; cursor: pointer; margin-right: 0.5rem;">
                     <input type="checkbox" id="theme-toggle">
-                    <div></div>
                 </label>
             </div>
         </div>
@@ -300,6 +299,20 @@
     <script src="js/auth.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Check authentication
+            if (!isAuthenticated()) {
+                window.location.href = '/login?error=auth_required';
+                return;
+            }
+            
+            // Get user info for display
+            const userInfo = getUserInfo();
+            if (userInfo && userInfo.email) {
+                const userEmailElement = document.querySelector('.user-email');
+                if (userEmailElement) {
+                    userEmailElement.textContent = userInfo.email;
+                }
+            }
             const weatherForm = document.getElementById('weather-form');
             const submitButton = document.getElementById('submit-button');
             const errorMessage = document.getElementById('error-message');
@@ -310,7 +323,7 @@
             // Check if user is authenticated
             if (!isAuthenticated()) {
                 // Not authenticated, redirect to login
-                window.location.href = '/login.html?error=auth_required';
+                window.location.href = '/login?error=auth_required';
                 return;
             }
             

@@ -18,6 +18,8 @@ object WebResources {
     // JavaScript file contents
     private val themeJs = readResourceFile("/web/js/theme.js")
     private val utilsJs = readResourceFile("/web/js/utils.js")
+    private val authJs = readResourceFile("/web/js/auth.js")
+    private val adminJs = readResourceFile("/web/js/admin.js")
 
     /**
      * Read a file from the resources directory
@@ -64,6 +66,7 @@ object WebResources {
             unsafe {
                 raw(themeJs)
                 raw(utilsJs)
+                raw(authJs)
 
                 // Initialize the app with a single DOMContentLoaded event listener
                 raw(
@@ -75,6 +78,49 @@ object WebResources {
                     });
                 """
                 )
+            }
+        }
+    }
+
+    /**
+     * Include minimal JavaScript for error pages (without auth.js)
+     * @param head The HEAD element to add the JavaScript to
+     */
+    fun includeErrorPageJs(head: HEAD) {
+        // Include only theme and utils JavaScript for error pages
+        head.script {
+            unsafe {
+                raw(themeJs)
+                raw(utilsJs)
+
+                // Initialize the app with a single DOMContentLoaded event listener
+                raw(
+                    """
+                    // Single initialization point for the error page
+                    document.addEventListener('DOMContentLoaded', function() {
+                        // Initialize only theme and basic functionality
+                        try {
+                            initializeTheme();
+                            initializeClickFeedback();
+                        } catch (error) {
+                            console.error('Error during error page initialization:', error);
+                        }
+                    });
+                """
+                )
+            }
+        }
+    }
+
+    /**
+     * Include admin JavaScript in the HTML head
+     * @param head The HEAD element to add the JavaScript to
+     */
+    fun includeAdminJs(head: HEAD) {
+        // Include admin JavaScript directly in the HTML
+        head.script {
+            unsafe {
+                raw(adminJs)
             }
         }
     }

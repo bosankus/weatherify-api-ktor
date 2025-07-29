@@ -211,7 +211,9 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
                         val role = when (value.toString().uppercase()) {
                             "ADMIN" -> UserRole.ADMIN
                             "MODERATOR" -> UserRole.MODERATOR
-                            else -> UserRole.USER
+                            "USER" -> UserRole.USER
+                            else -> { /*Nothing to do. Invalid or null role value*/
+                            }
                         }
                         filterList.add(Filters.eq("role", role))
                     }

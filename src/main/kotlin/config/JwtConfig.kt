@@ -39,72 +39,48 @@ object JwtConfig {
         .build()
 
     /**
-     * Generate a JWT token for a user
-     * @param email The user's email
-     * @return A signed JWT token with default USER role
-     */
-    fun generateToken(email: String): String {
-        return generateToken(email, UserRole.USER)
-    }
-
-    /**
      * Generate a JWT token for a user with a specific role
      * @param email The user's email
      * @param role The user's role
      * @return A signed JWT token
      */
-    fun generateToken(email: String, role: UserRole): String {
+    fun generateToken(email: String, role: UserRole?): String {
         return JWT.create()
             .withAudience(Environment.getJwtAudience())
             .withIssuer(Environment.getJwtIssuer())
             .withClaim(Constants.Auth.JWT_CLAIM_EMAIL, email)
-            .withClaim(Constants.Auth.JWT_CLAIM_ROLE, role.name)
+            .withClaim(Constants.Auth.JWT_CLAIM_ROLE, role?.name)
             .withExpiresAt(Date(System.currentTimeMillis() + Environment.getJwtExpiration()))
             .sign(algorithm)
     }
 
     /**
-     * Extract the user role from a JWT token
-     * @param payload The JWT payload
-     * @return The user role, or USER if the role claim is missing or invalid
-     */
-    fun extractUserRole(payload: Payload): UserRole {
-        return try {
-            val roleName = payload.getClaim(Constants.Auth.JWT_CLAIM_ROLE).asString()
-            if (roleName.isNullOrEmpty()) {
-                logger.warn("Role claim is missing or empty in JWT token")
-                UserRole.USER
-            } else {
-                try {
-                    UserRole.valueOf(roleName)
-                } catch (_: IllegalArgumentException) {
-                    logger.warn("Invalid role in JWT token: $roleName")
-                    UserRole.USER
-                }
-            }
-        } catch (e: Exception) {
-            logger.warn("Error extracting role from JWT token: ${e.message}")
-            UserRole.USER
-        }
-    }
-
-    /**
-     * Check if a user has admin role based on their JWT token
-     * @param payload The JWT payload
-     * @return True if the user has admin role, false otherwise
+     * Determines if the user has the admin role based on their JWT token.
+     * Uses a more robust comparison to handle edge cases like whitespace and case sensitivity.
+     * @param payload The decoded JWT token.
+     * @return `true` if the user has the admin role, `false` otherwise.
      */
     fun isAdmin(payload: Payload): Boolean {
-        return extractUserRole(payload) == UserRole.ADMIN
-    }
+        val roleClaim = payload.getClaim(Constants.Auth.JWT_CLAIM_ROLE)
+        if (roleClaim.isNull) {
+            logger.warn("Role claim is null in JWT payload")
+            return false
+        }
 
-    /**
-     * Check if a user has moderator role or higher based on their JWT token
-     * @param payload The JWT payload
-     * @return True if the user has moderator or admin role, false otherwise
-     */
-    fun isModeratorOrAdmin(payload: Payload): Boolean {
-        val role = extractUserRole(payload)
-        return role == UserRole.MODERATOR || role == UserRole.ADMIN
+        val roleName = roleClaim.asString()
+        if (roleName.isNullOrBlank()) {
+            logger.warn("Role name is null or blank in JWT payload")
+            return false
+        }
+
+        // Trim and use case-insensitive comparison for more robust validation
+        val isAdmin = roleName.trim().equals(UserRole.ADMIN.name, ignoreCase = true)
+
+        if (!isAdmin) {
+            logger.debug("User role '$roleName' is not ADMIN")
+        }
+
+        return isAdmin
     }
 
     /**

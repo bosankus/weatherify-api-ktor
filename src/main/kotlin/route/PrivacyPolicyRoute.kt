@@ -128,15 +128,6 @@ fun Route.privacyPolicyRoute() {
                                         // This div becomes the toggle button
                                     }
                                 }
-
-                                // GitHub icon
-                                span {
-                                    classes = setOf("material-icons", "nav-icon", "github-link")
-                                    id = "github-link"
-                                    attributes["data-url"] =
-                                        "https://github.com/bosankus/weatherify-api-ktor"
-                                    +"code"
-                                }
                             }
                         }
 

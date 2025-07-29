@@ -5,6 +5,7 @@ import bose.ankush.data.model.TokenRefreshRequest
 import bose.ankush.data.model.User
 import bose.ankush.data.model.UserLoginRequest
 import bose.ankush.data.model.UserRegistrationRequest
+import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
@@ -124,7 +125,9 @@ fun Route.authRoute() {
                 osVersion = request.osVersion,
                 appVersion = request.appVersion,
                 ipAddress = request.ipAddress,
-                registrationSource = request.registrationSource
+                registrationSource = request.registrationSource,
+                role = request.role,
+                isActive = request.isActive
             )
 
             // Save user to database
@@ -324,7 +327,7 @@ fun Route.authRoute() {
                     }
 
                     // Generate JWT token with user's role
-                    val token = JwtConfig.generateToken(user.email, user.role)
+                    val token = JwtConfig.generateToken(user.email, (user.role ?: "") as UserRole)
                     logger.info("Login successful for user: ${request.email}")
 
                     // Return token and user info in response body
@@ -529,7 +532,7 @@ fun Route.authRoute() {
                     }
 
                     // Generate new JWT token with user's role
-                    val newToken = JwtConfig.generateToken(email, user.role)
+                    val newToken = JwtConfig.generateToken(email, (user.role ?: "") as UserRole)
                     logger.info("Token refreshed successfully for user: $email")
 
                     // Return new token and user info in response body

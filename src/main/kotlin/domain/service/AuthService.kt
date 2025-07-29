@@ -1,6 +1,5 @@
 package domain.service
 
-import bose.ankush.data.model.User
 import domain.model.Result
 
 /**
@@ -8,14 +7,6 @@ import domain.model.Result
  * This interface defines the contract for authentication business logic.
  */
 interface AuthService {
-    /**
-     * Register a new user.
-     * @param email The email of the user to register.
-     * @param password The password of the user to register.
-     * @return Result containing the created user if successful, or an error if registration failed.
-     */
-    suspend fun registerUser(email: String, password: String): Result<User>
-
     /**
      * Login a user.
      * @param email The email of the user to login.

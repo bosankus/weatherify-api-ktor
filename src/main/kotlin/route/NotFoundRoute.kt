@@ -225,8 +225,8 @@ fun Route.notFoundRoute() {
                         }
                     }
 
-                    // Include shared JavaScript
-                    WebResources.includeSharedJs(this)
+                    // Include minimal JavaScript for error page (without auth.js)
+                    WebResources.includeErrorPageJs(this)
 
                     // Include page-specific JavaScript
                     script {
@@ -282,15 +282,6 @@ fun Route.notFoundRoute() {
                                         // This div becomes the toggle button
                                     }
                                 }
-
-                                // GitHub icon
-                                span {
-                                    classes = setOf("material-icons", "nav-icon", "github-link")
-                                    id = "github-link"
-                                    attributes["data-url"] =
-                                        "https://github.com/bosankus/weatherify-api-ktor"
-                                    +"code"
-                                }
                             }
                         }
 
@@ -298,12 +289,6 @@ fun Route.notFoundRoute() {
                         // 404 Error content
                         div {
                             classes = setOf("error-content")
-
-                            // Error icon
-                            span {
-                                classes = setOf("material-icons", "error-icon")
-                                +"error_outline"
-                            }
 
                             // Error code
                             h1 {
@@ -315,12 +300,6 @@ fun Route.notFoundRoute() {
                             h2 {
                                 classes = setOf("error-title")
                                 +"Page Not Found"
-                            }
-
-                            // Error message
-                            p {
-                                classes = setOf("error-message")
-                                +"Oops! The page you're looking for doesn't exist or has been moved."
                             }
 
                             // Action buttons

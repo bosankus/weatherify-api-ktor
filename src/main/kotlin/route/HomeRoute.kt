@@ -792,7 +792,7 @@ fun Route.homeRoute() {
                                     transition: opacity 0.1s ease;
                                 }
 
-                                /* Toggle styles (shared for theme and music) */
+                                /* Toggle styles (shared for theme) */
                                 .toggle {
                                     position: relative;
                                     display: inline-block;
@@ -802,99 +802,6 @@ fun Route.homeRoute() {
                                     display: flex;
                                     align-items: center;
                                     justify-content: center;
-                                }
-                                
-                                /* Music toggle styles */
-                                .music-toggle {
-                                    position: relative;
-                                    display: inline-block;
-                                    z-index: 10;
-                                    width: 24px;
-                                    height: 24px;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    cursor: pointer;
-                                }
-                                
-                                .music-toggle input {
-                                    display: none;
-                                }
-                                
-                                .music-toggle .icon {
-                                    width: 24px;
-                                    height: 24px;
-                                    position: relative;
-                                    color: var(--icon-color);
-                                }
-                                
-                                .music-toggle .icon::before,
-                                .music-toggle .icon::after {
-                                    content: '';
-                                    position: absolute;
-                                    background: currentColor;
-                                    transition: all 0.3s ease;
-                                }
-                                
-                                /* Music playing icon (bars) */
-                                .music-toggle .icon span {
-                                    position: absolute;
-                                    bottom: 5px;
-                                    width: 4px;
-                                    background: currentColor;
-                                    transition: all 0.3s ease;
-                                }
-                                
-                                .music-toggle .icon span:nth-child(1) {
-                                    height: 8px;
-                                    left: 4px;
-                                    animation: musicBar1 1s infinite alternate;
-                                }
-                                
-                                .music-toggle .icon span:nth-child(2) {
-                                    height: 14px;
-                                    left: 10px;
-                                    animation: musicBar2 1.3s infinite alternate;
-                                }
-                                
-                                .music-toggle .icon span:nth-child(3) {
-                                    height: 10px;
-                                    left: 16px;
-                                    animation: musicBar3 0.8s infinite alternate;
-                                }
-                                
-                                /* Music paused icon (pause symbol) */
-                                .music-toggle input:checked + .icon span {
-                                    animation: none;
-                                    height: 14px;
-                                    bottom: 5px;
-                                }
-                                
-                                .music-toggle input:checked + .icon span:nth-child(1) {
-                                    left: 6px;
-                                }
-                                
-                                .music-toggle input:checked + .icon span:nth-child(2) {
-                                    left: 14px;
-                                }
-                                
-                                .music-toggle input:checked + .icon span:nth-child(3) {
-                                    opacity: 0;
-                                }
-                                
-                                @keyframes musicBar1 {
-                                    0% { height: 8px; }
-                                    100% { height: 14px; }
-                                }
-                                
-                                @keyframes musicBar2 {
-                                    0% { height: 14px; }
-                                    100% { height: 6px; }
-                                }
-                                
-                                @keyframes musicBar3 {
-                                    0% { height: 10px; }
-                                    100% { height: 16px; }
                                 }
 
                                 .toggle input {
@@ -1283,8 +1190,11 @@ fun Route.homeRoute() {
                                 // Initialize theme toggle functionality is now handled by shared resources
 
                                 // Initialize click feedback for interactive elements is now handled by shared resources
-
-                                // Background music functionality is now handled by shared resources
+                                
+                                // Initialize event listeners for interactive elements
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    initializeEventListeners();
+                                });
                                 """
                             )
                         }

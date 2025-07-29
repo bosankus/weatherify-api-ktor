@@ -1,6 +1,5 @@
 package domain.service.impl
 
-import bose.ankush.data.model.User
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
 import domain.model.Result
@@ -24,44 +23,6 @@ class AuthServiceImpl(private val userRepository: UserRepository) : AuthService 
                 "[a-zA-Z0-9][a-zA-Z0-9\\-]{0,25}" +
                 ")+"
     )
-
-    /**
-     * Register a new user.
-     * @param email The email of the user to register.
-     * @param password The password of the user to register.
-     * @return Result containing the created user if successful, or an error if registration failed.
-     */
-    override suspend fun registerUser(email: String, password: String): Result<User> {
-        // Validate email and password
-        if (!isValidEmail(email)) {
-            return Result.error(Constants.Auth.INVALID_EMAIL_FORMAT)
-        }
-
-        if (!isStrongPassword(password)) {
-            return Result.error(Constants.Auth.INVALID_PASSWORD_STRENGTH)
-        }
-
-        // Check if user already exists
-        val existingUserResult = userRepository.findUserByEmail(email)
-        if (existingUserResult.isSuccess && existingUserResult.getOrNull() != null) {
-            return Result.error(Constants.Messages.USER_ALREADY_EXISTS)
-        }
-
-        // Hash password and create user
-        val passwordHash = PasswordUtil.hashPassword(password)
-        val user = User(
-            email = email,
-            passwordHash = passwordHash
-        )
-
-        // Save user to database
-        val createResult = userRepository.createUser(user)
-        return if (createResult.isSuccess && createResult.getOrNull() == true) {
-            Result.success(user)
-        } else {
-            Result.error(Constants.Messages.FAILED_REGISTER)
-        }
-    }
 
     /**
      * Login a user.
@@ -89,7 +50,7 @@ class AuthServiceImpl(private val userRepository: UserRepository) : AuthService 
         }
 
         // Generate JWT token
-        val token = JwtConfig.generateToken(user.email)
+        val token = JwtConfig.generateToken(user.email, user.role)
         return Result.success(token)
     }
 
