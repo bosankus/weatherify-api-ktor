@@ -7,5 +7,5 @@ import org.koin.dsl.module
  * This is the entry point for the dependency injection system.
  */
 val appModule = module {
-    includes(dataModule, domainModule)
+    includes(dataModule, domainModule, routeModule)
 }

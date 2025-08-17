@@ -1,14 +1,8 @@
 package bose.ankush.base
 
-import bose.ankush.route.adminAuthRoute
-import bose.ankush.route.authRoute
-import bose.ankush.route.feedbackRoute
+import bose.ankush.route.common.RouteRegistrar
 import bose.ankush.route.handleNotFound
-import bose.ankush.route.homeRoute
 import bose.ankush.route.notFoundRoute
-import bose.ankush.route.privacyPolicyRoute
-import bose.ankush.route.termsAndConditionsRoute
-import bose.ankush.route.weatherRoute
 import io.ktor.server.application.Application
 import io.ktor.server.request.path
 import io.ktor.server.response.respondRedirect
@@ -18,10 +12,12 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
+import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 
 fun Application.configureRouting() {
     val logger = LoggerFactory.getLogger("Routing")
+    val registrars by inject<List<RouteRegistrar>>()
 
     routing {
         // Serve favicon
@@ -29,14 +25,8 @@ fun Application.configureRouting() {
             call.respondText("Greetings! Favicon is currently dry or hidden 😉. Please hydrate elsewhere.")
         }
 
-        // Register all application routes
-        homeRoute()
-        weatherRoute()
-        feedbackRoute()
-        authRoute()
-        adminAuthRoute()
-        termsAndConditionsRoute()
-        privacyPolicyRoute()
+        // Register all application routes via registrars (order preserved by Koin list)
+        registrars.forEach { it.register(this) }
 
         // Handle login.html redirects to admin login
         get("/login.html") {

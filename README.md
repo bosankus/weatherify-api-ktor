@@ -177,3 +177,33 @@ src/
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+---
+
+## Extending the API (Feature Modules & Route Registrars)
+
+To make the project scalable and maintainable, route registration is modular.
+
+- Each feature exposes a Ktor `Route` extension (e.g., `Route.weatherRoute()`), keeping handlers
+  self-contained.
+- A tiny `RouteRegistrar` interface allows features to self-register their routes without changing
+  central wiring.
+- An ordered list of registrars is provided via Koin in `di/RouteModule.kt`, and `base/Routing.kt`
+  iterates this list.
+
+Add a new page/feature:
+
+1. Create or reuse a `Route` extension under `src/main/kotlin/route/...`.
+2. Add a registrar in `route/common/Registrars.kt` that delegates to the extension, e.g.:
+   ```kotlin
+   object MyFeatureRegistrar : RouteRegistrar { override fun register(r: Route) { with(r) { myFeatureRoute() } } }
+   ```
+3. Bind it in `di/RouteModule.kt` and add it to the ordered list.
+4. If your feature needs new services/repos, wire them in `di/DomainModule.kt` / `di/DataModule.kt`.
+
+Nothing in existing behavior changes when you follow this pattern; it simply reduces coupling.
+
+## Developer Workflow
+
+For contribution guidelines, coding conventions, and how to add features safely,
+see [CONTRIBUTING.md](CONTRIBUTING.md).

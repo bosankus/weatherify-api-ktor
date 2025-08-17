@@ -1,6 +1,5 @@
-package bose.ankush.route
+package bose.ankush.util
 
-import bose.ankush.util.getSecretValue
 import config.Environment
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -36,7 +35,7 @@ object WeatherCache {
         val currentTime = System.currentTimeMillis()
 
         if (cachedWeatherClient == null || currentTime > weatherClientExpiration) {
-            // Dispose previous client if exists
+            // Dispose of the previous client if it exists
             cachedWeatherClient?.close()
 
             cachedWeatherClient = HttpClient(CIO) {
