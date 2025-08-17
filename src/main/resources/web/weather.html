@@ -80,6 +80,46 @@
             margin-bottom: 1.5rem;
         }
         
+        .submit-container {
+            display: flex;
+            align-items: flex-end;
+        }
+        
+        /* Responsive styles for the weather form */
+        @media (max-width: 768px) {
+            .form-row {
+                flex-wrap: wrap;
+            }
+            
+            .form-group {
+                flex: 0 0 calc(50% - 0.5rem);
+            }
+            
+            .submit-container {
+                margin-top: 1rem;
+                flex: 0 0 100%;
+            }
+            
+            .submit-button {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .form-row {
+                flex-direction: column;
+                gap: 1.25rem;
+            }
+            
+            .form-group {
+                flex: 0 0 100%;
+            }
+            
+            .submit-container {
+                margin-top: 0;
+            }
+        }
+        
         .form-group {
             flex: 1;
             display: flex;
@@ -281,7 +321,11 @@
                             <label for="longitude">Longitude</label>
                             <input type="text" id="longitude" name="longitude" placeholder="e.g. -74.0060" required>
                         </div>
-                        <button type="submit" id="submit-button" class="submit-button">Get Weather</button>
+                        <div class="form-group submit-container">
+                            <button class="submit-button" id="submit-button" type="submit">Get
+                                Weather
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>

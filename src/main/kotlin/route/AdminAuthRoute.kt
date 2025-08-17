@@ -5,10 +5,13 @@ import bose.ankush.route.common.WebResources
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import com.auth0.jwt.interfaces.Payload
+import config.Environment
 import config.JwtConfig
 import domain.model.Result
 import domain.service.AuthService
+import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
@@ -20,6 +23,7 @@ import io.ktor.server.routing.application
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import kotlinx.html.DIV
 import kotlinx.html.HEAD
 import kotlinx.html.InputType
 import kotlinx.html.body
@@ -46,32 +50,17 @@ import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 import util.Constants
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.time.Year
 
 /**
  * Helper function to check if a user is an admin using the JWT payload
- * Uses a more robust comparison to handle edge cases like whitespace and case sensitivity
+ * Delegates to JwtConfig.isAdmin for consistent role checking across the application
  */
 fun isAdminFromPayload(payload: Payload): Boolean {
-    val roleClaim = payload.getClaim(Constants.Auth.JWT_CLAIM_ROLE)
-    if (roleClaim.isNull) {
-        LoggerFactory.getLogger("AdminAuthRoute").warn("Role claim is null in JWT payload")
-        return false
-    }
-
-    val roleName = roleClaim.asString()
-    if (roleName.isNullOrBlank()) {
-        LoggerFactory.getLogger("AdminAuthRoute").warn("Role name is null or blank in JWT payload")
-        return false
-    }
-
-    // Trim and use case-insensitive comparison for more robust validation
-    val isAdmin = roleName.trim().equals(UserRole.ADMIN.name, ignoreCase = true)
-
-    if (!isAdmin) {
-        LoggerFactory.getLogger("AdminAuthRoute").debug("User role '$roleName' is not ADMIN")
-    }
-
-    return isAdmin
+    // Use JwtConfig.isAdmin for consistent role checking
+    return JwtConfig.isAdmin(payload)
 }
 
 /**
@@ -79,9 +68,7 @@ fun isAdminFromPayload(payload: Payload): Boolean {
  */
 fun setupHead(head: HEAD, title: String, includeAdminJs: Boolean = false) {
     head.title { +title }
-    head.meta {
-        charset = "UTF-8"
-    }
+    head.meta { charset = "UTF-8" }
     head.meta {
         name = "viewport"
         content = "width=device-width, initial-scale=1.0"
@@ -111,6 +98,12 @@ fun setupHead(head: HEAD, title: String, includeAdminJs: Boolean = false) {
     // Include shared JavaScript
     WebResources.includeSharedJs(head)
 
+    // Always include auth.js for authentication functions
+    head.script {
+        src = "/web/js/auth.js"
+        defer = true
+    }
+
     // Include admin JavaScript if needed
     if (includeAdminJs) {
         WebResources.includeAdminJs(head)
@@ -120,7 +113,7 @@ fun setupHead(head: HEAD, title: String, includeAdminJs: Boolean = false) {
 /**
  * Helper function to create the header with logo and theme toggle
  */
-fun createHeader(container: kotlinx.html.DIV, subtitle: String) {
+fun createHeader(container: DIV, subtitle: String) {
     container.div {
         classes = setOf("header")
         div {
@@ -169,14 +162,14 @@ fun createHeader(container: kotlinx.html.DIV, subtitle: String) {
 /**
  * Helper function to create the footer
  */
-fun createFooter(container: kotlinx.html.DIV) {
+fun createFooter(container: DIV) {
     container.footer {
         classes = setOf("footer")
         div {
             classes = setOf("footer-content")
             div {
                 classes = setOf("footer-copyright")
-                +"© ${java.time.Year.now().value} Androidplay Weather API. All rights reserved."
+                +"© ${Year.now().value} Androidplay. All rights reserved."
             }
         }
     }
@@ -186,7 +179,7 @@ fun createFooter(container: kotlinx.html.DIV) {
  * Helper function to serve the admin login page
  */
 private suspend fun serveLoginPage(
-    call: io.ktor.server.application.ApplicationCall,
+    call: ApplicationCall,
     errorMessage: String? = null
 ) {
     call.respondHtml(HttpStatusCode.OK) {
@@ -242,7 +235,7 @@ private suspend fun serveLoginPage(
                             }
                             
                             // Check if already logged in with admin role
-                            const token = localStorage.getItem('auth_token');
+                            const token = localStorage.getItem('jwt_token');
                             if (token) {
                                 // Verify if token is valid and has admin role
                                 fetch('/admin/dashboard', {
@@ -259,7 +252,7 @@ private suspend fun serveLoginPage(
                                 .catch(error => {
                                     console.error('Error checking authentication:', error);
                                     // Clear invalid token
-                                    localStorage.removeItem('auth_token');
+                                    localStorage.removeItem('jwt_token');
                                 });
                             }
                             
@@ -297,20 +290,22 @@ private suspend fun serveLoginPage(
                                         // Login successful
                                         showSuccess('Login successful! Redirecting to dashboard...');
                                         
-                                        // Store token
-                                        localStorage.setItem('auth_token', data.data);
-                                        localStorage.setItem('jwt_token', data.data);
+                                        // Store token using consistent key
+                                        console.log('Storing token in localStorage:', data.data.token.substring(0, 10) + '...');
+                                        localStorage.setItem('jwt_token', data.data.token);
                                         
                                         // Store user info for role-based access
                                         try {
                                             // Parse the JWT to get user info
-                                            const tokenParts = data.data.split('.');
+                                            const token = data.data.token;
+                                            const tokenParts = token.split('.');
                                             if (tokenParts.length === 3) {
                                                 const payload = JSON.parse(atob(tokenParts[1]));
                                                 const userInfo = {
                                                     email: payload.email || email,
                                                     role: payload.role || 'USER',
-                                                    isActive: true
+                                                    // Handle isActive as either boolean or string
+                                                    isActive: payload.isActive === 'false' ? false : Boolean(payload.isActive)
                                                 };
                                                 localStorage.setItem('user_info', JSON.stringify(userInfo));
                                             }
@@ -321,12 +316,23 @@ private suspend fun serveLoginPage(
                                         // Redirect to intended destination or dashboard
                                         setTimeout(() => {
                                             const intendedDestination = sessionStorage.getItem('intendedDestination');
-                                            if (intendedDestination) {
-                                                console.log('Redirecting to intended destination:', intendedDestination);
-                                                sessionStorage.removeItem('intendedDestination');
-                                                window.location.href = intendedDestination;
+                                            
+                                            // Use the navigateToAdminPage function which handles token authentication properly
+                                            if (typeof navigateToAdminPage === 'function') {
+                                                console.log('Using navigateToAdminPage function for redirection');
+                                                if (intendedDestination && intendedDestination.startsWith('/admin')) {
+                                                    console.log('Redirecting to intended destination:', intendedDestination);
+                                                    sessionStorage.removeItem('intendedDestination');
+                                                    navigateToAdminPage(intendedDestination);
+                                                } else {
+                                                    console.log('Redirecting to dashboard');
+                                                    navigateToAdminPage('/admin/dashboard');
+                                                }
                                             } else {
-                                                window.location.href = '/admin/dashboard';
+                                                // Fallback if navigateToAdminPage is not available
+                                                console.error('navigateToAdminPage function not found, this should not happen');
+                                                // Redirect to login page with error
+                                                window.location.href = '/admin/login?error=auth_required';
                                             }
                                         }, 1000);
                                     } else {
@@ -395,7 +401,6 @@ private suspend fun serveLoginPage(
                 // Content area with login form
                 div {
                     classes = setOf("content-area")
-                    style = "max-width: 1400px;"
                     h2 {
                         classes = setOf("login-heading")
                         +"Admin Login"
@@ -488,6 +493,9 @@ private suspend fun serveLoginPage(
  * Provides login UI for admin users and redirects to dashboard when authenticated
  */
 fun Route.adminAuthRoute() {
+    // Ensure static resource check runs when routes are registered
+    AdminStaticResourceChecker
+
     val authService: AuthService by application.inject()
     val logger = LoggerFactory.getLogger("AdminAuthRoute")
     val pageName = "Admin Authentication - Androidplay Weather API"
@@ -508,10 +516,29 @@ fun Route.adminAuthRoute() {
 
                     // Check if user has ADMIN role
                     if (JwtConfig.isAdmin(decodedJWT)) {
-                        // User is already authenticated and has ADMIN role, redirect to dashboard
+                        // User is already authenticated and has ADMIN role, set auth cookie and redirect to dashboard
                         val userEmail =
                             decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                        logger.info("Admin user already authenticated: $userEmail, redirecting to dashboard")
+                        logger.info("Admin user already authenticated: $userEmail, setting cookie and redirecting to dashboard")
+
+                        // Set jwt_token cookie so that browser navigation to /admin/dashboard is authenticated
+                        try {
+                            val maxAgeSeconds =
+                                (Environment.getJwtExpiration() / 1000).toInt()
+                            call.response.cookies.append(
+                                Cookie(
+                                    name = "jwt_token",
+                                    value = token,
+                                    path = "/",
+                                    httpOnly = true,
+                                    secure = true,
+                                    maxAge = maxAgeSeconds
+                                )
+                            )
+                        } catch (e: Exception) {
+                            logger.warn("Failed to set auth cookie on /admin/login redirect: ${e.message}")
+                        }
+
                         call.respondRedirect("/admin/dashboard", permanent = false)
                         return@get
                     }
@@ -556,9 +583,25 @@ fun Route.adminAuthRoute() {
                     authService.loginUser(loginRequest.email, loginRequest.password)) {
                     is Result.Success<String> -> {
                         val token = result.data
-                        val decodedJWT = JwtConfig.verifier.verify(token)
-                        val email = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                        val role = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_ROLE).asString()
+
+                        // Verify JWT token with error handling
+                        val decodedJWT = try {
+                            JwtConfig.verifier.verify(token)
+                        } catch (e: Exception) {
+                            logger.error("Failed to verify JWT token: ${e.message}")
+                            call.respondError(
+                                "Authentication failed: Invalid token",
+                                null,
+                                HttpStatusCode.Unauthorized
+                            )
+                            return@post
+                        }
+
+                        // Extract claims with null safety
+                        val email =
+                            decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString() ?: ""
+                        val role =
+                            decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_ROLE).asString() ?: ""
                         val isActive = decodedJWT.getClaim("isActive")?.asBoolean()
 
                         isActive?.let {
@@ -573,43 +616,66 @@ fun Route.adminAuthRoute() {
                             }
                         }
 
+                        // Create a simplified response data structure with only string values
+                        // to avoid serialization issues
                         val responseData = mapOf(
                             "token" to token,
                             "email" to email,
                             "role" to role,
-                            "isActive" to isActive
+                            "isActive" to (isActive?.toString() ?: "true")
+                        )
+
+                        // Log the response data for debugging
+                        logger.info(
+                            "Response data: token=${
+                                token.substring(
+                                    0,
+                                    10
+                                )
+                            }..., email=$email, role=$role, isActive=$isActive"
                         )
 
                         // Debug logging to identify comparison issues
                         logger.info(
                             "Role comparison - User role: '$role', ADMIN role: '${UserRole.ADMIN.name}', Equal: ${
-                                role.equals(
-                                    UserRole.ADMIN.name,
-                                    ignoreCase = true
-                                )
+                                role.equals(UserRole.ADMIN.name, ignoreCase = true)
                             }"
                         )
                         logger.info("isActive value: $isActive, Type: ${isActive?.javaClass?.name}")
 
-                        // Fix: More robust role comparison and handle null isActive
+                        // Fix: More robust role comparison and handle null roles and isActive
                         val isRoleAdmin = role.trim().equals(UserRole.ADMIN.name, ignoreCase = true)
-                        val isUserActive = isActive != false // Consider null as active
 
-                        if (isRoleAdmin && isUserActive) {
+                        if (isRoleAdmin) {
                             logger.info("Admin login successful for: $email, role: $role")
+
+                            // Set jwt_token cookie so browser navigations to /admin pages remain authenticated
+                            try {
+                                val maxAgeSeconds =
+                                    (Environment.getJwtExpiration() / 1000).toInt()
+                                call.response.cookies.append(
+                                    Cookie(
+                                        name = "jwt_token",
+                                        value = token,
+                                        path = "/",
+                                        httpOnly = true,
+                                        secure = true,
+                                        maxAge = maxAgeSeconds
+                                    )
+                                )
+                            } catch (e: Exception) {
+                                logger.warn("Failed to set auth cookie on admin login: ${e.message}")
+                            }
+
                             call.respondSuccess("Login successful", responseData)
                             return@post
                         }
 
                         // Log the specific reason for denial
-                        if (!isRoleAdmin) {
-                            logger.warn("Non-admin user attempted to login to admin area: $email, role: $role")
-                        } else if (!isUserActive) {
-                            logger.warn("Inactive admin user attempted to login: $email")
-                        }
+                        logger.warn("Non-admin user attempted to login to admin area: $email, role: $role")
 
                         call.respondError(
-                            if (!isRoleAdmin) "Access denied: You are not an admin" else "Account inactive",
+                            "Access denied: You are not an admin",
                             null,
                             HttpStatusCode.Forbidden
                         )
@@ -621,7 +687,12 @@ fun Route.adminAuthRoute() {
                     }
                 }
             } catch (e: Exception) {
+                // Log detailed error information
                 logger.error("Error processing admin login: ${e.message}")
+                logger.error("Exception type: ${e.javaClass.name}")
+                logger.error("Stack trace: ${e.stackTraceToString()}")
+
+                // Respond with a more specific error message
                 call.respondError("Login failed: ${e.message}", null, HttpStatusCode.BadRequest)
             }
         }
@@ -630,26 +701,31 @@ fun Route.adminAuthRoute() {
     route("/admin") {
         // Root admin route - redirect to dashboard if authenticated admin, or to login page if not
         get {
-            // Check if user is authenticated
-            val principal = call.principal<JWTPrincipal>()
-            if (principal != null) {
-                // Extract user email from JWT
-                val userEmail =
-                    principal.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+            // Only redirect to dashboard if a valid admin JWT is present
+            val jwtToken = call.request.cookies["jwt_token"]
+            var isAdmin = false
+            var userEmail: String? = null
 
-                // Check if user has ADMIN role
-                if (isAdminFromPayload(principal.payload)) {
-                    // User is authenticated and has ADMIN role, redirect to dashboard
-                    logger.info("Admin user authenticated: $userEmail, redirecting to dashboard")
-                    call.respondRedirect("/admin/dashboard", permanent = false)
-                    return@get
-                } else {
-                    // User is authenticated but doesn't have ADMIN role
-                    logger.warn("Non-admin user ($userEmail) attempted to access admin area")
-                    // Redirect directly to login page with error message
-                    call.respondRedirect("/admin/login?error=admin_required", permanent = false)
-                    return@get
+            if (jwtToken != null) {
+                try {
+                    val decodedJWT = JwtConfig.verifier.verify(jwtToken)
+                    userEmail = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+                    isAdmin = JwtConfig.isAdmin(decodedJWT)
+                } catch (_: Exception) {
+                    // Invalid token, treat as unauthenticated
                 }
+            }
+
+            if (isAdmin) {
+                // User is authenticated and has ADMIN role, redirect to dashboard
+                logger.info("Admin user authenticated: $userEmail, redirecting to dashboard")
+                call.respondRedirect("/admin/dashboard", permanent = false)
+                return@get
+            } else if (jwtToken != null) {
+                // Token exists but not admin, force login with error
+                logger.warn("Non-admin or invalid JWT tried to access /admin: $userEmail")
+                call.respondRedirect("/admin/login?error=admin_required", permanent = false)
+                return@get
             }
 
             // User is not authenticated, redirect to login page
@@ -657,231 +733,263 @@ fun Route.adminAuthRoute() {
             call.respondRedirect("/admin/login", permanent = false)
         }
 
-        // Protected admin routes - require authentication and admin role
-        authenticate("jwt-auth") {
-            // Admin dashboard route - only accessible by authenticated admin users
-            get("/dashboard") {
-                // Check if user has ADMIN role
-                val principal = call.principal<JWTPrincipal>()
-                val userEmail =
-                    principal?.payload?.getClaim(Constants.Auth.JWT_CLAIM_EMAIL)?.asString()
+        // --- MOVE /admin/dashboard OUTSIDE authenticate("jwt-auth") ---
+        get("/dashboard") {
+            val authHeader = call.request.headers["Authorization"]
+            var jwtToken: String?
 
-                if (principal?.payload == null || !isAdminFromPayload(principal.payload)) {
-                    logger.warn("Non-admin user ($userEmail) attempted to access admin dashboard")
-                    call.respondRedirect("/admin/login?error=access_denied", permanent = false)
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                jwtToken = authHeader.substring(7)
+            } else {
+                jwtToken = call.request.cookies["jwt_token"]
+                if (jwtToken != null) {
+                    logger.info("JWT token found in cookie for /admin/dashboard")
+                }
+            }
+
+            var principal: JWTPrincipal? = null
+            var userEmail: String? = null
+
+            if (jwtToken != null) {
+                try {
+                    val decodedJWT = JwtConfig.verifier.verify(jwtToken)
+                    userEmail = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+                    principal = JWTPrincipal(decodedJWT)
+                    logger.info("JWT principal created for user: $userEmail")
+                } catch (e: Exception) {
+                    logger.warn("Failed to verify JWT: ${e.message}")
+                    call.respondRedirect("/admin/login?error=session_expired", permanent = false)
                     return@get
                 }
+            }
 
-                // User is authenticated and has ADMIN role, serve the admin dashboard
-                logger.info("Serving admin dashboard to admin user: $userEmail")
+            if (principal?.payload == null) {
+                logger.warn("No JWT principal found for dashboard access attempt")
+                call.respondRedirect("/admin/login?error=auth_required", permanent = false)
+                return@get
+            }
 
-                // Respond with the admin dashboard HTML
-                call.respondHtml(HttpStatusCode.OK) {
-                    attributes["lang"] = "en"
-                    head {
-                        setupHead(this, pageName, includeAdminJs = true)
+            if (!JwtConfig.isAdmin(principal.payload)) {
+                logger.warn("Non-admin user ($userEmail) attempted to access admin dashboard")
+                call.respondRedirect("/admin/login?error=access_denied", permanent = false)
+                return@get
+            }
 
-                        // Include page-specific CSS if needed
-                        style {
-                            unsafe {
-                                raw(
-                                    """
-                                    /* Admin dashboard specific styles */
-                                    .admin-container {
-                                        max-width: 1200px;
-                                        margin: 2rem auto;
-                                        padding: 2rem;
-                                        background: var(--card-bg);
-                                        border: 1px solid var(--card-border);
-                                        border-radius: 12px;
-                                        box-shadow: 0 4px 12px var(--card-shadow);
-                                        backdrop-filter: blur(10px);
-                                        -webkit-backdrop-filter: blur(10px);
-                                    }
-                                    
-                                    .admin-header {
-                                        display: flex;
-                                        justify-content: space-between;
-                                        align-items: center;
-                                        margin-bottom: 2rem;
-                                        padding-bottom: 1rem;
-                                        border-bottom: 1px solid var(--card-border);
-                                    }
-                                    
-                                    .admin-title {
-                                        margin: 0;
-                                        font-size: 1.8rem;
-                                        font-weight: 600;
-                                        color: var(--card-title);
-                                    }
-                                    
-                                    .admin-user-info {
-                                        display: flex;
-                                        align-items: center;
-                                        gap: 0.5rem;
-                                        font-size: 0.9rem;
-                                        color: var(--text-secondary);
-                                    }
-                                    
-                                    .admin-user-email {
-                                        font-weight: 600;
-                                        color: var(--text-color);
-                                    }
-                                    
-                                    .admin-logout {
-                                        cursor: pointer;
-                                        color: #ef4444;
-                                        text-decoration: underline;
-                                        transition: color 0.2s ease;
-                                    }
-                                    
-                                    .admin-logout:hover {
-                                        color: #dc2626;
-                                    }
-                                    
-                                    .dashboard-content {
-                                        display: grid;
-                                        gap: 2rem;
-                                    }
-                                    
-                                    .dashboard-section {
-                                        background: var(--card-bg);
-                                        border: 1px solid var(--card-border);
-                                        border-radius: 8px;
-                                        padding: 1.5rem;
-                                        transition: all 0.3s ease;
-                                    }
-                                    
-                                    .dashboard-section:hover {
-                                        border-color: var(--card-hover-border);
-                                        box-shadow: 0 4px 12px var(--card-shadow);
-                                    }
-                                    
-                                    .dashboard-section-title {
-                                        margin: 0 0 1rem 0;
-                                        font-size: 1.4rem;
-                                        font-weight: 600;
-                                        color: var(--card-title);
-                                    }
-                                    
-                                    .dashboard-card {
-                                        background: var(--endpoint-bg);
-                                        border: 1px solid var(--endpoint-border);
-                                        border-radius: 6px;
-                                        padding: 1rem;
-                                        margin-bottom: 1rem;
-                                    }
-                                    
-                                    .dashboard-card-title {
-                                        font-weight: 600;
-                                        color: var(--card-title);
-                                        margin-bottom: 0.5rem;
-                                    }
-                                    
-                                    .dashboard-card-content {
-                                        color: var(--text-secondary);
-                                        line-height: 1.6;
-                                    }
-                                    """
-                                )
-                            }
+            // User is authenticated and has ADMIN role, serve the admin dashboard
+            logger.info("Serving admin dashboard to admin user: $userEmail")
+
+            // Respond with the admin dashboard HTML
+            call.respondHtml(HttpStatusCode.OK) {
+                attributes["lang"] = "en"
+                head {
+                    setupHead(this, pageName, includeAdminJs = true)
+
+                    // Include page-specific CSS if needed
+                    style {
+                        unsafe {
+                            raw(
+                                """
+                                /* Admin dashboard specific styles */
+                                .admin-container {
+                                    max-width: 1200px;
+                                    margin: 2rem auto;
+                                    padding: 2rem;
+                                    background: var(--card-bg);
+                                    border: 1px solid var(--card-border);
+                                    border-radius: 12px;
+                                    box-shadow: 0 4px 12px var(--card-shadow);
+                                    backdrop-filter: blur(10px);
+                                    -webkit-backdrop-filter: blur(10px);
+                                }
+                                
+                                .admin-header {
+                                    display: flex;
+                                    justify-content: space-between;
+                                    align-items: center;
+                                    margin-bottom: 2rem;
+                                    padding-bottom: 1rem;
+                                    border-bottom: 1px solid var(--card-border);
+                                }
+                                
+                                .admin-title {
+                                    margin: 0;
+                                    font-size: 1.8rem;
+                                    font-weight: 600;
+                                    color: var(--card-title);
+                                }
+                                
+                                .admin-user-info {
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 0.5rem;
+                                    font-size: 0.9rem;
+                                    color: var(--text-secondary);
+                                }
+                                
+                                .admin-user-email {
+                                    font-weight: 600;
+                                    color: var(--text-color);
+                                }
+                                
+                                .admin-logout {
+                                    cursor: pointer;
+                                    color: #ef4444;
+                                    text-decoration: underline;
+                                    transition: color 0.2s ease;
+                                }
+                                
+                                .admin-logout:hover {
+                                    color: #dc2626;
+                                }
+                                
+                                .dashboard-content {
+                                    display: grid;
+                                    gap: 2rem;
+                                }
+                                
+                                .dashboard-section {
+                                    background: var(--card-bg);
+                                    border: 1px solid var(--card-border);
+                                    border-radius: 8px;
+                                    padding: 1.5rem;
+                                    transition: all 0.3s ease;
+                                }
+                                
+                                .dashboard-section:hover {
+                                    border-color: var(--card-hover-border);
+                                    box-shadow: 0 4px 12px var(--card-shadow);
+                                }
+                                
+                                .dashboard-section-title {
+                                    margin: 0 0 1rem 0;
+                                    font-size: 1.4rem;
+                                    font-weight: 600;
+                                    color: var(--card-title);
+                                }
+                                
+                                .dashboard-card {
+                                    background: var(--endpoint-bg);
+                                    border: 1px solid var(--endpoint-border);
+                                    border-radius: 6px;
+                                    padding: 1rem;
+                                    margin-bottom: 1rem;
+                                }
+                                
+                                .dashboard-card-title {
+                                    font-weight: 600;
+                                    color: var(--card-title);
+                                    margin-bottom: 0.5rem;
+                                }
+                                
+                                .dashboard-card-content {
+                                    color: var(--text-secondary);
+                                    line-height: 1.6;
+                                }
+                                """
+                            )
                         }
                     }
-                    body {
+                }
+                body {
+                    div {
+                        classes = setOf("container")
                         div {
-                            classes = setOf("container")
+                            classes = setOf("header")
                             div {
-                                classes = setOf("header")
+                                classes = setOf("brand-text")
+                                h1 {
+                                    classes = setOf("logo")
+                                    +"Androidplay"
+                                }
+                                span {
+                                    classes = setOf("subtitle")
+                                    +"Admin Portal"
+                                }
+                            }
+                            div {
+                                style = "flex-grow: 1;"
+                            }
+                            div {
+                                style = "display: flex; align-items: center; gap: 1rem;"
+
+                                // Theme toggle
+                                label {
+                                    classes = setOf("toggle")
+                                    style =
+                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
+
+                                    input {
+                                        type = InputType.checkBox
+                                        id = "theme-toggle"
+                                    }
+
+                                    div {
+                                        // This div becomes the toggle button
+                                    }
+                                }
+                            }
+                        }
+
+                        // Admin dashboard content
+                        div {
+                            classes = setOf("admin-container")
+                            div {
+                                classes = setOf("admin-header")
+                                h2 {
+                                    classes = setOf("admin-title")
+                                    +"Admin Dashboard"
+                                }
                                 div {
-                                    classes = setOf("brand-text")
-                                    h1 {
-                                        classes = setOf("logo")
-                                        +"Androidplay"
+                                    classes = setOf("admin-user-info")
+                                    span { +"Logged in as: " }
+                                    span {
+                                        classes = setOf("admin-user-email")
+                                        id = "admin-email"
+                                        +(userEmail ?: "Unknown User")
                                     }
                                     span {
-                                        classes = setOf("subtitle")
-                                        +"Admin Portal"
-                                    }
-                                }
-                                div {
-                                    style = "flex-grow: 1;"
-                                }
-                                div {
-                                    style = "display: flex; align-items: center; gap: 1rem;"
-
-                                    // Theme toggle
-                                    label {
-                                        classes = setOf("toggle")
-                                        style =
-                                            "position: relative; cursor: pointer; margin-right: 0.5rem;"
-
-                                        input {
-                                            type = InputType.checkBox
-                                            id = "theme-toggle"
-                                        }
-
-                                        div {
-                                            // This div becomes the toggle button
-                                        }
+                                        classes = setOf("admin-logout")
+                                        id = "logout-button"
+                                        +"Logout"
                                     }
                                 }
                             }
 
-                            // Admin dashboard content
+                            // Dashboard content
                             div {
-                                classes = setOf("admin-container")
+                                classes = setOf("dashboard-content")
                                 div {
-                                    classes = setOf("admin-header")
-                                    h2 {
-                                        classes = setOf("admin-title")
-                                        +"Admin Dashboard"
+                                    classes = setOf("dashboard-section")
+                                    h3 {
+                                        classes = setOf("dashboard-section-title")
+                                        +"Welcome to the Admin Dashboard"
                                     }
                                     div {
-                                        classes = setOf("admin-user-info")
-                                        span { +"Logged in as: " }
-                                        span {
-                                            classes = setOf("admin-user-email")
-                                            id = "admin-email"
-                                            +(userEmail ?: "Unknown User")
-                                        }
-                                        span {
-                                            classes = setOf("admin-logout")
-                                            id = "logout-button"
-                                            +"Logout"
-                                        }
-                                    }
-                                }
-
-                                // Dashboard content
-                                div {
-                                    classes = setOf("dashboard-content")
-                                    div {
-                                        classes = setOf("dashboard-section")
-                                        h3 {
-                                            classes = setOf("dashboard-section-title")
-                                            +"Welcome to the Admin Dashboard"
+                                        classes = setOf("dashboard-card")
+                                        div {
+                                            classes = setOf("dashboard-card-title")
+                                            +"Dashboard Overview"
                                         }
                                         div {
-                                            classes = setOf("dashboard-card")
-                                            div {
-                                                classes = setOf("dashboard-card-title")
-                                                +"Dashboard Overview"
-                                            }
-                                            div {
-                                                classes = setOf("dashboard-card-content")
-                                                +"This is the admin dashboard for the Androidplay Weather API. Here you can manage users, view statistics, and perform administrative tasks."
-                                            }
+                                            classes = setOf("dashboard-card-content")
+                                            +"This is the admin dashboard for the Androidplay Weather API. Here you can manage users, view statistics, and perform administrative tasks."
                                         }
                                     }
                                 }
                             }
-
-                            // Footer
-                            createFooter(this)
                         }
+
+                        // Footer
+                        createFooter(this)
                     }
                 }
             }
+        }
+
+        // Protected admin routes - require authentication and admin role
+        authenticate("jwt-auth") {
+            // Admin dashboard route - only accessible by authenticated admin users
+            // Removed get("/dashboard") from here
         }
 
         // Admin login has been moved to /admin/login route
@@ -896,3 +1004,21 @@ data class AdminLoginRequest(
     val email: String,
     val password: String
 )
+
+/**
+ * Deployment Note:
+ * Ensure that the file 'auth.js' is present in your static resources directory (e.g., /static/web/js/auth.js).
+ * If you use Ktor's static file serving, place 'auth.js' in the correct location so that '/web/js/auth.js' is accessible.
+ * Example: /resources/static/web/js/auth.js or /public/web/js/auth.js depending on your setup.
+ *
+ * Optional: Add a startup check to log a warning if the file is missing.
+ */
+object AdminStaticResourceChecker {
+    init {
+        val path = Paths.get("static/web/js/auth.js") // Adjust path as per your deployment
+        if (!Files.exists(path)) {
+            LoggerFactory.getLogger("Startup")
+                .warn("Missing static resource: /web/js/auth.js. Admin login/dashboard will fail to load JS.")
+        }
+    }
+}

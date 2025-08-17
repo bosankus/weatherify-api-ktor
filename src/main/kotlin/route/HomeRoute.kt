@@ -1670,7 +1670,7 @@ fun Route.homeRoute() {
                             div {
                                 classes = setOf("footer-content")
                                 p {
-                                    +"© 2025 Androidplay. All rights reserved."
+                                    +"© ${java.time.Year.now().value} Androidplay. All rights reserved."
                                 }
                             }
                         }

@@ -264,7 +264,7 @@ fun Route.privacyPolicyRoute() {
                             div {
                                 classes = setOf("footer-content")
                                 p {
-                                    +"© 2025 Weatherify. All rights reserved."
+                                    +"© ${java.time.Year.now().value} Androidplay. All rights reserved."
                                 }
                                 p {
                                     +"Return to "

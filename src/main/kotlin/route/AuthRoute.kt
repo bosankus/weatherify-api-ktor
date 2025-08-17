@@ -5,13 +5,13 @@ import bose.ankush.data.model.TokenRefreshRequest
 import bose.ankush.data.model.User
 import bose.ankush.data.model.UserLoginRequest
 import bose.ankush.data.model.UserRegistrationRequest
-import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
 import domain.model.Result
 import domain.repository.UserRepository
+import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.routing.Route
@@ -326,9 +326,26 @@ fun Route.authRoute() {
                         return@post
                     }
 
-                    // Generate JWT token with user's role
-                    val token = JwtConfig.generateToken(user.email, (user.role ?: "") as UserRole)
+                    // Generate JWT token with user's role (safe)
+                    val token = JwtConfig.generateToken(user.email, user.role)
                     logger.info("Login successful for user: ${request.email}")
+
+                    // Also set auth cookie for browser navigations to protected HTML pages
+                    try {
+                        val maxAgeSeconds = (config.Environment.getJwtExpiration() / 1000).toInt()
+                        call.response.cookies.append(
+                            Cookie(
+                                name = "jwt_token",
+                                value = token,
+                                path = "/",
+                                httpOnly = true,
+                                secure = true,
+                                maxAge = maxAgeSeconds
+                            )
+                        )
+                    } catch (e: Exception) {
+                        logger.warn("Failed to set auth cookie: ${e.message}")
+                    }
 
                     // Return token and user info in response body
                     call.respondSuccess(
@@ -531,8 +548,8 @@ fun Route.authRoute() {
                         return@post
                     }
 
-                    // Generate new JWT token with user's role
-                    val newToken = JwtConfig.generateToken(email, (user.role ?: "") as UserRole)
+                    // Generate new JWT token with user's role (safe)
+                    val newToken = JwtConfig.generateToken(email, user.role)
                     logger.info("Token refreshed successfully for user: $email")
 
                     // Return new token and user info in response body

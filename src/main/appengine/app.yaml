@@ -7,6 +7,10 @@ readiness_check:
   timeout_sec: 2
   failure_threshold: 2
 
+automatic_scaling:
+  min_idle_instances: 1
+  max_idle_instances: 2
+
 env_variables:
   GCP_PROJECT_ID: "1017382896100"
   DB_NAME: "weatherify-app-db"

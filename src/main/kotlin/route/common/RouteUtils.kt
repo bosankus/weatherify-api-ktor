@@ -23,6 +23,9 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
             data = actualData
         )
 
+        // Log the response for debugging
+        System.err.println("Sending success response: status=$status, message=$message")
+        
         respond(
             status = status,
             message = response
@@ -32,12 +35,14 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
         System.err.println("Error creating success response: ${e.message}")
         System.err.println("Response data type: ${T::class.java.simpleName}")
         System.err.println("Response message: $message")
-        e.printStackTrace()
+        System.err.println("Exception type: ${e.javaClass.name}")
+        System.err.println("Stack trace: ${e.stackTraceToString()}")
 
         try {
             // Try to respond with a simpler response
+            System.err.println("Attempting to send simplified success response")
             respond(
-                status = HttpStatusCode.OK, // Keep the original status code
+                status = status, // Keep the original status code
                 message = ApiResponse(
                     status = true,
                     message = message,
@@ -47,10 +52,13 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
         } catch (e2: Exception) {
             // If that fails too, use the most basic response possible
             System.err.println("Failed to send simplified success response: ${e2.message}")
-            e2.printStackTrace()
+            System.err.println("Exception type: ${e2.javaClass.name}")
+            System.err.println("Stack trace: ${e2.stackTraceToString()}")
 
+            // Use the most basic response format
+            System.err.println("Attempting to send basic map response")
             respond(
-                status = HttpStatusCode.OK,
+                status = status,
                 message = mapOf(
                     "status" to true,
                     "message" to message
@@ -78,6 +86,9 @@ suspend inline fun <reified T> ApplicationCall.respondError(
             data = actualData
         )
 
+        // Log the response for debugging
+        System.err.println("Sending error response: status=$status, message=$message")
+
         respond(
             status = status,
             message = response
@@ -88,10 +99,12 @@ suspend inline fun <reified T> ApplicationCall.respondError(
         System.err.println("Response data type: ${T::class.java.simpleName}")
         System.err.println("Response message: $message")
         System.err.println("Response status code: $status")
-        e.printStackTrace()
+        System.err.println("Exception type: ${e.javaClass.name}")
+        System.err.println("Stack trace: ${e.stackTraceToString()}")
 
         try {
             // Try to respond with a simpler response, but keep the original status code
+            System.err.println("Attempting to send simplified error response")
             respond(
                 status = status, // Keep the original status code
                 message = ApiResponse(
@@ -103,8 +116,11 @@ suspend inline fun <reified T> ApplicationCall.respondError(
         } catch (e2: Exception) {
             // If that fails too, use the most basic response possible
             System.err.println("Failed to send simplified error response: ${e2.message}")
-            e2.printStackTrace()
+            System.err.println("Exception type: ${e2.javaClass.name}")
+            System.err.println("Stack trace: ${e2.stackTraceToString()}")
 
+            // Use the most basic response format
+            System.err.println("Attempting to send basic map response")
             respond(
                 status = status, // Keep the original status code
                 message = mapOf(

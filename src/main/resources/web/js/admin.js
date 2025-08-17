@@ -19,15 +19,34 @@ function initializeAdmin() {
     // Check if user is authenticated
     if (!isAuthenticated()) {
         // Redirect to login page
-        window.location.href = '/login?error=auth_required';
+        window.location.href = '/admin/login?error=auth_required';
         return;
     }
 
-    // Set up event listeners
-    document.getElementById('logout-button').addEventListener('click', logout);
-    
-    // Load users
-    loadUsers(currentPage, pageSize);
+    // Ensure we have a valid token before proceeding
+    getValidToken().then(token => {
+        if (!token) {
+            console.warn('No valid token available for admin dashboard');
+            window.location.href = '/admin/login?error=auth_required';
+            return;
+        }
+        
+        // Check if user is admin
+        if (!isAdmin()) {
+            console.warn('Non-admin user attempted to access admin dashboard');
+            window.location.href = '/admin/login?error=access_denied';
+            return;
+        }
+        
+        // Set up event listeners
+        document.getElementById('logout-button').addEventListener('click', logout);
+        
+        // Load users
+        loadUsers(currentPage, pageSize);
+    }).catch(error => {
+        console.error('Error getting valid token for admin dashboard:', error);
+        window.location.href = '/admin/login?error=auth_required';
+    });
 }
 
 /**

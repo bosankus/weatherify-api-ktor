@@ -288,3 +288,30 @@ h1 strong {
 	transform: scale(1.5);
 	transition: transform .5s ease .15s;
 }
+
+/* Responsive styles for mobile devices */
+@media (max-width: 768px) {
+	section {
+		width: 90vw;
+		min-height: 150px;
+	}
+	
+	h1 {
+		font-size: clamp(24px, 5vw, 42px);
+	}
+	
+	.toggle {
+		transform: translateX(-50%) scale(.6);
+	}
+}
+
+@media (max-width: 480px) {
+	section {
+		width: 95vw;
+		min-height: 120px;
+	}
+	
+	h1 {
+		font-size: clamp(20px, 4.5vw, 32px);
+	}
+}

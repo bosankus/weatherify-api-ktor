@@ -6,11 +6,13 @@ import config.JwtConfig
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.auth.HttpAuthHeader
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
+import io.ktor.server.auth.parseAuthorizationHeader
 import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.Json
@@ -27,6 +29,21 @@ fun Application.configureAuthentication() {
         jwt("jwt-auth") {
             realm = Environment.getJwtRealm()
             verifier(JwtConfig.verifier)
+
+            // Accept token from Authorization header or fallback to jwt_token cookie
+            authHeader { call ->
+                // Prefer standard Authorization header if present
+                val header = call.request.parseAuthorizationHeader()
+                if (header != null) {
+                    return@authHeader header
+                }
+                // Fallback to cookie-based auth for browser navigations
+                val tokenFromCookie: String? = call.request.cookies["jwt_token"]
+                if (tokenFromCookie.isNullOrBlank()) {
+                    return@authHeader null
+                }
+                HttpAuthHeader.Single("Bearer", tokenFromCookie)
+            }
 
             validate { credential ->
                 try {
