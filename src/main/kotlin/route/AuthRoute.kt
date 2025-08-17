@@ -13,6 +13,7 @@ import domain.model.Result
 import domain.repository.UserRepository
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.application
@@ -693,4 +694,90 @@ fun Route.authRoute() {
             }
         }
     }
+
+    /**
+     * Logout the current user
+     * POST /logout clears auth cookies/session
+     */
+    post(Constants.Api.LOGOUT_ENDPOINT) {
+        try {
+            logger.info("Logout request received")
+            call.performLogout()
+        } catch (e: Exception) {
+            logger.error("Exception during logout: ${e.message}", e)
+            e.printStackTrace()
+
+            val errorMessage = when {
+                e is IllegalArgumentException -> Constants.Messages.VALIDATION_ERROR
+                e.message?.contains("auth", ignoreCase = true) == true ||
+                        e.message?.contains(
+                            "token",
+                            ignoreCase = true
+                        ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+
+                e.message?.contains("database", ignoreCase = true) == true ||
+                        e.message?.contains(
+                            "mongo",
+                            ignoreCase = true
+                        ) == true -> Constants.Messages.DATABASE_ERROR
+
+                e.message?.contains("connection", ignoreCase = true) == true ||
+                        e.message?.contains(
+                            "network",
+                            ignoreCase = true
+                        ) == true -> Constants.Messages.NETWORK_ERROR
+
+                else -> Constants.Messages.UNKNOWN_ERROR
+            }
+
+            val errorDetails = mapOf(
+                "errorType" to errorMessage.substringBefore(":"),
+                "errorMessage" to e.message,
+                "errorClass" to e.javaClass.simpleName,
+                "endpoint" to "logout"
+            )
+
+            try {
+                call.respondError(
+                    "$errorMessage: ${e.message}",
+                    errorDetails,
+                    HttpStatusCode.InternalServerError
+                )
+            } catch (respondException: Exception) {
+                logger.error(
+                    "Failed to send error response: ${respondException.message}",
+                    respondException
+                )
+                call.respondError(
+                    Constants.Messages.INTERNAL_SERVER_ERROR,
+                    mapOf("error" to "Failed to process request"),
+                    HttpStatusCode.InternalServerError
+                )
+            }
+        }
+    }
 }
+
+/**
+ * Reusable logout operation for clearing auth cookie and responding consistently
+ */
+suspend fun ApplicationCall.performLogout() {
+    // Optionally read token if needed for future blacklist
+    // val unusedToken = request.cookies["jwt_token"]
+
+    // Clear the jwt_token cookie
+    response.cookies.append(
+        Cookie(
+            name = "jwt_token",
+            value = "",
+            path = "/",
+            httpOnly = true,
+            secure = true,
+            maxAge = 0
+        )
+    )
+
+    // Respond success in a consistent format
+    respondSuccess<Unit>(Constants.Messages.LOGOUT_SUCCESS, Unit, HttpStatusCode.OK)
+}
+

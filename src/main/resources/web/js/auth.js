@@ -111,11 +111,32 @@ function navigateToAdminPage(url) {
 }
 
 /**
- * Logout user by removing token and redirecting to login page
+ * Logout user by removing token, invalidating session on backend, and redirecting to login page
  */
 function logout() {
-    removeToken();
-    window.location.href = '/admin/login';
+    // POST to common /logout to clear server-side cookie/session for all user types
+    fetch('/logout', {
+        method: 'POST',
+        credentials: 'include'
+    })
+    .then(() => {
+        removeToken();
+        // Optionally clear sessionStorage if used
+        if (typeof sessionStorage !== "undefined") {
+            sessionStorage.clear();
+        }
+        const isAdminPortal = window.location && window.location.pathname && window.location.pathname.startsWith('/admin');
+        window.location.href = isAdminPortal ? '/admin/login' : '/login';
+    })
+    .catch(() => {
+        // Even if request fails, clear local/session storage and redirect appropriately
+        removeToken();
+        if (typeof sessionStorage !== "undefined") {
+            sessionStorage.clear();
+        }
+        const isAdminPortal = window.location && window.location.pathname && window.location.pathname.startsWith('/admin');
+        window.location.href = isAdminPortal ? '/admin/login' : '/login';
+    });
 }
 
 /**
@@ -160,3 +181,36 @@ window.isAdmin = isAdmin;
 window.navigateToAdminPage = navigateToAdminPage;
 window.logout = logout;
 window.parseJwt = parseJwt;
+
+// Fallback logout button binding to ensure logout works even if admin.js init doesn't run
+// or if localStorage token is missing but cookie auth is present.
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        const btn = document.getElementById('logout-button');
+        if (btn && !btn.dataset.logoutBound) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (typeof window.logout === 'function') {
+                    window.logout();
+                }
+            });
+            btn.dataset.logoutBound = 'true';
+        }
+    } catch (e) {
+        console.error('Failed to bind logout button:', e);
+    }
+});
+
+// Optionally clear localStorage JWT if redirected to login due to session expiration/auth required
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    if (
+        window.location.pathname === '/admin/login' &&
+        (params.get('error') === 'session_expired' || params.get('error') === 'auth_required')
+    ) {
+        removeToken();
+        if (typeof sessionStorage !== "undefined") {
+            sessionStorage.clear();
+        }
+    }
+})();

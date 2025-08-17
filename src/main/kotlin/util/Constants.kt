@@ -57,6 +57,7 @@ object Constants {
         const val LOGIN_ENDPOINT = "/login"
         const val REGISTER_ENDPOINT = "/register"
         const val REFRESH_TOKEN_ENDPOINT = "/refresh-token"
+        const val LOGOUT_ENDPOINT = "/logout"
         const val HOME_ENDPOINT = "/"
 
         // API URLs
@@ -94,6 +95,7 @@ object Constants {
         const val FAILED_REGISTER = "Failed to register user"
         const val USER_NOT_REGISTERED = "User is not registered"
         const val ACCOUNT_INACTIVE = "Account is inactive"
+        const val LOGOUT_SUCCESS = "Logged out successfully"
 
         // Feedback messages
         const val FEEDBACK_SUBMITTED = "Feedback submitted successfully"

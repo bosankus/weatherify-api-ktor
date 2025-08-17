@@ -12,7 +12,6 @@ import domain.service.AuthService
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.html.respondHtml
@@ -711,8 +710,20 @@ fun Route.adminAuthRoute() {
                     val decodedJWT = JwtConfig.verifier.verify(jwtToken)
                     userEmail = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
                     isAdmin = JwtConfig.isAdmin(decodedJWT)
-                } catch (_: Exception) {
-                    // Invalid token, treat as unauthenticated
+                } catch (e: Exception) {
+                    // Invalid or expired token, clear cookie to break redirect loop
+                    call.response.cookies.append(
+                        Cookie(
+                            name = "jwt_token",
+                            value = "",
+                            path = "/",
+                            httpOnly = true,
+                            secure = true,
+                            maxAge = 0
+                        )
+                    )
+                    // Optionally log the error for debugging
+                    logger.warn("Failed to verify JWT in /admin: ${e.message}")
                 }
             }
 
@@ -986,13 +997,6 @@ fun Route.adminAuthRoute() {
             }
         }
 
-        // Protected admin routes - require authentication and admin role
-        authenticate("jwt-auth") {
-            // Admin dashboard route - only accessible by authenticated admin users
-            // Removed get("/dashboard") from here
-        }
-
-        // Admin login has been moved to /admin/login route
     }
 }
 
