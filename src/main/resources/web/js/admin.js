@@ -344,7 +344,7 @@ function updateUserRole(email, role, selectEl) {
     .then(data => {
         if (data.status === true) {
             if (selectEl) selectEl.dataset.prevValue = role;
-            showSuccessMessage(`Role updated successfully for ${email}`);
+            showToast('success', `Role updated successfully for ${email}`);
         } else {
             if (selectEl && prev) selectEl.value = prev;
             showErrorMessage(data.message || 'Failed to update user role');
@@ -389,7 +389,7 @@ function updateUserStatus(email, isActive, checkboxEl) {
         if (data.status === true) {
             const resultText = isActive ? 'activated' : 'deactivated';
             if (checkboxEl) checkboxEl.dataset.prevChecked = String(isActive);
-            showSuccessMessage(`User ${email} ${resultText} successfully`);
+            showToast('success', `User ${email} ${resultText} successfully`);
         } else {
             if (checkboxEl && prev !== null) checkboxEl.checked = prev;
             showErrorMessage(data.message || `Failed to ${statusText} user`);
@@ -423,20 +423,64 @@ function formatDate(dateString) {
 }
 
 /**
+ * Toast notification (top-right slide-in/out)
+ * @param {'success'|'error'|'info'} type
+ * @param {string} message
+ * @param {number} [timeout]
+ */
+function showToast(type, message, timeout) {
+    try {
+        const duration = typeof timeout === 'number' ? timeout : 4000;
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        const t = type === 'success' || type === 'error' || type === 'info' ? type : 'info';
+        toast.className = `toast toast-${t}`;
+        const icon = document.createElement('span');
+        icon.className = 'material-icons toast-icon';
+        icon.textContent = t === 'success' ? 'check_circle' : (t === 'error' ? 'error' : 'info');
+        const text = document.createElement('div');
+        text.className = 'toast-message';
+        text.textContent = message || '';
+        toast.appendChild(icon);
+        toast.appendChild(text);
+        container.appendChild(toast);
+        requestAnimationFrame(() => { toast.classList.add('toast-visible'); });
+        const hide = () => {
+            toast.classList.remove('toast-visible');
+            toast.classList.add('toast-hide');
+            setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 250);
+        };
+        const timer = setTimeout(hide, duration);
+        toast.addEventListener('click', function(){ clearTimeout(timer); hide(); });
+    } catch (e) { console.warn('Toast failed:', e); }
+}
+
+/**
  * Show a success message
  * @param {string} message - The message to display
  */
 function showSuccessMessage(message) {
     const successMessage = document.getElementById('success-message');
+    const errorMessage = document.getElementById('error-message');
+    const infoMessage = document.getElementById('info-message');
+    if (!successMessage) return;
     successMessage.textContent = message;
     successMessage.classList.remove('hidden');
-    
+    successMessage.classList.add('visible');
+
     // Hide error and info messages
-    document.getElementById('error-message').classList.add('hidden');
-    document.getElementById('info-message').classList.add('hidden');
-    
+    if (errorMessage) { errorMessage.classList.remove('visible'); errorMessage.classList.add('hidden'); }
+    if (infoMessage) { infoMessage.classList.remove('visible'); infoMessage.classList.add('hidden'); }
+
     // Hide message after 5 seconds
     setTimeout(() => {
+        successMessage.classList.remove('visible');
         successMessage.classList.add('hidden');
     }, 5000);
 }
@@ -447,15 +491,20 @@ function showSuccessMessage(message) {
  */
 function showErrorMessage(message) {
     const errorMessage = document.getElementById('error-message');
+    const successMessage = document.getElementById('success-message');
+    const infoMessage = document.getElementById('info-message');
+    if (!errorMessage) return;
     errorMessage.textContent = message;
     errorMessage.classList.remove('hidden');
-    
+    errorMessage.classList.add('visible');
+
     // Hide success and info messages
-    document.getElementById('success-message').classList.add('hidden');
-    document.getElementById('info-message').classList.add('hidden');
-    
+    if (successMessage) { successMessage.classList.remove('visible'); successMessage.classList.add('hidden'); }
+    if (infoMessage) { infoMessage.classList.remove('visible'); infoMessage.classList.add('hidden'); }
+
     // Hide message after 5 seconds
     setTimeout(() => {
+        errorMessage.classList.remove('visible');
         errorMessage.classList.add('hidden');
     }, 5000);
 }
@@ -466,21 +515,28 @@ function showErrorMessage(message) {
  */
 function showInfoMessage(message) {
     const infoMessage = document.getElementById('info-message');
+    const successMessage = document.getElementById('success-message');
+    const errorMessage = document.getElementById('error-message');
+    if (!infoMessage) return;
     infoMessage.textContent = message;
     infoMessage.classList.remove('hidden');
-    
+    infoMessage.classList.add('visible');
+
     // Hide success and error messages
-    document.getElementById('success-message').classList.add('hidden');
-    document.getElementById('error-message').classList.add('hidden');
+    if (successMessage) { successMessage.classList.remove('visible'); successMessage.classList.add('hidden'); }
+    if (errorMessage) { errorMessage.classList.remove('visible'); errorMessage.classList.add('hidden'); }
 }
 
 /**
  * Clear all messages
  */
 function clearMessages() {
-    document.getElementById('success-message').classList.add('hidden');
-    document.getElementById('error-message').classList.add('hidden');
-    document.getElementById('info-message').classList.add('hidden');
+    const s = document.getElementById('success-message');
+    const e = document.getElementById('error-message');
+    const i = document.getElementById('info-message');
+    if (s) { s.classList.remove('visible'); s.classList.add('hidden'); }
+    if (e) { e.classList.remove('visible'); e.classList.add('hidden'); }
+    if (i) { i.classList.remove('visible'); i.classList.add('hidden'); }
 }
 
 // Initialize admin dashboard when DOM is loaded

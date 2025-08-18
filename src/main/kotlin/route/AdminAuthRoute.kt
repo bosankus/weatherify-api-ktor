@@ -1058,6 +1058,20 @@ fun Route.adminAuthRoute() {
                                 .info-message { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
                                 .hidden { display: none; }
                                 
+                                /* Toast notifications */
+                                .toast-container { position: fixed; top: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 9999; }
+                                .toast { min-width: 260px; max-width: 420px; padding: 0.75rem 1rem; border-radius: 8px; background: var(--endpoint-bg, var(--card-bg)); color: var(--text-color); border: 1px solid var(--endpoint-border, var(--card-border)); box-shadow: 0 8px 24px var(--card-shadow); display: flex; align-items: center; gap: 0.6rem; transform: translateX(120%); opacity: 0; transition: transform 0.25s ease, opacity 0.25s ease; }
+                                .toast-visible { transform: translateX(0); opacity: 1; }
+                                .toast-hide { transform: translateX(120%); opacity: 0; }
+                                .toast .toast-icon { font-size: 20px; line-height: 1; }
+                                .toast-success { border-left: 4px solid #10b981; }
+                                .toast-error { border-left: 4px solid #ef4444; }
+                                .toast-info { border-left: 4px solid #3b82f6; }
+                                .toast-success .toast-icon { color: #10b981; }
+                                .toast-error .toast-icon { color: #ef4444; }
+                                .toast-info .toast-icon { color: #3b82f6; }
+                                .toast-message { flex: 1; }
+                                
                                 /* Loader skeleton */
                                 .skeleton { background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.2), rgba(255,255,255,0)); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
                                 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
