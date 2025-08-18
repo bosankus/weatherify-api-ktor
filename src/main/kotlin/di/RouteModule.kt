@@ -7,6 +7,7 @@ import bose.ankush.route.common.HomeRoutesRegistrar
 import bose.ankush.route.common.PrivacyPolicyRoutesRegistrar
 import bose.ankush.route.common.RouteRegistrar
 import bose.ankush.route.common.TermsAndConditionsRoutesRegistrar
+import bose.ankush.route.common.UserRoutesRegistrar
 import bose.ankush.route.common.WeatherRoutesRegistrar
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -22,6 +23,7 @@ val routeModule = module {
     single<RouteRegistrar>(named("feedback")) { FeedbackRoutesRegistrar }
     single<RouteRegistrar>(named("auth")) { AuthRoutesRegistrar }
     single<RouteRegistrar>(named("adminAuth")) { AdminAuthRoutesRegistrar }
+    single<RouteRegistrar>(named("users")) { UserRoutesRegistrar }
     single<RouteRegistrar>(named("terms")) { TermsAndConditionsRoutesRegistrar }
     single<RouteRegistrar>(named("privacy")) { PrivacyPolicyRoutesRegistrar }
 
@@ -33,6 +35,7 @@ val routeModule = module {
             get(named("feedback")),
             get(named("auth")),
             get(named("adminAuth")),
+            get(named("users")),
             get(named("terms")),
             get(named("privacy"))
         )

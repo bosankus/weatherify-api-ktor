@@ -12,41 +12,104 @@ let totalPages = 1;
 // Total number of users
 let totalUsers = 0;
 
+// UserRoute API wrapper to call backend UserRoute endpoints
+// This provides a clear contract for admin.js to use backend routes without hardcoding URLs inline
+window.UserRoute = window.UserRoute || {
+    listUsers(page, pageSize) {
+        const url = `/admin/users?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+        return fetch(url, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('You do not have permission to access this resource');
+                }
+                throw new Error('Failed to load users');
+            }
+            return response.json();
+        })
+        .then(payload => {
+            if (!payload || payload.status !== true || !payload.data) {
+                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading users');
+            }
+            // FIX: Do not force !!u.isActive or !!u.isPremium, use the value as returned (should be boolean from backend)
+            const mappedUsers = Array.isArray(payload.data.users) ? payload.data.users.map(u => ({
+                email: u.email,
+                role: u.role,
+                isActive: u.isActive,
+                isPremium: u.isPremium,
+                createdAt: u.createdAt
+            })) : [];
+            return {
+                users: mappedUsers,
+                pagination: payload.data.pagination || { page, pageSize, totalPages: 1, totalCount: mappedUsers.length }
+            };
+        });
+    },
+    updateRole(email, role) {
+        const url = `/admin/users/${encodeURIComponent(email)}/role`;
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ role })
+        });
+    },
+    updateStatus(email, isActive) {
+        const url = `/admin/users/${encodeURIComponent(email)}/status`;
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ isActive: !!isActive })
+        });
+    }
+};
+
 /**
  * Initialize the admin dashboard
  */
 function initializeAdmin() {
-    // Check if user is authenticated
-    if (!isAuthenticated()) {
-        // Redirect to login page
-        window.location.href = '/admin/login?error=auth_required';
-        return;
-    }
+    try {
+        // Bind logout
+        const logoutBtn = document.getElementById('logout-button');
+        if (logoutBtn && !logoutBtn.dataset.bound) {
+            logoutBtn.addEventListener('click', function(e){ e.preventDefault(); if (typeof logout === 'function') logout(); });
+            logoutBtn.dataset.bound = 'true';
+        }
 
-    // Ensure we have a valid token before proceeding
-    getValidToken().then(token => {
-        if (!token) {
-            console.warn('No valid token available for admin dashboard');
-            window.location.href = '/admin/login?error=auth_required';
-            return;
+
+        // Guarded initial load for IAM users: run once if IAM panel exists and table is empty
+        try {
+            const iamPanel = document.getElementById('iam');
+            const tbody = document.getElementById('users-table-body');
+            if (iamPanel && tbody && !window.__iamLoadedOnce) {
+                const hasRows = Array.isArray(tbody.rows) ? tbody.rows.length > 0 : tbody.children.length > 0;
+                if (!hasRows && typeof loadUsers === 'function') {
+                    window.__iamLoadedOnce = true;
+                    loadUsers(1, 10);
+                }
+            }
+        } catch (e) {
+            console.warn('IAM initial load guard failed:', e);
         }
-        
-        // Check if user is admin
-        if (!isAdmin()) {
-            console.warn('Non-admin user attempted to access admin dashboard');
-            window.location.href = '/admin/login?error=access_denied';
-            return;
-        }
-        
-        // Set up event listeners
-        document.getElementById('logout-button').addEventListener('click', logout);
-        
-        // Load users
-        loadUsers(currentPage, pageSize);
-    }).catch(error => {
-        console.error('Error getting valid token for admin dashboard:', error);
-        window.location.href = '/admin/login?error=auth_required';
-    });
+
+        // Do not redirect here; rely on server-side auth via cookie or Authorization header.
+        // The IAM tab activation script will trigger loading users when needed.
+    } catch (e) {
+        console.error('Error initializing admin dashboard:', e);
+    }
 }
 
 /**
@@ -55,50 +118,51 @@ function initializeAdmin() {
  * @param {number} pageSize - The number of users per page
  */
 function loadUsers(page, pageSize) {
-    // Show loading message
-    showInfoMessage('Loading users...');
-    
-    // Make API request to get users
-    authFetch(`/admin/users?page=${page}&pageSize=${pageSize}`)
-        .then(response => {
-            if (!response.ok) {
-                // If response is not OK, throw error
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access this resource');
-                } else {
-                    throw new Error('Failed to load users');
-                }
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.status === true && data.data) {
-                // Clear any previous messages
-                clearMessages();
-                
-                // Update pagination variables
-                currentPage = data.data.pagination.page;
-                pageSize = data.data.pagination.pageSize;
-                totalPages = data.data.pagination.totalPages;
-                totalUsers = data.data.pagination.totalCount;
-                
-                // Render users table
-                renderUsersTable(data.data.users);
-                
-                // Render pagination
-                renderPagination();
-            } else {
-                showErrorMessage(data.message || 'Failed to load users');
-            }
+    // Show inline loader only (avoid layout shift and flicker)
+    try {
+        const loader = document.getElementById('iam-loader');
+        if (loader) loader.style.display = 'block';
+    } catch (e) { /* ignore */ }
+
+    // Make API request to get users via UserRoute
+    window.UserRoute.listUsers(page, pageSize)
+        .then(({ users, pagination }) => {
+            // Hide loader
+            try {
+                const loader = document.getElementById('iam-loader');
+                if (loader) loader.style.display = 'none';
+            } catch (e) {}
+
+            // Log users to console
+            console.log('Fetched users:', users);
+
+            // Clear any previous messages
+            clearMessages();
+
+            // Update pagination variables
+            currentPage = pagination.page;
+            pageSize = pagination.pageSize;
+            totalPages = pagination.totalPages;
+            totalUsers = pagination.totalCount;
+
+            // Render users table
+            renderUsersTable(users);
+
+            // Render pagination
+            renderPagination();
         })
         .catch(error => {
             console.error('Error loading users:', error);
+            try {
+                const loader = document.getElementById('iam-loader');
+                if (loader) loader.style.display = 'none';
+            } catch (e) {}
             showErrorMessage(error.message || 'An error occurred while loading users');
-            
+
             // If error is due to authentication, redirect to login
             if (error.message.includes('permission') || error.message.includes('authentication')) {
                 setTimeout(() => {
-                    window.location.href = '/login?error=auth_required';
+                    window.location.href = '/admin/login?error=auth_required';
                 }, 2000);
             }
         });
@@ -110,41 +174,54 @@ function loadUsers(page, pageSize) {
  */
 function renderUsersTable(users) {
     const tableBody = document.getElementById('users-table-body');
-    tableBody.innerHTML = '';
-    
+    const fragment = document.createDocumentFragment();
+
     if (users.length === 0) {
-        // If no users, show message
         const row = document.createElement('tr');
         const cell = document.createElement('td');
         cell.colSpan = 4;
         cell.textContent = 'No users found';
         cell.style.textAlign = 'center';
         row.appendChild(cell);
-        tableBody.appendChild(row);
+        fragment.appendChild(row);
+        tableBody.replaceChildren(fragment);
         return;
     }
-    
-    // Create a row for each user
+
     users.forEach(user => {
         const row = document.createElement('tr');
-        
-        // Email cell
+
+        // Email cell with badges
         const emailCell = document.createElement('td');
-        emailCell.textContent = user.email;
+        const emailText = document.createElement('span');
+        emailText.textContent = user.email;
+        emailCell.appendChild(emailText);
+
+        if (user.role === 'ADMIN') {
+            const adminBadge = document.createElement('span');
+            adminBadge.className = 'badge badge-admin';
+            adminBadge.textContent = 'ADMIN';
+            emailCell.appendChild(adminBadge);
+        }
+        if (user.isPremium === true) {
+            const premiumBadge = document.createElement('span');
+            premiumBadge.className = 'badge badge-premium';
+            premiumBadge.textContent = 'PREMIUM';
+            emailCell.appendChild(premiumBadge);
+        }
         row.appendChild(emailCell);
-        
+
         // Created at cell
         const createdAtCell = document.createElement('td');
         createdAtCell.textContent = formatDate(user.createdAt);
         row.appendChild(createdAtCell);
-        
+
         // Role cell
         const roleCell = document.createElement('td');
         const roleSelect = document.createElement('select');
         roleSelect.className = 'role-select';
         roleSelect.dataset.email = user.email;
-        
-        // Add options for each role
+
         ['USER', 'MODERATOR', 'ADMIN'].forEach(role => {
             const option = document.createElement('option');
             option.value = role;
@@ -152,40 +229,42 @@ function renderUsersTable(users) {
             option.selected = user.role === role;
             roleSelect.appendChild(option);
         });
-        
-        // Add event listener for role change
+        roleSelect.dataset.prevValue = user.role || 'USER';
+
         roleSelect.addEventListener('change', function() {
-            updateUserRole(user.email, this.value);
+            updateUserRole(user.email, this.value, this);
         });
-        
+
         roleCell.appendChild(roleSelect);
         row.appendChild(roleCell);
-        
+
         // Status cell
         const statusCell = document.createElement('td');
         const statusToggle = document.createElement('label');
         statusToggle.className = 'status-toggle';
-        
+
         const statusInput = document.createElement('input');
         statusInput.type = 'checkbox';
-        statusInput.checked = user.isActive;
+        // Fix: ensure checked is set correctly for active users
+        statusInput.checked = !!user.isActive;
         statusInput.dataset.email = user.email;
-        
-        // Add event listener for status change
+        statusInput.dataset.prevChecked = String(!!user.isActive);
+
         statusInput.addEventListener('change', function() {
-            updateUserStatus(user.email, this.checked);
+            updateUserStatus(user.email, this.checked, this);
         });
-        
+
         const statusSlider = document.createElement('span');
         statusSlider.className = 'status-slider';
-        
+
         statusToggle.appendChild(statusInput);
         statusToggle.appendChild(statusSlider);
         statusCell.appendChild(statusToggle);
         row.appendChild(statusCell);
-        
-        tableBody.appendChild(row);
+
+        fragment.appendChild(row);
     });
+    tableBody.replaceChildren(fragment);
 }
 
 /**
@@ -247,23 +326,13 @@ function renderPagination() {
  * @param {string} email - The user's email
  * @param {string} role - The new role
  */
-function updateUserRole(email, role) {
-    // Show loading message
-    showInfoMessage(`Updating role for ${email}...`);
-    
+function updateUserRole(email, role, selectEl) {
+    const prev = selectEl ? (selectEl.dataset.prevValue || 'USER') : null;
+    if (selectEl) selectEl.disabled = true;
     // Make API request to update role
-    authFetch(`/admin/users/${encodeURIComponent(email)}/role`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            role: role
-        })
-    })
+    window.UserRoute.updateRole(email, role)
     .then(response => {
         if (!response.ok) {
-            // If response is not OK, throw error
             if (response.status === 403) {
                 throw new Error('You do not have permission to update user roles');
             } else {
@@ -274,14 +343,20 @@ function updateUserRole(email, role) {
     })
     .then(data => {
         if (data.status === true) {
+            if (selectEl) selectEl.dataset.prevValue = role;
             showSuccessMessage(`Role updated successfully for ${email}`);
         } else {
+            if (selectEl && prev) selectEl.value = prev;
             showErrorMessage(data.message || 'Failed to update user role');
         }
     })
     .catch(error => {
         console.error('Error updating user role:', error);
+        if (selectEl && prev) selectEl.value = prev;
         showErrorMessage(error.message || 'An error occurred while updating user role');
+    })
+    .finally(() => {
+        if (selectEl) selectEl.disabled = false;
     });
 }
 
@@ -290,24 +365,18 @@ function updateUserRole(email, role) {
  * @param {string} email - The user's email
  * @param {boolean} isActive - The new active status
  */
-function updateUserStatus(email, isActive) {
-    // Show loading message
+function updateUserStatus(email, isActive, checkboxEl) {
+    const prev = checkboxEl ? (checkboxEl.dataset.prevChecked === 'true') : null;
+    // If nothing changed, do nothing
+    if (prev !== null && prev === isActive) {
+        return;
+    }
+    if (checkboxEl) checkboxEl.disabled = true;
     const statusText = isActive ? 'activating' : 'deactivating';
-    showInfoMessage(`${statusText} user ${email}...`);
-    
     // Make API request to update status
-    authFetch(`/admin/users/${encodeURIComponent(email)}/status`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            isActive: isActive
-        })
-    })
+    window.UserRoute.updateStatus(email, isActive)
     .then(response => {
         if (!response.ok) {
-            // If response is not OK, throw error
             if (response.status === 403) {
                 throw new Error('You do not have permission to update user status');
             } else {
@@ -319,14 +388,20 @@ function updateUserStatus(email, isActive) {
     .then(data => {
         if (data.status === true) {
             const resultText = isActive ? 'activated' : 'deactivated';
+            if (checkboxEl) checkboxEl.dataset.prevChecked = String(isActive);
             showSuccessMessage(`User ${email} ${resultText} successfully`);
         } else {
+            if (checkboxEl && prev !== null) checkboxEl.checked = prev;
             showErrorMessage(data.message || `Failed to ${statusText} user`);
         }
     })
     .catch(error => {
         console.error(`Error ${statusText} user:`, error);
+        if (checkboxEl && prev !== null) checkboxEl.checked = prev;
         showErrorMessage(error.message || `An error occurred while ${statusText} user`);
+    })
+    .finally(() => {
+        if (checkboxEl) checkboxEl.disabled = false;
     });
 }
 

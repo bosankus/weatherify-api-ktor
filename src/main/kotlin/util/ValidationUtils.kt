@@ -78,12 +78,8 @@ object ValidationUtils {
             errors.add("Password hash cannot be empty")
         }
 
-        // Validate role is one of the defined enum values
-        try {
-            UserRole.valueOf(user.role.toString())
-        } catch (_: IllegalArgumentException) {
-            errors.add("Invalid user role: ${user.role}")
-        }
+        // Role can be null; when present it's an enum and already type-safe
+        // No validation needed here
 
         return errors
     }

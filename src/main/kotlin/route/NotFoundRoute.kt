@@ -139,7 +139,7 @@ fun Route.notFoundRoute() {
                                 """
                                 /* 404 page specific styles */
                                 .error-content {
-                                    max-width: 800px;
+                                    max-width: 1400px;
                                     margin: 2rem auto;
                                     padding: 2rem;
                                     text-align: center;

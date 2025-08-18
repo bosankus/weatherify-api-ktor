@@ -214,3 +214,40 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 })();
+
+
+// --- Added for admin dashboard authenticated fetch helpers ---
+/**
+ * Get a valid token. Placeholder for future refresh logic.
+ * @returns {Promise<string|null>} token or null
+ */
+function getValidToken() {
+    try {
+        const token = getToken();
+        return Promise.resolve(token || null);
+    } catch (e) {
+        return Promise.resolve(null);
+    }
+}
+
+/**
+ * Fetch with Authorization when token exists and include cookies for fallback auth.
+ * @param {string} url
+ * @param {RequestInit} options
+ */
+function authFetch(url, options) {
+    const opts = options ? { ...options } : {};
+    const headers = new Headers(opts.headers || {});
+    const token = getToken();
+    if (token) {
+        headers.set('Authorization', 'Bearer ' + token);
+    }
+    opts.headers = headers;
+    // Include cookies for routes using cookie-based auth
+    if (!opts.credentials) opts.credentials = 'include';
+    return fetch(url, opts);
+}
+
+// Expose helpers
+window.getValidToken = getValidToken;
+window.authFetch = authFetch;

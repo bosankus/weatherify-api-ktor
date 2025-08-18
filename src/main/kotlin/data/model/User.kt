@@ -9,15 +9,16 @@ data class User(
     val email: String,
     val passwordHash: String,
     val createdAt: String = Instant.now().toString(),
-    val isActive: Boolean,
-    val role: UserRole?,
+    val isActive: Boolean = false,
+    val role: UserRole? = null,
     val timestampOfRegistration: String? = null,
     val deviceModel: String? = null,
     val operatingSystem: String? = null,
     val osVersion: String? = null,
     val appVersion: String? = null,
     val ipAddress: String? = null,
-    val registrationSource: String? = null
+    val registrationSource: String? = null,
+    val isPremium: Boolean = false
 )
 
 /** User roles for access control */
@@ -41,7 +42,8 @@ data class UserRegistrationRequest(
     val ipAddress: String? = null,
     val registrationSource: String? = null,
     val role: UserRole? = null,
-    val isActive: Boolean
+    val isActive: Boolean,
+    val isPremium: Boolean
 )
 
 /** User login request data */
@@ -57,7 +59,7 @@ data class LoginResponse(
     val token: String,
     val email: String,
     val role: UserRole?,
-    val isActive: Boolean?
+    val isActive: Boolean
 )
 
 /** Token refresh request data */

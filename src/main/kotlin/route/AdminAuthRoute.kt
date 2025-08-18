@@ -1,5 +1,6 @@
 package bose.ankush.route
 
+import bose.ankush.data.model.User
 import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.WebResources
 import bose.ankush.route.common.respondError
@@ -8,6 +9,7 @@ import com.auth0.jwt.interfaces.Payload
 import config.Environment
 import config.JwtConfig
 import domain.model.Result
+import domain.repository.UserRepository
 import domain.service.AuthService
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
@@ -33,7 +35,6 @@ import kotlinx.html.footer
 import kotlinx.html.form
 import kotlinx.html.h1
 import kotlinx.html.h2
-import kotlinx.html.h3
 import kotlinx.html.head
 import kotlinx.html.id
 import kotlinx.html.input
@@ -49,8 +50,6 @@ import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 import util.Constants
-import java.nio.file.Files
-import java.nio.file.Paths
 import java.time.Year
 
 /**
@@ -65,54 +64,49 @@ fun isAdminFromPayload(payload: Payload): Boolean {
 /**
  * Helper function to set up common HTML head elements
  */
-fun setupHead(head: HEAD, title: String, includeAdminJs: Boolean = false) {
-    head.title { +title }
-    head.meta { charset = "UTF-8" }
-    head.meta {
+fun HEAD.setupHead(title: String, includeAdminJs: Boolean = false) {
+    title { +title }
+    meta { charset = "UTF-8" }
+    meta {
         name = "viewport"
         content = "width=device-width, initial-scale=1.0"
     }
-    head.link {
+    link {
         rel = "preconnect"
         href = "https://fonts.googleapis.com"
     }
-    head.link {
+    link {
         rel = "preconnect"
         href = "https://fonts.gstatic.com"
         attributes["crossorigin"] = ""
     }
-    head.link {
+    link {
         rel = "stylesheet"
         href =
             "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
     }
-    head.link {
+    link {
         rel = "stylesheet"
         href = "https://fonts.googleapis.com/icon?family=Material+Icons"
     }
 
     // Include shared CSS
-    WebResources.includeSharedCss(head)
+    WebResources.includeSharedCss(this)
 
     // Include shared JavaScript
-    WebResources.includeSharedJs(head)
+    WebResources.includeSharedJs(this)
 
-    // Always include auth.js for authentication functions
-    head.script {
-        src = "/web/js/auth.js"
-        defer = true
-    }
 
     // Include admin JavaScript if needed
     if (includeAdminJs) {
-        WebResources.includeAdminJs(head)
+        WebResources.includeAdminJs(this)
     }
 }
 
 /**
  * Helper function to create the header with logo and theme toggle
  */
-fun createHeader(container: DIV, subtitle: String) {
+fun createHeader(container: DIV) {
     container.div {
         classes = setOf("header")
         div {
@@ -123,7 +117,7 @@ fun createHeader(container: DIV, subtitle: String) {
             }
             span {
                 classes = setOf("subtitle")
-                +subtitle
+                +"Admin Portal"
             }
         }
         div {
@@ -184,7 +178,7 @@ private suspend fun serveLoginPage(
     call.respondHtml(HttpStatusCode.OK) {
         attributes["lang"] = "en"
         head {
-            setupHead(this, "Admin Login - Androidplay Weather API")
+            setupHead("Admin Login - Androidplay Weather API")
 
             // Include page-specific JavaScript if needed
             script {
@@ -395,7 +389,7 @@ private suspend fun serveLoginPage(
                 classes = setOf("container")
 
                 // Header with logo and theme toggle
-                createHeader(this, "Admin")
+                createHeader(this)
 
                 // Content area with login form
                 div {
@@ -498,6 +492,7 @@ fun Route.adminAuthRoute() {
     val authService: AuthService by application.inject()
     val logger = LoggerFactory.getLogger("AdminAuthRoute")
     val pageName = "Admin Authentication - Androidplay Weather API"
+    val userRepository: UserRepository by application.inject()
 
     // Public route for login page - no authentication required
     route("/admin/login") {
@@ -793,7 +788,7 @@ fun Route.adminAuthRoute() {
             call.respondHtml(HttpStatusCode.OK) {
                 attributes["lang"] = "en"
                 head {
-                    setupHead(this, pageName, includeAdminJs = true)
+                    setupHead(pageName, includeAdminJs = true)
 
                     // Include page-specific CSS if needed
                     style {
@@ -802,16 +797,20 @@ fun Route.adminAuthRoute() {
                                 """
                                 /* Admin dashboard specific styles */
                                 .admin-container {
-                                    max-width: 1200px;
-                                    margin: 2rem auto;
-                                    padding: 2rem;
-                                    background: var(--card-bg);
-                                    border: 1px solid var(--card-border);
-                                    border-radius: 12px;
-                                    box-shadow: 0 4px 12px var(--card-shadow);
-                                    backdrop-filter: blur(10px);
-                                    -webkit-backdrop-filter: blur(10px);
-                                }
+    /* Align with shared container/content-area widths */
+    position: relative;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto 2rem auto;
+    padding: 1.5rem 2rem;
+    background: var(--content-bg);
+    border: 1px solid var(--content-border);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px var(--card-shadow);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    min-height: 200px;
+}
                                 
                                 .admin-header {
                                     display: flex;
@@ -859,11 +858,24 @@ fun Route.adminAuthRoute() {
                                 }
                                 
                                 .dashboard-section {
+                                    position: relative;
+                                    min-width: 0;
+                                    width: 100%;
+                                    box-sizing: border-box;
                                     background: var(--card-bg);
                                     border: 1px solid var(--card-border);
                                     border-radius: 8px;
                                     padding: 1.5rem;
                                     transition: all 0.3s ease;
+                                    min-height: 160px;
+                                }
+                                
+                                /* Ensure all card UI components and tab contents have consistent sizing behavior */
+                                .dashboard-card, .tab-content, .tab-panel {
+                                    position: relative;
+                                    min-width: 0;
+                                    width: 100%;
+                                    box-sizing: border-box;
                                 }
                                 
                                 .dashboard-section:hover {
@@ -881,31 +893,251 @@ fun Route.adminAuthRoute() {
                                 .dashboard-card {
                                     background: var(--endpoint-bg);
                                     border: 1px solid var(--endpoint-border);
-                                    border-radius: 6px;
-                                    padding: 1rem;
+                                    border-radius: 10px;
+                                    padding: 0.5rem;
                                     margin-bottom: 1rem;
+                                    min-height: 120px;
                                 }
                                 
                                 .dashboard-card-title {
                                     font-weight: 600;
                                     color: var(--card-title);
-                                    margin-bottom: 0.5rem;
+                                    margin-bottom: 0.75rem;
                                 }
                                 
                                 .dashboard-card-content {
                                     color: var(--text-secondary);
                                     line-height: 1.6;
                                 }
+                                
+                                /* Users table breathing space and styling */
+                                .dashboard-card-content table {
+                                    width: 100%;
+                                    table-layout: fixed;
+                                    border-collapse: separate !important;
+                                    border-spacing: 0 10px;
+                                }
+                                .dashboard-card-content table.users-table th,
+                                .dashboard-card-content table.users-table td {
+                                    overflow: hidden;
+                                    text-overflow: ellipsis;
+                                    white-space: nowrap;
+                                }
+                                .dashboard-card-content table.users-table th:nth-child(1),
+                                .dashboard-card-content table.users-table td:nth-child(1) { width: 40%; }
+                                .dashboard-card-content table.users-table th:nth-child(2),
+                                .dashboard-card-content table.users-table td:nth-child(2) { width: 22%; }
+                                .dashboard-card-content table.users-table th:nth-child(3),
+                                .dashboard-card-content table.users-table td:nth-child(3) { width: 20%; }
+                                .dashboard-card-content table.users-table th:nth-child(4),
+                                .dashboard-card-content table.users-table td:nth-child(4) { width: 18%; }
+                                .dashboard-card-content thead th {
+                                    text-align: left;
+                                    padding: 12px 14px;
+                                    border-bottom: 1px solid var(--card-border);
+                                    color: var(--text-secondary);
+                                    font-weight: 600;
+                                    background: transparent;
+                                    vertical-align: middle;
+                                }
+                                .dashboard-card-content tbody tr {
+                                    background: var(--card-bg);
+                                    border: 1px solid var(--card-border);
+                                    transition: background 0.2s ease, border-color 0.2s ease;
+                                }
+                                .dashboard-card-content tbody tr:hover {
+                                    background: var(--card-hover-bg);
+                                    border-color: var(--card-hover-border);
+                                }
+                                .dashboard-card-content tbody td {
+                                    padding: 12px 14px;
+                                    border: none;
+                                    vertical-align: middle;
+                                }
+                                .dashboard-card-content tbody tr td:first-child {
+                                    border-top-left-radius: 8px;
+                                    border-bottom-left-radius: 8px;
+                                }
+                                .dashboard-card-content tbody tr td:last-child {
+                                    border-top-right-radius: 8px;
+                                    border-bottom-right-radius: 8px;
+                                }
+                                
+                                /* Role dropdown styling */
+                                .role-select {
+                                    appearance: none;
+                                    -webkit-appearance: none;
+                                    background: var(--endpoint-bg);
+                                    color: var(--text-color);
+                                    border: 1px solid var(--endpoint-border);
+                                    border-radius: 8px;
+                                    padding: 8px 32px 8px 12px;
+                                    font-size: 0.95rem;
+                                    cursor: pointer;
+                                    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+                                    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+                                    background-repeat: no-repeat;
+                                    background-position: right 10px center;
+                                    background-size: 16px 16px;
+                                    vertical-align: middle;
+                                }
+                                .role-select:hover { border-color: var(--card-hover-border); }
+                                .role-select:focus {
+                                    outline: none;
+                                    border-color: var(--card-hover-border);
+                                    box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+                                }
+                                
+                                /* Status toggle switch */
+                                .status-toggle { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
+                                .status-toggle input { opacity: 0; width: 0; height: 0; }
+                                .status-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ef4444; transition: .2s; border-radius: 9999px; }
+                                .status-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; top: 3px; background-color: white; transition: .2s; border-radius: 50%; }
+                                .status-toggle input:checked + .status-slider { background-color: #10b981; }
+                                .status-toggle input:checked + .status-slider:before { transform: translateX(20px); }
+                                
+                                /* Pagination buttons */
+                                #pagination { gap: 0.5rem; }
+                                .pagination-button { padding: 6px 10px; border: 1px solid var(--endpoint-border); background: var(--endpoint-bg); color: var(--text-color); border-radius: 6px; cursor: pointer; transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
+                                .pagination-button.active { background: var(--card-hover-bg); border-color: var(--card-hover-border); }
+                                .pagination-button.disabled { opacity: 0.5; cursor: default; }
+                                .pagination-button:hover:not(.disabled):not(.active) { border-color: var(--card-hover-border); }
+                                
+                                /* Tabs */
+                                .tabs {
+                                    display: flex;
+                                    align-items: flex-end;
+                                    gap: 0.75rem;
+                                    border-bottom: 1px solid var(--card-border);
+                                    margin-bottom: 1rem;
+                                    flex-wrap: wrap;
+                                }
+                                .tab {
+                                    position: relative;
+                                    padding: 0.6rem 1rem;
+                                    cursor: pointer;
+                                    border: 1px solid var(--card-border);
+                                    border-bottom: none;
+                                    border-top-left-radius: 8px;
+                                    border-top-right-radius: 8px;
+                                    background: var(--endpoint-bg);
+                                    color: var(--text-secondary);
+                                    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+                                    display: inline-flex;
+                                    align-items: center;
+                                    gap: 0.35rem;
+                                }
+                                .tab:hover {
+                                    color: var(--text-color);
+                                    border-color: var(--card-hover-border);
+                                }
+                                .tab.active {
+                                    background: var(--card-bg);
+                                    color: var(--text-color);
+                                    border-color: var(--card-hover-border);
+                                }
+                                .tab.active::after {
+                                    content: "";
+                                    position: absolute;
+                                    left: 0;
+                                    right: 0;
+                                    bottom: -1px;
+                                    height: 3px;
+                                    background: #6366f1;
+                                    border-bottom-left-radius: 3px;
+                                    border-bottom-right-radius: 3px;
+                                }
+                                .tab-content { position: relative; }
+                                .tab-panel { display: none; opacity: 0; transform: translateY(6px); transition: opacity 0.2s ease, transform 0.2s ease; min-height: 180px; }
+                                .tab-panel.active { display: block; opacity: 1; transform: translateY(0); }
+                                
+                                /* Messages */
+                                .message { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 0.75rem; }
+                                .success-message { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+                                .error-message { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+                                .info-message { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+                                .hidden { display: none; }
+                                
+                                /* Loader skeleton */
+                                .skeleton { background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.2), rgba(255,255,255,0)); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
+                                @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+                                
+                                /* Badges */
+                                .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; margin-left: 0.5rem; }
+                                .badge-admin { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+                                .badge-premium { background: rgba(99, 102, 241, 0.15); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.3); }
+                                
+                                /* Table transitions */
+                                .fade-in { animation: fadeIn 0.25s ease; }
+                                @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+                                
+                                /* Custom scrollbar for tables */
+                                ::-webkit-scrollbar {
+                                    width: 8px;
+                                    height: 8px;
+                                }
+                                ::-webkit-scrollbar-track {
+                                    background: var(--card-bg);
+                                    border-radius: 10px;
+                                }
+                                ::-webkit-scrollbar-thumb {
+                                    background: var(--card-border);
+                                    border-radius: 10px;
+                                }
+                                ::-webkit-scrollbar-thumb:hover {
+                                    background: var(--card-hover-border);
+                                }
+                                """
+                            )
+                        }
+                    }
+
+                    // Tabs initialization script
+                    script {
+                        unsafe {
+                            raw(
+                                """
+                                (function(){
+                                    function initDashboardTabs(){
+                                        try {
+                                            const tabs = document.querySelectorAll('.tab');
+                                            const panels = document.querySelectorAll('.tab-panel');
+                                            let iamLoaded = false;
+                                            function activateTab(name){
+                                                tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+                                                panels.forEach(p => p.classList.toggle('active', p.id === name));
+                                                if(name === 'iam' && !iamLoaded){
+                                                    iamLoaded = true;
+                                                    if (typeof loadUsers === 'function') {
+                                                        loadUsers(1, 10);
+                                                    }
+                                                }
+                                            }
+                                            tabs.forEach(tab => tab.addEventListener('click', function(){
+                                                activateTab(this.dataset.tab);
+                                            }));
+                                            // Default activate IAM
+                                            activateTab('iam');
+                                        } catch(e){ console.error('Failed to init tabs', e); }
+                                    }
+                                    document.addEventListener('DOMContentLoaded', initDashboardTabs);
+                                })();
                                 """
                             )
                         }
                     }
                 }
                 body {
+                    // Use a single, consistent container for all dashboard content
                     div {
-                        classes = setOf("container")
+                        classes = setOf("container", "main-container")
+                        style =
+                            "max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;" // <-- Ensure fixed width
+
                         div {
                             classes = setOf("header")
+                            style =
+                                "margin-top: 0 !important; margin-bottom: 0;" // Reduce top margin for dashboard header
                             div {
                                 classes = setOf("brand-text")
                                 h1 {
@@ -944,11 +1176,14 @@ fun Route.adminAuthRoute() {
                         // Admin dashboard content
                         div {
                             classes = setOf("admin-container")
+                            style =
+                                "max-width: 100%; width: 100%; box-sizing: border-box;" // <-- Ensure admin-container fills parent
+
                             div {
                                 classes = setOf("admin-header")
                                 h2 {
                                     classes = setOf("admin-title")
-                                    +"Admin Dashboard"
+                                    +"Dashboard"
                                 }
                                 div {
                                     classes = setOf("admin-user-info")
@@ -969,21 +1204,133 @@ fun Route.adminAuthRoute() {
                             // Dashboard content
                             div {
                                 classes = setOf("dashboard-content")
+                                style =
+                                    "display: grid; gap: 2rem; width: 100%; box-sizing: border-box;" // <-- Always full width
+
+                                // Welcome section (dismissible; shown once)
                                 div {
                                     classes = setOf("dashboard-section")
-                                    h3 {
-                                        classes = setOf("dashboard-section-title")
-                                        +"Welcome to the Admin Dashboard"
-                                    }
+                                    id = "welcome-section"
+                                    style =
+                                        "position: relative; min-width: 0; width: 100%; box-sizing: border-box;" // <-- Always full width
                                     div {
                                         classes = setOf("dashboard-card")
                                         div {
                                             classes = setOf("dashboard-card-title")
-                                            +"Dashboard Overview"
+                                            +"Overview"
                                         }
                                         div {
                                             classes = setOf("dashboard-card-content")
                                             +"This is the admin dashboard for the Androidplay Weather API. Here you can manage users, view statistics, and perform administrative tasks."
+                                        }
+                                    }
+                                }
+
+                                // Tabs section
+                                div {
+                                    classes = setOf("dashboard-section")
+                                    style =
+                                        "position: relative; min-width: 0; width: 100%; box-sizing: border-box;" // <-- Always full width
+
+                                    // Tabs navigation
+                                    div {
+                                        classes = setOf("tabs")
+                                        span {
+                                            classes = setOf("tab", "active")
+                                            attributes["data-tab"] = "iam"
+                                            unsafe {
+                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>group</span> Users")
+                                            }
+                                        }
+                                        span {
+                                            classes = setOf("tab")
+                                            attributes["data-tab"] = "finance"
+                                            unsafe {
+                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>payments</span> Finance")
+                                            }
+                                        }
+                                        span {
+                                            classes = setOf("tab")
+                                            attributes["data-tab"] = "reports"
+                                            unsafe {
+                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>analytics</span> Reports")
+                                            }
+                                        }
+                                    }
+
+                                    // Tabs content panels
+                                    div {
+                                        classes = setOf("tab-content")
+                                        style =
+                                            "width: 100%; box-sizing: border-box;" // <-- Always full width
+
+                                        // IAM Panel
+                                        div {
+                                            classes = setOf("tab-panel", "active")
+                                            id = "iam"
+                                            style =
+                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                            div {
+                                                classes = setOf("dashboard-card")
+                                                div {
+                                                    classes = setOf("dashboard-card-content")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                            <div id="success-message" class="message success-message hidden"></div>
+                                                            <div id="error-message" class="message error-message hidden"></div>
+                                                            <div id="info-message" class="message info-message hidden"></div>
+                                                            
+                                                            <div id="iam-loader" class="skeleton" style="height:8px;width:100%;display:none;"></div>
+                                                            
+                                                            <table class="users-table">
+                                                                <colgroup>
+                                                                    <col style="width:40%">
+                                                                    <col style="width:22%">
+                                                                    <col style="width:20%">
+                                                                    <col style="width:18%">
+                                                                </colgroup>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Email</th>
+                                                                        <th>Created At</th>
+                                                                        <th>Role</th>
+                                                                        <th>Status</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody id="users-table-body"></tbody>
+                                                            </table>
+                                                            
+                                                            <div id="pagination" style="display:flex;gap:0.5rem;margin-top:1rem;"></div>
+                                                            """
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Finance Panel
+                                        div {
+                                            classes = setOf("tab-panel")
+                                            id = "finance"
+                                            style =
+                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                            div {
+                                                classes = setOf("dashboard-card-content")
+                                                +"Financial metrics and billing summaries will appear here."
+                                            }
+                                        }
+
+                                        // Reports Panel
+                                        div {
+                                            classes = setOf("tab-panel")
+                                            id = "reports"
+                                            style =
+                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                            div {
+                                                classes = setOf("dashboard-card-content")
+                                                +"Reports and analytics will be shown here."
+                                            }
                                         }
                                     }
                                 }
@@ -996,7 +1343,214 @@ fun Route.adminAuthRoute() {
                 }
             }
         }
+        // Admin Users API
+        get("/users") {
+            // Authenticate admin via Authorization header or cookie
+            val authHeader = call.request.headers["Authorization"]
+            var jwtToken: String?
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                jwtToken = authHeader.substring(7)
+            } else {
+                jwtToken = call.request.cookies["jwt_token"]
+            }
 
+            val principal = try {
+                if (jwtToken.isNullOrBlank()) {
+                    call.respondError("Authentication required", null, HttpStatusCode.Unauthorized)
+                    return@get
+                }
+                val decoded = JwtConfig.verifier.verify(jwtToken)
+                JWTPrincipal(decoded)
+            } catch (_: Exception) {
+                call.respondError("Invalid or expired session", null, HttpStatusCode.Unauthorized)
+                return@get
+            }
+
+            if (!JwtConfig.isAdmin(principal.payload)) {
+                call.respondError("Access denied: Admins only", null, HttpStatusCode.Forbidden)
+                return@get
+            }
+
+            // Pagination params
+            val pageParam = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
+            val pageSizeParam = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 10
+            val page = if (pageParam < 1) 1 else pageParam
+            val pageSize = when {
+                pageSizeParam < 1 -> 10
+                pageSizeParam > 100 -> 100
+                else -> pageSizeParam
+            }
+
+            when (val result = userRepository.getAllUsers(
+                filter = null,
+                sortBy = "createdAt",
+                sortOrder = -1,
+                page = page,
+                pageSize = pageSize
+            )) {
+                is Result.Success -> {
+                    val (users, totalCount) = result.data
+                    val totalPages =
+                        if (totalCount == 0L) 1L else ((totalCount + pageSize.toLong() - 1) / pageSize.toLong())
+                    val response = UserListResponseDto(
+                        users = users,
+                        pagination = UserListPaginationDto(
+                            page = page,
+                            pageSize = pageSize,
+                            totalPages = totalPages,
+                            totalCount = totalCount
+                        )
+                    )
+                    call.respondSuccess("Users fetched", response)
+                }
+
+                is Result.Error -> {
+                    call.respondError(result.message, null, HttpStatusCode.InternalServerError)
+                }
+            }
+        }
+
+        post("/users/{email}/role") {
+            // Authenticate admin
+            val authHeader = call.request.headers["Authorization"]
+            val jwtToken = if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                authHeader.substring(7)
+            } else {
+                call.request.cookies["jwt_token"]
+            }
+            val principal = try {
+                if (jwtToken.isNullOrBlank()) {
+                    call.respondError("Authentication required", null, HttpStatusCode.Unauthorized)
+                    return@post
+                }
+                val decoded = JwtConfig.verifier.verify(jwtToken)
+                JWTPrincipal(decoded)
+            } catch (_: Exception) {
+                call.respondError("Invalid or expired session", null, HttpStatusCode.Unauthorized)
+                return@post
+            }
+            if (!JwtConfig.isAdmin(principal.payload)) {
+                call.respondError("Access denied: Admins only", null, HttpStatusCode.Forbidden)
+                return@post
+            }
+
+            val email = call.parameters["email"]
+            if (email.isNullOrBlank()) {
+                call.respondError("Email is required", null, HttpStatusCode.BadRequest)
+                return@post
+            }
+
+            val body = try {
+                call.receive<UpdateRoleRequest>()
+            } catch (_: Exception) {
+                call.respondError("Invalid request body", null, HttpStatusCode.BadRequest)
+                return@post
+            }
+
+            val newRole = try {
+                UserRole.valueOf(body.role.trim().uppercase())
+            } catch (_: Exception) {
+                call.respondError("Invalid role value", null, HttpStatusCode.BadRequest)
+                return@post
+            }
+
+            when (val userResult = userRepository.findUserByEmail(email)) {
+                is Result.Success -> {
+                    val existing = userResult.data
+                    if (existing == null) {
+                        call.respondError("User not found", null, HttpStatusCode.NotFound)
+                        return@post
+                    }
+                    val updated = existing.copy(role = newRole)
+                    when (val updateResult = userRepository.updateUser(updated)) {
+                        is Result.Success -> call.respondSuccess(
+                            "User role updated",
+                            mapOf("email" to email, "role" to newRole.name)
+                        )
+
+                        is Result.Error -> call.respondError(
+                            updateResult.message,
+                            null,
+                            HttpStatusCode.InternalServerError
+                        )
+                    }
+                }
+
+                is Result.Error -> call.respondError(
+                    userResult.message,
+                    null,
+                    HttpStatusCode.InternalServerError
+                )
+            }
+        }
+
+        post("/users/{email}/status") {
+            // Authenticate admin
+            val authHeader = call.request.headers["Authorization"]
+            var jwtToken: String?
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                jwtToken = authHeader.substring(7)
+            } else {
+                jwtToken = call.request.cookies["jwt_token"]
+            }
+            val principal = try {
+                if (jwtToken.isNullOrBlank()) {
+                    call.respondError("Authentication required", null, HttpStatusCode.Unauthorized)
+                    return@post
+                }
+                val decoded = JwtConfig.verifier.verify(jwtToken)
+                JWTPrincipal(decoded)
+            } catch (_: Exception) {
+                call.respondError("Invalid or expired session", null, HttpStatusCode.Unauthorized)
+                return@post
+            }
+            if (!JwtConfig.isAdmin(principal.payload)) {
+                call.respondError("Access denied: Admins only", null, HttpStatusCode.Forbidden)
+                return@post
+            }
+
+            val email = call.parameters["email"]
+            if (email.isNullOrBlank()) {
+                call.respondError("Email is required", null, HttpStatusCode.BadRequest)
+                return@post
+            }
+
+            val body = try {
+                call.receive<UpdateStatusRequest>()
+            } catch (_: Exception) {
+                call.respondError("Invalid request body", null, HttpStatusCode.BadRequest)
+                return@post
+            }
+
+            when (val userResult = userRepository.findUserByEmail(email)) {
+                is Result.Success -> {
+                    val existing = userResult.data
+                    if (existing == null) {
+                        call.respondError("User not found", null, HttpStatusCode.NotFound)
+                        return@post
+                    }
+                    val updated = existing.copy(isActive = body.isActive)
+                    when (val updateResult = userRepository.updateUser(updated)) {
+                        is Result.Success -> call.respondSuccess(
+                            "User status updated",
+                            UpdateStatusResultDto(email = email, isActive = body.isActive)
+                        )
+
+                        is Result.Error -> call.respondError(
+                            updateResult.message,
+                            null,
+                            HttpStatusCode.InternalServerError
+                        )
+                    }
+                }
+
+                is Result.Error -> call.respondError(
+                    userResult.message,
+                    null,
+                    HttpStatusCode.InternalServerError
+                )
+            }
+        }
     }
 }
 
@@ -1009,6 +1563,36 @@ data class AdminLoginRequest(
     val password: String
 )
 
+@Serializable
+data class UserListPaginationDto(
+    val page: Int,
+    val pageSize: Int,
+    val totalPages: Long,
+    val totalCount: Long
+)
+
+@Serializable
+data class UserListResponseDto(
+    val users: List<User>,
+    val pagination: UserListPaginationDto
+)
+
+@Serializable
+data class UpdateRoleRequest(
+    val role: String
+)
+
+@Serializable
+data class UpdateStatusRequest(
+    val isActive: Boolean
+)
+
+@Serializable
+data class UpdateStatusResultDto(
+    val email: String,
+    val isActive: Boolean
+)
+
 /**
  * Deployment Note:
  * Ensure that the file 'auth.js' is present in your static resources directory (e.g., /static/web/js/auth.js).
@@ -1019,10 +1603,16 @@ data class AdminLoginRequest(
  */
 object AdminStaticResourceChecker {
     init {
-        val path = Paths.get("static/web/js/auth.js") // Adjust path as per your deployment
-        if (!Files.exists(path)) {
+        try {
+            val resource =
+                AdminStaticResourceChecker::class.java.classLoader.getResource("web/js/auth.js")
+            if (resource == null) {
+                LoggerFactory.getLogger("Startup")
+                    .warn("Missing static resource: /web/js/auth.js. Admin login/dashboard will fail to load JS.")
+            }
+        } catch (e: Exception) {
             LoggerFactory.getLogger("Startup")
-                .warn("Missing static resource: /web/js/auth.js. Admin login/dashboard will fail to load JS.")
+                .warn("Failed to check static resource /web/js/auth.js: ${e.message}")
         }
     }
 }

@@ -6,6 +6,7 @@ import bose.ankush.route.feedbackRoute
 import bose.ankush.route.homeRoute
 import bose.ankush.route.privacyPolicyRoute
 import bose.ankush.route.termsAndConditionsRoute
+import bose.ankush.route.userRoute
 import bose.ankush.route.weatherRoute
 import io.ktor.server.routing.Route
 
@@ -52,5 +53,11 @@ object TermsAndConditionsRoutesRegistrar : RouteRegistrar {
 object PrivacyPolicyRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         with(root) { privacyPolicyRoute() }
+    }
+}
+
+object UserRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { userRoute() }
     }
 }

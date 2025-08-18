@@ -128,7 +128,8 @@ fun Route.authRoute() {
                 ipAddress = request.ipAddress,
                 registrationSource = request.registrationSource,
                 role = request.role,
-                isActive = request.isActive
+                isActive = request.isActive,
+                isPremium = request.isPremium
             )
 
             // Save user to database

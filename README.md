@@ -82,6 +82,35 @@ POST /login
 
 Authenticates a user and returns a JWT token. Requires email and password in request body.
 
+```
+POST /logout
+```
+
+Logs out the current user by clearing the jwt_token cookie on the server and invalidating the
+session. Returns 200 with a JSON ApiResponse.
+
+Example request:
+
+```
+POST /logout
+```
+
+Example success response:
+
+```
+{
+  "status": true,
+  "message": "Logged out successfully",
+  "data": null
+}
+```
+
+Notes:
+
+- Works for both admin and regular users.
+- When integrating in the browser, also clear any locally stored JWT (e.g., localStorage) after
+  calling this endpoint.
+
 ### Feedback
 
 ```
