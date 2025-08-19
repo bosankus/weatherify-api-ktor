@@ -47,6 +47,8 @@ The project includes the following documentation files:
   and their relationships.
 - **[Data Flows Documentation](docs/data-flows.md)**: Detailed sequence diagrams for key data flows
   in the application.
+- **[GCP Enhancements and Feature Ideas](docs/gcp-enhancements.md)**: Recommended GCP services,
+  rationale, and phased roadmap to enhance this project.
 
 ## API Endpoints
 
@@ -198,6 +200,27 @@ src/
 - **[kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)**: JSON serialization
 - **[kotlinx.html](https://github.com/Kotlin/kotlinx.html)**: HTML DSL
 - **[Google Cloud Platform](https://cloud.google.com/)**: Hosting platform
+
+## CI/CD
+
+See the full guide: docs/ci-cd.md
+
+Quick start:
+
+- Local build and tests: make build (or ./gradlew clean test jacocoTestReport shadowJar)
+- Run locally: make run (runs build/libs/weatherify-api-all.jar on port 8080)
+- Cloud Build (build only): gcloud builds submit --config=cloudbuild.yaml --substitutions=_DEPLOY="
+  false" .
+- Cloud Build (build + deploy): gcloud builds submit --config=cloudbuild.yaml --substitutions=_
+  DEPLOY="true",_PROMOTE="false",_APP_YAML="src/main/appengine/app.yaml" .
+- GitHub Actions: PRs and pushes run Build and Test workflow automatically; use “Deploy via Cloud
+  Build” workflow manually for deployments.
+
+Notes:
+
+- Deploy workflow uses Workload Identity Federation. Add repository secrets:
+  GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT_EMAIL, GCP_PROJECT_ID.
+- Shadow JAR name is weatherify-api-all.jar, matching src/main/appengine/app.yaml entrypoint.
 
 ## Contributing
 

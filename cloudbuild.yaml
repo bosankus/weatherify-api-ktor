@@ -1,0 +1,42 @@
+# Cloud Build configuration for Weatherify API (App Engine Standard)
+# Usage:
+# - Build only: gcloud builds submit --config=cloudbuild.yaml --substitutions=_DEPLOY="false" .
+# - Build and deploy: gcloud builds submit --config=cloudbuild.yaml --substitutions=_DEPLOY="true",_PROMOTE="false",_APP_YAML="src/main/appengine/app.yaml" .
+# Substitutions:
+#   _DEPLOY:   "true" to deploy to App Engine after build; default "false"
+#   _PROMOTE:  "true" to promote the new version; default "false"
+#   _APP_YAML: Path to app.yaml; default "src/main/appengine/app.yaml"
+
+substitutions:
+  _DEPLOY: "false"
+  _PROMOTE: "false"
+  _APP_YAML: "src/main/appengine/app.yaml"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # Ensure gradlew is executable and run build + tests + coverage + fat jar
+  - name: gcr.io/cloud-builders/bash
+    id: gradle-build
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        chmod +x ./gradlew
+        ./gradlew --no-daemon clean test jacocoTestReport shadowJar
+
+  # (Optional) Deploy to App Engine if _DEPLOY is true
+  - name: gcr.io/cloud-builders/gcloud
+    id: appengine-deploy
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ "$_DEPLOY" = "true" ]; then \
+          echo "Deploying to App Engine with app.yaml at $_APP_YAML (promote=$_PROMOTE)"; \
+          gcloud app deploy "$_APP_YAML" --quiet $( [ "$_PROMOTE" = "true" ] && echo "--promote" || echo "--no-promote" ); \
+        else \
+          echo "Skipping deployment (_DEPLOY=false)"; \
+        fi
+

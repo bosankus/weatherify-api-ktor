@@ -1,0 +1,54 @@
+name: Deploy via Cloud Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Whether to deploy after build (Cloud Build _DEPLOY)'
+        required: true
+        default: 'true'
+        type: choice
+        options: [ 'true', 'false' ]
+      promote:
+        description: 'Promote the new version to receive all traffic (Cloud Build _PROMOTE)'
+        required: true
+        default: 'false'
+        type: choice
+        options: [ 'true', 'false' ]
+      app_yaml:
+        description: 'Path to app.yaml'
+        required: true
+        default: 'src/main/appengine/app.yaml'
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for Workload Identity Federation
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Authenticate to Google Cloud using Workload Identity Federation
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: '>= 468.0.0'
+
+      - name: Submit Cloud Build (build + optional deploy)
+        run: |
+          gcloud builds submit \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --config=cloudbuild.yaml \
+            --substitutions=_DEPLOY="${{ inputs.deploy }}",_PROMOTE="${{ inputs.promote }}",_APP_YAML="${{ inputs.app_yaml }}" \
+            .
