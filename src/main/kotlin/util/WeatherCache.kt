@@ -3,6 +3,7 @@ package bose.ankush.util
 import config.Environment
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -47,6 +48,11 @@ object WeatherCache {
                         ignoreUnknownKeys = true
                     })
                 }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 5000
+                    connectTimeoutMillis = 3000
+                    socketTimeoutMillis = 5000
+                }
             }
             weatherClientExpiration = currentTime + CACHE_EXPIRATION_TIME
         }
@@ -85,5 +91,49 @@ object WeatherCache {
         }
 
         return cachedAirPollutionUrl!!
+    }
+
+    /**
+     * Clear all cached weather resources. Closes the HttpClient and resets cached values.
+     */
+    @Synchronized
+    fun clearCache() {
+        try {
+            cachedWeatherClient?.close()
+        } catch (_: Exception) {
+        }
+        cachedWeatherClient = null
+        weatherClientExpiration = 0
+
+        cachedApiKey = null
+        apiKeyExpiration = 0
+
+        cachedWeatherUrl = null
+        weatherUrlExpiration = 0
+
+        cachedAirPollutionUrl = null
+        airPollutionUrlExpiration = 0
+    }
+
+    /**
+     * Build a probe URL for weather endpoint including sample lat/lon and API key.
+     * Uses exclude=minutely for a lighter response when supported (OWM OneCall).
+     */
+    fun getProbeWeatherUrl(): String {
+        val base = getWeatherUrl()
+        val apiKey = getApiKey()
+        val sep = if (base.contains("?")) "&" else "?"
+        // Use 0,0 as harmless coordinates; include exclude=minutely to minimize payload
+        return "${base}${sep}lat=0&lon=0&exclude=minutely&appid=${apiKey}"
+    }
+
+    /**
+     * Build a probe URL for air pollution endpoint including sample lat/lon and API key.
+     */
+    fun getProbeAirPollutionUrl(): String {
+        val base = getAirPollutionUrl()
+        val apiKey = getApiKey()
+        val sep = if (base.contains("?")) "&" else "?"
+        return "${base}${sep}lat=0&lon=0&appid=${apiKey}"
     }
 }

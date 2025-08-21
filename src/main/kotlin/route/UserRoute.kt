@@ -3,9 +3,13 @@ package bose.ankush.route
 import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
+import bose.ankush.util.WeatherCache
 import config.JwtConfig
 import domain.model.Result
 import domain.repository.UserRepository
+import io.ktor.client.request.get
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
@@ -80,26 +84,26 @@ fun Route.userRoute() {
                         if (totalCount == 0L) 1 else ((totalCount + pageSize - 1) / pageSize).toInt()
 
                     val items = users.map { u ->
-                        mapOf(
-                            "email" to u.email,
-                            "createdAt" to u.createdAt,
-                            "role" to (u.role?.name ?: "USER"),
-                            "isActive" to u.isActive,
-                            "isPremium" to u.isPremium
+                        UserListItemDTO(
+                            email = u.email,
+                            createdAt = u.createdAt,
+                            role = (u.role?.name ?: "USER"),
+                            isActive = u.isActive,
+                            isPremium = u.isPremium
                         )
                     }
 
-                    val payload = mapOf(
-                        "users" to items,
-                        "pagination" to mapOf(
-                            "page" to page,
-                            "pageSize" to pageSize,
-                            "totalPages" to totalPages,
-                            "totalCount" to totalCount
+                    val payload = UsersResponseDTO(
+                        users = items,
+                        pagination = PaginationDTO(
+                            page = page,
+                            pageSize = pageSize,
+                            totalPages = totalPages,
+                            totalCount = totalCount
                         )
                     )
 
-                    call.respondSuccess("Users retrieved", payload)
+                    call.respondSuccess<UsersResponseDTO>("Users retrieved", payload)
                 }
 
                 is Result.Error -> {
@@ -216,9 +220,12 @@ fun Route.userRoute() {
                     when (val updRes = userRepository.updateUser(updated)) {
                         is Result.Success -> {
                             if (updRes.data) {
-                                call.respondSuccess(
+                                call.respondSuccess<StatusUpdateResponseDTO>(
                                     if (req.isActive) "User activated" else "User deactivated",
-                                    mapOf("email" to email, "isActive" to req.isActive)
+                                    StatusUpdateResponseDTO(
+                                        email = email,
+                                        isActive = req.isActive
+                                    )
                                 )
                             } else {
                                 call.respondError(
@@ -244,6 +251,211 @@ fun Route.userRoute() {
                 }
             }
         }
+
+        // Update user premium status
+        post("/users/{email}/premium") {
+            if (!ensureAdminAndGetToken(call)) return@post
+
+            val email = call.parameters["email"]?.trim()
+            if (email.isNullOrEmpty()) {
+                call.respondError(
+                    "Email path parameter is required",
+                    Unit,
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
+            val req = try {
+                call.receive<PremiumUpdateRequest>()
+            } catch (e: Exception) {
+                call.respondError(
+                    "Invalid request body: ${e.message}",
+                    Unit,
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
+            when (val userRes = userRepository.findUserByEmail(email)) {
+                is Result.Success -> {
+                    val user = userRes.data
+                    if (user == null) {
+                        call.respondError("User not found", Unit, HttpStatusCode.NotFound)
+                        return@post
+                    }
+                    val updated = user.copy(isPremium = req.isPremium)
+                    when (val updRes = userRepository.updateUser(updated)) {
+                        is Result.Success -> {
+                            if (updRes.data) {
+                                call.respondSuccess<PremiumUpdateResponseDTO>(
+                                    if (req.isPremium) "Premium enabled" else "Premium disabled",
+                                    PremiumUpdateResponseDTO(
+                                        email = email,
+                                        isPremium = req.isPremium
+                                    )
+                                )
+                            } else {
+                                call.respondError(
+                                    "Failed to update premium status",
+                                    Unit,
+                                    HttpStatusCode.InternalServerError
+                                )
+                            }
+                        }
+
+                        is Result.Error -> {
+                            call.respondError(
+                                updRes.message,
+                                Unit,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+                }
+
+                is Result.Error -> {
+                    call.respondError(userRes.message, Unit, HttpStatusCode.InternalServerError)
+                }
+            }
+        }
+
+        // Clear weather cache
+        post("/cache/clear") {
+            if (!ensureAdminAndGetToken(call)) return@post
+            WeatherCache.clearCache()
+            call.respondSuccess("Cache cleared", true)
+        }
+
+        // Tools endpoints
+        route("/tools") {
+            // Health check probing upstream services
+            post("/health") {
+                if (!ensureAdminAndGetToken(call)) return@post
+
+                val client = WeatherCache.getWeatherClient()
+                val weatherUrl = WeatherCache.getWeatherUrl()
+                val airUrl = WeatherCache.getAirPollutionUrl()
+                val probeWeatherUrl = WeatherCache.getProbeWeatherUrl()
+                val probeAirUrl = WeatherCache.getProbeAirPollutionUrl()
+
+                suspend fun probe(url: String): Triple<HttpResponse?, Long, String?> {
+                    val start = System.nanoTime()
+                    return try {
+                        val resp = client.get(url)
+                        val end = System.nanoTime()
+                        Triple(resp, ((end - start) / 1_000_000), null)
+                    } catch (e: Exception) {
+                        val end = System.nanoTime()
+                        Triple(null, ((end - start) / 1_000_000), e.message)
+                    }
+                }
+
+                val (wResp, wLatency, wErr) = probe(probeWeatherUrl)
+                val (aResp, aLatency, aErr) = probe(probeAirUrl)
+
+                val data = ToolsHealthData(
+                    weatherUrl = weatherUrl,
+                    probeWeatherUrl = probeWeatherUrl,
+                    weatherStatusCode = wResp?.status?.value ?: -1,
+                    weatherStatusText = wResp?.status?.description ?: (wErr ?: ""),
+                    weatherOk = (wResp?.status?.value ?: 0) in 200..299 && wErr == null,
+                    weatherLatencyMs = wLatency,
+                    weatherContentType = wResp?.headers?.get("Content-Type"),
+                    weatherBytes = try {
+                        wResp?.bodyAsText()?.toByteArray(Charsets.UTF_8)?.size
+                    } catch (_: Exception) {
+                        null
+                    },
+                    weatherError = wErr,
+                    airUrl = airUrl,
+                    probeAirUrl = probeAirUrl,
+                    airStatusCode = aResp?.status?.value ?: -1,
+                    airStatusText = aResp?.status?.description ?: (aErr ?: ""),
+                    airOk = (aResp?.status?.value ?: 0) in 200..299 && aErr == null,
+                    airLatencyMs = aLatency,
+                    airContentType = aResp?.headers?.get("Content-Type"),
+                    airBytes = try {
+                        aResp?.bodyAsText()?.toByteArray(Charsets.UTF_8)?.size
+                    } catch (_: Exception) {
+                        null
+                    },
+                    airError = aErr,
+                    timestamp = System.currentTimeMillis()
+                )
+
+                call.respondSuccess("Health check complete", data)
+            }
+
+            // Warmup critical endpoints for a few locations
+            post("/warmup") {
+                if (!ensureAdminAndGetToken(call)) return@post
+
+                val client = WeatherCache.getWeatherClient()
+                val apiKey = WeatherCache.getApiKey()
+                val wBase = WeatherCache.getWeatherUrl()
+                val aBase = WeatherCache.getAirPollutionUrl()
+
+                fun urlWithParams(base: String, lat: Double, lon: Double, air: Boolean): String {
+                    val sep = if (base.contains("?")) "&" else "?"
+                    return if (air) {
+                        "$base$sep" + "lat=$lat&lon=$lon&appid=$apiKey"
+                    } else {
+                        "$base$sep" + "lat=$lat&lon=$lon&exclude=minutely&appid=$apiKey"
+                    }
+                }
+
+                suspend fun hit(url: String): Triple<Int, Long, String?> {
+                    val start = System.nanoTime()
+                    return try {
+                        val resp = client.get(url)
+                        val end = System.nanoTime()
+                        Triple(resp.status.value, ((end - start) / 1_000_000), null)
+                    } catch (e: Exception) {
+                        val end = System.nanoTime()
+                        Triple(-1, ((end - start) / 1_000_000), e.message)
+                    }
+                }
+
+                val locations = listOf(
+                    Triple(0.0, 0.0, "Equator"),
+                    Triple(37.7749, -122.4194, "San Francisco"),
+                    Triple(51.5074, -0.1278, "London")
+                )
+
+                val results = mutableListOf<WarmupItem>()
+                for ((lat, lon, name) in locations) {
+                    val wUrl = urlWithParams(wBase, lat, lon, air = false)
+                    val aUrl = urlWithParams(aBase, lat, lon, air = true)
+
+                    val (wCode, wLatency, wErr) = hit(wUrl)
+                    val (aCode, aLatency, aErr) = hit(aUrl)
+
+                    results += WarmupItem(
+                        lat = lat,
+                        lon = lon,
+                        name = name,
+                        weatherStatusCode = wCode,
+                        weatherOk = (wCode in 200..299) && wErr == null,
+                        weatherLatencyMs = wLatency,
+                        weatherError = wErr,
+                        airStatusCode = aCode,
+                        airOk = (aCode in 200..299) && aErr == null,
+                        airLatencyMs = aLatency,
+                        airError = aErr
+                    )
+                }
+
+                val overallOk = results.all { it.weatherOk && it.airOk }
+                val payload = WarmupResponse(
+                    results = results,
+                    ok = overallOk,
+                    timestamp = System.currentTimeMillis()
+                )
+
+                call.respondSuccess("Warmup complete", payload)
+            }
+        }
     }
 }
 
@@ -252,3 +464,89 @@ data class RoleUpdateRequest(val role: String)
 
 @Serializable
 data class StatusUpdateRequest(val isActive: Boolean)
+
+
+@Serializable
+data class UserListItemDTO(
+    val email: String,
+    val createdAt: String,
+    val role: String,
+    val isActive: Boolean,
+    val isPremium: Boolean
+)
+
+@Serializable
+data class PaginationDTO(
+    val page: Int,
+    val pageSize: Int,
+    val totalPages: Int,
+    val totalCount: Long
+)
+
+@Serializable
+data class UsersResponseDTO(
+    val users: List<UserListItemDTO>,
+    val pagination: PaginationDTO
+)
+
+@Serializable
+data class StatusUpdateResponseDTO(
+    val email: String,
+    val isActive: Boolean
+)
+
+
+@Serializable
+data class PremiumUpdateRequest(val isPremium: Boolean)
+
+@Serializable
+data class PremiumUpdateResponseDTO(
+    val email: String,
+    val isPremium: Boolean
+)
+
+// Tools DTOs
+@Serializable
+data class ToolsHealthData(
+    val weatherUrl: String,
+    val probeWeatherUrl: String,
+    val weatherStatusCode: Int,
+    val weatherStatusText: String,
+    val weatherOk: Boolean,
+    val weatherLatencyMs: Long,
+    val weatherContentType: String? = null,
+    val weatherBytes: Int? = null,
+    val weatherError: String? = null,
+    val airUrl: String,
+    val probeAirUrl: String,
+    val airStatusCode: Int,
+    val airStatusText: String,
+    val airOk: Boolean,
+    val airLatencyMs: Long,
+    val airContentType: String? = null,
+    val airBytes: Int? = null,
+    val airError: String? = null,
+    val timestamp: Long
+)
+
+@Serializable
+data class WarmupItem(
+    val lat: Double,
+    val lon: Double,
+    val name: String? = null,
+    val weatherStatusCode: Int,
+    val weatherOk: Boolean,
+    val weatherLatencyMs: Long,
+    val weatherError: String? = null,
+    val airStatusCode: Int,
+    val airOk: Boolean,
+    val airLatencyMs: Long,
+    val airError: String? = null
+)
+
+@Serializable
+data class WarmupResponse(
+    val results: List<WarmupItem>,
+    val ok: Boolean,
+    val timestamp: Long
+)

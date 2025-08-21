@@ -1,6 +1,8 @@
 package bose.ankush.route
 
 import bose.ankush.route.common.WebResources
+import bose.ankush.route.common.respondSuccess
+import bose.ankush.util.AnnouncementStore
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.html.respondHtml
 import io.ktor.server.response.respondText
@@ -27,6 +29,7 @@ import kotlinx.html.span
 import kotlinx.html.style
 import kotlinx.html.title
 import kotlinx.html.unsafe
+import kotlinx.serialization.Serializable
 import util.Constants
 
 fun Route.homeRoute() {
@@ -336,7 +339,7 @@ fun Route.homeRoute() {
                                     transform: translateY(-8px);
                                     border-color: var(--card-hover-border);
                                     background: var(--card-hover-bg);
-                                    box-shadow: 
+                                    box-shadow:
                                         0 12px 24px var(--card-shadow),
                                         0 0 0 1px var(--card-hover-border);
                                 }
@@ -1190,7 +1193,7 @@ fun Route.homeRoute() {
                                 // Initialize theme toggle functionality is now handled by shared resources
 
                                 // Initialize click feedback for interactive elements is now handled by shared resources
-                                
+
                                 // Initialize event listeners for interactive elements
                                 document.addEventListener('DOMContentLoaded', function() {
                                     initializeEventListeners();
@@ -1248,7 +1251,7 @@ fun Route.homeRoute() {
                             }
                         }
 
-                        
+
                         div {
                             classes = setOf("content")
                             div {
@@ -1679,6 +1682,18 @@ fun Route.homeRoute() {
             }
         }
 
+        get("/announcement") {
+            val ann = AnnouncementStore.getActive()
+            val payload = AnnouncementPayload(
+                active = ann != null,
+                message = ann?.message,
+                severity = ann?.severity,
+                until = ann?.until,
+                updatedAt = ann?.updatedAt
+            )
+            call.respondSuccess("Announcement", payload)
+        }
+
         route("/favicon.ico") {
             get {
                 call.respondText(text = "Greetings! $pageName is currently dry or hidden 😉. Please hydrate elsewhere.")
@@ -1686,3 +1701,12 @@ fun Route.homeRoute() {
         }
     }
 }
+
+@Serializable
+data class AnnouncementPayload(
+    val active: Boolean,
+    val message: String? = null,
+    val severity: String? = null,
+    val until: Long? = null,
+    val updatedAt: Long? = null
+)

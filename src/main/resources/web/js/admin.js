@@ -17,12 +17,13 @@ let totalUsers = 0;
 window.UserRoute = window.UserRoute || {
     listUsers(page, pageSize) {
         const url = `/admin/users?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
+        const headers = { 'Accept': 'application/json' };
+        if (token) { headers['Authorization'] = 'Bearer ' + token; }
         return fetch(url, {
             method: 'GET',
             credentials: 'include',
-            headers: {
-                'Accept': 'application/json'
-            }
+            headers
         })
         .then(response => {
             if (!response.ok) {
@@ -74,19 +75,308 @@ window.UserRoute = window.UserRoute || {
             },
             body: JSON.stringify({ isActive: !!isActive })
         });
+    },
+    updatePremium(email, isPremium) {
+        const url = `/admin/users/${encodeURIComponent(email)}/premium`;
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ isPremium: !!isPremium })
+        });
     }
 };
+
+/**
+ * Call admin endpoint to clear weather cache
+ */
+function clearWeatherCache() {
+    return fetch('/admin/cache/clear', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'Accept': 'application/json'
+        }
+    }).then(resp => {
+        if (!resp.ok) {
+            if (resp.status === 403) throw new Error('Access denied');
+            throw new Error('Failed to clear cache');
+        }
+        return resp.json();
+    }).then(payload => {
+        if (payload && payload.status === true) return true;
+        throw new Error((payload && payload.message) || 'Failed to clear cache');
+    });
+}
+
+function runHealthCheck() {
+    return fetch('/admin/tools/health', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+    }).then(resp => {
+        if (!resp.ok) {
+            if (resp.status === 403) throw new Error('Access denied');
+            throw new Error('Health check failed');
+        }
+        return resp.json();
+    }).then(payload => {
+        if (!payload || payload.status !== true || !payload.data) {
+            throw new Error((payload && payload.message) || 'Invalid health check response');
+        }
+        return payload.data;
+    });
+}
+
+function runWarmup() {
+    return fetch('/admin/tools/warmup', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    }).then(resp => {
+        if (!resp.ok) {
+            if (resp.status === 403) throw new Error('Access denied');
+            throw new Error('Warmup failed');
+        }
+        return resp.json();
+    }).then(payload => {
+        if (!payload || payload.status !== true || !payload.data) {
+            throw new Error((payload && payload.message) || 'Invalid warmup response');
+        }
+        return payload.data;
+    });
+}
+
+
+
+
+
+function escapeHtml(str){
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Ensure modal CSS/HTML and helpers exist for Admin dashboard (mirrors HomeRoute modal UI)
+function ensureAdminModal(){
+    try {
+        // Inject CSS once
+        if (!document.getElementById('admin-modal-style')) {
+            const style = document.createElement('style');
+            style.id = 'admin-modal-style';
+            style.textContent = `
+            .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.8); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); opacity: 0; transition: opacity 0.3s ease; }
+            .modal-content { background: var(--modal-bg, var(--card-bg)); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border: 1px solid var(--modal-border, var(--card-border)); border-radius: 12px; margin: 5% auto; padding: 2rem; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; position: relative; transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s ease; transform: translateY(20px); }
+            .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; position: absolute; right: 1.5rem; top: 1rem; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s ease; user-select: none; }
+            .close:hover, .close:focus { color: #fff; background-color: rgba(255, 255, 255, 0.1); }
+            .modal h2 { color: var(--modal-title, var(--card-title)); margin-bottom: 1.5rem; font-size: 1.75rem; font-weight: 600; }
+            `;
+            document.head.appendChild(style);
+        }
+        // Inject HTML once
+        if (!document.getElementById('apiModal')) {
+            const modal = document.createElement('div');
+            modal.id = 'apiModal';
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <span class="close" id="modal-close">×</span>
+                    <h2 id="modalTitle">Details</h2>
+                    <div id="modalContent"></div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const closeBtn = modal.querySelector('#modal-close');
+            if (closeBtn) closeBtn.addEventListener('click', closeModal);
+            window.addEventListener('click', function(event){ if (event.target === modal) closeModal(); });
+        }
+    } catch (e) { console.warn('Failed to ensure admin modal', e); }
+}
+
+function showModal(title, content) {
+    try {
+        ensureAdminModal();
+        const modal = document.getElementById('apiModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalContent = document.getElementById('modalContent');
+        const modalContentDiv = modal ? modal.querySelector('.modal-content') : null;
+        if (!modal || !modalTitle || !modalContent || !modalContentDiv) return;
+        modalTitle.textContent = title;
+        modalContent.innerHTML = content;
+        modal.style.opacity = '0';
+        modalContentDiv.style.transform = 'translateY(20px)';
+        modal.style.display = 'block';
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                modal.style.opacity = '1';
+                modalContentDiv.style.transform = 'translateY(0)';
+            });
+        });
+        document.body.style.overflow = 'hidden';
+        document.addEventListener('keydown', handleEscKey);
+    } catch (e) { console.error('Error showing modal', e); }
+}
+
+function closeModal() {
+    try {
+        const modal = document.getElementById('apiModal');
+        const modalContentDiv = modal ? modal.querySelector('.modal-content') : null;
+        if (!modal || !modalContentDiv) return;
+        const transitionDuration = (typeof getTransitionDuration === 'function') ? getTransitionDuration(modal) : 300;
+        requestAnimationFrame(() => {
+            modal.style.opacity = '0';
+            modalContentDiv.style.transform = 'translateY(20px)';
+            setTimeout(() => { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }, transitionDuration);
+        });
+        document.removeEventListener('keydown', handleEscKey);
+    } catch (e) { console.error('Error closing modal', e); }
+}
+
+function handleEscKey(event) { if (event.key === 'Escape') closeModal(); }
+
+function buildHealthHtml(data){
+    const badge = (b) => b ? '<span style="color:#10b981;font-weight:600;">OK</span>' : '<span style="color:#ef4444;font-weight:600;">FAIL</span>';
+    const row = (k, v) => `<div style="display:flex; gap:8px; margin:2px 0;"><div style="min-width:180px;color:var(--text-color);font-weight:600;">${k}</div><div>${v}</div></div>`;
+    const section = (title, body) => `<div style="border:1px solid var(--card-border);background:var(--card-bg);border-radius:8px;padding:12px;margin-top:10px;"><div style="font-weight:700;color:var(--card-title);margin-bottom:6px;">${title}</div>${body}</div>`;
+    const wBody = [
+        row('Base URL', `<code>${escapeHtml(String(data.weatherUrl || ''))}</code>`),
+        row('Probe URL', `<code>${escapeHtml(String(data.probeWeatherUrl || ''))}</code>`),
+        row('HTTP Status', `${data.weatherStatusCode}${data.weatherStatusText ? ' ' + escapeHtml(String(data.weatherStatusText)) : ''} · ${badge(!!data.weatherOk)}`),
+        row('Latency', `${data.weatherLatencyMs} ms`),
+        row('Content-Type', `${escapeHtml(String(data.weatherContentType || 'n/a'))}`),
+        row('Bytes', `${data.weatherBytes != null ? data.weatherBytes : 'n/a'}`),
+        data.weatherError ? row('Error', `<span style="color:#ef4444">${escapeHtml(String(data.weatherError))}</span>`) : ''
+    ].join('');
+    const aBody = [
+        row('Base URL', `<code>${escapeHtml(String(data.airUrl || ''))}</code>`),
+        row('Probe URL', `<code>${escapeHtml(String(data.probeAirUrl || ''))}</code>`),
+        row('HTTP Status', `${data.airStatusCode}${data.airStatusText ? ' ' + escapeHtml(String(data.airStatusText)) : ''} · ${badge(!!data.airOk)}`),
+        row('Latency', `${data.airLatencyMs} ms`),
+        row('Content-Type', `${escapeHtml(String(data.airContentType || 'n/a'))}`),
+        row('Bytes', `${data.airBytes != null ? data.airBytes : 'n/a'}`),
+        data.airError ? row('Error', `<span style="color:#ef4444">${escapeHtml(String(data.airError))}</span>`) : ''
+    ].join('');
+    return [
+        section('Weather Service', wBody),
+        section('Air Pollution Service', aBody),
+        `<div style="margin-top:8px;color:var(--text-secondary)">Checked At: ${new Date(data.timestamp || Date.now()).toLocaleString()}</div>`
+    ].join('');
+}
+
+function buildWarmupHtml(data){
+    if (!data || !Array.isArray(data.results)) return '<div>No data</div>';
+    const badge = (b) => b ? '<span style="color:#10b981;font-weight:600;">OK</span>' : '<span style="color:#ef4444;font-weight:600;">FAIL</span>';
+    const header = `<div style="display:grid;grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;gap:6px;font-weight:700;color:var(--card-title);margin-top:6px;">
+        <div>Location</div><div>Weather</div><div>Latency</div><div>Air</div><div>Latency</div>
+    </div>`;
+    const rows = data.results.map(r => {
+        const location = escapeHtml(r.name || `${r.lat.toFixed(4)}, ${r.lon.toFixed(4)}`);
+        const w = `${r.weatherStatusCode} · ${badge(!!r.weatherOk)}`;
+        const a = `${r.airStatusCode} · ${badge(!!r.airOk)}`;
+        const wlat = (r.weatherLatencyMs >= 0 ? r.weatherLatencyMs + ' ms' : 'n/a');
+        const alat = (r.airLatencyMs >= 0 ? r.airLatencyMs + ' ms' : 'n/a');
+        return `<div style="display:grid;grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;gap:6px;padding:6px;border:1px solid var(--card-border);border-radius:6px;margin-top:6px;background:var(--card-bg);">
+            <div>${location}</div>
+            <div>${w}${r.weatherError ? ` <span style='color:#ef4444' title='${escapeHtml(r.weatherError)}'>!</span>` : ''}</div>
+            <div>${wlat}</div>
+            <div>${a}${r.airError ? ` <span style='color:#ef4444' title='${escapeHtml(r.airError)}'>!</span>` : ''}</div>
+            <div>${alat}</div>
+        </div>`;
+    }).join('');
+    const footer = `<div style="margin-top:8px;color:var(--text-secondary)">Completed: ${new Date(data.timestamp || Date.now()).toLocaleString()} · Overall: ${badge(!!data.ok)}</div>`;
+    return header + rows + footer;
+}
 
 /**
  * Initialize the admin dashboard
  */
 function initializeAdmin() {
     try {
+        ensureAdminModal();
         // Bind logout
         const logoutBtn = document.getElementById('logout-button');
         if (logoutBtn && !logoutBtn.dataset.bound) {
             logoutBtn.addEventListener('click', function(e){ e.preventDefault(); if (typeof logout === 'function') logout(); });
             logoutBtn.dataset.bound = 'true';
+        }
+
+        // Bind Clear Cache tool
+        const clearBtn = document.getElementById('clear-cache-btn');
+        const spinner = document.getElementById('clear-cache-spinner');
+        if (clearBtn && !clearBtn.dataset.bound) {
+            clearBtn.addEventListener('click', function(){
+                if (spinner) spinner.style.display = 'inline-block';
+                clearBtn.disabled = true;
+                clearWeatherCache()
+                    .then(() => {
+                        showToast('success', 'Weather cache cleared');
+                    })
+                    .catch(err => {
+                        console.error('Clear cache failed', err);
+                        showToast('error', err && err.message ? err.message : 'Failed to clear cache');
+                    })
+                    .finally(() => {
+                        if (spinner) spinner.style.display = 'none';
+                        clearBtn.disabled = false;
+                    });
+            });
+            clearBtn.dataset.bound = 'true';
+        }
+
+        // Bind Health Check tool
+        const healthBtn = document.getElementById('run-health-btn');
+        const healthSpinner = document.getElementById('run-health-spinner');
+        if (healthBtn && !healthBtn.dataset.bound) {
+            healthBtn.addEventListener('click', function(){
+                if (healthSpinner) healthSpinner.style.display = 'inline-block';
+                healthBtn.disabled = true;
+                runHealthCheck()
+                    .then((data) => {
+                        try { showModal('Health Check Results', buildHealthHtml(data)); } catch(e) { console.warn('Failed to show health modal', e); }
+                        const overallOk = (data.weatherOk === true) && (data.airOk === true);
+                        showToast(overallOk ? 'success' : 'error', overallOk ? 'Health check passed' : 'Health check has failures');
+                    })
+                    .catch(err => {
+                        console.error('Health check failed', err);
+                        showToast('error', err && err.message ? err.message : 'Health check failed');
+                    })
+                    .finally(() => {
+                        if (healthSpinner) healthSpinner.style.display = 'none';
+                        healthBtn.disabled = false;
+                    });
+            });
+            healthBtn.dataset.bound = 'true';
+        }
+
+        // Bind Warmup tool
+        const warmBtn = document.getElementById('warmup-btn');
+        const warmSpinner = document.getElementById('warmup-spinner');
+        if (warmBtn && !warmBtn.dataset.bound) {
+            warmBtn.addEventListener('click', function(){
+                if (warmSpinner) warmSpinner.style.display = 'inline-block';
+                warmBtn.disabled = true;
+                runWarmup()
+                    .then((data) => {
+                        try { showModal('Warmup Results', buildWarmupHtml(data)); } catch(e) { console.warn('Failed to show warmup modal', e); }
+                        showToast(data.ok ? 'success' : 'error', data.ok ? 'Warmup completed' : 'Warmup completed with failures');
+                    })
+                    .catch(err => {
+                        console.error('Warmup failed', err);
+                        showToast('error', err && err.message ? err.message : 'Warmup failed');
+                    })
+                    .finally(() => {
+                        if (warmSpinner) warmSpinner.style.display = 'none';
+                        warmBtn.disabled = false;
+                    });
+            });
+            warmBtn.dataset.bound = 'true';
         }
 
 
@@ -179,7 +469,7 @@ function renderUsersTable(users) {
     if (users.length === 0) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
-        cell.colSpan = 4;
+        cell.colSpan = 5;
         cell.textContent = 'No users found';
         cell.style.textAlign = 'center';
         row.appendChild(cell);
@@ -262,6 +552,29 @@ function renderUsersTable(users) {
         statusCell.appendChild(statusToggle);
         row.appendChild(statusCell);
 
+        // Premium cell
+        const premiumCell = document.createElement('td');
+        const premiumToggle = document.createElement('label');
+        premiumToggle.className = 'status-toggle';
+
+        const premiumInput = document.createElement('input');
+        premiumInput.type = 'checkbox';
+        premiumInput.checked = !!user.isPremium;
+        premiumInput.dataset.email = user.email;
+        premiumInput.dataset.prevChecked = String(!!user.isPremium);
+
+        premiumInput.addEventListener('change', function() {
+            updateUserPremium(user.email, this.checked, this);
+        });
+
+        const premiumSlider = document.createElement('span');
+        premiumSlider.className = 'status-slider';
+
+        premiumToggle.appendChild(premiumInput);
+        premiumToggle.appendChild(premiumSlider);
+        premiumCell.appendChild(premiumToggle);
+        row.appendChild(premiumCell);
+
         fragment.appendChild(row);
     });
     tableBody.replaceChildren(fragment);
@@ -273,12 +586,12 @@ function renderUsersTable(users) {
 function renderPagination() {
     const paginationContainer = document.getElementById('pagination');
     paginationContainer.innerHTML = '';
-    
+
     if (totalPages <= 1) {
         // If only one page, don't show pagination
         return;
     }
-    
+
     // Previous button
     const prevButton = document.createElement('button');
     prevButton.className = `pagination-button ${currentPage === 1 ? 'disabled' : ''}`;
@@ -290,12 +603,12 @@ function renderPagination() {
         }
     });
     paginationContainer.appendChild(prevButton);
-    
+
     // Page buttons
     const maxButtons = 5; // Maximum number of page buttons to show
     const startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
     const endPage = Math.min(totalPages, startPage + maxButtons - 1);
-    
+
     for (let i = startPage; i <= endPage; i++) {
         const pageButton = document.createElement('button');
         pageButton.className = `pagination-button ${i === currentPage ? 'active' : ''}`;
@@ -307,7 +620,7 @@ function renderPagination() {
         });
         paginationContainer.appendChild(pageButton);
     }
-    
+
     // Next button
     const nextButton = document.createElement('button');
     nextButton.className = `pagination-button ${currentPage === totalPages ? 'disabled' : ''}`;
@@ -405,6 +718,44 @@ function updateUserStatus(email, isActive, checkboxEl) {
     });
 }
 
+function updateUserPremium(email, isPremium, checkboxEl) {
+    const prev = checkboxEl ? (checkboxEl.dataset.prevChecked === 'true') : null;
+    if (prev !== null && prev === isPremium) {
+        return;
+    }
+    if (checkboxEl) checkboxEl.disabled = true;
+    const actionText = isPremium ? 'enabling premium for' : 'disabling premium for';
+    window.UserRoute.updatePremium(email, isPremium)
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 403) {
+                throw new Error('You do not have permission to update premium status');
+            } else {
+                throw new Error(`Failed while ${actionText} user`);
+            }
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === true) {
+            if (checkboxEl) checkboxEl.dataset.prevChecked = String(isPremium);
+            const resultText = isPremium ? 'Premium enabled' : 'Premium disabled';
+            showToast('success', `${resultText} for ${email}`);
+        } else {
+            if (checkboxEl && prev !== null) checkboxEl.checked = prev;
+            showErrorMessage(data.message || 'Failed to update premium status');
+        }
+    })
+    .catch(error => {
+        console.error('Error updating premium status:', error);
+        if (checkboxEl && prev !== null) checkboxEl.checked = prev;
+        showErrorMessage(error.message || 'An error occurred while updating premium status');
+    })
+    .finally(() => {
+        if (checkboxEl) checkboxEl.disabled = false;
+    });
+}
+
 /**
  * Format a date string to a more readable format
  * @param {string} dateString - The date string to format
@@ -412,7 +763,7 @@ function updateUserStatus(email, isActive, checkboxEl) {
  */
 function formatDate(dateString) {
     if (!dateString) return 'N/A';
-    
+
     try {
         const date = new Date(dateString);
         return date.toLocaleString();
@@ -466,23 +817,8 @@ function showToast(type, message, timeout) {
  * @param {string} message - The message to display
  */
 function showSuccessMessage(message) {
-    const successMessage = document.getElementById('success-message');
-    const errorMessage = document.getElementById('error-message');
-    const infoMessage = document.getElementById('info-message');
-    if (!successMessage) return;
-    successMessage.textContent = message;
-    successMessage.classList.remove('hidden');
-    successMessage.classList.add('visible');
-
-    // Hide error and info messages
-    if (errorMessage) { errorMessage.classList.remove('visible'); errorMessage.classList.add('hidden'); }
-    if (infoMessage) { infoMessage.classList.remove('visible'); infoMessage.classList.add('hidden'); }
-
-    // Hide message after 5 seconds
-    setTimeout(() => {
-        successMessage.classList.remove('visible');
-        successMessage.classList.add('hidden');
-    }, 5000);
+    // Route all success notifications through top-right toast
+    try { showToast('success', message || 'Success'); } catch (_) {}
 }
 
 /**
@@ -490,23 +826,8 @@ function showSuccessMessage(message) {
  * @param {string} message - The message to display
  */
 function showErrorMessage(message) {
-    const errorMessage = document.getElementById('error-message');
-    const successMessage = document.getElementById('success-message');
-    const infoMessage = document.getElementById('info-message');
-    if (!errorMessage) return;
-    errorMessage.textContent = message;
-    errorMessage.classList.remove('hidden');
-    errorMessage.classList.add('visible');
-
-    // Hide success and info messages
-    if (successMessage) { successMessage.classList.remove('visible'); successMessage.classList.add('hidden'); }
-    if (infoMessage) { infoMessage.classList.remove('visible'); infoMessage.classList.add('hidden'); }
-
-    // Hide message after 5 seconds
-    setTimeout(() => {
-        errorMessage.classList.remove('visible');
-        errorMessage.classList.add('hidden');
-    }, 5000);
+    // Route all error notifications through top-right toast
+    try { showToast('error', message || 'Something went wrong'); } catch (_) {}
 }
 
 /**
@@ -514,17 +835,8 @@ function showErrorMessage(message) {
  * @param {string} message - The message to display
  */
 function showInfoMessage(message) {
-    const infoMessage = document.getElementById('info-message');
-    const successMessage = document.getElementById('success-message');
-    const errorMessage = document.getElementById('error-message');
-    if (!infoMessage) return;
-    infoMessage.textContent = message;
-    infoMessage.classList.remove('hidden');
-    infoMessage.classList.add('visible');
-
-    // Hide success and error messages
-    if (successMessage) { successMessage.classList.remove('visible'); successMessage.classList.add('hidden'); }
-    if (errorMessage) { errorMessage.classList.remove('visible'); errorMessage.classList.add('hidden'); }
+    // Route all info notifications through top-right toast
+    try { showToast('info', message || ''); } catch (_) {}
 }
 
 /**
