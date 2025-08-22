@@ -380,6 +380,33 @@ function initializeAdmin() {
         }
 
 
+        // Bind JWT Token Inspector tool
+        const jwtBtn = document.getElementById('jwt-inspector-btn');
+        if (jwtBtn && !jwtBtn.dataset.bound) {
+            jwtBtn.addEventListener('click', function(){
+                try {
+                    const content = buildJwtInspectorContent();
+                    showModal('JWT Token Inspector', content);
+                    bindJwtInspectorModal();
+                } catch(e) { console.error('Failed to open JWT Inspector', e); }
+            });
+            jwtBtn.dataset.bound = 'true';
+        }
+
+        // Ensure footer exists (if server-side footer is missing)
+        try {
+            if (!document.querySelector('.footer')) {
+                const container = document.querySelector('.container.main-container') || document.querySelector('.container');
+                if (container) {
+                    const year = new Date().getFullYear();
+                    const footer = document.createElement('footer');
+                    footer.className = 'footer';
+                    footer.innerHTML = `<div class="footer-content"><div class="footer-copyright">© ${year} Androidplay. All rights reserved.</div></div>`;
+                    container.appendChild(footer);
+                }
+            }
+        } catch(e) { console.warn('Failed to inject dashboard footer', e); }
+
         // Guarded initial load for IAM users: run once if IAM panel exists and table is empty
         try {
             const iamPanel = document.getElementById('iam');
@@ -853,3 +880,385 @@ function clearMessages() {
 
 // Initialize admin dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', initializeAdmin);
+
+
+// ================= JWT Token Inspector =================
+function base64UrlDecodeToString(input){
+    if (typeof input !== 'string') return '';
+    let str = input.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = str.length % 4;
+    if (pad === 2) str += '==';
+    else if (pad === 3) str += '=';
+    else if (pad === 1) throw new Error('Invalid base64url string');
+    try { return atob(str); } catch(e){ throw new Error('Base64 decode failed'); }
+}
+
+function safeJsonParse(str){
+    try { return JSON.parse(str); } catch(e){ throw new Error('Invalid JSON'); }
+}
+
+function decodeJwtToken(token){
+    if (!token || typeof token !== 'string') throw new Error('No token provided');
+    const parts = token.split('.');
+    if (parts.length !== 3) throw new Error('Invalid JWT format');
+    const [h, p, s] = parts;
+    const headerStr = base64UrlDecodeToString(h);
+    const payloadStr = base64UrlDecodeToString(p);
+    const header = safeJsonParse(headerStr);
+    const payload = safeJsonParse(payloadStr);
+    const signature = s || '';
+    return { header, payload, signature, raw: { header:h, payload:p, signature:s } };
+}
+
+function tsToLocal(tsSec){
+    if (typeof tsSec !== 'number') return 'n/a';
+    try { return new Date(tsSec * 1000).toLocaleString(); } catch(e){ return String(tsSec); }
+}
+
+function computeTimeValidity(payload){
+    const nowSec = Math.floor(Date.now()/1000);
+    const exp = typeof payload.exp === 'number' ? payload.exp : null;
+    const nbf = typeof payload.nbf === 'number' ? payload.nbf : null;
+    const iat = typeof payload.iat === 'number' ? payload.iat : null;
+    let status = 'Unknown';
+    if (exp && nowSec > exp) status = 'Expired';
+    else if (nbf && nowSec < nbf) status = 'Not yet valid';
+    else status = 'Valid by time';
+    return { nowSec, exp, nbf, iat, status };
+}
+
+function renderJwtResult(decoded){
+    const time = computeTimeValidity(decoded.payload || {});
+    const claims = decoded.payload || {};
+    const keys = Object.keys(claims).sort();
+    const claimRows = keys.map(k => `<tr><td style="font-weight:600;color:var(--card-title)">${escapeHtml(k)}</td><td><code>${escapeHtml(String(claims[k]))}</code></td></tr>`).join('');
+    const hasSig = (decoded.signature || '').length > 0;
+    return [
+        '<div style="display:grid; gap:12px">',
+        '<div class="message info-message">Client-side decoding only. Signature verification is not performed here.</div>',
+        '<div style="display:grid; gap:6px">',
+        '<div style="font-weight:700;color:var(--card-title)">Time Validity</div>',
+        `<div>Status: <span style="font-weight:700;${time.status==='Expired'?'color:#ef4444':(time.status==='Valid by time'?'color:#10b981':'color:#f59e0b')}">${time.status}</span></div>`,
+        `<div>exp: ${time.exp != null ? tsToLocal(time.exp) + ` (${time.exp})` : 'n/a'}</div>`,
+        `<div>nbf: ${time.nbf != null ? tsToLocal(time.nbf) + ` (${time.nbf})` : 'n/a'}</div>`,
+        `<div>iat: ${time.iat != null ? tsToLocal(time.iat) + ` (${time.iat})` : 'n/a'}</div>`,
+        '</div>',
+        '<div style="display:grid; gap:6px">',
+        '<div style="font-weight:700;color:var(--card-title)">Header</div>',
+        `<pre style="white-space:pre-wrap;background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;padding:10px">${escapeHtml(JSON.stringify(decoded.header, null, 2))}</pre>`,
+        '</div>',
+        '<div style="display:grid; gap:6px">',
+        '<div style="font-weight:700;color:var(--card-title)">Payload</div>',
+        `<pre style="white-space:pre-wrap;background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;padding:10px">${escapeHtml(JSON.stringify(decoded.payload, null, 2))}</pre>`,
+        '</div>',
+        '<div style="display:grid; gap:6px">',
+        '<div style="font-weight:700;color:var(--card-title)">Claims</div>',
+        `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse">${claimRows || '<tr><td>No claims</td></tr>'}</table></div>`,
+        '</div>',
+        `<div>Signature present: <strong>${hasSig ? 'Yes' : 'No'}</strong> (not verified)</div>`,
+        '</div>'
+    ].join('');
+}
+
+function buildJwtInspectorContent(){
+    const token = '';
+    return [
+        '<div style="display:grid; gap:10px">',
+        '<div class="message info-message">Paste a JWT below to decode its header and payload. Do not include the "Bearer " prefix.</div>',
+        '<textarea id="jwt-input" class="form-control" rows="5" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIiwiZXhwIjoxNzAwMDAwMDAwfQ.signature"></textarea>',
+        '<div style="display:flex; gap:8px; align-items:center">',
+        '<button id="jwt-decode-btn" class="btn btn-primary">Decode</button>',
+        '<button id="jwt-clear-btn" class="btn btn-secondary">Clear</button>',
+        '</div>',
+        '<div id="jwt-error" class="message error-message" style="display:none"></div>',
+        '<div id="jwt-result"></div>',
+        '</div>'
+    ].join('');
+}
+
+function bindJwtInspectorModal(){
+    const input = document.getElementById('jwt-input');
+    const decodeBtn = document.getElementById('jwt-decode-btn');
+    const clearBtn = document.getElementById('jwt-clear-btn');
+    const result = document.getElementById('jwt-result');
+    const err = document.getElementById('jwt-error');
+    if (!input || !decodeBtn || !result) return;
+
+    function showErr(msg){ if (!err) return; err.textContent = msg || 'Error'; err.style.display = 'block'; }
+    function hideErr(){ if (err) err.style.display = 'none'; }
+
+    decodeBtn.addEventListener('click', function(){
+        hideErr();
+        result.innerHTML = '';
+        let value = (input.value || '').trim();
+        if (!value) { showErr('Please paste a JWT token'); return; }
+        if (value.toLowerCase().startsWith('bearer ')) value = value.slice(7).trim();
+        try {
+            const decoded = decodeJwtToken(value);
+            result.innerHTML = renderJwtResult(decoded);
+            showToast('success', 'Token decoded');
+        } catch(e){
+            console.error('JWT decode error', e);
+            showErr(e && e.message ? e.message : 'Failed to decode token');
+        }
+    });
+
+    if (clearBtn) clearBtn.addEventListener('click', function(){ input.value=''; result.innerHTML=''; hideErr(); });
+}
+
+// =============== End JWT Token Inspector ===============
+
+
+// ================= Reports (Usage Analytics) =================
+(function(){
+    const state = {
+        initialized: false,
+        chart: null,
+        users: []
+    };
+
+    function q(id){ return document.getElementById(id); }
+    function cssVar(name){
+        try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch(_) { return ''; }
+    }
+
+    function parseDateSafe(v){
+        try {
+            const d = new Date(v);
+            return isNaN(d.getTime()) ? null : d;
+        } catch(_) { return null; }
+    }
+
+    function endOfDay(d){ const nd = new Date(d); nd.setHours(23,59,59,999); return nd; }
+
+    function getRangeDays(){
+        const sel = q('reports-range');
+        const n = sel ? parseInt(sel.value, 10) : 30;
+        return isNaN(n) ? 30 : n;
+    }
+
+    function buildEmptySeries(days){
+        const labels = [];
+        const data = [];
+        const now = new Date();
+        for (let i = days - 1; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - i);
+            const key = d.toISOString().slice(0,10);
+            labels.push(key);
+            data.push(0);
+        }
+        return { labels, data };
+    }
+
+    function aggregateDaily(users, days){
+        const series = buildEmptySeries(days);
+        const byKey = Object.create(null);
+        series.labels.forEach((k, idx) => { byKey[k] = idx; });
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - (days - 1));
+        users.forEach(u => {
+            const d = parseDateSafe(u.createdAt);
+            if (!d) return;
+            if (d < new Date(cutoff.toDateString())) return;
+            const key = d.toISOString().slice(0,10);
+            const idx = byKey[key];
+            if (typeof idx === 'number') series.data[idx]++;
+        });
+        return series;
+    }
+
+    function updateKpis(users, days, series){
+        try {
+            const totalNew = series.data.reduce((a,b)=>a+b,0);
+            const activeCount = users.filter(u => u.isActive === true).length;
+            const activeRate = users.length > 0 ? Math.round((activeCount / users.length) * 100) : 0;
+            const admins = users.filter(u => (u.role||'').toUpperCase() === 'ADMIN').length;
+            const premium = users.filter(u => u.isPremium === true).length;
+            const elNew = q('kpi-new-users');
+            const elAct = q('kpi-active-rate');
+            const elAdm = q('kpi-admins');
+            const elPre = q('kpi-premium');
+            if (elNew) elNew.textContent = String(totalNew);
+            if (elAct) elAct.textContent = activeRate + '%';
+            if (elAdm) elAdm.textContent = String(admins);
+            if (elPre) elPre.textContent = String(premium);
+        } catch(e) { console.warn('Failed to update KPIs', e); }
+    }
+
+    function lineColor(){ return '#6366f1'; }
+    function gridColor(){ return (cssVar('--card-border') || 'rgba(99,102,241,0.2)'); }
+    function tickColor(){ return (cssVar('--text-secondary') || '#9ca3af'); }
+
+    function destroyChart(){ try { if (state.chart) { state.chart.destroy(); state.chart = null; } } catch(_){} }
+
+    function renderChart(series){
+        const canvas = q('reports-chart');
+        const empty = q('reports-empty');
+        if (!canvas) return;
+        const hasData = series.data.some(v => v > 0);
+        if (!hasData) {
+            if (empty) { empty.classList.remove('hidden'); empty.classList.add('visible'); }
+        } else {
+            if (empty) { empty.classList.add('hidden'); empty.classList.remove('visible'); }
+        }
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js not available');
+            if (empty) { empty.classList.remove('hidden'); empty.classList.add('visible'); empty.textContent = 'Chart library not available'; }
+            return;
+        }
+        destroyChart();
+        const ctx = canvas.getContext('2d');
+        const glowPlugin = {
+            id: 'glowLine',
+            beforeDatasetDraw(chart, args) {
+                if (!args || !args.meta || args.meta.type !== 'line') return;
+                const ctx = chart.ctx;
+                const ds = chart.data && chart.data.datasets ? chart.data.datasets[args.index] : null;
+                ctx.save();
+                ctx.shadowColor = (ds && ds.borderColor) || lineColor();
+                ctx.shadowBlur = 1;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+            },
+            afterDatasetDraw(chart, args) {
+                const ctx = chart.ctx;
+                try { ctx.restore(); } catch(_) {}
+            }
+        };
+
+        // gradient fill for a subtle modern look
+        let gradient;
+        try {
+            gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 260);
+            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.22)');
+            gradient.addColorStop(1, 'rgba(99, 102, 241, 0.02)');
+        } catch(_) {
+            gradient = 'rgba(99, 102, 241, 0.12)';
+        }
+
+        state.chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: series.labels.map(k => {
+                    try { const d = new Date(k); return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch(_) { return k; }
+                }),
+                datasets: [{
+                    label: 'New users',
+                    data: series.data,
+                    borderColor: lineColor(),
+                    backgroundColor: gradient,
+                    fill: true,
+                    cubicInterpolationMode: 'monotone',
+                    tension: 0.6,
+                    borderWidth: 2.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 700, easing: 'easeOutCubic' },
+                interaction: { mode: 'index', intersect: false },
+                elements: {
+                    line: { borderJoinStyle: 'round', capBezierPoints: true },
+                    point: { hitRadius: 10 }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#ffffff',
+                        displayColors: false,
+                        padding: 10,
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false },
+                        ticks: { color: tickColor(), maxTicksLimit: 8, maxRotation: 0 }
+                    },
+                    y: {
+                        display: false,
+                        beginAtZero: true,
+                        grid: { display: false, drawBorder: false },
+                        ticks: { display: false }
+                    }
+                }
+            },
+            plugins: [glowPlugin]
+        });
+    }
+
+    function render(){
+        const days = getRangeDays();
+        const series = aggregateDaily(state.users, days);
+        updateKpis(state.users, days, series);
+        renderChart(series);
+    }
+
+    function fetchUsers(){
+        // Load up to 100 latest users for aggregation
+        if (!window.UserRoute || typeof window.UserRoute.listUsers !== 'function') return Promise.reject(new Error('Users API unavailable'));
+        return window.UserRoute.listUsers(1, 100).then(({ users }) => {
+            state.users = Array.isArray(users) ? users : [];
+            return state.users;
+        });
+    }
+
+    function bindRange(){
+        const sel = q('reports-range');
+        if (sel && !sel.dataset.bound) {
+            sel.addEventListener('change', render);
+            sel.dataset.bound = 'true';
+        }
+    }
+
+    function bindThemeReactivity(){
+        // Observe html class changes to refresh chart colors
+        try {
+            const html = document.documentElement;
+            const obs = new MutationObserver(() => { if (state.chart) { render(); } });
+            obs.observe(html, { attributes: true, attributeFilter: ['class'] });
+        } catch(_) {}
+        const toggle = document.getElementById('theme-toggle');
+        if (toggle && !toggle.dataset.reportBound) {
+            toggle.addEventListener('change', () => { if (state.chart) { render(); } });
+            toggle.dataset.reportBound = 'true';
+        }
+    }
+
+    function ensureInitialized(){
+        if (state.initialized) return;
+        const panel = document.getElementById('reports');
+        if (!panel) return;
+        // show loader message in empty div while fetching
+        const empty = q('reports-empty');
+        if (empty) { empty.textContent = 'Loading report…'; empty.classList.remove('hidden'); empty.classList.add('visible'); }
+        fetchUsers()
+            .then(() => { bindRange(); bindThemeReactivity(); render(); state.initialized = true; })
+            .catch(err => { console.warn('Failed to initialize reports', err); if (empty) { empty.textContent = 'Failed to load data'; } });
+    }
+
+    // Hook into admin init: click on Reports tab should trigger initialization
+    document.addEventListener('DOMContentLoaded', function(){
+        try {
+            // Bind tab click
+            const tab = document.querySelector('.tab[data-tab="reports"]');
+            if (tab && !tab.dataset.reportsBound) {
+                tab.addEventListener('click', ensureInitialized);
+                tab.dataset.reportsBound = 'true';
+            }
+            // If already active (unlikely), init immediately
+            const panel = document.getElementById('reports');
+            if (panel && panel.classList.contains('active')) {
+                ensureInitialized();
+            }
+        } catch(e) { console.warn('Reports binding failed', e); }
+    });
+})();

@@ -4,7 +4,7 @@ import bose.ankush.data.model.User
 import bose.ankush.data.model.UserRole
 import com.mongodb.client.model.Aggregates
 import com.mongodb.client.model.Filters
-import com.mongodb.client.model.ReplaceOptions
+import com.mongodb.client.model.Projections
 import com.mongodb.client.model.Sorts
 import data.source.DatabaseModule
 import domain.model.Result
@@ -31,13 +31,52 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
     override suspend fun findUserByEmail(email: String): Result<User?> {
         logger.debug("Finding user by email: $email")
         return try {
-            val query = databaseModule.createQuery(Constants.Database.EMAIL_FIELD, email)
-            val user = databaseModule.getUsersCollection().find(query).firstOrNull()
-            if (user != null) {
-                logger.debug("User found: $email")
-            } else {
+            val query = databaseModule.createFilter(Constants.Database.EMAIL_FIELD, email)
+            val docCollection =
+                databaseModule.getUsersCollection().withDocumentClass(Document::class.java)
+            val doc = docCollection.find(query).firstOrNull()
+            if (doc == null) {
                 logger.debug("User not found: $email")
+                return Result.success(null)
             }
+
+            val rawId = doc["_id"]
+            val idStr = when (rawId) {
+                is org.bson.types.ObjectId -> rawId.toHexString()
+                is String -> rawId
+                else -> rawId?.toString() ?: org.bson.types.ObjectId().toHexString()
+            }
+
+            val roleValue = doc.get("role")
+            val role = when (roleValue) {
+                is String -> try {
+                    UserRole.valueOf(roleValue)
+                } catch (_: Exception) {
+                    null
+                }
+
+                else -> null
+            }
+
+            val user = User(
+                id = idStr,
+                email = doc.getString("email"),
+                passwordHash = doc.getString("passwordHash"),
+                createdAt = doc.getString("createdAt") ?: java.time.Instant.now().toString(),
+                isActive = (doc.get("isActive") as? Boolean) ?: false,
+                role = role,
+                timestampOfRegistration = doc.getString("timestampOfRegistration"),
+                deviceModel = doc.getString("deviceModel"),
+                operatingSystem = doc.getString("operatingSystem"),
+                osVersion = doc.getString("osVersion"),
+                appVersion = doc.getString("appVersion"),
+                ipAddress = doc.getString("ipAddress"),
+                registrationSource = doc.getString("registrationSource"),
+                isPremium = (doc.get("isPremium") as? Boolean) ?: false,
+                fcmToken = doc.getString("fcmToken")
+            )
+
+            logger.debug("User found: $email")
             Result.success(user)
         } catch (e: Exception) {
             logger.error("Failed to find user by email: $email", e)
@@ -60,7 +99,7 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
             logger.warn(errorMessage)
             return Result.error(errorMessage)
         }
-        
+
         return try {
             databaseModule.getUsersCollection().insertOne(user)
             logger.info("User created successfully: ${user.email}")
@@ -104,21 +143,57 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
             logger.warn(errorMessage)
             return Result.error(errorMessage)
         }
-        
+
         return try {
-            val query = databaseModule.createQuery(Constants.Database.EMAIL_FIELD, user.email)
-            val result = databaseModule.getUsersCollection().replaceOne(
-                filter = query,
-                replacement = user,
-                options = ReplaceOptions().upsert(false)
-            )
-            val success = result.wasAcknowledged()
-            if (success) {
+            // Build partial updates for mutable fields only. Do not replace the whole document
+            // and never include immutable fields like _id or email in updates.
+            val updates = mutableMapOf<String, Any>()
+
+            if (user.passwordHash != existingUser.passwordHash) updates["passwordHash"] =
+                user.passwordHash
+            if (user.isActive != existingUser.isActive) updates["isActive"] = user.isActive
+            if ((user.role?.name ?: "") != (existingUser.role?.name ?: "")) updates["role"] =
+                user.role?.name ?: "USER"
+            if (user.timestampOfRegistration != null && user.timestampOfRegistration != existingUser.timestampOfRegistration) updates["timestampOfRegistration"] =
+                user.timestampOfRegistration
+            if (user.deviceModel != null && user.deviceModel != existingUser.deviceModel) updates["deviceModel"] =
+                user.deviceModel
+            if (user.operatingSystem != null && user.operatingSystem != existingUser.operatingSystem) updates["operatingSystem"] =
+                user.operatingSystem
+            if (user.osVersion != null && user.osVersion != existingUser.osVersion) updates["osVersion"] =
+                user.osVersion
+            if (user.appVersion != null && user.appVersion != existingUser.appVersion) updates["appVersion"] =
+                user.appVersion
+            if (user.ipAddress != null && user.ipAddress != existingUser.ipAddress) updates["ipAddress"] =
+                user.ipAddress
+            if (user.registrationSource != null && user.registrationSource != existingUser.registrationSource) updates["registrationSource"] =
+                user.registrationSource
+            if (user.isPremium != existingUser.isPremium) updates["isPremium"] = user.isPremium
+            if (user.fcmToken != null && user.fcmToken != existingUser.fcmToken) updates["fcmToken"] =
+                user.fcmToken
+
+            if (updates.isEmpty()) {
+                logger.info("No changes detected for user: ${user.email}")
+                return Result.success(true)
+            }
+
+            val filter = databaseModule.createFilter(Constants.Database.EMAIL_FIELD, user.email)
+            val updateBson = databaseModule.createSetUpdates(updates)
+            val result = databaseModule.getUsersCollection().updateOne(filter, updateBson)
+
+            if (result.matchedCount == 0L) {
+                val msg = "User not found during update: ${user.email}"
+                logger.warn(msg)
+                return Result.error(msg)
+            }
+
+            if (result.modifiedCount > 0) {
                 logger.info("User updated successfully: ${user.email}")
             } else {
-                logger.warn("User update not acknowledged: ${user.email}")
+                logger.info("User update acknowledged but no values changed: ${user.email}")
             }
-            Result.success(success)
+
+            Result.success(true)
         } catch (e: Exception) {
             logger.error("Failed to update user: ${user.email}", e)
             Result.error("Failed to update user: ${e.message}", e)
@@ -274,6 +349,8 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
             val pipeline = mutableListOf<Bson>()
             pipeline.add(Aggregates.match(combinedFilter))
             pipeline.add(Aggregates.sort(sort))
+            // Exclude _id to avoid codec issues when it's an ObjectId in existing documents
+            pipeline.add(Aggregates.project(Projections.excludeId()))
             pipeline.add(Aggregates.skip(skip))
             pipeline.add(Aggregates.limit(limit))
 
@@ -284,6 +361,40 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
         } catch (e: Exception) {
             logger.error("Failed to get users", e)
             Result.error("Failed to get users: ${e.message}", e)
+        }
+    }
+
+    override suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): Result<Boolean> {
+        logger.debug("Updating FCM token for user email: $email")
+        if (email.isBlank() || fcmToken.isBlank()) {
+            val msg = "Invalid input: email and fcmToken are required"
+            logger.warn(msg)
+            return Result.error(msg)
+        }
+        return try {
+            val collection = databaseModule.getUsersCollection()
+            val filter = databaseModule.createFilter(Constants.Database.EMAIL_FIELD, email)
+            val update = databaseModule.createSetUpdate("fcmToken", fcmToken)
+            val result = collection.updateOne(filter, update)
+            when {
+                result.matchedCount == 0L -> {
+                    val msg = "User not found for email: $email"
+                    logger.warn(msg)
+                    Result.error(msg)
+                }
+
+                else -> {
+                    if (result.modifiedCount > 0) {
+                        logger.info("FCM token updated for user email: $email")
+                    } else {
+                        logger.info("FCM token value unchanged for user email: $email")
+                    }
+                    Result.success(true)
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to update FCM token for user email: $email", e)
+            Result.error("Failed to update FCM token: ${e.message}", e)
         }
     }
 }

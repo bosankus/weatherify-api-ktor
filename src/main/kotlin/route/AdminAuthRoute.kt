@@ -517,13 +517,27 @@ fun Route.adminAuthRoute() {
                         try {
                             val maxAgeSeconds =
                                 (Environment.getJwtExpiration() / 1000).toInt()
+                            val isHttps = (
+                                call.request.headers["X-Forwarded-Proto"]?.equals(
+                                    "https",
+                                    true
+                                ) == true ||
+                                    call.request.headers["X-Forwarded-Protocol"]?.equals(
+                                        "https",
+                                        true
+                                    ) == true ||
+                                    call.request.headers["X-Forwarded-Ssl"]?.equals(
+                                        "on",
+                                        true
+                                    ) == true
+                                )
                             call.response.cookies.append(
                                 Cookie(
                                     name = "jwt_token",
                                     value = token,
                                     path = "/",
                                     httpOnly = true,
-                                    secure = true,
+                                    secure = isHttps,
                                     maxAge = maxAgeSeconds
                                 )
                             )
@@ -645,13 +659,27 @@ fun Route.adminAuthRoute() {
                             try {
                                 val maxAgeSeconds =
                                     (Environment.getJwtExpiration() / 1000).toInt()
+                                val isHttps = (
+                                    call.request.headers["X-Forwarded-Proto"]?.equals(
+                                        "https",
+                                        true
+                                    ) == true ||
+                                        call.request.headers["X-Forwarded-Protocol"]?.equals(
+                                            "https",
+                                            true
+                                        ) == true ||
+                                        call.request.headers["X-Forwarded-Ssl"]?.equals(
+                                            "on",
+                                            true
+                                        ) == true
+                                    )
                                 call.response.cookies.append(
                                     Cookie(
                                         name = "jwt_token",
                                         value = token,
                                         path = "/",
                                         httpOnly = true,
-                                        secure = true,
+                                        secure = isHttps,
                                         maxAge = maxAgeSeconds
                                     )
                                 )
@@ -705,13 +733,21 @@ fun Route.adminAuthRoute() {
                     isAdmin = JwtConfig.isAdmin(decodedJWT)
                 } catch (e: Exception) {
                     // Invalid or expired token, clear cookie to break redirect loop
+                    val isHttps = (
+                        call.request.headers["X-Forwarded-Proto"]?.equals("https", true) == true ||
+                            call.request.headers["X-Forwarded-Protocol"]?.equals(
+                                "https",
+                                true
+                            ) == true ||
+                            call.request.headers["X-Forwarded-Ssl"]?.equals("on", true) == true
+                        )
                     call.response.cookies.append(
                         Cookie(
                             name = "jwt_token",
                             value = "",
                             path = "/",
                             httpOnly = true,
-                            secure = true,
+                            secure = isHttps,
                             maxAge = 0
                         )
                     )
@@ -1148,44 +1184,7 @@ fun Route.adminAuthRoute() {
                         style =
                             "max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;" // <-- Ensure fixed width
 
-                        div {
-                            classes = setOf("header")
-                            style =
-                                "margin-top: 0 !important; margin-bottom: 0;" // Reduce top margin for dashboard header
-                            div {
-                                classes = setOf("brand-text")
-                                h1 {
-                                    classes = setOf("logo")
-                                    +"Androidplay"
-                                }
-                                span {
-                                    classes = setOf("subtitle")
-                                    +"Admin Portal"
-                                }
-                            }
-                            div {
-                                style = "flex-grow: 1;"
-                            }
-                            div {
-                                style = "display: flex; align-items: center; gap: 1rem;"
-
-                                // Theme toggle
-                                label {
-                                    classes = setOf("toggle")
-                                    style =
-                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
-
-                                    input {
-                                        type = InputType.checkBox
-                                        id = "theme-toggle"
-                                    }
-
-                                    div {
-                                        // This div becomes the toggle button
-                                    }
-                                }
-                            }
-                        }
+                        createHeader(this)
 
                         // Admin dashboard content
                         div {
@@ -1351,8 +1350,64 @@ fun Route.adminAuthRoute() {
                                             style =
                                                 "width: 100%; box-sizing: border-box;" // <-- Always full width
                                             div {
-                                                classes = setOf("dashboard-card-content")
-                                                +"Reports and analytics will be shown here."
+                                                classes = setOf("dashboard-card")
+                                                div {
+                                                    classes = setOf("dashboard-card-title")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                        <span style="display:inline-flex; align-items:center; gap:6px; position:relative;">
+                                                            <span class="material-icons" style="font-size:18px;vertical-align:middle;">analytics</span>
+                                                            <span>Usage Reports</span>
+                                                        </span>
+                                                        """
+                                                        )
+                                                    }
+                                                }
+                                                div {
+                                                    classes = setOf("dashboard-card-content")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                        <div id="reports-controls" style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:.75rem">
+                                                            <div style="display:flex;gap:.5rem;align-items:center">
+                                                                <label for="reports-range" style="color:var(--text-secondary);font-size:.9rem">Range</label>
+                                                                <select id="reports-range" class="role-select">
+                                                                    <option value="7">Last 7 days</option>
+                                                                    <option value="30" selected>Last 30 days</option>
+                                                                    <option value="90">Last 90 days</option>
+                                                                </select>
+                                                            </div>
+                                                            <div style="color:var(--text-secondary);font-size:.85rem">
+                                                                Data derived from the latest users list
+                                                            </div>
+                                                        </div>
+                                                        <div id="reports-kpis" style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:.75rem;margin:.5rem 0 1rem 0">
+                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                <div style="font-size:.8rem;color:var(--text-secondary)">New users</div>
+                                                                <div id="kpi-new-users" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                            </div>
+                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Active rate</div>
+                                                                <div id="kpi-active-rate" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                            </div>
+                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Admins</div>
+                                                                <div id="kpi-admins" style="font-size:1.2rem;font-weight:700;color:var(--card-title)">—</div>
+                                                            </div>
+                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Premium users</div>
+                                                                <div id="kpi-premium" style="font-size:1.2rem;font-weight:700;color:var(--card-title)">—</div>
+                                                            </div>
+                                                        </div>
+                                                        <div style="position:relative;min-height:260px">
+                                                            <canvas id="reports-chart" height="260" aria-label="User registrations chart" role="img"></canvas>
+                                                            <div id="reports-empty" class="message info-message hidden" style="position:absolute;left:0;right:0;top:0;">Not enough data to render chart</div>
+                                                        </div>
+                                                        """
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
 
@@ -1404,6 +1459,16 @@ fun Route.adminAuthRoute() {
                                                                         <div class="tool-actions">
                                                                             <button id="warmup-btn" class="btn btn-secondary" aria-label="Warm up endpoints">Warm up</button>
                                                                             <span id="warmup-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="tool-item" role="listitem">
+                                                                    <span class="material-icons tool-icon" aria-hidden="true">vpn_key</span>
+                                                                    <div class="tool-content">
+                                                                        <div class="tool-title">JWT Token Inspector</div>
+                                                                        <div class="tool-desc">Paste a JWT to decode its header and payload, view claims and expiration, and check time validity.</div>
+                                                                        <div class="tool-actions">
+                                                                            <button id="jwt-inspector-btn" class="btn btn-secondary" aria-label="Open JWT Token Inspector">Open</button>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -1471,6 +1536,9 @@ fun Route.adminAuthRoute() {
                                     }
                                 }
                             }
+
+                            // Footer
+                            createFooter(this)
                         }
                     }
                 }

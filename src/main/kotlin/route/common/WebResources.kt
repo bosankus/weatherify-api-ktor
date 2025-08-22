@@ -117,6 +117,11 @@ object WebResources {
      * @param head The HEAD element to add the JavaScript to
      */
     fun includeAdminJs(head: HEAD) {
+        // Include Chart.js from CDN first so it's available to admin.js
+        head.script {
+            attributes["src"] = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+            attributes["crossorigin"] = "anonymous"
+        }
         // Include admin JavaScript directly in the HTML
         head.script {
             unsafe {

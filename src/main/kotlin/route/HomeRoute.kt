@@ -1,8 +1,6 @@
 package bose.ankush.route
 
 import bose.ankush.route.common.WebResources
-import bose.ankush.route.common.respondSuccess
-import bose.ankush.util.AnnouncementStore
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.html.respondHtml
 import io.ktor.server.response.respondText
@@ -29,7 +27,6 @@ import kotlinx.html.span
 import kotlinx.html.style
 import kotlinx.html.title
 import kotlinx.html.unsafe
-import kotlinx.serialization.Serializable
 import util.Constants
 
 fun Route.homeRoute() {
@@ -58,7 +55,8 @@ fun Route.homeRoute() {
                     }
                     link {
                         rel = "stylesheet"
-                        href = "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+                        href =
+                            "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
                     }
                     link {
                         rel = "stylesheet"
@@ -1228,7 +1226,8 @@ fun Route.homeRoute() {
                                 // Theme toggle
                                 label {
                                     classes = setOf("toggle")
-                                    style = "position: relative; cursor: pointer; margin-right: 0.5rem;"
+                                    style =
+                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
 
                                     input {
                                         type = InputType.checkBox
@@ -1245,7 +1244,8 @@ fun Route.homeRoute() {
                                 span {
                                     classes = setOf("material-icons", "nav-icon", "github-link")
                                     id = "github-link"
-                                    attributes["data-url"] = "https://github.com/bosankus/weatherify-api-ktor"
+                                    attributes["data-url"] =
+                                        "https://github.com/bosankus/weatherify-api-ktor"
                                     +"code"
                                 }
                             }
@@ -1452,44 +1452,44 @@ fun Route.homeRoute() {
                                 id = "feedback-api-card"
                                 attributes["data-title"] = "Feedback API"
                                 attributes["data-content"] = "<h3>Feedback API Endpoints</h3>" +
-                                        "<div class='response-example'>" +
-                                        "<strong>GET /feedback</strong><br>" +
-                                        "<span class='param-label'>Parameters:</span> <code>id</code> (feedback ID)<br>" +
-                                        "<span class='desc-label'>Description:</span> Returns feedback details for the specified ID" +
-                                        "</div>" +
-                                        "<div class='response-example'>" +
-                                        "<strong>POST /feedback</strong><br>" +
-                                        "<span class='param-label'>Parameters:</span> <code>deviceId</code>, <code>deviceOs</code>, <code>feedbackTitle</code>, <code>feedbackDescription</code><br>" +
-                                        "<span class='desc-label'>Description:</span> Creates a new feedback entry and returns the ID" +
-                                        "</div>" +
-                                        "<div class='response-example'>" +
-                                        "<strong>DELETE /feedback</strong><br>" +
-                                        "<span class='param-label'>Parameters:</span> <code>id</code> (feedback ID)<br>" +
-                                        "<span class='desc-label'>Description:</span> Deletes the feedback with the specified ID" +
-                                        "</div>" +
-                                        "<h4>Feedback Model:</h4>" +
-                                        "<div class='response-example model-container'>" +
-                                        "<div class='model-header'>Feedback</div>" +
-                                        "<pre class='model-content'>" +
-                                        "{\n" +
-                                        "  \"_id\": String,\n" +
-                                        "  \"deviceId\": String,\n" +
-                                        "  \"deviceOs\": String,\n" +
-                                        "  \"feedbackTitle\": String,\n" +
-                                        "  \"feedbackDescription\": String,\n" +
-                                        "  \"timestamp\": String\n" +
-                                        "}</pre>" +
-                                        "</div>" +
-                                        "<h4>Response Format:</h4>" +
-                                        "<div class='response-example model-container'>" +
-                                        "<div class='model-header'>ApiResponse</div>" +
-                                        "<pre class='model-content'>" +
-                                        "{\n" +
-                                        "  \"status\": Boolean,\n" +
-                                        "  \"message\": String,\n" +
-                                        "  \"data\": T\n" +
-                                        "}</pre>" +
-                                        "</div>"
+                                    "<div class='response-example'>" +
+                                    "<strong>GET /feedback</strong><br>" +
+                                    "<span class='param-label'>Parameters:</span> <code>id</code> (feedback ID)<br>" +
+                                    "<span class='desc-label'>Description:</span> Returns feedback details for the specified ID" +
+                                    "</div>" +
+                                    "<div class='response-example'>" +
+                                    "<strong>POST /feedback</strong><br>" +
+                                    "<span class='param-label'>Parameters:</span> <code>deviceId</code>, <code>deviceOs</code>, <code>feedbackTitle</code>, <code>feedbackDescription</code><br>" +
+                                    "<span class='desc-label'>Description:</span> Creates a new feedback entry and returns the ID" +
+                                    "</div>" +
+                                    "<div class='response-example'>" +
+                                    "<strong>DELETE /feedback</strong><br>" +
+                                    "<span class='param-label'>Parameters:</span> <code>id</code> (feedback ID)<br>" +
+                                    "<span class='desc-label'>Description:</span> Deletes the feedback with the specified ID" +
+                                    "</div>" +
+                                    "<h4>Feedback Model:</h4>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>Feedback</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"_id\": String,\n" +
+                                    "  \"deviceId\": String,\n" +
+                                    "  \"deviceOs\": String,\n" +
+                                    "  \"feedbackTitle\": String,\n" +
+                                    "  \"feedbackDescription\": String,\n" +
+                                    "  \"timestamp\": String\n" +
+                                    "}</pre>" +
+                                    "</div>" +
+                                    "<h4>Response Format:</h4>" +
+                                    "<div class='response-example model-container'>" +
+                                    "<div class='model-header'>ApiResponse</div>" +
+                                    "<pre class='model-content'>" +
+                                    "{\n" +
+                                    "  \"status\": Boolean,\n" +
+                                    "  \"message\": String,\n" +
+                                    "  \"data\": T\n" +
+                                    "}</pre>" +
+                                    "</div>"
                                 div {
                                     classes = setOf("card-header")
                                     div {
@@ -1553,51 +1553,51 @@ fun Route.homeRoute() {
                                 attributes["data-title"] = "Authentication API"
                                 attributes["data-content"] =
                                     "<h3>Authentication API Endpoints</h3>" +
-                                            "<div class='response-example'>" +
-                                            "<strong>POST /register</strong><br>" +
-                                            "<span class='param-label'>Parameters:</span> <code>email</code>, <code>password</code><br>" +
-                                            "<span class='desc-label'>Description:</span> Registers a new user with email and password. Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character." +
-                                            "</div>" +
-                                            "<div class='response-example'>" +
-                                            "<strong>POST /login</strong><br>" +
-                                            "<span class='param-label'>Parameters:</span> <code>email</code>, <code>password</code><br>" +
-                                            "<span class='desc-label'>Description:</span> Authenticates a user and returns a JWT token for accessing protected resources." +
-                                            "</div>" +
-                                            "<h4>Request Models:</h4>" +
-                                            "<div class='response-example model-container'>" +
-                                            "<div class='model-header'>UserRegistrationRequest</div>" +
-                                            "<pre class='model-content'>" +
-                                            "{\n" +
-                                            "  \"email\": String,\n" +
-                                            "  \"password\": String\n" +
-                                            "}</pre>" +
-                                            "</div>" +
-                                            "<div class='response-example model-container'>" +
-                                            "<div class='model-header'>UserLoginRequest</div>" +
-                                            "<pre class='model-content'>" +
-                                            "{\n" +
-                                            "  \"email\": String,\n" +
-                                            "  \"password\": String\n" +
-                                            "}</pre>" +
-                                            "</div>" +
-                                            "<h4>Response Models:</h4>" +
-                                            "<div class='response-example model-container'>" +
-                                            "<div class='model-header'>LoginResponse</div>" +
-                                            "<pre class='model-content'>" +
-                                            "{\n" +
-                                            "  \"token\": String,\n" +
-                                            "  \"email\": String\n" +
-                                            "}</pre>" +
-                                            "</div>" +
-                                            "<div class='response-example model-container'>" +
-                                            "<div class='model-header'>ApiResponse</div>" +
-                                            "<pre class='model-content'>" +
-                                            "{\n" +
-                                            "  \"status\": Boolean,\n" +
-                                            "  \"message\": String,\n" +
-                                            "  \"data\": T\n" +
-                                            "}</pre>" +
-                                            "</div>"
+                                        "<div class='response-example'>" +
+                                        "<strong>POST /register</strong><br>" +
+                                        "<span class='param-label'>Parameters:</span> <code>email</code>, <code>password</code><br>" +
+                                        "<span class='desc-label'>Description:</span> Registers a new user with email and password. Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character." +
+                                        "</div>" +
+                                        "<div class='response-example'>" +
+                                        "<strong>POST /login</strong><br>" +
+                                        "<span class='param-label'>Parameters:</span> <code>email</code>, <code>password</code><br>" +
+                                        "<span class='desc-label'>Description:</span> Authenticates a user and returns a JWT token for accessing protected resources." +
+                                        "</div>" +
+                                        "<h4>Request Models:</h4>" +
+                                        "<div class='response-example model-container'>" +
+                                        "<div class='model-header'>UserRegistrationRequest</div>" +
+                                        "<pre class='model-content'>" +
+                                        "{\n" +
+                                        "  \"email\": String,\n" +
+                                        "  \"password\": String\n" +
+                                        "}</pre>" +
+                                        "</div>" +
+                                        "<div class='response-example model-container'>" +
+                                        "<div class='model-header'>UserLoginRequest</div>" +
+                                        "<pre class='model-content'>" +
+                                        "{\n" +
+                                        "  \"email\": String,\n" +
+                                        "  \"password\": String\n" +
+                                        "}</pre>" +
+                                        "</div>" +
+                                        "<h4>Response Models:</h4>" +
+                                        "<div class='response-example model-container'>" +
+                                        "<div class='model-header'>LoginResponse</div>" +
+                                        "<pre class='model-content'>" +
+                                        "{\n" +
+                                        "  \"token\": String,\n" +
+                                        "  \"email\": String\n" +
+                                        "}</pre>" +
+                                        "</div>" +
+                                        "<div class='response-example model-container'>" +
+                                        "<div class='model-header'>ApiResponse</div>" +
+                                        "<pre class='model-content'>" +
+                                        "{\n" +
+                                        "  \"status\": Boolean,\n" +
+                                        "  \"message\": String,\n" +
+                                        "  \"data\": T\n" +
+                                        "}</pre>" +
+                                        "</div>"
                                 div {
                                     classes = setOf("card-header")
                                     div {
@@ -1682,18 +1682,6 @@ fun Route.homeRoute() {
             }
         }
 
-        get("/announcement") {
-            val ann = AnnouncementStore.getActive()
-            val payload = AnnouncementPayload(
-                active = ann != null,
-                message = ann?.message,
-                severity = ann?.severity,
-                until = ann?.until,
-                updatedAt = ann?.updatedAt
-            )
-            call.respondSuccess("Announcement", payload)
-        }
-
         route("/favicon.ico") {
             get {
                 call.respondText(text = "Greetings! $pageName is currently dry or hidden 😉. Please hydrate elsewhere.")
@@ -1702,11 +1690,3 @@ fun Route.homeRoute() {
     }
 }
 
-@Serializable
-data class AnnouncementPayload(
-    val active: Boolean,
-    val message: String? = null,
-    val severity: String? = null,
-    val until: Long? = null,
-    val updatedAt: Long? = null
-)

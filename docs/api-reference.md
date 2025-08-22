@@ -92,7 +92,9 @@ Registers a new user with email and password.
       {
         "status": true,
         "message": "Registration successful",
-        "data": {}
+        "data": {
+          "_id": "b2d5f3b2-5f9a-4b0f-9f77-123456789abc"
+        }
       }
       ```
     - **Error (400 Bad Request)**: Invalid email format or weak password

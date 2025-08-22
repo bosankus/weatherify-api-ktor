@@ -79,7 +79,7 @@ class WeatherRepositoryImpl(
         limit: Int?
     ): Result<List<Weather>> {
         return try {
-            val query = databaseModule.createQuery("lat", lat).append("lon", lon)
+            val query = databaseModule.createQuery(mapOf("lat" to lat, "lon" to lon))
             val flow = databaseModule.getWeatherCollection().find(query).sort(
                 org.bson.Document("dt", -1) // Sort by timestamp descending
             )
@@ -104,7 +104,7 @@ class WeatherRepositoryImpl(
      */
     suspend fun getCachedWeatherData(lat: String, lon: String): Result<Weather> {
         return try {
-            val query = databaseModule.createQuery("lat", lat).append("lon", lon)
+            val query = databaseModule.createQuery(mapOf("lat" to lat, "lon" to lon))
             val weather = databaseModule.getWeatherCollection().find(query)
                 .sort(org.bson.Document("dt", -1)) // Sort by timestamp descending
                 .limit(1)

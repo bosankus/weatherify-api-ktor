@@ -30,6 +30,14 @@ interface UserRepository {
     suspend fun updateUser(user: User): Result<Boolean>
 
     /**
+     * Update user's FCM token by email.
+     * @param email The email of the user.
+     * @param fcmToken The FCM token to set.
+     * @return Result indicating success or failure.
+     */
+    suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): Result<Boolean>
+
+    /**
      * Get all users with optional filtering, sorting, and pagination.
      * @param filter Optional filter criteria (e.g., by email, role, isActive)
      * @param sortBy Optional field to sort by

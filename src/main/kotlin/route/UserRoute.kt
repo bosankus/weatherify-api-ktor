@@ -30,6 +30,75 @@ import org.koin.ktor.ext.inject
 fun Route.userRoute() {
     val userRepository: UserRepository by application.inject()
 
+    // FCM token registration endpoint (email-based)
+    post("/user/{email}/fcm-token") {
+        try {
+            val email = call.parameters["email"]?.trim()
+            if (email.isNullOrEmpty()) {
+                call.respondError(
+                    "Validation process failed: Missing user email in path",
+                    Unit,
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
+            val req = try {
+                call.receive<FcmTokenRequest>()
+            } catch (e: Exception) {
+                call.respondError(
+                    "Invalid request body: ${e.message}",
+                    Unit,
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
+            if (req.fcmToken.isBlank()) {
+                call.respondError(
+                    "Validation process failed: fcmToken is required",
+                    Unit,
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
+            when (val res = userRepository.updateFcmTokenByEmail(email, req.fcmToken)) {
+                is Result.Success -> {
+                    if (res.data) {
+                        call.respondSuccess("FCM token registered", mapOf("email" to email))
+                    } else {
+                        call.respondError(
+                            "Database operation failed: Failed to update FCM token",
+                            Unit,
+                            HttpStatusCode.InternalServerError
+                        )
+                    }
+                }
+
+                is Result.Error -> {
+                    val message = res.message
+                    val status = when {
+                        message.contains("not found", ignoreCase = true) -> HttpStatusCode.NotFound
+                        message.contains(
+                            "validation",
+                            ignoreCase = true
+                        ) -> HttpStatusCode.BadRequest
+
+                        else -> HttpStatusCode.InternalServerError
+                    }
+                    call.respondError(message, Unit, status)
+                }
+            }
+        } catch (e: Exception) {
+            call.respondError(
+                "Internal server error",
+                mapOf("error" to (e.message ?: "unknown")),
+                HttpStatusCode.InternalServerError
+            )
+        }
+    }
+
     // Helper to extract and verify admin JWT
     suspend fun ensureAdminAndGetToken(call: ApplicationCall): Boolean {
         val authHeader = call.request.headers["Authorization"]
@@ -495,6 +564,10 @@ data class StatusUpdateResponseDTO(
     val isActive: Boolean
 )
 
+@Serializable
+data class FcmTokenRequest(
+    val fcmToken: String
+)
 
 @Serializable
 data class PremiumUpdateRequest(val isPremium: Boolean)
