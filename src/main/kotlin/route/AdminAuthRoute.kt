@@ -1,6 +1,5 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.User
 import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.WebResources
 import bose.ankush.route.common.respondError
@@ -9,7 +8,6 @@ import com.auth0.jwt.interfaces.Payload
 import config.Environment
 import config.JwtConfig
 import domain.model.Result
-import domain.repository.UserRepository
 import domain.service.AuthService
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
@@ -60,6 +58,9 @@ fun isAdminFromPayload(payload: Payload): Boolean {
     // Use JwtConfig.isAdmin for consistent role checking
     return JwtConfig.isAdmin(payload)
 }
+
+@Serializable
+data class AdminLoginRequest(val email: String, val password: String)
 
 /**
  * Helper function to set up common HTML head elements
@@ -189,10 +190,10 @@ private suspend fun serveLoginPage(
                         function initializeApp() {
                             // Initialize theme toggle functionality
                             initializeTheme();
-                            
+
                             // Initialize login form
                             initializeLoginForm();
-                            
+
                             // Initialize GitHub link
                             const githubLink = document.getElementById('github-link');
                             if (githubLink) {
@@ -204,19 +205,19 @@ private suspend fun serveLoginPage(
                                 });
                             }
                         }
-                        
+
                         function initializeLoginForm() {
                             const loginForm = document.getElementById('login-form');
                             const loginButton = document.getElementById('login-button');
                             const errorMessage = document.getElementById('error-message');
                             const successMessage = document.getElementById('success-message');
-                            
+
                             if (!loginForm || !loginButton) return;
-                            
+
                             // Check URL parameters for error messages
                             const urlParams = new URLSearchParams(window.location.search);
                             const errorParam = urlParams.get('error');
-                            
+
                             if (errorParam) {
                                 if (errorParam === 'auth_required') {
                                     showError('Please login to access the admin dashboard');
@@ -226,7 +227,7 @@ private suspend fun serveLoginPage(
                                     showError('Access denied. You do not have administrator privileges.');
                                 }
                             }
-                            
+
                             // Check if already logged in with admin role
                             const token = localStorage.getItem('jwt_token');
                             if (token) {
@@ -248,24 +249,24 @@ private suspend fun serveLoginPage(
                                     localStorage.removeItem('jwt_token');
                                 });
                             }
-                            
+
                             // Handle form submission
                             loginForm.addEventListener('submit', function(e) {
                                 e.preventDefault();
-                                
+
                                 const email = document.getElementById('email').value;
                                 const password = document.getElementById('password').value;
-                                
+
                                 // Validate inputs
                                 if (!email || !password) {
                                     showError('Please enter both email and password');
                                     return;
                                 }
-                                
+
                                 // Show loading state
                                 loginButton.classList.add('loading');
                                 loginButton.disabled = true;
-                                
+
                                 // Send login request
                                 fetch('/admin/login', {
                                     method: 'POST',
@@ -282,11 +283,11 @@ private suspend fun serveLoginPage(
                                     if (data.status === true) {
                                         // Login successful
                                         showSuccess('Login successful! Redirecting to dashboard...');
-                                        
+
                                         // Store token using consistent key
                                         console.log('Storing token in localStorage:', data.data.token.substring(0, 10) + '...');
                                         localStorage.setItem('jwt_token', data.data.token);
-                                        
+
                                         // Store user info for role-based access
                                         try {
                                             // Parse the JWT to get user info
@@ -305,11 +306,11 @@ private suspend fun serveLoginPage(
                                         } catch (e) {
                                             console.error('Error parsing JWT token:', e);
                                         }
-                                        
+
                                         // Redirect to intended destination or dashboard
                                         setTimeout(() => {
                                             const intendedDestination = sessionStorage.getItem('intendedDestination');
-                                            
+
                                             // Use the navigateToAdminPage function which handles token authentication properly
                                             if (typeof navigateToAdminPage === 'function') {
                                                 console.log('Using navigateToAdminPage function for redirection');
@@ -344,38 +345,38 @@ private suspend fun serveLoginPage(
                                 });
                             });
                         }
-                        
+
                         // Helper function to show error message
                         function showError(message) {
                             const errorMessage = document.getElementById('error-message');
                             const successMessage = document.getElementById('success-message');
-                            
+
                             if (!errorMessage || !successMessage) return;
-                            
+
                             errorMessage.textContent = message;
                             errorMessage.classList.add('visible');
                             successMessage.classList.remove('visible');
-                            
+
                             // Scroll to the error message to ensure it's visible
                             errorMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                            
+
                             // Hide error after 6 seconds
                             setTimeout(() => {
                                 errorMessage.classList.remove('visible');
                             }, 6000);
                         }
-                        
+
                         // Helper function to show success message
                         function showSuccess(message) {
                             const errorMessage = document.getElementById('error-message');
                             const successMessage = document.getElementById('success-message');
-                            
+
                             if (!errorMessage || !successMessage) return;
-                            
+
                             successMessage.textContent = message;
                             successMessage.classList.add('visible');
                             errorMessage.classList.remove('visible');
-                            
+
                             // Scroll to the success message to ensure it's visible
                             successMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }
@@ -486,13 +487,10 @@ private suspend fun serveLoginPage(
  * Provides login UI for admin users and redirects to dashboard when authenticated
  */
 fun Route.adminAuthRoute() {
-    // Ensure static resource check runs when routes are registered
-    AdminStaticResourceChecker
 
     val authService: AuthService by application.inject()
     val logger = LoggerFactory.getLogger("AdminAuthRoute")
     val pageName = "Admin Authentication - Androidplay Weather API"
-    val userRepository: UserRepository by application.inject()
 
     // Public route for login page - no authentication required
     route("/admin/login") {
@@ -519,13 +517,27 @@ fun Route.adminAuthRoute() {
                         try {
                             val maxAgeSeconds =
                                 (Environment.getJwtExpiration() / 1000).toInt()
+                            val isHttps = (
+                                call.request.headers["X-Forwarded-Proto"]?.equals(
+                                    "https",
+                                    true
+                                ) == true ||
+                                    call.request.headers["X-Forwarded-Protocol"]?.equals(
+                                        "https",
+                                        true
+                                    ) == true ||
+                                    call.request.headers["X-Forwarded-Ssl"]?.equals(
+                                        "on",
+                                        true
+                                    ) == true
+                                )
                             call.response.cookies.append(
                                 Cookie(
                                     name = "jwt_token",
                                     value = token,
                                     path = "/",
                                     httpOnly = true,
-                                    secure = true,
+                                    secure = isHttps,
                                     maxAge = maxAgeSeconds
                                 )
                             )
@@ -647,13 +659,27 @@ fun Route.adminAuthRoute() {
                             try {
                                 val maxAgeSeconds =
                                     (Environment.getJwtExpiration() / 1000).toInt()
+                                val isHttps = (
+                                    call.request.headers["X-Forwarded-Proto"]?.equals(
+                                        "https",
+                                        true
+                                    ) == true ||
+                                        call.request.headers["X-Forwarded-Protocol"]?.equals(
+                                            "https",
+                                            true
+                                        ) == true ||
+                                        call.request.headers["X-Forwarded-Ssl"]?.equals(
+                                            "on",
+                                            true
+                                        ) == true
+                                    )
                                 call.response.cookies.append(
                                     Cookie(
                                         name = "jwt_token",
                                         value = token,
                                         path = "/",
                                         httpOnly = true,
-                                        secure = true,
+                                        secure = isHttps,
                                         maxAge = maxAgeSeconds
                                     )
                                 )
@@ -707,13 +733,21 @@ fun Route.adminAuthRoute() {
                     isAdmin = JwtConfig.isAdmin(decodedJWT)
                 } catch (e: Exception) {
                     // Invalid or expired token, clear cookie to break redirect loop
+                    val isHttps = (
+                        call.request.headers["X-Forwarded-Proto"]?.equals("https", true) == true ||
+                            call.request.headers["X-Forwarded-Protocol"]?.equals(
+                                "https",
+                                true
+                            ) == true ||
+                            call.request.headers["X-Forwarded-Ssl"]?.equals("on", true) == true
+                        )
                     call.response.cookies.append(
                         Cookie(
                             name = "jwt_token",
                             value = "",
                             path = "/",
                             httpOnly = true,
-                            secure = true,
+                            secure = isHttps,
                             maxAge = 0
                         )
                     )
@@ -800,7 +834,7 @@ fun Route.adminAuthRoute() {
     /* Align with shared container/content-area widths */
     position: relative;
     width: 100%;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto 2rem auto;
     padding: 1.5rem 2rem;
     background: var(--content-bg);
@@ -811,7 +845,7 @@ fun Route.adminAuthRoute() {
     -webkit-backdrop-filter: blur(10px);
     min-height: 200px;
 }
-                                
+
                                 .admin-header {
                                     display: flex;
                                     justify-content: space-between;
@@ -820,14 +854,14 @@ fun Route.adminAuthRoute() {
                                     padding-bottom: 1rem;
                                     border-bottom: 1px solid var(--card-border);
                                 }
-                                
+
                                 .admin-title {
                                     margin: 0;
                                     font-size: 1.8rem;
                                     font-weight: 600;
                                     color: var(--card-title);
                                 }
-                                
+
                                 .admin-user-info {
                                     display: flex;
                                     align-items: center;
@@ -835,28 +869,28 @@ fun Route.adminAuthRoute() {
                                     font-size: 0.9rem;
                                     color: var(--text-secondary);
                                 }
-                                
+
                                 .admin-user-email {
                                     font-weight: 600;
                                     color: var(--text-color);
                                 }
-                                
+
                                 .admin-logout {
                                     cursor: pointer;
                                     color: #ef4444;
                                     text-decoration: underline;
                                     transition: color 0.2s ease;
                                 }
-                                
+
                                 .admin-logout:hover {
                                     color: #dc2626;
                                 }
-                                
+
                                 .dashboard-content {
                                     display: grid;
                                     gap: 2rem;
                                 }
-                                
+
                                 .dashboard-section {
                                     position: relative;
                                     min-width: 0;
@@ -869,7 +903,7 @@ fun Route.adminAuthRoute() {
                                     transition: all 0.3s ease;
                                     min-height: 160px;
                                 }
-                                
+
                                 /* Ensure all card UI components and tab contents have consistent sizing behavior */
                                 .dashboard-card, .tab-content, .tab-panel {
                                     position: relative;
@@ -877,19 +911,19 @@ fun Route.adminAuthRoute() {
                                     width: 100%;
                                     box-sizing: border-box;
                                 }
-                                
+
                                 .dashboard-section:hover {
                                     border-color: var(--card-hover-border);
                                     box-shadow: 0 4px 12px var(--card-shadow);
                                 }
-                                
+
                                 .dashboard-section-title {
                                     margin: 0 0 1rem 0;
                                     font-size: 1.4rem;
                                     font-weight: 600;
                                     color: var(--card-title);
                                 }
-                                
+
                                 .dashboard-card {
                                     background: var(--endpoint-bg);
                                     border: 1px solid var(--endpoint-border);
@@ -898,18 +932,18 @@ fun Route.adminAuthRoute() {
                                     margin-bottom: 1rem;
                                     min-height: 120px;
                                 }
-                                
+
                                 .dashboard-card-title {
                                     font-weight: 600;
                                     color: var(--card-title);
                                     margin-bottom: 0.75rem;
                                 }
-                                
+
                                 .dashboard-card-content {
                                     color: var(--text-secondary);
                                     line-height: 1.6;
                                 }
-                                
+
                                 /* Users table breathing space and styling */
                                 .dashboard-card-content table {
                                     width: 100%;
@@ -924,13 +958,15 @@ fun Route.adminAuthRoute() {
                                     white-space: nowrap;
                                 }
                                 .dashboard-card-content table.users-table th:nth-child(1),
-                                .dashboard-card-content table.users-table td:nth-child(1) { width: 40%; }
+                                .dashboard-card-content table.users-table td:nth-child(1) { width: 34%; }
                                 .dashboard-card-content table.users-table th:nth-child(2),
-                                .dashboard-card-content table.users-table td:nth-child(2) { width: 22%; }
+                                .dashboard-card-content table.users-table td:nth-child(2) { width: 18%; }
                                 .dashboard-card-content table.users-table th:nth-child(3),
-                                .dashboard-card-content table.users-table td:nth-child(3) { width: 20%; }
+                                .dashboard-card-content table.users-table td:nth-child(3) { width: 18%; }
                                 .dashboard-card-content table.users-table th:nth-child(4),
-                                .dashboard-card-content table.users-table td:nth-child(4) { width: 18%; }
+                                .dashboard-card-content table.users-table td:nth-child(4) { width: 15%; }
+                                .dashboard-card-content table.users-table th:nth-child(5),
+                                .dashboard-card-content table.users-table td:nth-child(5) { width: 15%; }
                                 .dashboard-card-content thead th {
                                     text-align: left;
                                     padding: 12px 14px;
@@ -962,7 +998,7 @@ fun Route.adminAuthRoute() {
                                     border-top-right-radius: 8px;
                                     border-bottom-right-radius: 8px;
                                 }
-                                
+
                                 /* Role dropdown styling */
                                 .role-select {
                                     appearance: none;
@@ -987,7 +1023,20 @@ fun Route.adminAuthRoute() {
                                     border-color: var(--card-hover-border);
                                     box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
                                 }
-                                
+
+                                /* Actions cell overflow + menu + ripple */
+                                .dashboard-card-content table.users-table td.actions-cell, .dashboard-card-content table.users-table th.actions-col { overflow: visible; }
+                                .actions-wrapper { overflow: visible; }
+                                .icon-button { position: relative; overflow: hidden; }
+                                .icon-button .ripple { position: absolute; border-radius: 50%; transform: scale(0); animation: ripple 600ms linear; background-color: var(--icon-color); opacity: 0.25; pointer-events: none; }
+                                @keyframes ripple { to { transform: scale(4); opacity: 0; } }
+
+                                /* Defensively hide any accidental icon button inside Role column */
+                                .dashboard-card-content table.users-table td:nth-child(3) .icon-button { display: none !important; }
+
+                                /* Ensure menus are not clipped by table rows */
+                                .dashboard-card-content tbody, .dashboard-card-content tbody tr { overflow: visible; }
+
                                 /* Status toggle switch */
                                 .status-toggle { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
                                 .status-toggle input { opacity: 0; width: 0; height: 0; }
@@ -995,14 +1044,14 @@ fun Route.adminAuthRoute() {
                                 .status-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; top: 3px; background-color: white; transition: .2s; border-radius: 50%; }
                                 .status-toggle input:checked + .status-slider { background-color: #10b981; }
                                 .status-toggle input:checked + .status-slider:before { transform: translateX(20px); }
-                                
+
                                 /* Pagination buttons */
                                 #pagination { gap: 0.5rem; }
                                 .pagination-button { padding: 6px 10px; border: 1px solid var(--endpoint-border); background: var(--endpoint-bg); color: var(--text-color); border-radius: 6px; cursor: pointer; transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
                                 .pagination-button.active { background: var(--card-hover-bg); border-color: var(--card-hover-border); }
                                 .pagination-button.disabled { opacity: 0.5; cursor: default; }
                                 .pagination-button:hover:not(.disabled):not(.active) { border-color: var(--card-hover-border); }
-                                
+
                                 /* Tabs */
                                 .tabs {
                                     display: flex;
@@ -1050,14 +1099,14 @@ fun Route.adminAuthRoute() {
                                 .tab-content { position: relative; }
                                 .tab-panel { display: none; opacity: 0; transform: translateY(6px); transition: opacity 0.2s ease, transform 0.2s ease; min-height: 180px; }
                                 .tab-panel.active { display: block; opacity: 1; transform: translateY(0); }
-                                
+
                                 /* Messages */
                                 .message { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 0.75rem; }
                                 .success-message { background: rgba(16, 185, 129, 0.1); color: #10b981; }
                                 .error-message { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
                                 .info-message { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
                                 .hidden { display: none; }
-                                
+
                                 /* Toast notifications */
                                 .toast-container { position: fixed; top: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 9999; }
                                 .toast { min-width: 260px; max-width: 420px; padding: 0.75rem 1rem; border-radius: 8px; background: var(--endpoint-bg, var(--card-bg)); color: var(--text-color); border: 1px solid var(--endpoint-border, var(--card-border)); box-shadow: 0 8px 24px var(--card-shadow); display: flex; align-items: center; gap: 0.6rem; transform: translateX(120%); opacity: 0; transition: transform 0.25s ease, opacity 0.25s ease; }
@@ -1071,20 +1120,20 @@ fun Route.adminAuthRoute() {
                                 .toast-error .toast-icon { color: #ef4444; }
                                 .toast-info .toast-icon { color: #3b82f6; }
                                 .toast-message { flex: 1; }
-                                
+
                                 /* Loader skeleton */
                                 .skeleton { background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.2), rgba(255,255,255,0)); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
                                 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-                                
+
                                 /* Badges */
                                 .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; margin-left: 0.5rem; }
                                 .badge-admin { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
                                 .badge-premium { background: rgba(99, 102, 241, 0.15); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.3); }
-                                
+
                                 /* Table transitions */
                                 .fade-in { animation: fadeIn 0.25s ease; }
                                 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-                                
+
                                 /* Custom scrollbar for tables */
                                 ::-webkit-scrollbar {
                                     width: 8px;
@@ -1148,44 +1197,7 @@ fun Route.adminAuthRoute() {
                         style =
                             "max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;" // <-- Ensure fixed width
 
-                        div {
-                            classes = setOf("header")
-                            style =
-                                "margin-top: 0 !important; margin-bottom: 0;" // Reduce top margin for dashboard header
-                            div {
-                                classes = setOf("brand-text")
-                                h1 {
-                                    classes = setOf("logo")
-                                    +"Androidplay"
-                                }
-                                span {
-                                    classes = setOf("subtitle")
-                                    +"Admin Portal"
-                                }
-                            }
-                            div {
-                                style = "flex-grow: 1;"
-                            }
-                            div {
-                                style = "display: flex; align-items: center; gap: 1rem;"
-
-                                // Theme toggle
-                                label {
-                                    classes = setOf("toggle")
-                                    style =
-                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
-
-                                    input {
-                                        type = InputType.checkBox
-                                        id = "theme-toggle"
-                                    }
-
-                                    div {
-                                        // This div becomes the toggle button
-                                    }
-                                }
-                            }
-                        }
+                        createHeader(this)
 
                         // Admin dashboard content
                         div {
@@ -1270,6 +1282,13 @@ fun Route.adminAuthRoute() {
                                                 raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>analytics</span> Reports")
                                             }
                                         }
+                                        span {
+                                            classes = setOf("tab")
+                                            attributes["data-tab"] = "tools"
+                                            unsafe {
+                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>build_circle</span> Tools")
+                                            }
+                                        }
                                     }
 
                                     // Tabs content panels
@@ -1294,15 +1313,17 @@ fun Route.adminAuthRoute() {
                                                             <div id="success-message" class="message success-message hidden"></div>
                                                             <div id="error-message" class="message error-message hidden"></div>
                                                             <div id="info-message" class="message info-message hidden"></div>
-                                                            
+
                                                             <div id="iam-loader" class="skeleton" style="height:8px;width:100%;display:none;"></div>
-                                                            
+
                                                             <table class="users-table">
                                                                 <colgroup>
-                                                                    <col style="width:40%">
-                                                                    <col style="width:22%">
-                                                                    <col style="width:20%">
+                                                                    <col style="width:32%">
                                                                     <col style="width:18%">
+                                                                    <col style="width:18%">
+                                                                    <col style="width:14%">
+                                                                    <col style="width:10%">
+                                                                    <col style="width:8%">
                                                                 </colgroup>
                                                                 <thead>
                                                                     <tr>
@@ -1310,11 +1331,13 @@ fun Route.adminAuthRoute() {
                                                                         <th>Created At</th>
                                                                         <th>Role</th>
                                                                         <th>Status</th>
+                                                                        <th>Premium</th>
+                                                                        <th class="actions-col" aria-label="Actions"></th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody id="users-table-body"></tbody>
                                                             </table>
-                                                            
+
                                                             <div id="pagination" style="display:flex;gap:0.5rem;margin-top:1rem;"></div>
                                                             """
                                                         )
@@ -1342,291 +1365,200 @@ fun Route.adminAuthRoute() {
                                             style =
                                                 "width: 100%; box-sizing: border-box;" // <-- Always full width
                                             div {
-                                                classes = setOf("dashboard-card-content")
-                                                +"Reports and analytics will be shown here."
+                                                classes = setOf("dashboard-card")
+                                                div {
+                                                    classes = setOf("dashboard-card-title")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                        <span style="display:inline-flex; align-items:center; gap:6px; position:relative;">
+                                                            <span class="material-icons" style="font-size:18px;vertical-align:middle;">analytics</span>
+                                                            <span>Usage Reports</span>
+                                                        </span>
+                                                        """
+                                                        )
+                                                    }
+                                                }
+                                                div {
+                                                    classes = setOf("dashboard-card-content")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                        <div id="reports-controls" style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:.75rem">
+                                                            <div style="display:flex;gap:.5rem;align-items:center">
+                                                                <label for="reports-range" style="color:var(--text-secondary);font-size:.9rem">Range</label>
+                                                                <select id="reports-range" class="role-select">
+                                                                    <option value="7">Last 7 days</option>
+                                                                    <option value="30" selected>Last 30 days</option>
+                                                                    <option value="90">Last 90 days</option>
+                                                                </select>
+                                                            </div>
+                                                            <div style="color:var(--text-secondary);font-size:.85rem">
+                                                                Data derived from the latest users list
+                                                            </div>
+                                                        </div>
+                                                        <div id="reports-kpis" style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:.75rem;margin:.5rem 0 1rem 0">
+                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                <div style="font-size:.8rem;color:var(--text-secondary)">New users</div>
+                                                                <div id="kpi-new-users" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                            </div>
+                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Active rate</div>
+                                                                <div id="kpi-active-rate" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                            </div>
+                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Admins</div>
+                                                                <div id="kpi-admins" style="font-size:1.2rem;font-weight:700;color:var(--card-title)">—</div>
+                                                            </div>
+                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Premium users</div>
+                                                                <div id="kpi-premium" style="font-size:1.2rem;font-weight:700;color:var(--card-title)">—</div>
+                                                            </div>
+                                                        </div>
+                                                        <div style="position:relative;min-height:260px">
+                                                            <canvas id="reports-chart" height="260" aria-label="User registrations chart" role="img"></canvas>
+                                                            <div id="reports-empty" class="message info-message hidden" style="position:absolute;left:0;right:0;top:0;">Not enough data to render chart</div>
+                                                        </div>
+                                                        """
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Tools Panel
+                                        div {
+                                            classes = setOf("tab-panel")
+                                            id = "tools"
+                                            style =
+                                                "width: 100%; box-sizing: border-box;"
+                                            div {
+                                                classes = setOf("dashboard-card")
+                                                div {
+                                                    classes =
+                                                        setOf("dashboard-card-title"); +"Tools"
+                                                }
+                                                div {
+                                                    classes = setOf("dashboard-card-content")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                            <div class="tool-list" role="list">
+                                                                <div class="tool-item" role="listitem">
+                                                                    <span class="material-icons tool-icon" aria-hidden="true">cached</span>
+                                                                    <div class="tool-content">
+                                                                        <div class="tool-title">Clear Weather Cache</div>
+                                                                        <div class="tool-desc">Purge cached weather and air quality responses from memory to fetch fresh data on next requests.</div>
+                                                                        <div class="tool-actions">
+                                                                            <button id="clear-cache-btn" class="btn btn-secondary" aria-label="Clear weather cache">Clear Cache</button>
+                                                                            <span id="clear-cache-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="tool-item" role="listitem">
+                                                                    <span class="material-icons tool-icon" aria-hidden="true">monitor_heart</span>
+                                                                    <div class="tool-content">
+                                                                        <div class="tool-title">Run Health Check</div>
+                                                                        <div class="tool-desc">Validate upstream APIs and response latency across endpoints. Results will be shown in a popup.</div>
+                                                                        <div class="tool-actions">
+                                                                            <button id="run-health-btn" class="btn btn-secondary" aria-label="Run health check">Run</button>
+                                                                            <span id="run-health-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="tool-item" role="listitem">
+                                                                    <span class="material-icons tool-icon" aria-hidden="true">bolt</span>
+                                                                    <div class="tool-content">
+                                                                        <div class="tool-title">Warmup Endpoints</div>
+                                                                        <div class="tool-desc">Preload critical endpoints to prime caches and reduce cold-start latency. Results will be shown in a popup.</div>
+                                                                        <div class="tool-actions">
+                                                                            <button id="warmup-btn" class="btn btn-secondary" aria-label="Warm up endpoints">Warm up</button>
+                                                                            <span id="warmup-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="tool-item" role="listitem">
+                                                                    <span class="material-icons tool-icon" aria-hidden="true">vpn_key</span>
+                                                                    <div class="tool-content">
+                                                                        <div class="tool-title">JWT Token Inspector</div>
+                                                                        <div class="tool-desc">Paste a JWT to decode its header and payload, view claims and expiration, and check time validity.</div>
+                                                                        <div class="tool-actions">
+                                                                            <button id="jwt-inspector-btn" class="btn btn-secondary" aria-label="Open JWT Token Inspector">Open</button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            """
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Announcements Panel
+                                        div {
+                                            classes = setOf("tab-panel")
+                                            id = "announcements"
+                                            style =
+                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                            div {
+                                                classes = setOf("dashboard-card")
+                                                div {
+                                                    classes = setOf("dashboard-card-title")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                            <span style="display:inline-flex; align-items:center; gap:6px; position:relative;">
+                                                                <span>Service Announcements</span>
+                                                                <span id=\"ann-help-trigger\" class=\"material-icons\" tabindex=\"0\" aria-label=\"How to use and why to use Service Announcements\" aria-controls=\"ann-help-popover\" aria-expanded=\"false\" style=\"font-size:18px; color: var(--text-secondary); cursor: help;\">info</span>
+                                                            </span>
+                                                            <div id=\"ann-help-popover\" role=\"dialog\" aria-hidden=\"true\" aria-labelledby=\"ann-help-title\" style=\"position: fixed; display:none; z-index: 9999; max-width: 380px; padding: 12px 14px; border-radius: 10px; background: var(--endpoint-bg, var(--card-bg)); color: var(--text-color); border: 1px solid var(--endpoint-border, var(--card-border)); box-shadow: 0 8px 24px var(--card-shadow);\">\n                                                              <div id=\"ann-help-title\" style=\"font-weight:700; margin-bottom:6px; color: var(--card-title); display:flex; align-items:center; gap:6px;\">\n                                                                <span class=\"material-icons\" style=\"font-size:18px; color:#6366f1;\">campaign</span>\n                                                                <span>Service announcements guide</span>\n                                                              </div>\n                                                              <div style=\"font-size: 0.92rem; line-height: 1.5;\">\n                                                                <div style=\"margin-bottom:8px;\">\n                                                                  <strong>How to use</strong>\n                                                                  <ul style=\"margin:6px 0 0 18px;\">\n                                                                    <li>Write a clear message for all users.</li>\n                                                                    <li>Select severity: Info, Warning, or Critical.</li>\n                                                                    <li>Optionally set Duration (minutes) or an Until date-time.</li>\n                                                                    <li>If both time fields are empty, the announcement remains until you clear it.</li>\n                                                                  </ul>\n                                                                </div>\n                                                                <div>\n                                                                  <strong>When to use (examples)</strong>\n                                                                  <ul style=\"margin:6px 0 0 18px;\">\n                                                                    <li>Planned maintenance: warning with an until time.</li>\n                                                                    <li>Service outage: critical with short duration.</li>\n                                                                    <li>New feature rollout: info without time.</li>\n                                                                  </ul>\n                                                                </div>\n                                                              </div>\n                                                            </div>\n                                                            <script>\n                                                            (function(){\n                                                              if (window.__annHelpBound) return;\n                                                              window.__annHelpBound = true;\n                                                              function initAnnPopover(){\n                                                                try {\n                                                                  var trigger = document.getElementById('ann-help-trigger');\n                                                                  var pop = document.getElementById('ann-help-popover');\n                                                                  if (!trigger || !pop) return;\n                                                                  var hoverTimeout;\n                                                                  function show(){\n                                                                    if (!pop) return;\n                                                                    if (hoverTimeout) { clearTimeout(hoverTimeout); }\n                                                                    // Position near the icon (viewport coords)\n                                                                    var rect = trigger.getBoundingClientRect();\n                                                                    pop.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - 400)) + 'px';\n                                                                    pop.style.top = (rect.bottom + 8) + 'px';\n                                                                    pop.style.display = 'block';\n                                                                    pop.setAttribute('aria-hidden','false');\n                                                                    trigger.setAttribute('aria-expanded','true');\n                                                                  }\n                                                                  function hide(){\n                                                                    hoverTimeout = setTimeout(function(){\n                                                                      if (!pop) return;\n                                                                      pop.style.display = 'none';\n                                                                      pop.setAttribute('aria-hidden','true');\n                                                                      trigger.setAttribute('aria-expanded','false');\n                                                                    }, 120);\n                                                                  }\n                                                                  trigger.addEventListener('mouseenter', show);\n                                                                  trigger.addEventListener('mouseleave', hide);\n                                                                  pop.addEventListener('mouseenter', function(){ if (hoverTimeout) clearTimeout(hoverTimeout); });\n                                                                  pop.addEventListener('mouseleave', hide);\n                                                                  trigger.addEventListener('click', function(e){ e.stopPropagation(); if (pop.style.display === 'block') { pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); } else { show(); } });\n                                                                  document.addEventListener('click', function(e){ if (!pop || pop.style.display !== 'block') return; if (!pop.contains(e.target) && e.target !== trigger) { pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); }});\n                                                                  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') { if (!pop) return; pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); }});\n                                                                  window.addEventListener('resize', function(){ if (pop && pop.style.display === 'block') { var r = trigger.getBoundingClientRect(); pop.style.left = Math.max(12, Math.min(r.left, window.innerWidth - 400)) + 'px'; pop.style.top = (r.bottom + 8) + 'px'; }});\n                                                                  window.addEventListener('scroll', function(){ if (pop && pop.style.display === 'block') { var r2 = trigger.getBoundingClientRect(); pop.style.left = Math.max(12, Math.min(r2.left, window.innerWidth - 400)) + 'px'; pop.style.top = (r2.bottom + 8) + 'px'; }}, true);\n                                                                } catch (err) { console.error('Failed to init announcement help popover', err); }\n                                                              }\n                                                              if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', initAnnPopover); } else { initAnnPopover(); }\n                                                            })();\n                                                            </script>\n                                                            """
+                                                        )
+                                                    }
+                                                }
+                                                div {
+                                                    classes = setOf("dashboard-card-content")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                            <div id="ann-preview" class="announcement-preview" aria-live="polite"></div>
+                                                            <form id="ann-form" class="form form-compact" onsubmit="return false;">
+                                                                <div class="form-group">
+                                                                    <label for="ann-message" class="form-label">Message</label>
+                                                                    <textarea id="ann-message" class="form-control" rows="3" placeholder="Enter announcement message"></textarea>
+                                                                </div>
+                                                                <div id="ann-severity-group" class="radio-group" role="radiogroup" aria-label="Announcement severity">
+                                                                    <label class="badge pill-radio"><input type="radio" name="ann-sev" value="info" checked> Info</label>
+                                                                    <label class="badge pill-radio"><input type="radio" name="ann-sev" value="warning"> Warning</label>
+                                                                    <label class="badge pill-radio"><input type="radio" name="ann-sev" value="critical"> Critical</label>
+                                                                </div>
+                                                                <div class="form-row">
+                                                                    <input id="ann-duration" class="form-control" type="number" min="0" placeholder="Duration (minutes)">
+                                                                    <input id="ann-until" class="form-control" type="datetime-local" placeholder="Until (date and time)">
+                                                                </div>
+                                                                <div class="form-actions">
+                                                                    <button type="button" id="ann-set-btn" class="btn btn-primary">Save <span id=\"ann-set-spinner\" class=\"loading-spinner\" style=\"display:none;margin-left:6px;width:14px;height:14px;border-width:2px;\"></span></button>
+                                                                    <button type="button" id="ann-clear-btn" class="btn btn-secondary">Clear <span id=\"ann-clear-spinner\" class=\"loading-spinner\" style=\"display:none;margin-left:6px;width:14px;height:14px;border-width:2px;\"></span></button>
+                                                                </div>
+                                                            </form>
+                                                            """
+                                                        )
+                                                    }
+                                                }
+
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
 
+                        }
                         // Footer
                         createFooter(this)
                     }
                 }
             }
         }
-        // Admin Users API
-        get("/users") {
-            // Authenticate admin via Authorization header or cookie
-            val authHeader = call.request.headers["Authorization"]
-            var jwtToken: String?
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                jwtToken = authHeader.substring(7)
-            } else {
-                jwtToken = call.request.cookies["jwt_token"]
-            }
-
-            val principal = try {
-                if (jwtToken.isNullOrBlank()) {
-                    call.respondError("Authentication required", null, HttpStatusCode.Unauthorized)
-                    return@get
-                }
-                val decoded = JwtConfig.verifier.verify(jwtToken)
-                JWTPrincipal(decoded)
-            } catch (_: Exception) {
-                call.respondError("Invalid or expired session", null, HttpStatusCode.Unauthorized)
-                return@get
-            }
-
-            if (!JwtConfig.isAdmin(principal.payload)) {
-                call.respondError("Access denied: Admins only", null, HttpStatusCode.Forbidden)
-                return@get
-            }
-
-            // Pagination params
-            val pageParam = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
-            val pageSizeParam = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 10
-            val page = if (pageParam < 1) 1 else pageParam
-            val pageSize = when {
-                pageSizeParam < 1 -> 10
-                pageSizeParam > 100 -> 100
-                else -> pageSizeParam
-            }
-
-            when (val result = userRepository.getAllUsers(
-                filter = null,
-                sortBy = "createdAt",
-                sortOrder = -1,
-                page = page,
-                pageSize = pageSize
-            )) {
-                is Result.Success -> {
-                    val (users, totalCount) = result.data
-                    val totalPages =
-                        if (totalCount == 0L) 1L else ((totalCount + pageSize.toLong() - 1) / pageSize.toLong())
-                    val response = UserListResponseDto(
-                        users = users,
-                        pagination = UserListPaginationDto(
-                            page = page,
-                            pageSize = pageSize,
-                            totalPages = totalPages,
-                            totalCount = totalCount
-                        )
-                    )
-                    call.respondSuccess("Users fetched", response)
-                }
-
-                is Result.Error -> {
-                    call.respondError(result.message, null, HttpStatusCode.InternalServerError)
-                }
-            }
-        }
-
-        post("/users/{email}/role") {
-            // Authenticate admin
-            val authHeader = call.request.headers["Authorization"]
-            val jwtToken = if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                authHeader.substring(7)
-            } else {
-                call.request.cookies["jwt_token"]
-            }
-            val principal = try {
-                if (jwtToken.isNullOrBlank()) {
-                    call.respondError("Authentication required", null, HttpStatusCode.Unauthorized)
-                    return@post
-                }
-                val decoded = JwtConfig.verifier.verify(jwtToken)
-                JWTPrincipal(decoded)
-            } catch (_: Exception) {
-                call.respondError("Invalid or expired session", null, HttpStatusCode.Unauthorized)
-                return@post
-            }
-            if (!JwtConfig.isAdmin(principal.payload)) {
-                call.respondError("Access denied: Admins only", null, HttpStatusCode.Forbidden)
-                return@post
-            }
-
-            val email = call.parameters["email"]
-            if (email.isNullOrBlank()) {
-                call.respondError("Email is required", null, HttpStatusCode.BadRequest)
-                return@post
-            }
-
-            val body = try {
-                call.receive<UpdateRoleRequest>()
-            } catch (_: Exception) {
-                call.respondError("Invalid request body", null, HttpStatusCode.BadRequest)
-                return@post
-            }
-
-            val newRole = try {
-                UserRole.valueOf(body.role.trim().uppercase())
-            } catch (_: Exception) {
-                call.respondError("Invalid role value", null, HttpStatusCode.BadRequest)
-                return@post
-            }
-
-            when (val userResult = userRepository.findUserByEmail(email)) {
-                is Result.Success -> {
-                    val existing = userResult.data
-                    if (existing == null) {
-                        call.respondError("User not found", null, HttpStatusCode.NotFound)
-                        return@post
-                    }
-                    val updated = existing.copy(role = newRole)
-                    when (val updateResult = userRepository.updateUser(updated)) {
-                        is Result.Success -> call.respondSuccess(
-                            "User role updated",
-                            mapOf("email" to email, "role" to newRole.name)
-                        )
-
-                        is Result.Error -> call.respondError(
-                            updateResult.message,
-                            null,
-                            HttpStatusCode.InternalServerError
-                        )
-                    }
-                }
-
-                is Result.Error -> call.respondError(
-                    userResult.message,
-                    null,
-                    HttpStatusCode.InternalServerError
-                )
-            }
-        }
-
-        post("/users/{email}/status") {
-            // Authenticate admin
-            val authHeader = call.request.headers["Authorization"]
-            var jwtToken: String?
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                jwtToken = authHeader.substring(7)
-            } else {
-                jwtToken = call.request.cookies["jwt_token"]
-            }
-            val principal = try {
-                if (jwtToken.isNullOrBlank()) {
-                    call.respondError("Authentication required", null, HttpStatusCode.Unauthorized)
-                    return@post
-                }
-                val decoded = JwtConfig.verifier.verify(jwtToken)
-                JWTPrincipal(decoded)
-            } catch (_: Exception) {
-                call.respondError("Invalid or expired session", null, HttpStatusCode.Unauthorized)
-                return@post
-            }
-            if (!JwtConfig.isAdmin(principal.payload)) {
-                call.respondError("Access denied: Admins only", null, HttpStatusCode.Forbidden)
-                return@post
-            }
-
-            val email = call.parameters["email"]
-            if (email.isNullOrBlank()) {
-                call.respondError("Email is required", null, HttpStatusCode.BadRequest)
-                return@post
-            }
-
-            val body = try {
-                call.receive<UpdateStatusRequest>()
-            } catch (_: Exception) {
-                call.respondError("Invalid request body", null, HttpStatusCode.BadRequest)
-                return@post
-            }
-
-            when (val userResult = userRepository.findUserByEmail(email)) {
-                is Result.Success -> {
-                    val existing = userResult.data
-                    if (existing == null) {
-                        call.respondError("User not found", null, HttpStatusCode.NotFound)
-                        return@post
-                    }
-                    val updated = existing.copy(isActive = body.isActive)
-                    when (val updateResult = userRepository.updateUser(updated)) {
-                        is Result.Success -> call.respondSuccess(
-                            "User status updated",
-                            UpdateStatusResultDto(email = email, isActive = body.isActive)
-                        )
-
-                        is Result.Error -> call.respondError(
-                            updateResult.message,
-                            null,
-                            HttpStatusCode.InternalServerError
-                        )
-                    }
-                }
-
-                is Result.Error -> call.respondError(
-                    userResult.message,
-                    null,
-                    HttpStatusCode.InternalServerError
-                )
-            }
-        }
     }
-}
 
-/**
- * Request body for admin login
- */
-@Serializable
-data class AdminLoginRequest(
-    val email: String,
-    val password: String
-)
-
-@Serializable
-data class UserListPaginationDto(
-    val page: Int,
-    val pageSize: Int,
-    val totalPages: Long,
-    val totalCount: Long
-)
-
-@Serializable
-data class UserListResponseDto(
-    val users: List<User>,
-    val pagination: UserListPaginationDto
-)
-
-@Serializable
-data class UpdateRoleRequest(
-    val role: String
-)
-
-@Serializable
-data class UpdateStatusRequest(
-    val isActive: Boolean
-)
-
-@Serializable
-data class UpdateStatusResultDto(
-    val email: String,
-    val isActive: Boolean
-)
-
-/**
- * Deployment Note:
- * Ensure that the file 'auth.js' is present in your static resources directory (e.g., /static/web/js/auth.js).
- * If you use Ktor's static file serving, place 'auth.js' in the correct location so that '/web/js/auth.js' is accessible.
- * Example: /resources/static/web/js/auth.js or /public/web/js/auth.js depending on your setup.
- *
- * Optional: Add a startup check to log a warning if the file is missing.
- */
-object AdminStaticResourceChecker {
-    init {
-        try {
-            val resource =
-                AdminStaticResourceChecker::class.java.classLoader.getResource("web/js/auth.js")
-            if (resource == null) {
-                LoggerFactory.getLogger("Startup")
-                    .warn("Missing static resource: /web/js/auth.js. Admin login/dashboard will fail to load JS.")
-            }
-        } catch (e: Exception) {
-            LoggerFactory.getLogger("Startup")
-                .warn("Failed to check static resource /web/js/auth.js: ${e.message}")
-        }
-    }
 }

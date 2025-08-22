@@ -31,27 +31,28 @@ class AuthServiceImpl(private val userRepository: UserRepository) : AuthService 
      * @return Result containing the JWT token if login is successful, or an error if login failed.
      */
     override suspend fun loginUser(email: String, password: String): Result<String> {
-        // Find user by email
-        val userResult = userRepository.findUserByEmail(email)
-        val user = userResult.getOrNull()
+        // Find user by email and handle repository result explicitly
+        return when (val userResult = userRepository.findUserByEmail(email)) {
+            is Result.Success -> {
+                val user = userResult.data
+                if (user == null) {
+                    Result.error(Constants.Messages.USER_NOT_REGISTERED)
+                } else if (!PasswordUtil.verifyPassword(password, user.passwordHash)) {
+                    Result.error(Constants.Messages.INVALID_CREDENTIALS)
+                } else if (!user.isActive) {
+                    Result.error(Constants.Messages.ACCOUNT_INACTIVE)
+                } else {
+                    val token = JwtConfig.generateToken(user.email, user.role)
+                    Result.success(token)
+                }
+            }
 
-        if (user == null) {
-            return Result.error(Constants.Messages.USER_NOT_REGISTERED)
+            is Result.Error -> {
+                // Propagate underlying error instead of masking it as not registered
+                val msg = userResult.message.ifBlank { Constants.Messages.AUTHENTICATION_ERROR }
+                Result.error(msg, userResult.exception)
+            }
         }
-
-        // Verify password
-        if (!PasswordUtil.verifyPassword(password, user.passwordHash)) {
-            return Result.error(Constants.Messages.INVALID_CREDENTIALS)
-        }
-
-        // Check if user is active
-        if (!user.isActive) {
-            return Result.error(Constants.Messages.ACCOUNT_INACTIVE)
-        }
-
-        // Generate JWT token
-        val token = JwtConfig.generateToken(user.email, user.role)
-        return Result.success(token)
     }
 
     /**

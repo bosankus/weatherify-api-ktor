@@ -141,7 +141,7 @@ fun Route.authRoute() {
                         logger.info("User registered successfully: ${request.email}")
                         call.respondSuccess(
                             Constants.Messages.REGISTRATION_SUCCESS,
-                            Unit,
+                            mapOf("_id" to user.id),
                             HttpStatusCode.Created
                         )
                     } else {
@@ -356,7 +356,8 @@ fun Route.authRoute() {
                             token = token,
                             email = user.email,
                             role = user.role,
-                            isActive = user.isActive
+                            isActive = user.isActive,
+                            isPremium = user.isPremium
                         ),
                         HttpStatusCode.OK
                     )
@@ -561,7 +562,8 @@ fun Route.authRoute() {
                             token = newToken,
                             email = email,
                             role = user.role,
-                            isActive = user.isActive
+                            isActive = user.isActive,
+                            isPremium = user.isPremium
                         ),
                         HttpStatusCode.OK
                     )

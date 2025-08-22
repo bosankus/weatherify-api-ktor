@@ -7,14 +7,11 @@ import bose.ankush.util.getSecretValue
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
-import com.mongodb.client.model.ReplaceOptions
 import com.mongodb.client.model.Updates
 import com.mongodb.kotlin.client.coroutine.MongoClient
 import com.mongodb.kotlin.client.coroutine.MongoCollection
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import config.Environment
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.bson.Document
 import org.bson.conversions.Bson
@@ -139,21 +136,29 @@ class DatabaseModule(
      * @param value The field value
      * @return A Bson filter
      */
-    fun createFilter(field: String, value: Any): Bson = Filters.eq(field, value)
+    fun createFilter(field: String, value: Any): Bson {
+        return if (field == Constants.Database.ID_FIELD) {
+            when (value) {
+                is String -> {
+                    // Support both ObjectId-based and legacy string-based _id
+                    if (org.bson.types.ObjectId.isValid(value)) {
+                        Filters.or(
+                            Filters.eq(field, org.bson.types.ObjectId(value)),
+                            Filters.eq(field, value)
+                        )
+                    } else {
+                        Filters.eq(field, value)
+                    }
+                }
 
-    /**
-     * Create a filter with multiple conditions
-     * @param filters The filters to combine
-     * @return A Bson filter that combines all the filters with AND
-     */
-    fun createAndFilter(vararg filters: Bson): Bson = Filters.and(*filters)
+                is org.bson.types.ObjectId -> Filters.eq(field, value)
+                else -> Filters.eq(field, value)
+            }
+        } else {
+            Filters.eq(field, value)
+        }
+    }
 
-    /**
-     * Create a filter with multiple conditions
-     * @param filters The filters to combine
-     * @return A Bson filter that combines all the filters with OR
-     */
-    fun createOrFilter(vararg filters: Bson): Bson = Filters.or(*filters)
 
     /**
      * Create an update operation to set a field to a value
@@ -173,97 +178,11 @@ class DatabaseModule(
         return Updates.combine(updatesList)
     }
 
-    /**
-     * Find a document by ID
-     * @param collection The collection to search
-     * @param id The ID of the document
-     * @return The document, or null if not found
-     */
-    suspend fun <T : Any> findById(collection: MongoCollection<T>, id: String): T? {
-        logger.debug("Finding document by ID: $id in collection: ${collection.namespace.collectionName}")
-        val filter = createFilter(Constants.Database.ID_FIELD, id)
-        return collection.find(filter).firstOrNull()
-    }
 
-    /**
-     * Find a document by a field value
-     * @param collection The collection to search
-     * @param field The field name
-     * @param value The field value
-     * @return The document, or null if not found
-     */
-    suspend fun <T : Any> findByField(
-        collection: MongoCollection<T>,
-        field: String,
-        value: Any
-    ): T? {
-        logger.debug("Finding document by field: $field = $value in collection: ${collection.namespace.collectionName}")
-        val filter = createFilter(field, value)
-        return collection.find(filter).firstOrNull()
-    }
 
-    /**
-     * Find all documents in a collection
-     * @param collection The collection to search
-     * @return A list of all documents in the collection
-     */
-    suspend fun <T : Any> findAll(collection: MongoCollection<T>): List<T> {
-        logger.debug("Finding all documents in collection: ${collection.namespace.collectionName}")
-        return collection.find().toList()
-    }
 
-    /**
-     * Update a document by ID
-     * @param collection The collection to update
-     * @param id The ID of the document
-     * @param updates A map of field names to values
-     * @return True if the update was acknowledged, false otherwise
-     */
-    suspend fun <T : Any> updateById(
-        collection: MongoCollection<T>,
-        id: String,
-        updates: Map<String, Any>
-    ): Boolean {
-        logger.debug("Updating document by ID: $id in collection: ${collection.namespace.collectionName}")
-        val filter = createFilter(Constants.Database.ID_FIELD, id)
-        val update = createSetUpdates(updates)
-        val result = collection.updateOne(filter, update)
-        return result.wasAcknowledged()
-    }
 
-    /**
-     * Replace a document by ID
-     * @param collection The collection to update
-     * @param id The ID of the document
-     * @param replacement The replacement document
-     * @param upsert Whether to insert the document if it doesn't exist
-     * @return True if the replacement was acknowledged, false otherwise
-     */
-    suspend fun <T : Any> replaceById(
-        collection: MongoCollection<T>,
-        id: String,
-        replacement: T,
-        upsert: Boolean = false
-    ): Boolean {
-        logger.debug("Replacing document by ID: $id in collection: ${collection.namespace.collectionName}")
-        val filter = createFilter(Constants.Database.ID_FIELD, id)
-        val options = ReplaceOptions().upsert(upsert)
-        val result = collection.replaceOne(filter, replacement, options)
-        return result.wasAcknowledged()
-    }
 
-    /**
-     * Delete a document by ID
-     * @param collection The collection to delete from
-     * @param id The ID of the document
-     * @return True if the deletion was acknowledged, false otherwise
-     */
-    suspend fun <T : Any> deleteById(collection: MongoCollection<T>, id: String): Boolean {
-        logger.debug("Deleting document by ID: $id in collection: ${collection.namespace.collectionName}")
-        val filter = createFilter(Constants.Database.ID_FIELD, id)
-        val result = collection.deleteOne(filter)
-        return result.wasAcknowledged()
-    }
 
     /**
      * Close the database connection

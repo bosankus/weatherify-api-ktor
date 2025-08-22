@@ -191,3 +191,74 @@
         padding: 1.25rem;
     }
 }
+
+/* Form UI utilities (shared) */
+.form { display: flex; flex-direction: column; gap: 12px; }
+.form-compact { gap: 10px; }
+.form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.form-actions { display: flex; gap: 8px; align-items: center; }
+.form-label { font-weight: 600; color: var(--text-color); font-size: 0.95rem; }
+.form-control { padding: 0.6rem 0.8rem; border: 1px solid var(--endpoint-border, var(--card-border)); border-radius: 8px; background: var(--endpoint-bg, var(--card-bg)); color: var(--text-color); font-family: 'Space Grotesk', sans-serif; font-size: 0.95rem; min-width: 180px; }
+.form-control:focus { outline: none; border-color: var(--card-hover-border); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+.radio-group { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* Buttons */
+.btn { padding: 0.55rem 0.9rem; border: 1px solid var(--endpoint-border, var(--card-border)); border-radius: 8px; background: var(--endpoint-bg, var(--card-bg)); color: var(--text-color); cursor: pointer; transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
+.btn:hover { border-color: var(--card-hover-border); }
+.btn-primary { background: #6366f1; border-color: #6366f1; color: #fff; }
+.btn-primary:hover { background: #5559ee; border-color: #5559ee; }
+.btn-secondary { background: var(--endpoint-bg, var(--card-bg)); }
+
+/* Announcement preview */
+.announcement-preview { padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--endpoint-border, var(--card-border)); background: var(--endpoint-bg, var(--card-bg)); }
+
+
+/* Tools panel styles */
+.tool-list { display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 768px) { .tool-list { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1200px) { .tool-list { grid-template-columns: 1fr 1fr 1fr; } }
+
+.tool-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+.tool-item:hover { border-color: var(--card-hover-border); background: var(--card-hover-bg); box-shadow: 0 4px 12px var(--card-shadow); }
+
+.tool-icon { font-size: 24px; color: var(--icon-color); line-height: 1; margin-top: 2px; }
+
+.tool-content { flex: 1; min-width: 0; }
+.tool-title { font-weight: 600; color: var(--card-title, var(--heading-color)); margin-bottom: 4px; }
+.tool-desc { color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 8px; }
+.tool-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tool-results { margin-top: 8px; }
+
+
+/* Announcement banner refinements */
+.announcement-banner { border:1px solid var(--card-border); background: var(--card-bg); border-left-width:4px; border-left-style: solid; padding: 10px 12px; border-radius: 8px; }
+.announcement-banner__severity { font-weight: 700; text-transform: uppercase; font-size: 12px; margin-bottom: 4px; }
+.announcement-banner__message { color: var(--text-color); }
+.announcement-banner__meta { margin-top: 4px; color: var(--text-secondary); font-size: 12px; }
+
+.announcement-banner.is-info { border-left-color: #3b82f6; }
+.announcement-banner.is-info .announcement-banner__severity { color:#3b82f6; }
+
+.announcement-banner.is-warning { border-left-color: #f59e0b; }
+.announcement-banner.is-warning .announcement-banner__severity { color:#f59e0b; }
+
+.announcement-banner.is-critical { border-left-color: #ef4444; }
+.announcement-banner.is-critical .announcement-banner__severity { color:#ef4444; }
+
+/* Muted text utility */
+.text-muted { color: var(--text-secondary); }
+
+
+/* Pill radio styling for compact severity selections */
+.pill-radio { cursor: pointer; border:1px solid var(--card-border); padding:6px 10px; border-radius:14px; display:inline-flex; align-items:center; gap:6px; color: var(--text-color); background: var(--card-bg); transition: border-color 0.2s ease, background 0.2s ease; }
+.pill-radio:hover { border-color: var(--card-hover-border); background: var(--card-hover-bg); }
+.pill-radio input { accent-color: #6366f1; }
