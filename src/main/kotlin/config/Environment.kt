@@ -57,4 +57,9 @@ object Environment {
     fun getJwtRealm(): String {
         return System.getenv(Constants.Env.JWT_REALM) ?: Constants.Auth.DEFAULT_JWT_REALM
     }
+
+    /** Notifications: Cloud Function URL if configured */
+    fun getFcmFunctionUrl(): String? {
+        return System.getenv(Constants.Env.FCM_FUNCTION_URL)?.takeIf { it.isNotBlank() }
+    }
 }

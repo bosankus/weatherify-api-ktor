@@ -834,7 +834,7 @@ fun Route.adminAuthRoute() {
     /* Align with shared container/content-area widths */
     position: relative;
     width: 100%;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto 2rem auto;
     padding: 1.5rem 2rem;
     background: var(--content-bg);
@@ -1023,6 +1023,19 @@ fun Route.adminAuthRoute() {
                                     border-color: var(--card-hover-border);
                                     box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
                                 }
+
+                                /* Actions cell overflow + menu + ripple */
+                                .dashboard-card-content table.users-table td.actions-cell, .dashboard-card-content table.users-table th.actions-col { overflow: visible; }
+                                .actions-wrapper { overflow: visible; }
+                                .icon-button { position: relative; overflow: hidden; }
+                                .icon-button .ripple { position: absolute; border-radius: 50%; transform: scale(0); animation: ripple 600ms linear; background-color: var(--icon-color); opacity: 0.25; pointer-events: none; }
+                                @keyframes ripple { to { transform: scale(4); opacity: 0; } }
+
+                                /* Defensively hide any accidental icon button inside Role column */
+                                .dashboard-card-content table.users-table td:nth-child(3) .icon-button { display: none !important; }
+
+                                /* Ensure menus are not clipped by table rows */
+                                .dashboard-card-content tbody, .dashboard-card-content tbody tr { overflow: visible; }
 
                                 /* Status toggle switch */
                                 .status-toggle { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
@@ -1305,11 +1318,12 @@ fun Route.adminAuthRoute() {
 
                                                             <table class="users-table">
                                                                 <colgroup>
-                                                                    <col style="width:34%">
+                                                                    <col style="width:32%">
                                                                     <col style="width:18%">
                                                                     <col style="width:18%">
-                                                                    <col style="width:15%">
-                                                                    <col style="width:15%">
+                                                                    <col style="width:14%">
+                                                                    <col style="width:10%">
+                                                                    <col style="width:8%">
                                                                 </colgroup>
                                                                 <thead>
                                                                     <tr>
@@ -1318,6 +1332,7 @@ fun Route.adminAuthRoute() {
                                                                         <th>Role</th>
                                                                         <th>Status</th>
                                                                         <th>Premium</th>
+                                                                        <th class="actions-col" aria-label="Actions"></th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody id="users-table-body"></tbody>
@@ -1537,9 +1552,9 @@ fun Route.adminAuthRoute() {
                                 }
                             }
 
-                            // Footer
-                            createFooter(this)
                         }
+                        // Footer
+                        createFooter(this)
                     }
                 }
             }

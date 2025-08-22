@@ -87,6 +87,18 @@ window.UserRoute = window.UserRoute || {
             },
             body: JSON.stringify({ isPremium: !!isPremium })
         });
+    },
+    notify(email, payload) {
+        const url = `/admin/users/${encodeURIComponent(email)}/notify`;
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload || { title: 'Promotion', body: 'Enjoy new features in our app!' })
+        });
     }
 };
 
@@ -496,7 +508,7 @@ function renderUsersTable(users) {
     if (users.length === 0) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
-        cell.colSpan = 5;
+        cell.colSpan = 6;
         cell.textContent = 'No users found';
         cell.style.textAlign = 'center';
         row.appendChild(cell);
@@ -601,6 +613,10 @@ function renderUsersTable(users) {
         premiumToggle.appendChild(premiumSlider);
         premiumCell.appendChild(premiumToggle);
         row.appendChild(premiumCell);
+
+        // Actions cell (overflow menu at end of row)
+        const actionsCell = createActionsCell(user);
+        row.appendChild(actionsCell);
 
         fragment.appendChild(row);
     });
@@ -1262,3 +1278,262 @@ function bindJwtInspectorModal(){
         } catch(e) { console.warn('Reports binding failed', e); }
     });
 })();
+
+
+// ===== IAM Actions Menu (Users row overflow menu) =====
+function closeAllOverflowMenus(){
+    try {
+        document.querySelectorAll('.overflow-menu.open').forEach(menu => {
+            menu.classList.remove('open');
+            menu.style.display = 'none';
+        });
+    } catch (_) {}
+}
+
+function ensureGlobalMenuCloseHandler(){
+    if (window.__iamMenuCloseInstalled) return;
+    try {
+        document.addEventListener('click', function(e){
+            const target = e.target;
+            if (!target) return closeAllOverflowMenus();
+            if (!target.closest) return closeAllOverflowMenus();
+            if (!target.closest('.actions-wrapper')) closeAllOverflowMenus();
+        });
+        window.__iamMenuCloseInstalled = true;
+    } catch (_) {}
+}
+
+function createActionsCell(user){
+    const td = document.createElement('td');
+    td.className = 'actions-cell';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'actions-wrapper';
+    wrapper.style.position = 'relative';
+    wrapper.style.display = 'flex';
+    wrapper.style.justifyContent = 'flex-end';
+
+    // Button
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-button';
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.title = 'Actions';
+    Object.assign(btn.style, {
+        border: 'none',
+        background: 'transparent',
+        cursor: 'pointer',
+        padding: '4px',
+        borderRadius: '50%'
+    });
+    const icon = document.createElement('span');
+    icon.className = 'material-icons';
+    icon.textContent = 'more_vert';
+    icon.style.fontSize = '20px';
+    icon.style.color = 'var(--icon-color)';
+    btn.appendChild(icon);
+
+    // Menu
+    const menu = document.createElement('div');
+    menu.className = 'overflow-menu';
+    Object.assign(menu.style, {
+        position: 'absolute',
+        right: '0',
+        top: '28px',
+        background: 'var(--card-bg)',
+        border: '1px solid var(--card-border)',
+        borderRadius: '8px',
+        boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
+        minWidth: '220px',
+        zIndex: '2000',
+        display: 'none',
+        overflow: 'hidden'
+    });
+
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'overflow-menu-item';
+    item.textContent = 'Send Promotional Notification';
+    Object.assign(item.style, {
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        background: 'transparent',
+        border: 'none',
+        padding: '10px 12px',
+        color: 'var(--text-color)',
+        cursor: 'pointer'
+    });
+    item.addEventListener('mouseenter', function(){ this.style.background = 'var(--card-hover-bg)'; });
+    item.addEventListener('mouseleave', function(){ this.style.background = 'transparent'; });
+
+    item.addEventListener('click', function(e){
+        e.stopPropagation();
+        closeAllOverflowMenus();
+        try {
+            const email = user.email;
+            const content = buildSendNotificationContent(email);
+            showModal('Send Promotional Notification', content);
+            bindSendNotificationModal(email);
+        } catch (err) {
+            console.error('Failed to open notification modal', err);
+            try { showErrorMessage('Failed to open notification dialog'); } catch(_){}
+        }
+    });
+
+    menu.appendChild(item);
+
+    btn.addEventListener('click', function(e){
+        e.stopPropagation();
+
+        // Ripple feedback
+        try {
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const ripple = document.createElement('span');
+            ripple.className = 'ripple';
+            ripple.style.width = size + 'px';
+            ripple.style.height = size + 'px';
+            ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+            ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+            btn.appendChild(ripple);
+            setTimeout(() => { try { ripple.remove(); } catch(_){} }, 650);
+        } catch(_) {}
+
+        const isOpen = menu.classList.contains('open');
+        closeAllOverflowMenus();
+        if (!isOpen) {
+            // Show first to measure
+            menu.style.display = 'block';
+            menu.classList.add('open');
+            btn.setAttribute('aria-expanded', 'true');
+
+            // Positioning: if menu would overflow viewport bottom, open upwards
+            try {
+                const menuRect = menu.getBoundingClientRect();
+                const spaceBelow = window.innerHeight - menuRect.top;
+                const wouldOverflow = spaceBelow < (menuRect.height + 16);
+                if (wouldOverflow) {
+                    menu.style.top = 'auto';
+                    menu.style.bottom = '28px';
+                } else {
+                    menu.style.bottom = 'auto';
+                    menu.style.top = '28px';
+                }
+            } catch(_) {}
+        } else {
+            menu.style.display = 'none';
+            menu.classList.remove('open');
+            btn.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    ensureGlobalMenuCloseHandler();
+
+    wrapper.appendChild(btn);
+    wrapper.appendChild(menu);
+    td.appendChild(wrapper);
+    return td;
+}
+
+function sendPromotionalNotification(email){
+    const payload = { title: 'Promotion', body: 'Enjoy new features in our app!' };
+    return window.UserRoute.notify(email, payload)
+        .then(response => {
+            if (!response.ok) {
+                return response.json().catch(() => ({})).then(data => {
+                    const msg = (data && data.message) || 'Failed to send notification';
+                    throw new Error(msg);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && data.status === true) {
+                showSuccessMessage('Notification sent successfully');
+            } else {
+                throw new Error((data && data.message) || 'Failed to send notification');
+            }
+        })
+        .catch(err => {
+            showErrorMessage(err.message || 'Failed to send notification');
+        });
+}
+
+
+// ===== Send Promotional Notification Modal =====
+function buildSendNotificationContent(email){
+    try { email = String(email || ''); } catch(_) { email = ''; }
+    return [
+        '<div style="display:grid; gap:10px">',
+        `<div class="message info-message">Send a promotional push notification to <strong>${escapeHtml(email)}</strong>.</div>`,
+        '<div style="display:grid; gap:6px">',
+        '<label for="notif-title" style="color:var(--text-secondary)">Title</label>',
+        '<input id="notif-title" class="form-control" type="text" placeholder="Promotion" />',
+        '</div>',
+        '<div style="display:grid; gap:6px">',
+        '<label for="notif-body" style="color:var(--text-secondary)">Body</label>',
+        '<textarea id="notif-body" class="form-control" rows="4" placeholder="Write your message"></textarea>',
+        '</div>',
+        '<div id="notif-error" class="message error-message" style="display:none"></div>',
+        '<div style="display:flex; gap:8px; align-items:center">',
+        '<button id="notif-send-btn" class="btn btn-primary">Send</button>',
+        '<button id="notif-cancel-btn" class="btn btn-secondary">Cancel</button>',
+        '</div>',
+        '</div>'
+    ].join('');
+}
+
+function bindSendNotificationModal(email){
+    const titleEl = document.getElementById('notif-title');
+    const bodyEl = document.getElementById('notif-body');
+    const sendBtn = document.getElementById('notif-send-btn');
+    const cancelBtn = document.getElementById('notif-cancel-btn');
+    const errEl = document.getElementById('notif-error');
+    if (!sendBtn || !cancelBtn || !bodyEl) return;
+
+    // Pre-fill recommended default title
+    try { if (titleEl && !titleEl.value) titleEl.value = 'Promotion'; } catch(_){}
+
+    function showErr(msg){ if (errEl){ errEl.textContent = msg || 'Error'; errEl.style.display = 'block'; } }
+    function clearErr(){ if (errEl){ errEl.textContent = ''; errEl.style.display = 'none'; } }
+
+    cancelBtn.addEventListener('click', function(){ closeModal(); });
+
+    sendBtn.addEventListener('click', function(){
+        clearErr();
+        const title = (titleEl && typeof titleEl.value === 'string' && titleEl.value.trim()) ? titleEl.value.trim() : 'Promotion';
+        const body = (bodyEl && typeof bodyEl.value === 'string') ? bodyEl.value.trim() : '';
+        if (!body) { showErr('Body is required'); return; }
+        sendBtn.disabled = true;
+        const prevText = sendBtn.textContent;
+        sendBtn.textContent = 'Sending...';
+        window.UserRoute.notify(email, { title, body })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().catch(() => ({})).then(data => {
+                        const msg = (data && data.message) || 'Failed to send notification';
+                        throw new Error(msg);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.status === true) {
+                    try { showToast('success', 'Notification sent successfully'); } catch(_) {}
+                    closeModal();
+                } else {
+                    throw new Error((data && data.message) || 'Failed to send notification');
+                }
+            })
+            .catch(err => {
+                showErr(err && err.message ? err.message : 'Failed to send notification');
+            })
+            .finally(() => {
+                sendBtn.disabled = false;
+                sendBtn.textContent = prevText || 'Send';
+            });
+    });
+}
+// ===== End Send Promotional Notification Modal =====

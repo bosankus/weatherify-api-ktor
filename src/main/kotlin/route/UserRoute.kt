@@ -4,10 +4,13 @@ import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.WeatherCache
+import config.Environment
 import config.JwtConfig
 import domain.model.Result
 import domain.repository.UserRepository
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -389,6 +392,85 @@ fun Route.userRoute() {
             }
         }
 
+        // Send promotional notification
+        post("/users/{email}/notify") {
+            if (!ensureAdminAndGetToken(call)) return@post
+
+            val email = call.parameters["email"]?.trim()
+            if (email.isNullOrEmpty()) {
+                call.respondError(
+                    "Email path parameter is required",
+                    Unit,
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
+            val req = try {
+                call.receive<NotificationRequest>()
+            } catch (_: Exception) {
+                NotificationRequest()
+            }
+
+            when (val findRes = userRepository.findUserByEmail(email)) {
+                is Result.Success -> {
+                    val user = findRes.data
+                    if (user == null) {
+                        call.respondError("User not found", Unit, HttpStatusCode.NotFound)
+                        return@post
+                    }
+                    val token = user.fcmToken?.trim()
+                    if (token.isNullOrEmpty()) {
+                        call.respondError(
+                            "No FCM token registered for this user",
+                            Unit,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    // If a Cloud Function URL is configured, attempt to call it; otherwise, return success.
+                    val fnUrl = Environment.getFcmFunctionUrl()
+                    if (fnUrl.isNullOrBlank()) {
+                        call.respondSuccess("Notification queued", mapOf("email" to email))
+                        return@post
+                    }
+
+                    try {
+                        val client = WeatherCache.getWeatherClient()
+                        val payload = mapOf(
+                            "token" to token,
+                            "title" to (req.title ?: "Promotion"),
+                            "body" to (req.body ?: "Enjoy new features in our app!")
+                        )
+                        val resp = client.post(fnUrl) {
+                            setBody(payload)
+                        }
+                        val ok = resp.status.value in 200..299
+                        if (ok) {
+                            call.respondSuccess("Notification sent", mapOf("email" to email))
+                        } else {
+                            call.respondError(
+                                "Failed to send notification via function (status ${'$'}{resp.status.value})",
+                                Unit,
+                                HttpStatusCode.BadGateway
+                            )
+                        }
+                    } catch (_: Exception) {
+                        call.respondError(
+                            "Failed to send notification: ${'$'}{e.message}",
+                            Unit,
+                            HttpStatusCode.BadGateway
+                        )
+                    }
+                }
+
+                is Result.Error -> {
+                    call.respondError(findRes.message, Unit, HttpStatusCode.InternalServerError)
+                }
+            }
+        }
+
         // Clear weather cache
         post("/cache/clear") {
             if (!ensureAdminAndGetToken(call)) return@post
@@ -576,6 +658,12 @@ data class PremiumUpdateRequest(val isPremium: Boolean)
 data class PremiumUpdateResponseDTO(
     val email: String,
     val isPremium: Boolean
+)
+
+@Serializable
+data class NotificationRequest(
+    val title: String? = null,
+    val body: String? = null
 )
 
 // Tools DTOs

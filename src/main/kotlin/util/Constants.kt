@@ -141,5 +141,9 @@ object Constants {
         // API environment variables
         const val WEATHER_URL = "WEATHER_URL"
         const val AIR_POLLUTION_URL = "AIR_POLLUTION_URL"
+
+        // Notifications / FCM
+        const val FCM_FUNCTION_URL = "FCM_FUNCTION_URL" // Optional: HTTPS Cloud Function endpoint
+        // const val FCM_SERVER_KEY = "FCM_SERVER_KEY"     // Optional: Legacy FCM server key
     }
 }
