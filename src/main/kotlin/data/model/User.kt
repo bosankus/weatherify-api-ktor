@@ -46,6 +46,7 @@ data class UserRegistrationRequest(
     val appVersion: String? = null,
     val ipAddress: String? = null,
     val registrationSource: String? = null,
+    val firebaseToken: String? = null,
     val role: UserRole? = UserRole.USER,
     val isActive: Boolean = true,
     val isPremium: Boolean = false

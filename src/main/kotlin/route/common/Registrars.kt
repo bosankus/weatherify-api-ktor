@@ -4,6 +4,7 @@ import bose.ankush.route.adminAuthRoute
 import bose.ankush.route.authRoute
 import bose.ankush.route.feedbackRoute
 import bose.ankush.route.homeRoute
+import bose.ankush.route.paymentRoute
 import bose.ankush.route.privacyPolicyRoute
 import bose.ankush.route.termsAndConditionsRoute
 import bose.ankush.route.userRoute
@@ -59,5 +60,11 @@ object PrivacyPolicyRoutesRegistrar : RouteRegistrar {
 object UserRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         with(root) { userRoute() }
+    }
+}
+
+object PaymentRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { paymentRoute() }
     }
 }

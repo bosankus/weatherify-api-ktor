@@ -129,7 +129,8 @@ fun Route.authRoute() {
                 registrationSource = request.registrationSource,
                 role = request.role,
                 isActive = request.isActive,
-                isPremium = request.isPremium
+                isPremium = request.isPremium,
+                fcmToken = request.firebaseToken
             )
 
             // Save user to database
@@ -139,10 +140,39 @@ fun Route.authRoute() {
                 is Result.Success -> {
                     if (createResult.data) {
                         logger.info("User registered successfully: ${request.email}")
+
+                        // Generate JWT token similar to /login
+                        val token = JwtConfig.generateToken(user.email, user.role)
+
+                        // Try to set auth cookie
+                        try {
+                            val maxAgeSeconds =
+                                (config.Environment.getJwtExpiration() / 1000).toInt()
+                            call.response.cookies.append(
+                                Cookie(
+                                    name = "jwt_token",
+                                    value = token,
+                                    path = "/",
+                                    httpOnly = true,
+                                    secure = true,
+                                    maxAge = maxAgeSeconds
+                                )
+                            )
+                        } catch (e: Exception) {
+                            logger.warn("Failed to set auth cookie on register: ${e.message}")
+                        }
+
+                        // Respond like /login
                         call.respondSuccess(
-                            Constants.Messages.REGISTRATION_SUCCESS,
-                            mapOf("_id" to user.id),
-                            HttpStatusCode.Created
+                            Constants.Messages.LOGIN_SUCCESS,
+                            LoginResponse(
+                                token = token,
+                                email = user.email,
+                                role = user.role,
+                                isActive = user.isActive,
+                                isPremium = user.isPremium
+                            ),
+                            HttpStatusCode.OK
                         )
                     } else {
                         logger.error("Failed to register user: ${request.email}")

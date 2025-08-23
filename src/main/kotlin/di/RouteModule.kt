@@ -4,6 +4,7 @@ import bose.ankush.route.common.AdminAuthRoutesRegistrar
 import bose.ankush.route.common.AuthRoutesRegistrar
 import bose.ankush.route.common.FeedbackRoutesRegistrar
 import bose.ankush.route.common.HomeRoutesRegistrar
+import bose.ankush.route.common.PaymentRoutesRegistrar
 import bose.ankush.route.common.PrivacyPolicyRoutesRegistrar
 import bose.ankush.route.common.RouteRegistrar
 import bose.ankush.route.common.TermsAndConditionsRoutesRegistrar
@@ -26,6 +27,7 @@ val routeModule = module {
     single<RouteRegistrar>(named("users")) { UserRoutesRegistrar }
     single<RouteRegistrar>(named("terms")) { TermsAndConditionsRoutesRegistrar }
     single<RouteRegistrar>(named("privacy")) { PrivacyPolicyRoutesRegistrar }
+    single<RouteRegistrar>(named("payments")) { PaymentRoutesRegistrar }
 
     // Provide ordered list
     single<List<RouteRegistrar>> {
@@ -37,7 +39,8 @@ val routeModule = module {
             get(named("adminAuth")),
             get(named("users")),
             get(named("terms")),
-            get(named("privacy"))
+            get(named("privacy")),
+            get(named("payments"))
         )
     }
 }

@@ -842,8 +842,6 @@ fun Route.homeRoute() {
                                     left: 50%;
                                     box-shadow: 0 -14px 0 var(--icon-color),
                                         0 14px 0 var(--icon-color),
-                                        14px 0 0 var(--icon-color),
-                                        -14px 0 0 var(--icon-color),
                                         10px 10px 0 var(--icon-color),
                                         -10px 10px 0 var(--icon-color),
                                         10px -10px 0 var(--icon-color),
@@ -1258,150 +1256,61 @@ fun Route.homeRoute() {
                                 classes = setOf("card")
                                 id = "weather-api-card"
                                 attributes["data-title"] = "Weather API"
-                                attributes["data-content"] = "<h3>Weather API Endpoints</h3>" +
-                                    "<div class='response-example'>" +
-                                    "<strong>GET /weather</strong><br>" +
-                                    "<span class='param-label'>Parameters:</span> <code>lat</code> (latitude), <code>lon</code> (longitude)<br>" +
-                                    "<span class='desc-label'>Description:</span> Returns comprehensive weather data including current conditions, hourly and daily forecasts, and weather alerts" +
-                                    "</div>" +
-                                    "<div class='response-example'>" +
-                                    "<strong>GET /air-pollution</strong><br>" +
-                                    "<span class='param-label'>Parameters:</span> <code>lat</code> (latitude), <code>lon</code> (longitude)<br>" +
-                                    "<span class='desc-label'>Description:</span> Returns detailed air quality information including AQI and pollutant concentrations" +
-                                    "</div>" +
-                                    "<h4>Weather Response Model:</h4>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Weather</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"id\": Long?,\n" +
-                                    "  \"alerts\": List&lt;Alert?&gt;?,\n" +
-                                    "  \"current\": Current?,\n" +
-                                    "  \"daily\": List&lt;Daily?&gt;?,\n" +
-                                    "  \"hourly\": List&lt;Hourly?&gt;?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Alert</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"description\": String?,\n" +
-                                    "  \"end\": Int?,\n" +
-                                    "  \"event\": String?,\n" +
-                                    "  \"senderName\": String?,\n" +
-                                    "  \"start\": Int?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Current</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"clouds\": Int?,\n" +
-                                    "  \"dt\": Long?,\n" +
-                                    "  \"feelsLike\": Double?,\n" +
-                                    "  \"humidity\": Int?,\n" +
-                                    "  \"pressure\": Int?,\n" +
-                                    "  \"sunrise\": Int?,\n" +
-                                    "  \"sunset\": Int?,\n" +
-                                    "  \"temp\": Double?,\n" +
-                                    "  \"uvi\": Double?,\n" +
-                                    "  \"weather\": List&lt;WeatherData?&gt;?,\n" +
-                                    "  \"wind_gust\": Double?,\n" +
-                                    "  \"wind_speed\": Double?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Daily</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"clouds\": Int?,\n" +
-                                    "  \"dewPoint\": Double?,\n" +
-                                    "  \"dt\": Long?,\n" +
-                                    "  \"humidity\": Int?,\n" +
-                                    "  \"pressure\": Int?,\n" +
-                                    "  \"rain\": Double?,\n" +
-                                    "  \"summary\": String?,\n" +
-                                    "  \"sunrise\": Int?,\n" +
-                                    "  \"sunset\": Int?,\n" +
-                                    "  \"temp\": Temp?,\n" +
-                                    "  \"uvi\": Double?,\n" +
-                                    "  \"weather\": List&lt;WeatherData?&gt;?,\n" +
-                                    "  \"windGust\": Double?,\n" +
-                                    "  \"windSpeed\": Double?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Temp</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"day\": Double?,\n" +
-                                    "  \"eve\": Double?,\n" +
-                                    "  \"max\": Double?,\n" +
-                                    "  \"min\": Double?,\n" +
-                                    "  \"morn\": Double?,\n" +
-                                    "  \"night\": Double?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Hourly</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"clouds\": Int?,\n" +
-                                    "  \"dt\": Long?,\n" +
-                                    "  \"feelsLike\": Double?,\n" +
-                                    "  \"humidity\": Int?,\n" +
-                                    "  \"temp\": Double?,\n" +
-                                    "  \"weather\": List&lt;WeatherData?&gt;?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>WeatherData</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"description\": String,\n" +
-                                    "  \"icon\": String,\n" +
-                                    "  \"id\": Int?,\n" +
-                                    "  \"main\": String\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<h4>Air Quality Response Model:</h4>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>AirQuality</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"list\": List&lt;QualityDetails?&gt;?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>QualityDetails</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"components\": Components?,\n" +
-                                    "  \"dt\": Int?,\n" +
-                                    "  \"main\": Main?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Components</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"co\": Double?,\n" +
-                                    "  \"nh3\": Double?,\n" +
-                                    "  \"no\": Double?,\n" +
-                                    "  \"no2\": Double?,\n" +
-                                    "  \"o3\": Double?,\n" +
-                                    "  \"pm10\": Double?,\n" +
-                                    "  \"pm25\": Double?,\n" +
-                                    "  \"so2\": Double?\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Main</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"aqi\": Int?\n" +
-                                    "}</pre>" +
-                                    "</div>"
+                                attributes["data-content"] = """
+            <h3>Weather API Endpoints</h3>
+            <div class='response-example'>
+                <strong>GET /weather</strong><br>
+                <span class='param-label'>Query:</span> <code>lat</code> (latitude), <code>lon</code> (longitude)<br>
+                <span class='desc-label'>Description:</span> Returns current, hourly, and daily weather, plus alerts.
+            </div>
+            <div class='response-example'>
+                <strong>GET /air-pollution</strong><br>
+                <span class='param-label'>Query:</span> <code>lat</code>, <code>lon</code><br>
+                <span class='desc-label'>Description:</span> Returns AQI and pollutant concentrations.
+            </div>
+            <h4>Request Example:</h4>
+            <div class='response-example model-container'>
+                <div class='model-header'>/weather</div>
+                <pre class='model-content'>
+GET /weather?lat=28.6&lon=77.2
+                </pre>
+            </div>
+            <h4>Response Example:</h4>
+            <div class='response-example model-container'>
+                <div class='model-header'>WeatherResponse</div>
+                <pre class='model-content'>
+{
+  "current": { ... },
+  "hourly": [ ... ],
+  "daily": [ ... ],
+  "alerts": [ ... ]
+}
+                </pre>
+            </div>
+            <div class='response-example model-container'>
+                <div class='model-header'>AirPollutionResponse</div>
+                <pre class='model-content'>
+{
+  "list": [
+    {
+      "main": { "aqi": 2 },
+      "components": {
+        "co": 201.94,
+        "no": 0.0,
+        "no2": 0.0,
+        "o3": 68.89,
+        "so2": 0.64,
+        "pm2_5": 0.5,
+        "pm10": 0.54,
+        "nh3": 0.0
+      },
+      "dt": 1661870592
+    }
+  ]
+}
+                </pre>
+            </div>
+        """.trimIndent()
                                 div {
                                     classes = setOf("card-header")
                                     div {
@@ -1424,25 +1333,13 @@ fun Route.homeRoute() {
                                     classes = setOf("endpoints-container")
                                     div {
                                         classes = setOf("endpoint")
-                                        span {
-                                            classes = setOf("method", "get")
-                                            +"GET"
-                                        }
-                                        span {
-                                            classes = setOf("endpoint-path")
-                                            +"/weather"
-                                        }
+                                        span { classes = setOf("method", "get"); +"GET" }
+                                        span { classes = setOf("endpoint-path"); +"/weather" }
                                     }
                                     div {
                                         classes = setOf("endpoint")
-                                        span {
-                                            classes = setOf("method", "get")
-                                            +"GET"
-                                        }
-                                        span {
-                                            classes = setOf("endpoint-path")
-                                            +"/air-pollution"
-                                        }
+                                        span { classes = setOf("method", "get"); +"GET" }
+                                        span { classes = setOf("endpoint-path"); +"/air-pollution" }
                                     }
                                 }
                             }
@@ -1451,45 +1348,54 @@ fun Route.homeRoute() {
                                 classes = setOf("card")
                                 id = "feedback-api-card"
                                 attributes["data-title"] = "Feedback API"
-                                attributes["data-content"] = "<h3>Feedback API Endpoints</h3>" +
-                                    "<div class='response-example'>" +
-                                    "<strong>GET /feedback</strong><br>" +
-                                    "<span class='param-label'>Parameters:</span> <code>id</code> (feedback ID)<br>" +
-                                    "<span class='desc-label'>Description:</span> Returns feedback details for the specified ID" +
-                                    "</div>" +
-                                    "<div class='response-example'>" +
-                                    "<strong>POST /feedback</strong><br>" +
-                                    "<span class='param-label'>Parameters:</span> <code>deviceId</code>, <code>deviceOs</code>, <code>feedbackTitle</code>, <code>feedbackDescription</code><br>" +
-                                    "<span class='desc-label'>Description:</span> Creates a new feedback entry and returns the ID" +
-                                    "</div>" +
-                                    "<div class='response-example'>" +
-                                    "<strong>DELETE /feedback</strong><br>" +
-                                    "<span class='param-label'>Parameters:</span> <code>id</code> (feedback ID)<br>" +
-                                    "<span class='desc-label'>Description:</span> Deletes the feedback with the specified ID" +
-                                    "</div>" +
-                                    "<h4>Feedback Model:</h4>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>Feedback</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"_id\": String,\n" +
-                                    "  \"deviceId\": String,\n" +
-                                    "  \"deviceOs\": String,\n" +
-                                    "  \"feedbackTitle\": String,\n" +
-                                    "  \"feedbackDescription\": String,\n" +
-                                    "  \"timestamp\": String\n" +
-                                    "}</pre>" +
-                                    "</div>" +
-                                    "<h4>Response Format:</h4>" +
-                                    "<div class='response-example model-container'>" +
-                                    "<div class='model-header'>ApiResponse</div>" +
-                                    "<pre class='model-content'>" +
-                                    "{\n" +
-                                    "  \"status\": Boolean,\n" +
-                                    "  \"message\": String,\n" +
-                                    "  \"data\": T\n" +
-                                    "}</pre>" +
-                                    "</div>"
+                                attributes["data-content"] = """
+            <h3>Feedback API Endpoints</h3>
+            <div class='response-example'>
+                <strong>GET /feedback</strong><br>
+                <span class='param-label'>Query:</span> <code>id</code> (feedback ID, optional)<br>
+                <span class='desc-label'>Description:</span> Returns feedback details or all feedbacks.
+            </div>
+            <div class='response-example'>
+                <strong>POST /feedback</strong><br>
+                <span class='param-label'>Body:</span> <code>deviceId</code>, <code>deviceOs</code>, <code>feedbackTitle</code>, <code>feedbackDescription</code><br>
+                <span class='desc-label'>Description:</span> Creates a new feedback entry.
+            </div>
+            <div class='response-example'>
+                <strong>DELETE /feedback</strong><br>
+                <span class='param-label'>Query:</span> <code>id</code> (feedback ID)<br>
+                <span class='desc-label'>Description:</span> Deletes the feedback with the specified ID.
+            </div>
+            <h4>Request Example:</h4>
+            <div class='response-example model-container'>
+                <div class='model-header'>POST /feedback</div>
+                <pre class='model-content'>
+{
+  "deviceId": "abc123",
+  "deviceOs": "Android",
+  "feedbackTitle": "App Crash",
+  "feedbackDescription": "App crashes on launch"
+}
+                </pre>
+            </div>
+            <h4>Response Example:</h4>
+            <div class='response-example model-container'>
+                <div class='model-header'>ApiResponse&lt;Feedback&gt;</div>
+                <pre class='model-content'>
+{
+  "status": true,
+  "message": "Feedback submitted",
+  "data": {
+    "_id": "64e8b...",
+    "deviceId": "abc123",
+    "deviceOs": "Android",
+    "feedbackTitle": "App Crash",
+    "feedbackDescription": "App crashes on launch",
+    "timestamp": "2023-08-17T12:34:56Z"
+  }
+}
+                </pre>
+            </div>
+        """.trimIndent()
                                 div {
                                     classes = setOf("card-header")
                                     div {
@@ -1512,36 +1418,18 @@ fun Route.homeRoute() {
                                     classes = setOf("endpoints-container")
                                     div {
                                         classes = setOf("endpoint")
-                                        span {
-                                            classes = setOf("method", "get")
-                                            +"GET"
-                                        }
-                                        span {
-                                            classes = setOf("endpoint-path")
-                                            +"/feedback"
-                                        }
+                                        span { classes = setOf("method", "get"); +"GET" }
+                                        span { classes = setOf("endpoint-path"); +"/feedback" }
                                     }
                                     div {
                                         classes = setOf("endpoint")
-                                        span {
-                                            classes = setOf("method", "post")
-                                            +"POST"
-                                        }
-                                        span {
-                                            classes = setOf("endpoint-path")
-                                            +"/feedback"
-                                        }
+                                        span { classes = setOf("method", "post"); +"POST" }
+                                        span { classes = setOf("endpoint-path"); +"/feedback" }
                                     }
                                     div {
                                         classes = setOf("endpoint")
-                                        span {
-                                            classes = setOf("method", "delete")
-                                            +"DELETE"
-                                        }
-                                        span {
-                                            classes = setOf("endpoint-path")
-                                            +"/feedback"
-                                        }
+                                        span { classes = setOf("method", "delete"); +"DELETE" }
+                                        span { classes = setOf("endpoint-path"); +"/feedback" }
                                     }
                                 }
 
@@ -1551,53 +1439,52 @@ fun Route.homeRoute() {
                                 classes = setOf("card")
                                 id = "auth-api-card"
                                 attributes["data-title"] = "Authentication API"
-                                attributes["data-content"] =
-                                    "<h3>Authentication API Endpoints</h3>" +
-                                        "<div class='response-example'>" +
-                                        "<strong>POST /register</strong><br>" +
-                                        "<span class='param-label'>Parameters:</span> <code>email</code>, <code>password</code><br>" +
-                                        "<span class='desc-label'>Description:</span> Registers a new user with email and password. Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character." +
-                                        "</div>" +
-                                        "<div class='response-example'>" +
-                                        "<strong>POST /login</strong><br>" +
-                                        "<span class='param-label'>Parameters:</span> <code>email</code>, <code>password</code><br>" +
-                                        "<span class='desc-label'>Description:</span> Authenticates a user and returns a JWT token for accessing protected resources." +
-                                        "</div>" +
-                                        "<h4>Request Models:</h4>" +
-                                        "<div class='response-example model-container'>" +
-                                        "<div class='model-header'>UserRegistrationRequest</div>" +
-                                        "<pre class='model-content'>" +
-                                        "{\n" +
-                                        "  \"email\": String,\n" +
-                                        "  \"password\": String\n" +
-                                        "}</pre>" +
-                                        "</div>" +
-                                        "<div class='response-example model-container'>" +
-                                        "<div class='model-header'>UserLoginRequest</div>" +
-                                        "<pre class='model-content'>" +
-                                        "{\n" +
-                                        "  \"email\": String,\n" +
-                                        "  \"password\": String\n" +
-                                        "}</pre>" +
-                                        "</div>" +
-                                        "<h4>Response Models:</h4>" +
-                                        "<div class='response-example model-container'>" +
-                                        "<div class='model-header'>LoginResponse</div>" +
-                                        "<pre class='model-content'>" +
-                                        "{\n" +
-                                        "  \"token\": String,\n" +
-                                        "  \"email\": String\n" +
-                                        "}</pre>" +
-                                        "</div>" +
-                                        "<div class='response-example model-container'>" +
-                                        "<div class='model-header'>ApiResponse</div>" +
-                                        "<pre class='model-content'>" +
-                                        "{\n" +
-                                        "  \"status\": Boolean,\n" +
-                                        "  \"message\": String,\n" +
-                                        "  \"data\": T\n" +
-                                        "}</pre>" +
-                                        "</div>"
+                                attributes["data-content"] = """
+            <h3>Authentication API Endpoints</h3>
+            <div class='response-example'>
+                <strong>POST /register</strong><br>
+                <span class='param-label'>Body:</span> <code>email</code>, <code>password</code><br>
+                <span class='desc-label'>Description:</span> Registers a new user.
+            </div>
+            <div class='response-example'>
+                <strong>POST /login</strong><br>
+                <span class='param-label'>Body:</span> <code>email</code>, <code>password</code><br>
+                <span class='desc-label'>Description:</span> Authenticates a user and returns a JWT token.
+            </div>
+            <h4>Request Example:</h4>
+            <div class='response-example model-container'>
+                <div class='model-header'>POST /register or /login</div>
+                <pre class='model-content'>
+{
+  "email": "user@example.com",
+  "password": "StrongPassword123!"
+}
+                </pre>
+            </div>
+            <h4>Response Example:</h4>
+            <div class='response-example model-container'>
+                <div class='model-header'>LoginResponse</div>
+                <pre class='model-content'>
+{
+  "token": "jwt_token_here",
+  "email": "user@example.com"
+}
+                </pre>
+            </div>
+            <div class='response-example model-container'>
+                <div class='model-header'>ApiResponse&lt;LoginResponse&gt;</div>
+                <pre class='model-content'>
+{
+  "status": true,
+  "message": "Login successful",
+  "data": {
+    "token": "jwt_token_here",
+    "email": "user@example.com"
+  }
+}
+                </pre>
+            </div>
+        """.trimIndent()
                                 div {
                                     classes = setOf("card-header")
                                     div {
@@ -1620,29 +1507,16 @@ fun Route.homeRoute() {
                                     classes = setOf("endpoints-container")
                                     div {
                                         classes = setOf("endpoint")
-                                        span {
-                                            classes = setOf("method", "post")
-                                            +"POST"
-                                        }
-                                        span {
-                                            classes = setOf("endpoint-path")
-                                            +"/register"
-                                        }
+                                        span { classes = setOf("method", "post"); +"POST" }
+                                        span { classes = setOf("endpoint-path"); +"/register" }
                                     }
                                     div {
                                         classes = setOf("endpoint")
-                                        span {
-                                            classes = setOf("method", "post")
-                                            +"POST"
-                                        }
-                                        span {
-                                            classes = setOf("endpoint-path")
-                                            +"/login"
-                                        }
+                                        span { classes = setOf("method", "post"); +"POST" }
+                                        span { classes = setOf("endpoint-path"); +"/login" }
                                     }
                                 }
                             }
-
                         }
 
                         // Modal
@@ -1689,4 +1563,3 @@ fun Route.homeRoute() {
         }
     }
 }
-

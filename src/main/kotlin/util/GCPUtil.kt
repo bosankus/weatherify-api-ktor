@@ -42,6 +42,28 @@ internal fun getSecretValue(secretName: String): String {
                 }
             }
 
+            "RAZORPAY_SECRET" -> {
+                val envValue = System.getenv("RAZORPAY_SECRET")
+                if (!envValue.isNullOrBlank()) {
+                    println("Using RAZORPAY_SECRET environment variable for development")
+                    envValue
+                } else {
+                    println("Using dummy Razorpay secret for development")
+                    "dummy_razorpay_secret"
+                }
+            }
+
+            "RAZORPAY_KEY_ID" -> {
+                val envValue = System.getenv("RAZORPAY_KEY_ID")
+                if (!envValue.isNullOrBlank()) {
+                    println("Using RAZORPAY_KEY_ID environment variable for development")
+                    envValue
+                } else {
+                    println("Using dummy Razorpay key id for development")
+                    "dummy_razorpay_key_id"
+                }
+            }
+
             else -> {
                 println("Using dummy value for unknown secret: $secretName")
                 "dummy_value_for_$secretName"
@@ -72,7 +94,7 @@ internal fun getSecretValue(secretName: String): String {
         // Log the error with more details
         System.err.println("Error accessing secret $secretName from Secret Manager: ${e.message}")
         e.printStackTrace()
-        
+
         // Fallback to environment variables if Secret Manager fails
         val fallbackValue = when (secretName) {
             "jwt-secret" -> {
