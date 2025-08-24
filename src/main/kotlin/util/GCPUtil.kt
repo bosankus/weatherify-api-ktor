@@ -42,7 +42,7 @@ internal fun getSecretValue(secretName: String): String {
                 }
             }
 
-            "RAZORPAY_SECRET" -> {
+            "razorpay-secret" -> {
                 val envValue = System.getenv("RAZORPAY_SECRET")
                 if (!envValue.isNullOrBlank()) {
                     println("Using RAZORPAY_SECRET environment variable for development")
@@ -53,7 +53,7 @@ internal fun getSecretValue(secretName: String): String {
                 }
             }
 
-            "RAZORPAY_KEY_ID" -> {
+            "razorpay-key-id" -> {
                 val envValue = System.getenv("RAZORPAY_KEY_ID")
                 if (!envValue.isNullOrBlank()) {
                     println("Using RAZORPAY_KEY_ID environment variable for development")
@@ -128,6 +128,29 @@ internal fun getSecretValue(secretName: String): String {
                 } else {
                     System.err.println("WARNING: Using dummy weather API key as fallback")
                     "dummy_weather_api_key"
+                }
+            }
+
+            // Razorpay secrets explicit handling to avoid calling external API with bad credentials
+            "razorpay-secret" -> {
+                val envValue = System.getenv("RAZORPAY_SECRET")
+                if (!envValue.isNullOrBlank()) {
+                    System.err.println("Using RAZORPAY_SECRET environment variable as fallback")
+                    envValue
+                } else {
+                    System.err.println("WARNING: Using dummy Razorpay secret as fallback")
+                    "dummy_razorpay_secret"
+                }
+            }
+
+            "razorpay-key-id" -> {
+                val envValue = System.getenv("RAZORPAY_KEY_ID")
+                if (!envValue.isNullOrBlank()) {
+                    System.err.println("Using RAZORPAY_KEY_ID environment variable as fallback")
+                    envValue
+                } else {
+                    System.err.println("WARNING: Using dummy Razorpay key id as fallback")
+                    "dummy_razorpay_key_id"
                 }
             }
 

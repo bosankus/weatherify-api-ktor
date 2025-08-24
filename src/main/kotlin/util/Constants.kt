@@ -16,6 +16,7 @@ object Constants {
         const val FEEDBACK_COLLECTION = "feedback"
         const val WEATHER_COLLECTION = "weather"
         const val USERS_COLLECTION = "users"
+        const val PAYMENTS_COLLECTION = "payments"
 
         // Field names
         const val ID_FIELD = "_id"
@@ -39,8 +40,8 @@ object Constants {
         // Secret names
         const val JWT_SECRET_NAME = "jwt-secret"
         const val DB_CONNECTION_STRING_SECRET = "db-connection-string"
-        const val RAZORPAY_SECRET = "RAZORPAY_SECRET"
-        const val RAZORPAY_KEY_ID = "RAZORPAY_KEY_ID"
+        const val RAZORPAY_SECRET = "razorpay-secret"
+        const val RAZORPAY_KEY_ID = "razorpay-key-id"
 
         // Password validation messages
         const val INVALID_EMAIL_FORMAT = "Invalid email format"
@@ -61,8 +62,8 @@ object Constants {
         const val REFRESH_TOKEN_ENDPOINT = "/refresh-token"
         const val LOGOUT_ENDPOINT = "/logout"
         const val HOME_ENDPOINT = "/"
-        const val VERIFY_PAYMENT_ENDPOINT = "/verify-payment"
         const val CREATE_ORDER_ENDPOINT = "/create-order"
+        const val STORE_PAYMENT_ENDPOINT = "/store-payment"
 
         // API URLs
         const val DEFAULT_WEATHER_URL = "https://api.openweathermap.org/data/3.0/onecall"

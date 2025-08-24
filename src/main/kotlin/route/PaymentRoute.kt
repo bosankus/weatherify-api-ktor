@@ -1,7 +1,9 @@
 package bose.ankush.route
 
+import bose.ankush.data.db.DatabaseFactory
 import bose.ankush.data.model.CreateOrderRequest
 import bose.ankush.data.model.CreateOrderResponse
+import bose.ankush.data.model.Payment
 import bose.ankush.data.model.RazorpayCreateOrderPayload
 import bose.ankush.data.model.RazorpayErrorResponse
 import bose.ankush.data.model.VerifyPaymentRequest
@@ -39,6 +41,8 @@ private val razorpayClient: HttpClient by lazy {
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
     }
 }
+
+private val relaxedJson: Json = Json { ignoreUnknownKeys = true }
 
 private suspend fun ApplicationCall.getJwtPrincipalOrRespond(): JWTPrincipal? {
     // Extract token from Authorization header or cookie
@@ -85,7 +89,8 @@ fun Route.paymentRoute() {
         val keySecret = getSecretValue(Constants.Auth.RAZORPAY_SECRET)
         if (keyId.isBlank() || keySecret.isBlank() || keyId.startsWith("dummy_") || keySecret.startsWith(
                 "dummy_"
-            ) || keyId.startsWith("dummy_value_for_") || keySecret.startsWith("dummy_value_for_")
+            ) || keyId.startsWith("dummy_value_for_") || keySecret.startsWith("dummy_value_for_") ||
+            keyId.startsWith("fallback_value_for_") || keySecret.startsWith("fallback_value_for_")
         ) {
             call.respondError(
                 message = "Payment not configured. Please contact support.",
@@ -136,7 +141,7 @@ fun Route.paymentRoute() {
 
             val bodyText = response.bodyAsText()
             if (response.status.value in 200..299) {
-                val rp = Json { ignoreUnknownKeys = true }.decodeFromString(
+                val rp = relaxedJson.decodeFromString(
                     bose.ankush.data.model.RazorpayOrderResponse.serializer(),
                     bodyText
                 )
@@ -155,7 +160,7 @@ fun Route.paymentRoute() {
             } else {
                 // Try to parse Razorpay error; if fails, use raw body
                 val err = try {
-                    Json { ignoreUnknownKeys = true }.decodeFromString(
+                    relaxedJson.decodeFromString(
                         RazorpayErrorResponse.serializer(),
                         bodyText
                     )
@@ -179,12 +184,16 @@ fun Route.paymentRoute() {
         }
     }
 
-    // POST /verify-payment -> Verify Razorpay signature
-    post(Constants.Api.VERIFY_PAYMENT_ENDPOINT) {
-        call.getJwtPrincipalOrRespond() ?: return@post
+
+    // POST /store-payment -> Verify and store payment details
+    post(Constants.Api.STORE_PAYMENT_ENDPOINT) {
+        val principal = call.getJwtPrincipalOrRespond() ?: return@post
 
         val secret = getSecretValue(Constants.Auth.RAZORPAY_SECRET)
-        if (secret.isBlank() || secret.startsWith("dummy_") || secret.startsWith("dummy_value_for_")) {
+        if (secret.isBlank() || secret.startsWith("dummy_") || secret.startsWith("dummy_value_for_") || secret.startsWith(
+                "fallback_value_for_"
+            )
+        ) {
             call.respondError(
                 message = "Payment verification not configured. Please contact support.",
                 data = Unit,
@@ -196,7 +205,7 @@ fun Route.paymentRoute() {
         val payload = try {
             call.receive<VerifyPaymentRequest>()
         } catch (e: Exception) {
-            paymentLogger.warn("Malformed JSON payload for verify payment", e)
+            paymentLogger.warn("Malformed JSON payload for store payment", e)
             call.respondError(
                 message = "Malformed JSON payload",
                 data = Unit,
@@ -218,11 +227,12 @@ fun Route.paymentRoute() {
             return@post
         }
 
+        // Verify signature
         val dataString = "$orderId|$paymentId"
         val generated = try {
             SignatureUtil.secure(dataString, secret)
         } catch (e: Exception) {
-            paymentLogger.error("Failed to compute signature for verify payment", e)
+            paymentLogger.error("Failed to compute signature for store payment", e)
             call.respondError(
                 message = "Failed to compute signature",
                 data = Unit,
@@ -232,18 +242,62 @@ fun Route.paymentRoute() {
         }
 
         val matches = SignatureUtil.compare(generated, signature)
-        if (matches) {
-            call.respondSuccess(
-                message = "Payment verified successfully",
-                data = VerifyPaymentResponse(verified = true),
-                status = HttpStatusCode.OK
-            )
-        } else {
+        if (!matches) {
             call.respondError(
                 message = "Signature verification failed",
                 data = VerifyPaymentResponse(verified = false),
                 status = HttpStatusCode.BadRequest
             )
+            return@post
         }
+
+        // Extract user email from JWT principal to link with User
+        val userEmail = try {
+            principal.getClaim(Constants.Auth.JWT_CLAIM_EMAIL, String::class)
+        } catch (_: Exception) {
+            null
+        } ?: run {
+            paymentLogger.warn("Email claim missing from JWT; cannot link payment to user")
+            call.respondError(
+                message = "Authentication error: email not found in token",
+                data = Unit,
+                status = HttpStatusCode.Unauthorized
+            )
+            return@post
+        }
+
+        // Persist payment
+        val payment = Payment(
+            userEmail = userEmail,
+            orderId = orderId,
+            paymentId = paymentId,
+            signature = signature,
+            status = "verified"
+        )
+
+        val saved = try {
+            DatabaseFactory.savePayment(payment)
+        } catch (e: Exception) {
+            paymentLogger.error(
+                "Failed to save verified payment for user=$userEmail order=$orderId",
+                e
+            )
+            false
+        }
+
+        if (!saved) {
+            call.respondError(
+                message = "Failed to store payment details",
+                data = Unit,
+                status = HttpStatusCode.InternalServerError
+            )
+            return@post
+        }
+
+        call.respondSuccess(
+            message = "Payment verified and stored successfully",
+            data = VerifyPaymentResponse(verified = true),
+            status = HttpStatusCode.OK
+        )
     }
 }
