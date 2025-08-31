@@ -1488,16 +1488,6 @@ fun Route.adminAuthRoute() {
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                                <div class="tool-item" role="listitem">
-                                                                    <span class="material-icons tool-icon" aria-hidden="true">fingerprint</span>
-                                                                    <div class="tool-content">
-                                                                        <div class="tool-title">Request Signature Playground</div>
-                                                                        <div class="tool-desc">Experiment with HMAC-based signing used in callbacks/webhooks. Generate and verify signatures against arbitrary payloads to validate integrations.</div>
-                                                                        <div class="tool-actions">
-                                                                            <button id="sig-tool-btn" class="btn btn-secondary" aria-label="Open Request Signature Playground">Open</button>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
                                                             </div>
                                                             """
                                                         )

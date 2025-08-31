@@ -405,19 +405,6 @@ function initializeAdmin() {
             jwtBtn.dataset.bound = 'true';
         }
 
-        // Bind Request Signature Playground
-        const sigBtn = document.getElementById('sig-tool-btn');
-        if (sigBtn && !sigBtn.dataset.bound) {
-            sigBtn.addEventListener('click', function(){
-                try {
-                    const content = buildSigToolContent();
-                    showModal('Request Signature Playground', content);
-                    bindSigToolModal();
-                } catch(e) { console.error('Failed to open Signature Playground', e); }
-            });
-            sigBtn.dataset.bound = 'true';
-        }
-
         // Ensure footer exists (if server-side footer is missing)
         try {
             if (!document.querySelector('.footer')) {
@@ -1036,117 +1023,6 @@ function bindJwtInspectorModal(){
 }
 
 // =============== End JWT Token Inspector ===============
-
-// =============== Request Signature Playground ===============
-function buildSigToolContent(){
-    return [
-        '<div style="display:grid; gap:10px">',
-        '<div class="message info-message">Use this tool to generate or verify HMAC-SHA256 signatures. Useful for webhook/callback testing.</div>',
-        '<div class="form-row">',
-        '<input id="sig-secret" class="form-control" type="text" placeholder="Shared secret (e.g., test_secret)">',
-        '<select id="sig-encoding" class="role-select" style="min-width:140px">',
-        '<option value="hex">Hex</option>',
-        '<option value="base64">Base64</option>',
-        '</select>',
-        '</div>',
-        '<div class="form-group">',
-        '<label for="sig-payload" class="form-label">Payload</label>',
-        '<textarea id="sig-payload" class="form-control" rows="6" placeholder="Raw body or canonical string"></textarea>',
-        '</div>',
-        '<div class="form-group">',
-        '<label for="sig-header" class="form-label">Header name (optional)</label>',
-        '<input id="sig-header" class="form-control" type="text" value="X-Signature">',
-        '</div>',
-        '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">',
-        '<button id="sig-generate" class="btn btn-primary">Generate</button>',
-        '<button id="sig-verify" class="btn btn-secondary">Verify</button>',
-        '<button id="sig-clear" class="btn">Clear</button>',
-        '</div>',
-        '<div id="sig-error" class="message error-message" style="display:none"></div>',
-        '<div id="sig-output" class="message info-message" style="display:none"></div>',
-        '</div>'
-    ].join('');
-}
-
-function bindSigToolModal(){
-    const q = (id) => document.getElementById(id);
-    const secretEl = q('sig-secret');
-    const encSel = q('sig-encoding');
-    const payloadEl = q('sig-payload');
-    const headerEl = q('sig-header');
-    const outEl = q('sig-output');
-    const errEl = q('sig-error');
-
-    function showErr(msg){ if (!errEl) return; errEl.textContent = msg || 'Error'; errEl.style.display = 'block'; }
-    function hideErr(){ if (errEl) errEl.style.display = 'none'; }
-    function showOut(msg){ if (!outEl) return; outEl.textContent = msg || ''; outEl.style.display = 'block'; }
-    function hideOut(){ if (outEl) outEl.style.display = 'none'; }
-
-    async function hmacSha256Hex(key, data){
-        const enc = new TextEncoder();
-        const cryptoKey = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-        const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(data));
-        return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-    async function hmacSha256Base64(key, data){
-        const enc = new TextEncoder();
-        const cryptoKey = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-        const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(data));
-        let bin = '';
-        const bytes = new Uint8Array(sig);
-        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-        return btoa(bin);
-    }
-
-    async function generate(){
-        hideErr(); hideOut();
-        const secret = (secretEl && secretEl.value || '').trim();
-        const payload = (payloadEl && payloadEl.value || '').trim();
-        const enc = (encSel && encSel.value) || 'hex';
-        if (!secret) { showErr('Please provide a secret'); return; }
-        if (!payload) { showErr('Please provide a payload'); return; }
-        try {
-            const sig = enc === 'base64' ? await hmacSha256Base64(secret, payload) : await hmacSha256Hex(secret, payload);
-            const header = (headerEl && headerEl.value || 'X-Signature').trim();
-            showOut(`${header}: ${sig}`);
-            showToast('success', 'Signature generated');
-        } catch(e){
-            console.error('Signature generate error', e);
-            showErr('Failed to generate signature');
-        }
-    }
-
-    async function verify(){
-        hideErr(); hideOut();
-        try {
-            const expected = prompt('Paste expected signature value');
-            if (!expected) { return; }
-            const secret = (secretEl && secretEl.value || '').trim();
-            const payload = (payloadEl && payloadEl.value || '').trim();
-            const enc = (encSel && encSel.value) || 'hex';
-            if (!secret || !payload) { showErr('Provide secret and payload first'); return; }
-            const computed = enc === 'base64' ? await hmacSha256Base64(secret, payload) : await hmacSha256Hex(secret, payload);
-            const ok = computed.trim() === expected.trim();
-            showOut(`Match: ${ok ? 'Yes' : 'No'}\nComputed: ${computed}`);
-            showToast(ok ? 'success' : 'error', ok ? 'Signature matches' : 'Signature mismatch');
-        } catch(e){
-            console.error('Signature verify error', e);
-            showErr('Failed to verify signature');
-        }
-    }
-
-    const genBtn = q('sig-generate');
-    const verBtn = q('sig-verify');
-    const clrBtn = q('sig-clear');
-    if (genBtn) genBtn.addEventListener('click', () => { generate(); });
-    if (verBtn) verBtn.addEventListener('click', () => { verify(); });
-    if (clrBtn) clrBtn.addEventListener('click', () => {
-        if (payloadEl) payloadEl.value = '';
-        if (outEl) { outEl.textContent = ''; outEl.style.display = 'none'; }
-        hideErr();
-    });
-}
-// =============== End Request Signature Playground ===============
 
 
 // ================= Reports (Usage Analytics) =================
