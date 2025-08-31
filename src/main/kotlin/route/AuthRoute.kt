@@ -27,6 +27,7 @@ import util.Constants
  */
 fun Route.authRoute() {
     val userRepository: UserRepository by application.inject()
+    val analytics: util.Analytics by application.inject()
     val logger = LoggerFactory.getLogger("AuthRoute")
 
     /**
@@ -161,6 +162,16 @@ fun Route.authRoute() {
                         } catch (e: Exception) {
                             logger.warn("Failed to set auth cookie on register: ${e.message}")
                         }
+
+                        // Analytics: sign_up success
+                        analytics.event(
+                            name = "sign_up",
+                            params = mapOf(
+                                "method" to "email_password"
+                            ),
+                            userId = user.email,
+                            userAgent = call.request.headers["User-Agent"]
+                        )
 
                         // Respond like /login
                         call.respondSuccess(
@@ -379,6 +390,16 @@ fun Route.authRoute() {
                         logger.warn("Failed to set auth cookie: ${e.message}")
                     }
 
+                    // Analytics: login success
+                    analytics.event(
+                        name = "login",
+                        params = mapOf(
+                            "method" to "email_password"
+                        ),
+                        userId = user.email,
+                        userAgent = call.request.headers["User-Agent"]
+                    )
+
                     // Return token and user info in response body
                     call.respondSuccess(
                         Constants.Messages.LOGIN_SUCCESS,
@@ -585,6 +606,14 @@ fun Route.authRoute() {
                     val newToken = JwtConfig.generateToken(email, user.role)
                     logger.info("Token refreshed successfully for user: $email")
 
+                    // Analytics: token_refresh
+                    analytics.event(
+                        name = "token_refresh",
+                        params = emptyMap(),
+                        userId = email,
+                        userAgent = call.request.headers["User-Agent"]
+                    )
+
                     // Return new token and user info in response body
                     call.respondSuccess(
                         Constants.Messages.TOKEN_REFRESH_SUCCESS,
@@ -735,6 +764,12 @@ fun Route.authRoute() {
     post(Constants.Api.LOGOUT_ENDPOINT) {
         try {
             logger.info("Logout request received")
+            // Analytics: logout
+            analytics.event(
+                name = "logout",
+                params = emptyMap(),
+                userAgent = call.request.headers["User-Agent"]
+            )
             call.performLogout()
         } catch (e: Exception) {
             logger.error("Exception during logout: ${e.message}", e)

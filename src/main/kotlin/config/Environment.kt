@@ -62,4 +62,22 @@ object Environment {
     fun getFcmFunctionUrl(): String? {
         return System.getenv(Constants.Env.FCM_FUNCTION_URL)?.takeIf { it.isNotBlank() }
     }
+
+    /** Analytics (GA4): measurement ID or null if missing */
+    fun getGaMeasurementId(): String? {
+        return System.getenv(Constants.Env.GA_MEASUREMENT_ID)?.takeIf { it.isNotBlank() }
+    }
+
+    /** Analytics (GA4): API secret or null if missing */
+    fun getGaApiSecret(): String? {
+        return System.getenv(Constants.Env.GA_API_SECRET)?.takeIf { it.isNotBlank() }
+    }
+
+    /** Analytics (GA4): enabled flag, default false */
+    fun isAnalyticsEnabled(): Boolean {
+        return (System.getenv(Constants.Env.GA_ENABLED) ?: "false").equals(
+            "true",
+            ignoreCase = true
+        )
+    }
 }

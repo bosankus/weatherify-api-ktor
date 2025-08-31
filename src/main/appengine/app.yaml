@@ -20,3 +20,6 @@ env_variables:
   JWT_AUDIENCE: "jwt-audience"
   JWT_ISSUER: "jwt-issuer"
   JWT_REALM: "jwt-realm"
+  GA_ENABLED: "true"
+  GA_TRACKING_ID: "G-EBVRVNN6JF	"
+  GA_MEASUREMENT_ID: "G-LWRPRSSDRY"

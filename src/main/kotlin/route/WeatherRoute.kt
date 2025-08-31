@@ -14,10 +14,12 @@ import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.application
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.koin.ktor.ext.inject
 import util.Constants
 
 /** Extract latitude and longitude from request */
@@ -56,6 +58,7 @@ private suspend inline fun <reified T> fetchWeatherData(
 
 /** Weather API routes */
 fun Route.weatherRoute() {
+    val analytics: util.Analytics by application.inject()
     authenticate("jwt-auth") {
         route(Constants.Api.WEATHER_ENDPOINT) {
             // Get weather data
@@ -74,6 +77,17 @@ fun Route.weatherRoute() {
                     lon = lon,
                     additionalParams = mapOf(Constants.Api.PARAM_EXCLUDE to Constants.Api.EXCLUDE_MINUTELY)
                 ).onSuccess { weatherData ->
+                    // Analytics: weather_view
+                    analytics.event(
+                        name = "weather_view",
+                        params = mapOf(
+                            "lat" to lat,
+                            "lon" to lon
+                        ),
+                        userId = email,
+                        userAgent = call.request.headers["User-Agent"]
+                    )
+
                     call.respondSuccess(
                         Constants.Messages.WEATHER_RETRIEVED,
                         weatherData,
@@ -112,6 +126,17 @@ fun Route.weatherRoute() {
                     lat = lat,
                     lon = lon
                 ).onSuccess { response ->
+                    // Analytics: air_quality_view
+                    analytics.event(
+                        name = "air_quality_view",
+                        params = mapOf(
+                            "lat" to lat,
+                            "lon" to lon
+                        ),
+                        userId = email,
+                        userAgent = call.request.headers["User-Agent"]
+                    )
+
                     call.respondSuccess(
                         Constants.Messages.AIR_POLLUTION_RETRIEVED,
                         response,

@@ -150,5 +150,10 @@ object Constants {
         // Notifications / FCM
         const val FCM_FUNCTION_URL = "FCM_FUNCTION_URL" // Optional: HTTPS Cloud Function endpoint
         // const val FCM_SERVER_KEY = "FCM_SERVER_KEY"     // Optional: Legacy FCM server key
+
+        // Analytics (GA4 via Firebase)
+        const val GA_MEASUREMENT_ID = "GA_MEASUREMENT_ID"
+        const val GA_API_SECRET = "GA_API_SECRET"
+        const val GA_ENABLED = "GA_ENABLED" // "true" to enable server-side analytics
     }
 }

@@ -66,6 +66,7 @@ data class AdminLoginRequest(val email: String, val password: String)
  * Helper function to set up common HTML head elements
  */
 fun HEAD.setupHead(title: String, includeAdminJs: Boolean = false) {
+    WebResources.includeGoogleTag(this)
     title { +title }
     meta { charset = "UTF-8" }
     meta {
@@ -1484,6 +1485,16 @@ fun Route.adminAuthRoute() {
                                                                         <div class="tool-desc">Paste a JWT to decode its header and payload, view claims and expiration, and check time validity.</div>
                                                                         <div class="tool-actions">
                                                                             <button id="jwt-inspector-btn" class="btn btn-secondary" aria-label="Open JWT Token Inspector">Open</button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="tool-item" role="listitem">
+                                                                    <span class="material-icons tool-icon" aria-hidden="true">fingerprint</span>
+                                                                    <div class="tool-content">
+                                                                        <div class="tool-title">Request Signature Playground</div>
+                                                                        <div class="tool-desc">Experiment with HMAC-based signing used in callbacks/webhooks. Generate and verify signatures against arbitrary payloads to validate integrations.</div>
+                                                                        <div class="tool-actions">
+                                                                            <button id="sig-tool-btn" class="btn btn-secondary" aria-label="Open Request Signature Playground">Open</button>
                                                                         </div>
                                                                     </div>
                                                                 </div>

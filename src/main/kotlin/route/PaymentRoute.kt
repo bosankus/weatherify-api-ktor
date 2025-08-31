@@ -266,13 +266,47 @@ fun Route.paymentRoute() {
             return@post
         }
 
-        // Persist payment
+        // Persist payment and update subscription
+        // Fetch user by email to link payment and update subscriptions
+        val user = try {
+            DatabaseFactory.findUserByEmail(userEmail)
+        } catch (e: Exception) {
+            paymentLogger.error("Failed to fetch user by email for payment storing: $userEmail", e)
+            null
+        }
+
+        if (user == null) {
+            call.respondError(
+                message = "User not found for payment processing",
+                data = Unit,
+                status = HttpStatusCode.NotFound
+            )
+            return@post
+        }
+
+        // Determine subscription window (30 days)
+        val nowInstant = java.time.Instant.now()
+        val startDate = nowInstant.toString()
+        val endDate = nowInstant.plusSeconds(30L * 24L * 60L * 60L).toString()
+
+        // Admin tracking context
+        val ip = call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+            ?: call.request.headers["X-Real-IP"]
+        val ua = call.request.headers["User-Agent"]
+
         val payment = Payment(
             userEmail = userEmail,
             orderId = orderId,
             paymentId = paymentId,
             signature = signature,
-            status = "verified"
+            status = "verified",
+            verifiedAt = startDate,
+            userId = user.id,
+            serviceType = bose.ankush.data.model.ServiceType.PREMIUM_ONE,
+            subscriptionStart = startDate,
+            subscriptionEnd = endDate,
+            requestIp = ip,
+            userAgent = ua
         )
 
         val saved = try {
@@ -294,8 +328,42 @@ fun Route.paymentRoute() {
             return@post
         }
 
+        // Update user's subscription history and active status
+        val updatedExisting = user.subscriptions.map {
+            if (it.status == bose.ankush.data.model.SubscriptionStatus.ACTIVE) {
+                it.copy(status = bose.ankush.data.model.SubscriptionStatus.EXPIRED)
+            } else it
+        }
+        val newSubscription = bose.ankush.data.model.Subscription(
+            service = bose.ankush.data.model.ServiceType.PREMIUM_ONE,
+            startDate = startDate,
+            endDate = endDate,
+            status = bose.ankush.data.model.SubscriptionStatus.ACTIVE,
+            sourcePaymentId = payment.id
+        )
+        val updatedUser = user.copy(
+            subscriptions = updatedExisting + newSubscription,
+            isPremium = true
+        )
+
+        val userUpdated = try {
+            DatabaseFactory.updateUser(updatedUser)
+        } catch (e: Exception) {
+            paymentLogger.error("Failed to update user subscription for user=$userEmail", e)
+            false
+        }
+
+        if (!userUpdated) {
+            call.respondError(
+                message = "Payment stored but failed to update subscription",
+                data = Unit,
+                status = HttpStatusCode.InternalServerError
+            )
+            return@post
+        }
+
         call.respondSuccess(
-            message = "Payment verified and stored successfully",
+            message = "Payment verified, stored and subscription activated",
             data = VerifyPaymentResponse(verified = true),
             status = HttpStatusCode.OK
         )

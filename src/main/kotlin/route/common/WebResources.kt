@@ -10,6 +10,31 @@ import kotlinx.html.unsafe
  */
 object WebResources {
 
+    /**
+     * Include Google tag (gtag.js) immediately after the <head> element
+     */
+    fun includeGoogleTag(head: HEAD) {
+        // External gtag.js loader
+        head.script {
+            attributes["async"] = ""
+            attributes["src"] = "https://www.googletagmanager.com/gtag/js?id=G-EBVRVNN6JF"
+        }
+        // Inline gtag config
+        head.script {
+            unsafe {
+                raw(
+                    """
+                    window.dataLayer = window.dataLayer || [];
+                    function gtag(){dataLayer.push(arguments);}
+                    gtag('js', new Date());
+
+                    gtag('config', 'G-EBVRVNN6JF');
+                    """.trimIndent()
+                )
+            }
+        }
+    }
+
     // CSS file contents
     private val baseCss = readResourceFile("/web/css/base.css")
     private val componentsCss = readResourceFile("/web/css/components.css")

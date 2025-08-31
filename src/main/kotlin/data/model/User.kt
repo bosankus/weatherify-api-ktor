@@ -5,6 +5,32 @@ import kotlinx.serialization.Serializable
 import org.bson.types.ObjectId
 import java.time.Instant
 
+/**
+ * Service types available for subscription. Currently only one service.
+ */
+@Serializable
+enum class ServiceType {
+    PREMIUM_ONE
+}
+
+/** Subscription status values */
+@Serializable
+enum class SubscriptionStatus {
+    ACTIVE,
+    EXPIRED
+}
+
+/** Subscription record for a user */
+@Serializable
+data class Subscription(
+    val service: ServiceType,
+    val startDate: String,
+    val endDate: String,
+    val status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
+    val sourcePaymentId: String? = null,
+    val createdAt: String = Instant.now().toString()
+)
+
 /** User model with authentication and status information */
 @Serializable
 data class User(
@@ -23,7 +49,9 @@ data class User(
     val ipAddress: String? = null,
     val registrationSource: String? = null,
     val isPremium: Boolean = false,
-    val fcmToken: String? = null
+    val fcmToken: String? = null,
+    // All subscriptions for this user; at most one should be ACTIVE at any time
+    val subscriptions: List<Subscription> = emptyList()
 )
 
 /** User roles for access control */

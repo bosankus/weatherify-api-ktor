@@ -102,6 +102,7 @@ fun Route.notFoundRoute() {
             call.respondHtml(HttpStatusCode.NotFound) {
                 attributes["lang"] = "en"
                 head {
+                    WebResources.includeGoogleTag(this)
                     title { +pageName }
                     meta {
                         charset = "UTF-8"
@@ -144,7 +145,7 @@ fun Route.notFoundRoute() {
                                     padding: 2rem;
                                     text-align: center;
                                 }
-                                
+
                                 .error-code {
                                     font-size: 8rem;
                                     font-weight: 700;
@@ -155,34 +156,34 @@ fun Route.notFoundRoute() {
                                     -webkit-text-fill-color: transparent;
                                     margin-bottom: 1rem;
                                 }
-                                
+
                                 .error-title {
                                     font-size: 2rem;
                                     margin-bottom: 1.5rem;
                                     color: var(--text-primary);
                                 }
-                                
+
                                 .error-message {
                                     font-size: 1.2rem;
                                     margin-bottom: 2rem;
                                     color: var(--text-secondary);
                                     line-height: 1.6;
                                 }
-                                
+
                                 .error-icon {
                                     font-size: 5rem;
                                     color: var(--text-secondary);
                                     margin-bottom: 1rem;
                                     opacity: 0.7;
                                 }
-                                
+
                                 .action-buttons {
                                     display: flex;
                                     justify-content: center;
                                     gap: 1rem;
                                     margin-top: 2rem;
                                 }
-                                
+
                                 .action-button {
                                     padding: 0.75rem 1.5rem;
                                     border-radius: 8px;
@@ -195,28 +196,28 @@ fun Route.notFoundRoute() {
                                     align-items: center;
                                     gap: 0.5rem;
                                 }
-                                
+
                                 .primary-button {
                                     background: linear-gradient(135deg, #3b4f7d, #2d3748);
                                     color: white;
                                     border: none;
                                 }
-                                
+
                                 .secondary-button {
                                     background: transparent;
                                     color: var(--text-primary);
                                     border: 1px solid var(--border-color);
                                 }
-                                
+
                                 .action-button:hover {
                                     transform: translateY(-2px);
                                     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
                                 }
-                                
+
                                 .action-button:active {
                                     transform: translateY(0);
                                 }
-                                
+
                                 .material-icons {
                                     font-size: 1.2rem;
                                 }

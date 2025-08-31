@@ -5,6 +5,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.html.respondHtml
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.application
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import kotlinx.html.InputType
@@ -27,15 +28,27 @@ import kotlinx.html.span
 import kotlinx.html.style
 import kotlinx.html.title
 import kotlinx.html.unsafe
+import org.koin.ktor.ext.inject
 import util.Constants
 
 fun Route.homeRoute() {
     val pageName = "Androidplay API Portal"
+    val analytics: util.Analytics by application.inject()
     route(Constants.Api.HOME_ENDPOINT) {
         get {
+            // Analytics: page_view for home
+            analytics.event(
+                name = "page_view",
+                params = mapOf(
+                    "page_location" to "home",
+                    "page_title" to pageName
+                ),
+                userAgent = call.request.headers["User-Agent"]
+            )
             call.respondHtml(HttpStatusCode.OK) {
                 attributes["lang"] = "en"
                 head {
+                    WebResources.includeGoogleTag(this)
                     title { +pageName }
                     meta {
                         charset = "UTF-8"

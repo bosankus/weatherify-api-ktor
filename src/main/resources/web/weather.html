@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-EBVRVNN6JF"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        gtag('config', 'G-EBVRVNN6JF');
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weather Dashboard - Androidplay Weather API</title>
@@ -18,32 +27,32 @@
             margin: 0 auto;
             padding: 0;
         }
-        
+
         .dashboard-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 2rem;
         }
-        
+
         .dashboard-title {
             font-size: 1.8rem;
             font-weight: 600;
             color: var(--text-primary);
             margin: 0;
         }
-        
+
         .user-info {
             display: flex;
             align-items: center;
             gap: 1rem;
         }
-        
+
         .user-email {
             font-size: 0.95rem;
             color: var(--text-secondary);
         }
-        
+
         .logout-button {
             padding: 0.5rem 1rem;
             background: linear-gradient(135deg, #3b4f7d, #2d3748);
@@ -55,16 +64,16 @@
             cursor: pointer;
             transition: transform 0.1s, box-shadow 0.2s;
         }
-        
+
         .logout-button:hover {
             transform: translateY(-1px);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
-        
+
         .logout-button:active {
             transform: translateY(0);
         }
-        
+
         .weather-form {
             background: var(--card-bg);
             border: 1px solid var(--card-border);
@@ -73,66 +82,66 @@
             margin-bottom: 2rem;
             box-shadow: 0 4px 12px var(--card-shadow);
         }
-        
+
         .form-row {
             display: flex;
             gap: 1rem;
             margin-bottom: 1.5rem;
         }
-        
+
         .submit-container {
             display: flex;
             align-items: flex-end;
         }
-        
+
         /* Responsive styles for the weather form */
         @media (max-width: 768px) {
             .form-row {
                 flex-wrap: wrap;
             }
-            
+
             .form-group {
                 flex: 0 0 calc(50% - 0.5rem);
             }
-            
+
             .submit-container {
                 margin-top: 1rem;
                 flex: 0 0 100%;
             }
-            
+
             .submit-button {
                 width: 100%;
             }
         }
-        
+
         @media (max-width: 480px) {
             .form-row {
                 flex-direction: column;
                 gap: 1.25rem;
             }
-            
+
             .form-group {
                 flex: 0 0 100%;
             }
-            
+
             .submit-container {
                 margin-top: 0;
             }
         }
-        
+
         .form-group {
             flex: 1;
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
         }
-        
+
         .form-group label {
             font-weight: 500;
             color: var(--text-primary);
             font-size: 1rem;
         }
-        
+
         .form-group input {
             padding: 0.75rem 1rem;
             border: 1px solid var(--input-border);
@@ -143,13 +152,13 @@
             font-size: 1rem;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-        
+
         .form-group input:focus {
             border-color: var(--primary-color);
             box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
             outline: none;
         }
-        
+
         .submit-button {
             padding: 0.75rem 1.5rem;
             background: linear-gradient(135deg, #3b4f7d, #2d3748);
@@ -162,22 +171,22 @@
             transition: transform 0.1s, box-shadow 0.2s;
             align-self: flex-end;
         }
-        
+
         .submit-button:hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
-        
+
         .submit-button:active {
             transform: translateY(0);
         }
-        
+
         .submit-button.loading {
             pointer-events: none;
             opacity: 0.8;
             position: relative;
         }
-        
+
         .submit-button.loading::after {
             content: "";
             position: absolute;
@@ -191,11 +200,11 @@
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
-        
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        
+
         .error-message {
             background-color: rgba(220, 38, 38, 0.1);
             color: #dc2626;
@@ -205,17 +214,17 @@
             font-size: 0.95rem;
             display: none;
         }
-        
+
         .error-message.visible {
             display: block;
         }
-        
+
         .weather-results {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 1.5rem;
         }
-        
+
         .weather-card {
             background: var(--card-bg);
             border: 1px solid var(--card-border);
@@ -223,41 +232,41 @@
             padding: 1.5rem;
             box-shadow: 0 4px 12px var(--card-shadow);
         }
-        
+
         .weather-card h3 {
             margin-top: 0;
             margin-bottom: 1rem;
             font-size: 1.3rem;
             color: var(--text-primary);
         }
-        
+
         .weather-data {
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
         }
-        
+
         .weather-item {
             display: flex;
             justify-content: space-between;
             padding-bottom: 0.75rem;
             border-bottom: 1px solid var(--card-border);
         }
-        
+
         .weather-item:last-child {
             border-bottom: none;
         }
-        
+
         .weather-label {
             font-weight: 500;
             color: var(--text-secondary);
         }
-        
+
         .weather-value {
             font-weight: 600;
             color: var(--text-primary);
         }
-        
+
         .air-quality-level {
             display: inline-block;
             padding: 0.25rem 0.5rem;
@@ -265,13 +274,13 @@
             font-size: 0.85rem;
             font-weight: 600;
         }
-        
+
         .aqi-1 { background-color: #a8e05f; color: #2d3748; }
         .aqi-2 { background-color: #ffd050; color: #2d3748; }
         .aqi-3 { background-color: #ff9b57; color: #2d3748; }
         .aqi-4 { background-color: #ff5e5e; color: white; }
         .aqi-5 { background-color: #a97abc; color: white; }
-        
+
         .no-results {
             grid-column: 1 / -1;
             text-align: center;
@@ -298,7 +307,7 @@
                 </label>
             </div>
         </div>
-        
+
         <div class="dashboard-container">
             <div class="dashboard-header">
                 <h2 class="dashboard-title">Weather Dashboard</h2>
@@ -307,9 +316,9 @@
                     <button id="logout-button" class="logout-button">Logout</button>
                 </div>
             </div>
-            
+
             <div id="error-message" class="error-message"></div>
-            
+
             <div class="weather-form">
                 <form id="weather-form">
                     <div class="form-row">
@@ -329,7 +338,7 @@
                     </div>
                 </form>
             </div>
-            
+
             <div id="weather-results" class="weather-results">
                 <div class="no-results">
                     <p>Enter a location to see weather data</p>
@@ -337,7 +346,7 @@
             </div>
         </div>
     </div>
-    
+
     <script src="js/theme.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/auth.js"></script>
@@ -348,7 +357,7 @@
                 window.location.href = '/login?error=auth_required';
                 return;
             }
-            
+
             // Get user info for display
             const userInfo = getUserInfo();
             if (userInfo && userInfo.email) {
@@ -363,14 +372,14 @@
             const weatherResults = document.getElementById('weather-results');
             const userEmail = document.getElementById('user-email');
             const logoutButton = document.getElementById('logout-button');
-            
+
             // Check if user is authenticated
             if (!isAuthenticated()) {
                 // Not authenticated, redirect to login
                 window.location.href = '/login?error=auth_required';
                 return;
             }
-            
+
             // Display user email from JWT token
             try {
                 const token = getToken();
@@ -381,7 +390,7 @@
                     const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
                         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
                     }).join(''));
-                    
+
                     const payload = JSON.parse(jsonPayload);
                     if (payload.email) {
                         userEmail.textContent = payload.email;
@@ -390,35 +399,35 @@
             } catch (error) {
                 console.error('Error parsing JWT token:', error);
             }
-            
+
             // Handle logout
             logoutButton.addEventListener('click', function() {
                 logout();
             });
-            
+
             // Handle form submission
             weatherForm.addEventListener('submit', function(e) {
                 e.preventDefault();
-                
+
                 const latitude = document.getElementById('latitude').value;
                 const longitude = document.getElementById('longitude').value;
-                
+
                 // Validate inputs
                 if (!latitude || !longitude) {
                     showError('Please enter both latitude and longitude');
                     return;
                 }
-                
+
                 // Show loading state
                 submitButton.classList.add('loading');
-                
+
                 // Clear previous results
                 weatherResults.innerHTML = '';
-                
+
                 // Fetch weather data
                 fetchWeatherData(latitude, longitude);
             });
-            
+
             // Helper function to fetch weather data
             function fetchWeatherData(lat, lon) {
                 // Use authFetch from auth.js to make authenticated request
@@ -432,7 +441,7 @@
                     .then(weatherResponse => {
                         // Remove loading state
                         submitButton.classList.remove('loading');
-                        
+
                         if (weatherResponse.status === true && weatherResponse.data) {
                             // Fetch air pollution data
                             fetchAirPollutionData(lat, lon, weatherResponse.data);
@@ -444,7 +453,7 @@
                     .catch(error => {
                         // Remove loading state
                         submitButton.classList.remove('loading');
-                        
+
                         if (error.message.includes('401')) {
                             // Unauthorized - token might be expired
                             showError('Your session has expired. Please login again.');
@@ -455,11 +464,11 @@
                             showError('Failed to fetch weather data. Please try again.');
                             displayNoResults();
                         }
-                        
+
                         console.error('Weather fetch error:', error);
                     });
             }
-            
+
             // Helper function to fetch air pollution data
             function fetchAirPollutionData(lat, lon, weatherData) {
                 // Use authFetch from auth.js to make authenticated request
@@ -486,26 +495,26 @@
                         console.error('Air pollution fetch error:', error);
                     });
             }
-            
+
             // Helper function to display weather data
             function displayWeatherData(weatherData, airData) {
                 weatherResults.innerHTML = '';
-                
+
                 // Current weather card
                 const currentWeather = weatherData.current;
                 if (currentWeather) {
                     const currentCard = document.createElement('div');
                     currentCard.className = 'weather-card';
-                    
+
                     let weatherDesc = 'Unknown';
                     let weatherIcon = '';
-                    
+
                     if (currentWeather.weather && currentWeather.weather.length > 0) {
                         weatherDesc = currentWeather.weather[0].description || 'Unknown';
                         weatherDesc = weatherDesc.charAt(0).toUpperCase() + weatherDesc.slice(1);
                         weatherIcon = currentWeather.weather[0].icon || '';
                     }
-                    
+
                     currentCard.innerHTML = `
                         <h3>Current Weather</h3>
                         <div class="weather-data">
@@ -531,19 +540,19 @@
                             </div>
                         </div>
                     `;
-                    
+
                     weatherResults.appendChild(currentCard);
                 }
-                
+
                 // Air pollution card
                 if (airData && airData.list && airData.list.length > 0) {
                     const airPollution = airData.list[0];
                     const airCard = document.createElement('div');
                     airCard.className = 'weather-card';
-                    
+
                     let aqiClass = '';
                     let aqiText = '';
-                    
+
                     switch (airPollution.main?.aqi) {
                         case 1:
                             aqiClass = 'aqi-1';
@@ -569,7 +578,7 @@
                             aqiClass = '';
                             aqiText = 'Unknown';
                     }
-                    
+
                     airCard.innerHTML = `
                         <h3>Air Quality</h3>
                         <div class="weather-data">
@@ -597,23 +606,23 @@
                             </div>
                         </div>
                     `;
-                    
+
                     weatherResults.appendChild(airCard);
                 }
-                
+
                 // Daily forecast card (first day only)
                 if (weatherData.daily && weatherData.daily.length > 0) {
                     const dailyForecast = weatherData.daily[0];
                     const dailyCard = document.createElement('div');
                     dailyCard.className = 'weather-card';
-                    
+
                     let weatherDesc = 'Unknown';
-                    
+
                     if (dailyForecast.weather && dailyForecast.weather.length > 0) {
                         weatherDesc = dailyForecast.weather[0].description || 'Unknown';
                         weatherDesc = weatherDesc.charAt(0).toUpperCase() + weatherDesc.slice(1);
                     }
-                    
+
                     dailyCard.innerHTML = `
                         <h3>Today's Forecast</h3>
                         <div class="weather-data">
@@ -639,16 +648,16 @@
                             </div>
                         </div>
                     `;
-                    
+
                     weatherResults.appendChild(dailyCard);
                 }
-                
+
                 // If no cards were added, display no results
                 if (weatherResults.children.length === 0) {
                     displayNoResults();
                 }
             }
-            
+
             // Helper function to display no results
             function displayNoResults() {
                 weatherResults.innerHTML = `
@@ -657,23 +666,23 @@
                     </div>
                 `;
             }
-            
+
             // Helper function to show error message
             function showError(message) {
                 errorMessage.textContent = message;
                 errorMessage.classList.add('visible');
-                
+
                 // Hide error after 5 seconds
                 setTimeout(() => {
                     errorMessage.classList.remove('visible');
                 }, 5000);
             }
-            
+
             // Initialize theme
             if (typeof initializeTheme === 'function') {
                 initializeTheme();
             }
-            
+
             // Initialize app
             if (typeof initializeApp === 'function') {
                 initializeApp();

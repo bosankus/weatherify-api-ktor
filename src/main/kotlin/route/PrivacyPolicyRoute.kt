@@ -38,6 +38,7 @@ fun Route.privacyPolicyRoute() {
             call.respondHtml(HttpStatusCode.OK) {
                 attributes["lang"] = "en"
                 head {
+                    WebResources.includeGoogleTag(this)
                     title { +pageName }
                     meta {
                         charset = "UTF-8"

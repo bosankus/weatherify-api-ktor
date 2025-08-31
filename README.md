@@ -47,8 +47,6 @@ The project includes the following documentation files:
   and their relationships.
 - **[Data Flows Documentation](docs/data-flows.md)**: Detailed sequence diagrams for key data flows
   in the application.
-- **[GCP Enhancements and Feature Ideas](docs/gcp-enhancements.md)**: Recommended GCP services,
-  rationale, and phased roadmap to enhance this project.
 
 ## API Endpoints
 

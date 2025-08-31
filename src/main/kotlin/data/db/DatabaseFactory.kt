@@ -111,8 +111,37 @@ object DatabaseFactory {
         return paymentsCollection.find(query).toList()
     }
 
+    /** List recent payments, most recent first */
+    suspend fun listRecentPayments(limit: Int = 100): List<Payment> {
+        val lim = if (limit <= 0) 100 else minOf(limit, 1000)
+        return paymentsCollection.find().sort(Document("createdAt", -1)).limit(lim).toList()
+    }
+
+    /** Get all verified payments (for summary aggregation) */
+    suspend fun getAllVerifiedPayments(): List<Payment> {
+        return paymentsCollection.find(Document("status", "verified")).toList()
+    }
+
+    /** Count all payments */
+    suspend fun countAllPayments(): Long {
+        return try {
+            paymentsCollection.countDocuments()
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    /** Count all verified payments */
+    suspend fun countVerifiedPayments(): Long {
+        return try {
+            paymentsCollection.countDocuments(Document("status", "verified"))
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
     /** Update a user */
-    /*suspend fun updateUser(user: User): Boolean {
+    suspend fun updateUser(user: User): Boolean {
         val query = createQuery("email", user.email)
         return executeDbOperation {
             usersCollection.replaceOne(
@@ -120,5 +149,5 @@ object DatabaseFactory {
                 replacement = user
             )
         }
-    }*/
+    }
 }

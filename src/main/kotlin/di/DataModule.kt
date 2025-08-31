@@ -22,6 +22,9 @@ val dataModule = module {
     // API Clients
     single<WeatherApiClient> { WeatherApiClientImpl() }
 
+    // Analytics
+    single<util.Analytics> { util.GoogleAnalyticsClient.fromEnv() }
+
     // Repositories
     single<UserRepository> { UserRepositoryImpl(get()) }
     single<FeedbackRepository> { FeedbackRepositoryImpl(get()) }
