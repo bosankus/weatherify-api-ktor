@@ -45,6 +45,7 @@ object WebResources {
     private val utilsJs = readResourceFile("/web/js/utils.js")
     private val authJs = readResourceFile("/web/js/auth.js")
     private val adminJs = readResourceFile("/web/js/admin.js")
+    private val decodeJs = readResourceFile("/web/js/decode.js")
 
     /**
      * Read a file from the resources directory
@@ -151,6 +152,23 @@ object WebResources {
         head.script {
             unsafe {
                 raw(adminJs)
+            }
+        }
+    }
+
+    /**
+     * Include decode page JavaScript in the HTML head
+     */
+    fun includeDecodeJs(head: HEAD) {
+        // Include jsonlint library via CDN to get line/column error reporting
+        head.script {
+            attributes["src"] =
+                "https://cdn.jsdelivr.net/npm/jsonlint-mod@1.7.6/dist/jsonlint.min.js"
+            attributes["crossorigin"] = "anonymous"
+        }
+        head.script {
+            unsafe {
+                raw(decodeJs)
             }
         }
     }

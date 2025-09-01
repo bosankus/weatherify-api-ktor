@@ -2,8 +2,10 @@ package bose.ankush.route.common
 
 import bose.ankush.route.adminAuthRoute
 import bose.ankush.route.authRoute
+import bose.ankush.route.decodeRoute
 import bose.ankush.route.feedbackRoute
 import bose.ankush.route.homeRoute
+import bose.ankush.route.mockApiRoute
 import bose.ankush.route.paymentRoute
 import bose.ankush.route.privacyPolicyRoute
 import bose.ankush.route.termsAndConditionsRoute
@@ -66,5 +68,17 @@ object UserRoutesRegistrar : RouteRegistrar {
 object PaymentRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         with(root) { paymentRoute() }
+    }
+}
+
+object MockRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { mockApiRoute() }
+    }
+}
+
+object DecodeRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { decodeRoute() }
     }
 }
