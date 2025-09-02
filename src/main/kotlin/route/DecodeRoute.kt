@@ -11,6 +11,7 @@ import kotlinx.html.InputType
 import kotlinx.html.body
 import kotlinx.html.button
 import kotlinx.html.classes
+import kotlinx.html.details
 import kotlinx.html.div
 import kotlinx.html.footer
 import kotlinx.html.h1
@@ -18,14 +19,19 @@ import kotlinx.html.head
 import kotlinx.html.id
 import kotlinx.html.input
 import kotlinx.html.label
+import kotlinx.html.li
 import kotlinx.html.link
 import kotlinx.html.meta
+import kotlinx.html.option
 import kotlinx.html.p
 import kotlinx.html.pre
+import kotlinx.html.select
 import kotlinx.html.span
 import kotlinx.html.style
+import kotlinx.html.summary
 import kotlinx.html.textArea
 import kotlinx.html.title
+import kotlinx.html.ul
 import kotlinx.html.unsafe
 import org.koin.ktor.ext.inject
 
@@ -50,8 +56,16 @@ fun Route.decodeRoute() {
                     meta { charset = "UTF-8" }
                     meta {
                         name = "viewport"
-                        content = "width=device-width, initial-scale=1.0"
+                        content =
+                            "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
                     }
+                    meta { name = "theme-color"; content = "#0f1117" }
+                    meta { name = "apple-mobile-web-app-capable"; content = "yes" }
+                    meta {
+                        name = "apple-mobile-web-app-status-bar-style"; content =
+                        "black-translucent"
+                    }
+                    meta { name = "mobile-web-app-capable"; content = "yes" }
                     // fonts and icons similar to home
                     link { rel = "preconnect"; href = "https://fonts.googleapis.com" }
                     link {
@@ -76,13 +90,14 @@ fun Route.decodeRoute() {
                         unsafe {
                             raw(
                                 """
-                                .container { padding: 1rem 2rem 2rem; }
-                                .header { margin-top: 0; }
+                                :root { --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); --safe-left: env(safe-area-inset-left); --safe-right: env(safe-area-inset-right); }
+                                .container { padding: calc(0.75rem + var(--safe-top)) calc(1rem + var(--safe-right)) calc(1rem + var(--safe-bottom)) calc(1rem + var(--safe-left)); }
+                                .header { margin-top: 0; display:flex; flex-wrap: wrap; gap: .5rem; }
 
                                 .decode-container { max-width: 1100px; margin: 0 auto; padding: 24px; }
                                 .decode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
                                 .panel { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; box-shadow: 0 8px 30px var(--card-shadow); overflow: hidden; }
-                                .panel-header { padding: 12px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--header-border); }
+                                .panel-header { padding: 12px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--header-border); flex-wrap: wrap; gap: 8px; }
                                 .panel-title { font-weight:600; color: var(--card-title); }
                                 .panel-body { padding: 0; }
                                 .input-area { width:100%; min-height:420px; resize:vertical; padding:16px; background: transparent; color: var(--text-color); font-family: 'JetBrains Mono', monospace; border: none; outline:none; }
@@ -96,11 +111,21 @@ fun Route.decodeRoute() {
                                 .token-boolean { color:#f28b82; }
                                 .token-null { color:#c792ea; }
                                 .error-line { background: rgba(255,107,107,0.1); }
-                                .toolbar { display:flex; gap:8px; }
-                                .btn { background: var(--endpoint-bg); border:1px solid var(--endpoint-border); color: var(--text-color); padding:6px 10px; border-radius:10px; cursor:pointer; }
+                                .toolbar { display:flex; gap:8px; flex-wrap: wrap; }
+                                .btn { background: var(--endpoint-bg); border:1px solid var(--endpoint-border); color: var(--text-color); padding:10px 12px; border-radius:10px; cursor:pointer; min-height: 40px; }
                                 .btn:hover { background: var(--card-hover-bg); border-color: var(--card-hover-border); }
+                                .btn[disabled] { opacity: .6; cursor: not-allowed; }
                                 .decode-container > p { margin-bottom: 20px; }
-                                @media (max-width: 900px){ .decode-grid{ grid-template-columns: 1fr; } }
+                                @media (max-width: 900px){
+                                  .decode-grid{ grid-template-columns: 1fr; }
+                                  .input-area{ min-height: 40vh; }
+                                  .code-view{ max-height: 50vh; }
+                                }
+                                @media (max-width: 480px){
+                                  .decode-container{ padding: 12px; }
+                                  .panel-title{ margin-bottom: 4px; }
+                                  .btn{ flex: 1 1 auto; }
+                                }
                                 """
                             )
                         }
@@ -139,41 +164,88 @@ fun Route.decodeRoute() {
                                     }
                                     div { }
                                 }
-                                span {
-                                    classes = setOf("material-icons", "nav-icon", "github-link")
-                                    id = "github-link"
-                                    attributes["data-url"] =
-                                        "https://github.com/bosankus/weatherify-api-ktor"
-                                    +"code"
-                                }
                             }
                         }
 
                         // Main content
                         div {
                             classes = setOf("decode-container")
-                            h1 { +"JSON Decoder" }
-                            p { +"Paste or type unformatted JSON on the left. The formatted, colorized output appears on the right. Errors will be highlighted with the line number." }
+                            h1 {
+                                attributes["style"] =
+                                    "margin-top: 6px;"; +"Data Decoder (JSON, XML, Protobuf)"
+                            }
+                            p { +"Paste or type your data on the left. Choose a format. The formatted output appears on the right. Errors will be highlighted with line numbers when available." }
+                            // Collapsible How to Use at top
+                            details {
+                                attributes["id"] = "howto-details"
+                                attributes["style"] = "margin: 8px 0 12px;"
+                                summary { +"How to Use" }
+                                div {
+                                    attributes["style"] =
+                                        "padding: 12px 16px; border: 1px solid var(--header-border); border-radius: 12px; margin-top:8px;"
+                                    p { +"Choose a format from the selector. Tools behave per format as described below." }
+                                    p { +"Input tools:" }
+                                    ul {
+                                        li { +"Format: Pretty-print JSON/XML. For Protobuf, shows hex dump of Base64 input." }
+                                        li { +"Auto Fix: JSON only. Fixes common JSON issues (quotes, commas, comments, Python True/False/None)." }
+                                        li { +"Unescape: JSON only. Decodes escape sequences or string literals." }
+                                        li { +"Clear: Clears the input area." }
+                                        li { +"Sample: Inserts sample for the selected format." }
+                                    }
+                                    p { +"Output tools:" }
+                                    ul {
+                                        li { +"Copy: Copy the output." }
+                                        li { +"Minify: JSON/XML minify; for Protobuf compacts whitespace in hex." }
+                                        li { +"Sort Keys: JSON only. Recursively sorts object keys." }
+                                        li { +"Download: Saves output with appropriate file type." }
+                                        li { +"Create Mock API: JSON only. Uses your JSON to create a temporary mock endpoint." }
+                                    }
+                                    p { +"Notes:" }
+                                    ul {
+                                        li { +"JSON: Line/column errors highlighted where possible." }
+                                        li { +"XML: Basic error reporting; pretty print is best-effort." }
+                                        li { +"Protobuf: Schema (.proto) is required for full decode. Paste Base64 to view a hex dump or convert via protoc to JSON and use JSON mode." }
+                                    }
+                                }
+                            }
                             div {
                                 classes = setOf("decode-grid")
                                 div("panel") {
                                     div("panel-header") {
                                         span("panel-title") { +"Input" }
                                         div("toolbar") {
-                                            button(classes = "btn") {
-                                                attributes["id"] = "btn-format"; +"Format"
+                                            select(classes = "btn") {
+                                                attributes["id"] = "format-select"
+                                                attributes["title"] =
+                                                    "Select data format (JSON, XML, Protobuf)"
+                                                option { value = "json"; selected = true; +"JSON" }
+                                                option { value = "xml"; +"XML" }
+                                                option { value = "protobuf"; +"Protobuf" }
                                             }
                                             button(classes = "btn") {
-                                                attributes["id"] = "btn-autofix"; +"Auto Fix"
+                                                attributes["id"] =
+                                                    "btn-format"; attributes["title"] =
+                                                "Format the input. Attempts auto-fix if needed."; +"Format"
                                             }
                                             button(classes = "btn") {
-                                                attributes["id"] = "btn-unescape"; +"Unescape"
+                                                attributes["id"] =
+                                                    "btn-autofix"; attributes["title"] =
+                                                "Auto-fix common JSON issues (quotes, commas, comments, booleans)"; +"Auto Fix"
                                             }
                                             button(classes = "btn") {
-                                                attributes["id"] = "btn-clear"; +"Clear"
+                                                attributes["id"] =
+                                                    "btn-unescape"; attributes["title"] =
+                                                "Decode escape sequences or quoted string into raw text (JSON)"; +"Unescape"
                                             }
                                             button(classes = "btn") {
-                                                attributes["id"] = "btn-sample"; +"Sample"
+                                                attributes["id"] =
+                                                    "btn-clear"; attributes["title"] =
+                                                "Clear the input area"; +"Clear"
+                                            }
+                                            button(classes = "btn") {
+                                                attributes["id"] =
+                                                    "btn-sample"; attributes["title"] =
+                                                "Insert a sample for the selected format"; +"Sample"
                                             }
                                         }
                                     }
@@ -191,20 +263,27 @@ fun Route.decodeRoute() {
                                         span("panel-title") { +"Output" }
                                         div("toolbar") {
                                             button(classes = "btn") {
-                                                attributes["id"] = "btn-copy"; +"Copy"
-                                            }
-                                            button(classes = "btn") {
-                                                attributes["id"] = "btn-minify"; +"Minify"
-                                            }
-                                            button(classes = "btn") {
-                                                attributes["id"] = "btn-sort"; +"Sort Keys"
-                                            }
-                                            button(classes = "btn") {
-                                                attributes["id"] = "btn-download"; +"Download"
+                                                attributes["id"] = "btn-copy"; attributes["title"] =
+                                                "Copy the output to clipboard"; +"Copy"
                                             }
                                             button(classes = "btn") {
                                                 attributes["id"] =
-                                                    "btn-create-mock"; +"Create Mock API"
+                                                    "btn-minify"; attributes["title"] =
+                                                "Minify the output"; +"Minify"
+                                            }
+                                            button(classes = "btn") {
+                                                attributes["id"] = "btn-sort"; attributes["title"] =
+                                                "Sort JSON object keys recursively"; +"Sort Keys"
+                                            }
+                                            button(classes = "btn") {
+                                                attributes["id"] =
+                                                    "btn-download"; attributes["title"] =
+                                                "Download the output as a file"; +"Download"
+                                            }
+                                            button(classes = "btn") {
+                                                attributes["id"] =
+                                                    "btn-create-mock"; attributes["title"] =
+                                                "Create a temporary mock API from JSON output"; +"Create Mock API"
                                             }
                                         }
                                     }
@@ -229,10 +308,14 @@ fun Route.decodeRoute() {
                                             }
                                             div("toolbar") {
                                                 button(classes = "btn") {
-                                                    attributes["id"] = "btn-mock-copy"; +"Copy URL"
+                                                    attributes["id"] =
+                                                        "btn-mock-copy"; attributes["title"] =
+                                                    "Copy the mock API URL"; +"Copy URL"
                                                 }
                                                 button(classes = "btn") {
-                                                    attributes["id"] = "btn-mock-reset"; +"Reset"
+                                                    attributes["id"] =
+                                                        "btn-mock-reset"; attributes["title"] =
+                                                    "Delete the mock API and hide this box"; +"Reset"
                                                 }
                                             }
                                         }
