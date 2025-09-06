@@ -98,7 +98,7 @@ body {
 .container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 2.5rem;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -279,24 +279,24 @@ html.light-theme .success-message {
     .container {
         padding: 0 1rem;
     }
-    
+
     .login-form {
         padding: 1.5rem;
         gap: 1.5rem;
     }
-    
+
     .form-group input {
         padding: 0.75rem 1rem;
     }
-    
+
     .login-button {
         padding: 0.75rem 1rem;
     }
-    
+
     .message {
         padding: 0.75rem 1rem;
     }
-    
+
     .login-heading {
         font-size: 1.75rem;
         margin-bottom: 1.5rem;
@@ -307,35 +307,35 @@ html.light-theme .success-message {
     .container {
         padding: 0 0.75rem;
     }
-    
+
     .login-form {
         padding: 1.25rem;
         gap: 1.25rem;
     }
-    
+
     .form-group label {
         font-size: 0.95rem;
     }
-    
+
     .form-group input {
         padding: 0.65rem 0.9rem;
         font-size: 0.95rem;
     }
-    
+
     .login-button {
         padding: 0.65rem 0.9rem;
         font-size: 0.95rem;
     }
-    
+
     .message {
         font-size: 0.85rem;
     }
-    
+
     .login-heading {
         font-size: 1.5rem;
         margin-bottom: 1.25rem;
     }
-    
+
     .login-subtitle {
         font-size: 0.9rem;
     }
@@ -350,7 +350,7 @@ html.light-theme .success-message {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid var(--header-border);
+    border-bottom: none;
     background-color: var(--card-bg);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);

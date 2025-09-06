@@ -1,17 +1,7 @@
 package bose.ankush.route.common
 
-import bose.ankush.route.adminAuthRoute
-import bose.ankush.route.authRoute
-import bose.ankush.route.decodeRoute
-import bose.ankush.route.feedbackRoute
-import bose.ankush.route.homeRoute
-import bose.ankush.route.mockApiRoute
-import bose.ankush.route.paymentRoute
-import bose.ankush.route.privacyPolicyRoute
-import bose.ankush.route.termsAndConditionsRoute
-import bose.ankush.route.userRoute
-import bose.ankush.route.weatherRoute
-import io.ktor.server.routing.Route
+import bose.ankush.route.*
+import io.ktor.server.routing.*
 
 /**
  * Registrar implementations that simply delegate to existing route extension functions.
@@ -80,5 +70,11 @@ object MockRoutesRegistrar : RouteRegistrar {
 object DecodeRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         with(root) { decodeRoute() }
+    }
+}
+
+object PollingEngineRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { pollingEngineRoute() }
     }
 }

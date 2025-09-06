@@ -1,31 +1,10 @@
 package bose.ankush.route
 
 import bose.ankush.route.common.WebResources
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.html.respondHtml
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
-import io.ktor.server.routing.route
-import kotlinx.html.InputType
-import kotlinx.html.a
-import kotlinx.html.body
-import kotlinx.html.classes
-import kotlinx.html.div
-import kotlinx.html.footer
-import kotlinx.html.h1
-import kotlinx.html.h2
-import kotlinx.html.head
-import kotlinx.html.id
-import kotlinx.html.input
-import kotlinx.html.label
-import kotlinx.html.link
-import kotlinx.html.meta
-import kotlinx.html.p
-import kotlinx.html.script
-import kotlinx.html.span
-import kotlinx.html.style
-import kotlinx.html.title
-import kotlinx.html.unsafe
+import io.ktor.http.*
+import io.ktor.server.html.*
+import io.ktor.server.routing.*
+import kotlinx.html.*
 
 /**
  * Route for Privacy Policy page
@@ -266,12 +245,6 @@ fun Route.privacyPolicyRoute() {
                                 classes = setOf("footer-content")
                                 p {
                                     +"© ${java.time.Year.now().value} Androidplay. All rights reserved."
-                                }
-                                p {
-                                    +"Return to "
-                                    a(href = "/") {
-                                        +"Home"
-                                    }
                                 }
                             }
                         }

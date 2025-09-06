@@ -1,17 +1,6 @@
 package di
 
-import bose.ankush.route.common.AdminAuthRoutesRegistrar
-import bose.ankush.route.common.AuthRoutesRegistrar
-import bose.ankush.route.common.DecodeRoutesRegistrar
-import bose.ankush.route.common.FeedbackRoutesRegistrar
-import bose.ankush.route.common.HomeRoutesRegistrar
-import bose.ankush.route.common.MockRoutesRegistrar
-import bose.ankush.route.common.PaymentRoutesRegistrar
-import bose.ankush.route.common.PrivacyPolicyRoutesRegistrar
-import bose.ankush.route.common.RouteRegistrar
-import bose.ankush.route.common.TermsAndConditionsRoutesRegistrar
-import bose.ankush.route.common.UserRoutesRegistrar
-import bose.ankush.route.common.WeatherRoutesRegistrar
+import bose.ankush.route.common.*
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
@@ -32,6 +21,7 @@ val routeModule = module {
     single<RouteRegistrar>(named("payments")) { PaymentRoutesRegistrar }
     single<RouteRegistrar>(named("mock")) { MockRoutesRegistrar }
     single<RouteRegistrar>(named("decode")) { DecodeRoutesRegistrar }
+    single<RouteRegistrar>(named("pollingengine")) { PollingEngineRoutesRegistrar }
 
     // Provide ordered list
     single<List<RouteRegistrar>> {
@@ -46,7 +36,8 @@ val routeModule = module {
             get(named("privacy")),
             get(named("payments")),
             get(named("mock")),
-            get(named("decode"))
+            get(named("decode")),
+            get(named("pollingengine"))
         )
     }
 }
