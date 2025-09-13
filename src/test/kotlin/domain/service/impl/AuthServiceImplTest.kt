@@ -18,6 +18,9 @@ class AuthServiceImplTest {
         override suspend fun updateUser(user: bose.ankush.data.model.User) =
             throw NotImplementedError("Not needed for these tests")
 
+        override suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): domain.model.Result<Boolean> =
+            domain.model.Result.Success(true)
+
         override suspend fun getAllUsers(
             filter: Map<String, Any>?,
             sortBy: String?,
