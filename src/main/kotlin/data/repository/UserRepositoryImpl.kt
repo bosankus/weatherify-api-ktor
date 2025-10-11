@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import org.bson.Document
 import org.bson.conversions.Bson
+import org.bson.types.ObjectId
 import org.slf4j.LoggerFactory
 import util.Constants
 import util.ValidationUtils
@@ -42,9 +43,9 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
 
             val rawId = doc["_id"]
             val idStr = when (rawId) {
-                is org.bson.types.ObjectId -> rawId.toHexString()
+                is ObjectId -> rawId.toHexString()
                 is String -> rawId
-                else -> rawId?.toString() ?: org.bson.types.ObjectId().toHexString()
+                else -> rawId?.toString() ?: ObjectId().toHexString()
             }
 
             val roleValue = doc.get("role")
@@ -59,7 +60,7 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
             }
 
             val user = User(
-                id = idStr,
+                id = ObjectId(idStr),
                 email = doc.getString("email"),
                 passwordHash = doc.getString("passwordHash"),
                 createdAt = doc.getString("createdAt") ?: java.time.Instant.now().toString(),

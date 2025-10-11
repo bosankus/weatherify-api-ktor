@@ -35,7 +35,8 @@ data class Subscription(
 @Serializable
 data class User(
     @SerialName("_id")
-    val id: String = ObjectId().toHexString(),
+    @kotlinx.serialization.Contextual
+    val id: ObjectId = ObjectId(),
     val email: String,
     val passwordHash: String,
     val createdAt: String = Instant.now().toString(),

@@ -1,39 +1,27 @@
 package bose.ankush.route
 
 import bose.ankush.data.db.DatabaseFactory
-import bose.ankush.data.model.CreateOrderRequest
-import bose.ankush.data.model.CreateOrderResponse
-import bose.ankush.data.model.Payment
-import bose.ankush.data.model.RazorpayCreateOrderPayload
-import bose.ankush.data.model.RazorpayErrorResponse
-import bose.ankush.data.model.VerifyPaymentRequest
-import bose.ankush.data.model.VerifyPaymentResponse
+import bose.ankush.data.model.*
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.SignatureUtil
 import bose.ankush.util.getSecretValue
 import config.JwtConfig
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.auth.jwt.JWTPrincipal
-import io.ktor.server.request.receive
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.post
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.auth.jwt.*
+import io.ktor.server.request.*
+import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import util.Constants
-import java.util.Base64
+import java.util.*
 
 private val paymentLogger = LoggerFactory.getLogger("PaymentRoute")
 private val razorpayClient: HttpClient by lazy {
@@ -142,7 +130,7 @@ fun Route.paymentRoute() {
             val bodyText = response.bodyAsText()
             if (response.status.value in 200..299) {
                 val rp = relaxedJson.decodeFromString(
-                    bose.ankush.data.model.RazorpayOrderResponse.serializer(),
+                    RazorpayOrderResponse.serializer(),
                     bodyText
                 )
                 call.respondSuccess(
@@ -301,8 +289,8 @@ fun Route.paymentRoute() {
             signature = signature,
             status = "verified",
             verifiedAt = startDate,
-            userId = user.id,
-            serviceType = bose.ankush.data.model.ServiceType.PREMIUM_ONE,
+            userId = user.id.toHexString(),
+            serviceType = ServiceType.PREMIUM_ONE,
             subscriptionStart = startDate,
             subscriptionEnd = endDate,
             requestIp = ip,
@@ -330,15 +318,15 @@ fun Route.paymentRoute() {
 
         // Update user's subscription history and active status
         val updatedExisting = user.subscriptions.map {
-            if (it.status == bose.ankush.data.model.SubscriptionStatus.ACTIVE) {
-                it.copy(status = bose.ankush.data.model.SubscriptionStatus.EXPIRED)
+            if (it.status == SubscriptionStatus.ACTIVE) {
+                it.copy(status = SubscriptionStatus.EXPIRED)
             } else it
         }
-        val newSubscription = bose.ankush.data.model.Subscription(
-            service = bose.ankush.data.model.ServiceType.PREMIUM_ONE,
+        val newSubscription = Subscription(
+            service = ServiceType.PREMIUM_ONE,
             startDate = startDate,
             endDate = endDate,
-            status = bose.ankush.data.model.SubscriptionStatus.ACTIVE,
+            status = SubscriptionStatus.ACTIVE,
             sourcePaymentId = payment.id
         )
         val updatedUser = user.copy(
