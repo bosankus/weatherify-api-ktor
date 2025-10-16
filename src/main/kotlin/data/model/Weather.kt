@@ -38,8 +38,8 @@ data class Weather(
         val temp: Double?,
         val uvi: Double?,
         val weather: List<WeatherData?>? = listOf(),
-        val wind_gust: Double?,
-        val wind_speed: Double?
+        @SerialName("wind_gust") val windGust: Double? = null,
+        @SerialName("wind_speed") val windSpeed: Double? = null
     )
 
     @Serializable
@@ -57,8 +57,8 @@ data class Weather(
         val temp: Temp?,
         val uvi: Double?,
         val weather: List<WeatherData?>? = listOf(),
-        @SerialName("wind_gust") val windGust: Double?,
-        @SerialName("wind_speed") val windSpeed: Double?
+        @SerialName("wind_gust") val windGust: Double? = null,
+        @SerialName("wind_speed") val windSpeed: Double? = null
     ) {
         @Serializable
         data class Temp(
@@ -87,4 +87,3 @@ data class Weather(
 data class WeatherData(
     val description: String, val icon: String, val id: Int?=null, val main: String
 )
-
