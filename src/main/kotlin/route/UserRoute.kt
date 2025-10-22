@@ -5,24 +5,16 @@ import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.WeatherCache
 import config.Environment
-import config.JwtConfig
 import domain.model.Result
 import domain.repository.UserRepository
-import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.receive
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.application
-import io.ktor.server.routing.get
-import io.ktor.server.routing.post
-import io.ktor.server.routing.route
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.server.request.*
+import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
+import util.AuthHelper.getAuthenticatedAdminOrRespond
 
 /**
  * Admin User management routes (IAM)
@@ -102,35 +94,12 @@ fun Route.userRoute() {
         }
     }
 
-    // Helper to extract and verify admin JWT
-    suspend fun ensureAdminAndGetToken(call: ApplicationCall): Boolean {
-        val authHeader = call.request.headers["Authorization"]
-        val jwtToken = when {
-            authHeader != null && authHeader.startsWith("Bearer ") -> authHeader.substring(7)
-            else -> call.request.cookies["jwt_token"]
-        }
 
-        if (jwtToken.isNullOrBlank()) {
-            call.respondError("Authentication required", Unit, HttpStatusCode.Unauthorized)
-            return false
-        }
-        val decoded = try {
-            JwtConfig.verifier.verify(jwtToken)
-        } catch (_: Exception) {
-            call.respondError("Session expired or invalid token", Unit, HttpStatusCode.Unauthorized)
-            return false
-        }
-        if (!JwtConfig.isAdmin(decoded)) {
-            call.respondError("Access denied: Admins only", Unit, HttpStatusCode.Forbidden)
-            return false
-        }
-        return true
-    }
 
     route("/admin") {
         // List users (migrated from AdminAuthRoute)
         get("/users") {
-            if (!ensureAdminAndGetToken(call)) return@get
+            call.getAuthenticatedAdminOrRespond() ?: return@get
 
             // Pagination params
             val pageParam = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
@@ -186,7 +155,7 @@ fun Route.userRoute() {
 
         // Update user role
         post("/users/{email}/role") {
-            if (!ensureAdminAndGetToken(call)) return@post
+            call.getAuthenticatedAdminOrRespond() ?: return@post
 
             val email = call.parameters["email"]?.trim()
             if (email.isNullOrEmpty()) {
@@ -258,7 +227,7 @@ fun Route.userRoute() {
 
         // Update user active status
         post("/users/{email}/status") {
-            if (!ensureAdminAndGetToken(call)) return@post
+            call.getAuthenticatedAdminOrRespond() ?: return@post
 
             val email = call.parameters["email"]?.trim()
             if (email.isNullOrEmpty()) {
@@ -326,7 +295,7 @@ fun Route.userRoute() {
 
         // Update user premium status
         post("/users/{email}/premium") {
-            if (!ensureAdminAndGetToken(call)) return@post
+            call.getAuthenticatedAdminOrRespond() ?: return@post
 
             val email = call.parameters["email"]?.trim()
             if (email.isNullOrEmpty()) {
@@ -394,7 +363,7 @@ fun Route.userRoute() {
 
         // Send promotional notification
         post("/users/{email}/notify") {
-            if (!ensureAdminAndGetToken(call)) return@post
+            call.getAuthenticatedAdminOrRespond() ?: return@post
 
             val email = call.parameters["email"]?.trim()
             if (email.isNullOrEmpty()) {
@@ -473,7 +442,7 @@ fun Route.userRoute() {
 
         // Clear weather cache
         post("/cache/clear") {
-            if (!ensureAdminAndGetToken(call)) return@post
+            call.getAuthenticatedAdminOrRespond() ?: return@post
             WeatherCache.clearCache()
             call.respondSuccess("Cache cleared", true)
         }
@@ -482,7 +451,7 @@ fun Route.userRoute() {
         route("/tools") {
             // Health check probing upstream services
             post("/health") {
-                if (!ensureAdminAndGetToken(call)) return@post
+                call.getAuthenticatedAdminOrRespond() ?: return@post
 
                 val client = WeatherCache.getWeatherClient()
                 val weatherUrl = WeatherCache.getWeatherUrl()
@@ -540,7 +509,7 @@ fun Route.userRoute() {
 
             // Warmup critical endpoints for a few locations
             post("/warmup") {
-                if (!ensureAdminAndGetToken(call)) return@post
+                call.getAuthenticatedAdminOrRespond() ?: return@post
 
                 val client = WeatherCache.getWeatherClient()
                 val apiKey = WeatherCache.getApiKey()

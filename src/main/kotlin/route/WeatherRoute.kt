@@ -6,20 +6,14 @@ import bose.ankush.data.model.Weather
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.WeatherCache
-import io.ktor.client.call.body
-import io.ktor.client.request.get
-import io.ktor.client.request.parameter
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.jwt.JWTPrincipal
-import io.ktor.server.auth.principal
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.application
-import io.ktor.server.routing.get
-import io.ktor.server.routing.route
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.server.application.*
+import io.ktor.server.routing.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.ktor.ext.inject
+import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
 
 /** Extract latitude and longitude from request */
@@ -59,96 +53,93 @@ private suspend inline fun <reified T> fetchWeatherData(
 /** Weather API routes */
 fun Route.weatherRoute() {
     val analytics: util.Analytics by application.inject()
-    authenticate("jwt-auth") {
-        route(Constants.Api.WEATHER_ENDPOINT) {
-            // Get weather data
-            get {
-                // Access the JWT principal to get user information
-                val principal = call.principal<JWTPrincipal>()
-                val email = principal?.payload?.getClaim("email")?.asString()
-                println("User with email $email is accessing weather data")
 
-                val locationParams = call.extractLocationParams() ?: return@get
-                val (lat, lon) = locationParams
+    route(Constants.Api.WEATHER_ENDPOINT) {
+        // Get weather data
+        get {
+            // Authenticate user using unified helper
+            val user = call.getAuthenticatedUserOrRespond() ?: return@get
+            println("User with email ${user.email} is accessing weather data")
 
-                fetchWeatherData<Weather>(
-                    url = WeatherCache.getWeatherUrl(),
-                    lat = lat,
-                    lon = lon,
-                    additionalParams = mapOf(Constants.Api.PARAM_EXCLUDE to Constants.Api.EXCLUDE_MINUTELY)
-                ).onSuccess { weatherData ->
-                    // Analytics: weather_view
-                    analytics.event(
-                        name = "weather_view",
-                        params = mapOf(
-                            "lat" to lat,
-                            "lon" to lon
-                        ),
-                        userId = email,
-                        userAgent = call.request.headers["User-Agent"]
-                    )
+            val locationParams = call.extractLocationParams() ?: return@get
+            val (lat, lon) = locationParams
 
-                    call.respondSuccess(
-                        Constants.Messages.WEATHER_RETRIEVED,
-                        weatherData,
-                        io.ktor.http.HttpStatusCode.OK
-                    )
+            fetchWeatherData<Weather>(
+                url = WeatherCache.getWeatherUrl(),
+                lat = lat,
+                lon = lon,
+                additionalParams = mapOf(Constants.Api.PARAM_EXCLUDE to Constants.Api.EXCLUDE_MINUTELY)
+            ).onSuccess { weatherData ->
+                // Analytics: weather_view
+                analytics.event(
+                    name = "weather_view",
+                    params = mapOf(
+                        "lat" to lat,
+                        "lon" to lon
+                    ),
+                    userId = user.email,
+                    userAgent = call.request.headers["User-Agent"]
+                )
 
-                    // Save data asynchronously
-                    withContext(Dispatchers.IO) {
-                        val saved = saveWeatherData(weatherData)
-                        if (!saved) {
-                            println(Constants.Messages.FAILED_SAVE_WEATHER)
-                        }
+                call.respondSuccess(
+                    Constants.Messages.WEATHER_RETRIEVED,
+                    weatherData,
+                    io.ktor.http.HttpStatusCode.OK
+                )
+
+                // Save data asynchronously
+                withContext(Dispatchers.IO) {
+                    val saved = saveWeatherData(weatherData)
+                    if (!saved) {
+                        println(Constants.Messages.FAILED_SAVE_WEATHER)
                     }
-                }.onFailure { e ->
-                    call.respondError(
-                        "${Constants.Messages.FAILED_FETCH_WEATHER}: ${e.message}",
-                        Unit,
-                        io.ktor.http.HttpStatusCode.InternalServerError
-                    )
                 }
+            }.onFailure { e ->
+                call.respondError(
+                    "${Constants.Messages.FAILED_FETCH_WEATHER}: ${e.message}",
+                    Unit,
+                    io.ktor.http.HttpStatusCode.InternalServerError
+                )
             }
         }
+    }
 
-        route(Constants.Api.AIR_POLLUTION_ENDPOINT) {
-            get {
-                // Access the JWT principal to get user information
-                val principal = call.principal<JWTPrincipal>()
-                val email = principal?.payload?.getClaim("email")?.asString()
-                println("User with email $email is accessing air pollution data")
+    route(Constants.Api.AIR_POLLUTION_ENDPOINT) {
+        get {
+            // Authenticate user using unified helper
+            val user = call.getAuthenticatedUserOrRespond() ?: return@get
+            println("User with email ${user.email} is accessing air pollution data")
 
-                val locationParams = call.extractLocationParams() ?: return@get
-                val (lat, lon) = locationParams
+            val locationParams = call.extractLocationParams() ?: return@get
+            val (lat, lon) = locationParams
 
-                fetchWeatherData<AirQuality>(
-                    url = WeatherCache.getAirPollutionUrl(),
-                    lat = lat,
-                    lon = lon
-                ).onSuccess { response ->
-                    // Analytics: air_quality_view
-                    analytics.event(
-                        name = "air_quality_view",
-                        params = mapOf(
-                            "lat" to lat,
-                            "lon" to lon
-                        ),
-                        userId = email,
-                        userAgent = call.request.headers["User-Agent"]
-                    )
+            fetchWeatherData<AirQuality>(
+                url = WeatherCache.getAirPollutionUrl(),
+                lat = lat,
+                lon = lon
+            ).onSuccess { response ->
+                // Analytics: air_quality_view
+                analytics.event(
+                    name = "air_quality_view",
+                    params = mapOf(
+                        "lat" to lat,
+                        "lon" to lon
+                    ),
+                    userId = user.email,
+                    userAgent = call.request.headers["User-Agent"]
+                )
 
-                    call.respondSuccess(
-                        Constants.Messages.AIR_POLLUTION_RETRIEVED,
-                        response,
-                        io.ktor.http.HttpStatusCode.OK
-                    )
-                }.onFailure { e ->
-                    call.respondError(
-                        "${Constants.Messages.FAILED_FETCH_AIR_POLLUTION}: ${e.message}",
-                        Unit,
-                        io.ktor.http.HttpStatusCode.InternalServerError
-                    )
-                }
+                call.respondSuccess(
+                    Constants.Messages.AIR_POLLUTION_RETRIEVED,
+                    response,
+                    io.ktor.http.HttpStatusCode.OK
+                )
+            }.onFailure { e ->
+                call.respondError(
+                    "${Constants.Messages.FAILED_FETCH_AIR_POLLUTION}: ${e.message}",
+                    Unit,
+                    io.ktor.http.HttpStatusCode.InternalServerError
+                )
             }
         }
     }

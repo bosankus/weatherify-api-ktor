@@ -54,8 +54,8 @@ class WeatherServiceImplTest {
                             temp = 0.0,
                             uvi = 0.0,
                             weather = listOf(),
-                            wind_gust = 0.0,
-                            wind_speed = 0.0
+                            windGust = 0.0,
+                            windSpeed = 0.0
                         )
                     )
                     Result.success(listOf(weather))

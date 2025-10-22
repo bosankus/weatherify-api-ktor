@@ -4,60 +4,25 @@ import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.WebResources
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
-import com.auth0.jwt.interfaces.Payload
 import config.Environment
 import config.JwtConfig
 import domain.model.Result
 import domain.service.AuthService
-import io.ktor.http.Cookie
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.auth.jwt.JWTPrincipal
-import io.ktor.server.auth.principal
-import io.ktor.server.html.respondHtml
-import io.ktor.server.request.receive
-import io.ktor.server.response.respondRedirect
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.application
-import io.ktor.server.routing.get
-import io.ktor.server.routing.post
-import io.ktor.server.routing.route
-import kotlinx.html.DIV
-import kotlinx.html.HEAD
-import kotlinx.html.InputType
-import kotlinx.html.body
-import kotlinx.html.button
-import kotlinx.html.classes
-import kotlinx.html.div
-import kotlinx.html.footer
-import kotlinx.html.form
-import kotlinx.html.h1
-import kotlinx.html.h2
-import kotlinx.html.head
-import kotlinx.html.id
-import kotlinx.html.input
-import kotlinx.html.label
-import kotlinx.html.link
-import kotlinx.html.meta
-import kotlinx.html.script
-import kotlinx.html.span
-import kotlinx.html.style
-import kotlinx.html.title
-import kotlinx.html.unsafe
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.html.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import kotlinx.html.*
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
+import util.AuthHelper.getAuthenticatedAdminOrRespond
+import util.AuthHelper.isAdminToken
+import util.AuthHelper.isTokenValid
 import util.Constants
 import java.time.Year
-
-/**
- * Helper function to check if a user is an admin using the JWT payload
- * Delegates to JwtConfig.isAdmin for consistent role checking across the application
- */
-fun isAdminFromPayload(payload: Payload): Boolean {
-    // Use JwtConfig.isAdmin for consistent role checking
-    return JwtConfig.isAdmin(payload)
-}
 
 @Serializable
 data class AdminLoginRequest(val email: String, val password: String)
@@ -496,72 +461,41 @@ fun Route.adminAuthRoute() {
     // Public route for login page - no authentication required
     route("/admin/login") {
         get {
-            // Manually check for JWT token in the Authorization header
+            // Check if user is already authenticated as admin using unified helper
             val authHeader = call.request.headers["Authorization"]
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                try {
-                    // Extract the token
-                    val token = authHeader.substring(7)
-                    // Verify the token
-                    val decodedJWT = JwtConfig.verifier.verify(token)
-
-                    logger.info("JWT token manually verified: ${decodedJWT.token}")
-
-                    // Check if user has ADMIN role
-                    if (JwtConfig.isAdmin(decodedJWT)) {
-                        // User is already authenticated and has ADMIN role, set auth cookie and redirect to dashboard
-                        val userEmail =
-                            decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                        logger.info("Admin user already authenticated: $userEmail, setting cookie and redirecting to dashboard")
-
-                        // Set jwt_token cookie so that browser navigation to /admin/dashboard is authenticated
-                        try {
-                            val maxAgeSeconds =
-                                (Environment.getJwtExpiration() / 1000).toInt()
-                            val isHttps = (
-                                call.request.headers["X-Forwarded-Proto"]?.equals(
-                                    "https",
-                                    true
-                                ) == true ||
-                                    call.request.headers["X-Forwarded-Protocol"]?.equals(
-                                        "https",
-                                        true
-                                    ) == true ||
-                                    call.request.headers["X-Forwarded-Ssl"]?.equals(
-                                        "on",
-                                        true
-                                    ) == true
-                                )
-                            call.response.cookies.append(
-                                Cookie(
-                                    name = "jwt_token",
-                                    value = token,
-                                    path = "/",
-                                    httpOnly = true,
-                                    secure = isHttps,
-                                    maxAge = maxAgeSeconds
-                                )
-                            )
-                        } catch (e: Exception) {
-                            logger.warn("Failed to set auth cookie on /admin/login redirect: ${e.message}")
-                        }
-
-                        call.respondRedirect("/admin/dashboard", permanent = false)
-                        return@get
-                    }
-                } catch (e: Exception) {
-                    logger.warn("Failed to validate JWT token: ${e.message}")
-                    // Continue to login page if token validation fails
-                }
+            val token = if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                authHeader.substring(7)
+            } else {
+                call.request.cookies["jwt_token"]
             }
 
-            // If no valid token or not an admin, check for principal (for backward compatibility)
-            val principal = call.principal<JWTPrincipal>()
-            logger.info("JWT Payload from principal: ${principal?.payload?.toString()}")
-            if (principal != null && isAdminFromPayload(principal.payload)) {
-                val userEmail =
-                    principal.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                logger.info("Admin user already authenticated: $userEmail, redirecting to dashboard")
+            if (token != null && isTokenValid(token) && isAdminToken(token)) {
+                logger.info("Admin user already authenticated, redirecting to dashboard")
+
+                // Set jwt_token cookie if it came from header
+                if (authHeader != null) {
+                    try {
+                        val maxAgeSeconds = (Environment.getJwtExpiration() / 1000).toInt()
+                        val isHttps = (
+                            call.request.headers["X-Forwarded-Proto"]?.equals("https", true) == true ||
+                                call.request.headers["X-Forwarded-Protocol"]?.equals("https", true) == true ||
+                                call.request.headers["X-Forwarded-Ssl"]?.equals("on", true) == true
+                            )
+                        call.response.cookies.append(
+                            Cookie(
+                                name = "jwt_token",
+                                value = token,
+                                path = "/",
+                                httpOnly = true,
+                                secure = isHttps,
+                                maxAge = maxAgeSeconds
+                            )
+                        )
+                    } catch (e: Exception) {
+                        logger.warn("Failed to set auth cookie on /admin/login redirect: ${e.message}")
+                    }
+                }
+
                 call.respondRedirect("/admin/dashboard", permanent = false)
                 return@get
             }
@@ -774,49 +708,16 @@ fun Route.adminAuthRoute() {
             call.respondRedirect("/admin/login", permanent = false)
         }
 
-        // --- MOVE /admin/dashboard OUTSIDE authenticate("jwt-auth") ---
         get("/dashboard") {
-            val authHeader = call.request.headers["Authorization"]
-            var jwtToken: String?
-
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                jwtToken = authHeader.substring(7)
-            } else {
-                jwtToken = call.request.cookies["jwt_token"]
-                if (jwtToken != null) {
-                    logger.info("JWT token found in cookie for /admin/dashboard")
-                }
-            }
-
-            var principal: JWTPrincipal? = null
-            var userEmail: String? = null
-
-            if (jwtToken != null) {
-                try {
-                    val decodedJWT = JwtConfig.verifier.verify(jwtToken)
-                    userEmail = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                    principal = JWTPrincipal(decodedJWT)
-                    logger.info("JWT principal created for user: $userEmail")
-                } catch (e: Exception) {
-                    logger.warn("Failed to verify JWT: ${e.message}")
-                    call.respondRedirect("/admin/login?error=session_expired", permanent = false)
-                    return@get
-                }
-            }
-
-            if (principal?.payload == null) {
-                logger.warn("No JWT principal found for dashboard access attempt")
+            // Use unified authentication helper for admin dashboard
+            val admin = call.getAuthenticatedAdminOrRespond()
+            if (admin == null) {
+                // Authentication failed, redirect to login with appropriate error
                 call.respondRedirect("/admin/login?error=auth_required", permanent = false)
                 return@get
             }
 
-            if (!JwtConfig.isAdmin(principal.payload)) {
-                logger.warn("Non-admin user ($userEmail) attempted to access admin dashboard")
-                call.respondRedirect("/admin/login?error=access_denied", permanent = false)
-                return@get
-            }
-
-            // User is authenticated and has ADMIN role, serve the admin dashboard
+            val userEmail = admin.email
             logger.info("Serving admin dashboard to admin user: $userEmail")
 
             // Respond with the admin dashboard HTML
@@ -1218,7 +1119,7 @@ fun Route.adminAuthRoute() {
                                     span {
                                         classes = setOf("admin-user-email")
                                         id = "admin-email"
-                                        +(userEmail ?: "Unknown User")
+                                        +userEmail
                                     }
                                     span {
                                         classes = setOf("admin-logout")

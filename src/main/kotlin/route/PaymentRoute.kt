@@ -6,7 +6,6 @@ import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.SignatureUtil
 import bose.ankush.util.getSecretValue
-import config.JwtConfig
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -14,12 +13,11 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.*
-import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
+import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
 import java.util.*
 
@@ -32,46 +30,13 @@ private val razorpayClient: HttpClient by lazy {
 
 private val relaxedJson: Json = Json { ignoreUnknownKeys = true }
 
-private suspend fun ApplicationCall.getJwtPrincipalOrRespond(): JWTPrincipal? {
-    // Extract token from Authorization header or cookie
-    val authHeader = request.headers["Authorization"]
-    val jwtToken = if (authHeader != null && authHeader.startsWith("Bearer ")) {
-        authHeader.substring(7)
-    } else {
-        request.cookies["jwt_token"]
-    }
 
-    if (jwtToken != null) {
-        try {
-            val decodedJWT = JwtConfig.verifier.verify(jwtToken)
-            val email = decodedJWT.getClaim("email").asString()
-            paymentLogger.info("JWT principal created for user: $email")
-            return JWTPrincipal(decodedJWT)
-        } catch (e: Exception) {
-            paymentLogger.warn("Failed to verify JWT: ${e.message}", e)
-            respondError(
-                message = "Session expired or invalid. Please login again.",
-                data = null,
-                status = HttpStatusCode.Unauthorized
-            )
-            return null
-        }
-    }
-
-    paymentLogger.warn("No JWT principal found for payment API access attempt")
-    respondError(
-        message = "Authentication required. Please login.",
-        data = null,
-        status = HttpStatusCode.Unauthorized
-    )
-    return null
-}
 
 /** Payment routes: create order and verify payment */
 fun Route.paymentRoute() {
     // POST /create-order -> Create Razorpay order server-side
     post(Constants.Api.CREATE_ORDER_ENDPOINT) {
-        call.getJwtPrincipalOrRespond() ?: return@post
+        call.getAuthenticatedUserOrRespond() ?: return@post
 
         val keyId = getSecretValue(Constants.Auth.RAZORPAY_KEY_ID)
         val keySecret = getSecretValue(Constants.Auth.RAZORPAY_SECRET)
@@ -175,7 +140,7 @@ fun Route.paymentRoute() {
 
     // POST /store-payment -> Verify and store payment details
     post(Constants.Api.STORE_PAYMENT_ENDPOINT) {
-        val principal = call.getJwtPrincipalOrRespond() ?: return@post
+        val user = call.getAuthenticatedUserOrRespond() ?: return@post
 
         val secret = getSecretValue(Constants.Auth.RAZORPAY_SECRET)
         if (secret.isBlank() || secret.startsWith("dummy_") || secret.startsWith("dummy_value_for_") || secret.startsWith(
@@ -239,31 +204,19 @@ fun Route.paymentRoute() {
             return@post
         }
 
-        // Extract user email from JWT principal to link with User
-        val userEmail = try {
-            principal.getClaim(Constants.Auth.JWT_CLAIM_EMAIL, String::class)
-        } catch (_: Exception) {
-            null
-        } ?: run {
-            paymentLogger.warn("Email claim missing from JWT; cannot link payment to user")
-            call.respondError(
-                message = "Authentication error: email not found in token",
-                data = Unit,
-                status = HttpStatusCode.Unauthorized
-            )
-            return@post
-        }
+        // Use authenticated user's email
+        val userEmail = user.email
 
         // Persist payment and update subscription
         // Fetch user by email to link payment and update subscriptions
-        val user = try {
+        val dbUser = try {
             DatabaseFactory.findUserByEmail(userEmail)
         } catch (e: Exception) {
             paymentLogger.error("Failed to fetch user by email for payment storing: $userEmail", e)
             null
         }
 
-        if (user == null) {
+        if (dbUser == null) {
             call.respondError(
                 message = "User not found for payment processing",
                 data = Unit,
@@ -289,7 +242,7 @@ fun Route.paymentRoute() {
             signature = signature,
             status = "verified",
             verifiedAt = startDate,
-            userId = user.id.toHexString(),
+            userId = dbUser.id.toHexString(),
             serviceType = ServiceType.PREMIUM_ONE,
             subscriptionStart = startDate,
             subscriptionEnd = endDate,
@@ -317,7 +270,7 @@ fun Route.paymentRoute() {
         }
 
         // Update user's subscription history and active status
-        val updatedExisting = user.subscriptions.map {
+        val updatedExisting = dbUser.subscriptions.map {
             if (it.status == SubscriptionStatus.ACTIVE) {
                 it.copy(status = SubscriptionStatus.EXPIRED)
             } else it
@@ -329,7 +282,7 @@ fun Route.paymentRoute() {
             status = SubscriptionStatus.ACTIVE,
             sourcePaymentId = payment.id
         )
-        val updatedUser = user.copy(
+        val updatedUser = dbUser.copy(
             subscriptions = updatedExisting + newSubscription,
             isPremium = true
         )
