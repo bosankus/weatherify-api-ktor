@@ -2363,19 +2363,24 @@ fun Route.adminAuthRoute() {
                                                             <div id="error-message" class="message error-message hidden"></div>
                                                             <div id="info-message" class="message info-message hidden"></div>
 
+                                                            <div id="users-filters"></div>
+                                                            <div id="filter-stats" style="margin-bottom: 1rem; font-size: 0.875rem; color: var(--text-secondary);"></div>
+
                                                             <div id="iam-loader" class="skeleton" style="height:8px;width:100%;display:none;"></div>
 
                                                             <table class="users-table">
                                                                 <colgroup>
-                                                                    <col style="min-width:200px">
-                                                                    <col style="min-width:140px">
+                                                                    <col style="width:40px">
+                                                                    <col style="min-width:250px">
+                                                                    <col style="min-width:180px">
                                                                     <col style="min-width:120px">
-                                                                    <col style="min-width:100px">
+                                                                    <col style="min-width:120px">
                                                                     <col style="min-width:100px">
                                                                     <col style="min-width:80px">
                                                                 </colgroup>
                                                                 <thead>
                                                                     <tr>
+                                                                        <th><input type="checkbox" id="select-all-header" style="width:18px;height:18px;cursor:pointer;"></th>
                                                                         <th>Email</th>
                                                                         <th>Created At</th>
                                                                         <th>Role</th>
@@ -2460,14 +2465,6 @@ fun Route.adminAuthRoute() {
                                                         id = "total-payments"
                                                         +"0"
                                                     }
-                                                }
-                                            }
-
-                                            // Revenue Chart Container
-                                            div {
-                                                classes = setOf("finance-chart-container")
-                                                canvas {
-                                                    id = "revenue-chart"
                                                 }
                                             }
 
@@ -2670,15 +2667,6 @@ fun Route.adminAuthRoute() {
                                                             id = "avg-processing-time"
                                                             +"0.0h"
                                                         }
-                                                    }
-                                                }
-
-                                                // Refund Chart Container
-                                                div {
-                                                    classes = setOf("finance-chart-container")
-                                                    style = "margin-bottom: 1.5rem;"
-                                                    canvas {
-                                                        id = "refund-chart"
                                                     }
                                                 }
 
@@ -2927,9 +2915,48 @@ fun Route.adminAuthRoute() {
                                                                 <div id="kpi-retention-rate" style="font-size:2rem;font-weight:700;color:var(--card-title);line-height:1;">—</div>
                                                             </div>
                                                         </div>
-                                                        <div style="position:relative;min-height:260px">
-                                                            <canvas id="reports-chart" height="260" aria-label="User registrations chart" role="img"></canvas>
-                                                            <div id="reports-empty" class="message info-message hidden" style="position:absolute;left:0;right:0;top:0;">Not enough data to render chart</div>
+                                                        
+                                                        <!-- Charts Grid -->
+                                                        <div class="reports-charts-grid" style="display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 2rem;">
+                                                            <!-- User Registrations Chart -->
+                                                            <div class="chart-container" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem;">
+                                                                <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600; color: var(--heading-color); display: flex; align-items: center; gap: 0.5rem;">
+                                                                    <span class="material-icons" style="font-size: 20px; color: #6366f1;">people</span>
+                                                                    User Registrations
+                                                                </h3>
+                                                                <div style="position:relative;min-height:300px">
+                                                                    <canvas id="reports-chart" height="300" aria-label="User registrations chart" role="img"></canvas>
+                                                                    <div id="reports-empty" class="message info-message hidden" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);">Not enough data to render chart</div>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <!-- Combined Revenue & Refund Chart -->
+                                                            <div class="chart-container" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem;">
+                                                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                                                                    <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--heading-color); display: flex; align-items: center; gap: 0.5rem;">
+                                                                        <span class="material-icons" style="font-size: 20px; color: #6366f1;">show_chart</span>
+                                                                        Revenue & Refund Trends
+                                                                    </h3>
+                                                                    <div style="display: flex; gap: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                                                        <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                                            <span style="width: 12px; height: 12px; background: #10b981; border-radius: 50%;"></span>
+                                                                            <span>Revenue</span>
+                                                                        </div>
+                                                                        <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                                            <span style="width: 12px; height: 12px; background: #ef4444; border-radius: 50%;"></span>
+                                                                            <span>Refunds</span>
+                                                                        </div>
+                                                                        <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                                            <span style="width: 12px; height: 12px; background: #6366f1; border-radius: 50%;"></span>
+                                                                            <span>Net</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div style="position:relative;min-height:400px">
+                                                                    <canvas id="financial-trends-chart" height="400" aria-label="Revenue and refund trends chart showing monthly revenue, refunds, and net revenue" role="img"></canvas>
+                                                                    <div id="financial-trends-empty" class="message info-message hidden" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);">Not enough data to render chart</div>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         """
                                                         )

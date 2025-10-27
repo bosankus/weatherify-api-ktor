@@ -5,6 +5,7 @@ import io.ktor.http.*
 import io.ktor.server.html.*
 import io.ktor.server.routing.*
 import kotlinx.html.*
+import java.time.Year
 
 /**
  * Route for Terms and Conditions page
@@ -46,13 +47,56 @@ fun Route.termsAndConditionsRoute() {
                     }
                     // Include shared CSS
                     WebResources.includeSharedCss(this)
+                    WebResources.includeAdminHeaderCss(this)
 
-                    // Include page-specific CSS if needed
+                    // Include page-specific CSS
                     style {
                         unsafe {
                             raw(
                                 """
-                                /* Any additional page-specific styles can go here */
+                                /* Mobile-first responsive styles for terms and conditions */
+                                .app-header__subtitle {
+                                    text-transform: uppercase;
+                                }
+
+                                .terms-content {
+                                    max-width: 900px;
+                                    margin: 2rem auto;
+                                    padding: 2rem;
+                                }
+
+                                @media (max-width: 768px) {
+                                    .terms-content {
+                                        margin: 1rem auto;
+                                        padding: 1.5rem;
+                                    }
+
+                                    .terms-content h1 {
+                                        font-size: 1.75rem;
+                                    }
+
+                                    .terms-content h2 {
+                                        font-size: 1.35rem;
+                                    }
+                                }
+
+                                @media (max-width: 480px) {
+                                    .terms-content {
+                                        padding: 1rem;
+                                    }
+
+                                    .terms-content h1 {
+                                        font-size: 1.5rem;
+                                    }
+
+                                    .terms-content h2 {
+                                        font-size: 1.2rem;
+                                    }
+
+                                    .terms-content p {
+                                        font-size: 0.95rem;
+                                    }
+                                }
                                 """
                             )
                         }
@@ -60,12 +104,17 @@ fun Route.termsAndConditionsRoute() {
                     // Include shared JavaScript
                     WebResources.includeSharedJs(this)
 
-                    // Include page-specific JavaScript if needed
+                    // Include page-specific JavaScript
                     script {
                         unsafe {
                             raw(
                                 """
-                                // Any additional page-specific JavaScript can go here
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    // Initialize header with custom subtitle
+                                    if (typeof updateHeaderText === 'function') {
+                                        updateHeaderText('Androidplay', 'Terms & Conditions');
+                                    }
+                                });
                                 """
                             )
                         }
@@ -74,38 +123,61 @@ fun Route.termsAndConditionsRoute() {
                 body {
                     div {
                         classes = setOf("container")
-                        div {
-                            classes = setOf("header")
-                            div {
-                                classes = setOf("brand-text")
-                                h1 {
-                                    classes = setOf("logo")
-                                    +"Androidplay"
-                                }
-                                span {
-                                    classes = setOf("subtitle")
-                                    +"Terms & Conditions"
-                                }
-                            }
-                            div {
-                                style = "flex-grow: 1;"
-                            }
-                            div {
-                                style = "display: flex; align-items: center; gap: 1rem;"
 
-                                // Theme toggle
-                                label {
-                                    classes = setOf("toggle")
-                                    style =
-                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
+                        // Use the same header structure as admin dashboard
+                        header {
+                            classes = setOf("app-header")
+                            attributes["role"] = "banner"
 
-                                    input {
-                                        type = InputType.checkBox
-                                        id = "theme-toggle"
+                            div {
+                                classes = setOf("app-header__container")
+
+                                // Brand section
+                                div {
+                                    classes = setOf("app-header__brand")
+                                    a {
+                                        href = "/weather"
+                                        id = "header-logo-link"
+                                        classes = setOf("app-header__logo-link")
+                                        attributes["aria-label"] = "Androidplay Home"
+                                        h1 {
+                                            classes = setOf("app-header__logo")
+                                            +"Androidplay"
+                                        }
                                     }
+                                    span {
+                                        id = "header-subtitle"
+                                        classes = setOf("app-header__subtitle")
+                                        +"TERMS & CONDITIONS"
+                                    }
+                                }
 
-                                    div {
-                                        // This div becomes the toggle button
+                                // Spacer
+                                div {
+                                    classes = setOf("app-header__spacer")
+                                }
+
+                                // Actions container with theme toggle
+                                div {
+                                    id = "header-actions"
+                                    classes = setOf("app-header__actions")
+                                    attributes["role"] = "navigation"
+                                    attributes["aria-label"] = "Header actions"
+
+                                    // Theme toggle
+                                    label {
+                                        classes = setOf("admin-header__theme-toggle")
+                                        attributes["aria-label"] = "Toggle theme"
+
+                                        input {
+                                            type = InputType.checkBox
+                                            id = "theme-toggle"
+                                            attributes["aria-label"] = "Toggle dark/light theme"
+                                        }
+
+                                        div {
+                                            classes = setOf("admin-header__theme-icon")
+                                        }
                                     }
                                 }
                             }
@@ -239,8 +311,9 @@ fun Route.termsAndConditionsRoute() {
                             classes = setOf("footer")
                             div {
                                 classes = setOf("footer-content")
-                                p {
-                                    +"© ${java.time.Year.now().value} Androidplay. All rights reserved."
+                                div {
+                                    classes = setOf("footer-copyright")
+                                    +"© ${Year.now().value} Androidplay. All rights reserved."
                                 }
                             }
                         }

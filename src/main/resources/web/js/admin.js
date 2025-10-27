@@ -6040,10 +6040,8 @@ function bindSendNotificationModal(email){
             // Render refund metrics cards
             renderRefundMetricsCards(metrics);
 
-            // Render refund chart if data is available
-            if (metrics.monthlyRefundChart && Array.isArray(metrics.monthlyRefundChart)) {
-                renderRefundChart(metrics.monthlyRefundChart);
-            }
+            // Note: Refund chart is now in Reports tab, not Finance tab
+            // Chart rendering is handled by reports-charts.js module
 
             console.log('[Refund Analytics] Refund metrics loaded successfully');
         })
@@ -6096,118 +6094,8 @@ function bindSendNotificationModal(email){
         return '₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    /**
-     * Render refund chart using Chart.js
-     * @param {Array} monthlyData - Array of monthly refund data
-     */
-    function renderRefundChart(monthlyData) {
-        const canvas = q('refund-chart');
-        if (!canvas) return;
-
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js not available');
-            return;
-        }
-
-        // Destroy existing chart if any
-        if (state.refundChart) {
-            try {
-                state.refundChart.destroy();
-                state.refundChart = null;
-            } catch(e) {
-                console.warn('Failed to destroy previous refund chart', e);
-            }
-        }
-
-        // Prepare data for chart
-        const labels = monthlyData.map(item => {
-            try {
-                const date = new Date(item.month + '-01');
-                return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-            } catch(e) {
-                return item.month;
-            }
-        });
-
-        const data = monthlyData.map(item => item.refundAmount || 0);
-
-        const ctx = canvas.getContext('2d');
-
-        // Create gradient fill
-        let gradient;
-        try {
-            gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 260);
-            gradient.addColorStop(0, 'rgba(239, 68, 68, 0.22)');
-            gradient.addColorStop(1, 'rgba(239, 68, 68, 0.02)');
-        } catch(e) {
-            gradient = 'rgba(239, 68, 68, 0.12)';
-        }
-
-        // Get theme colors
-        const lineColor = '#ef4444';
-        const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--card-border').trim() || 'rgba(239,68,68,0.2)';
-        const tickColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#9ca3af';
-
-        state.refundChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Refunds',
-                    data: data,
-                    borderColor: lineColor,
-                    backgroundColor: gradient,
-                    fill: true,
-                    cubicInterpolationMode: 'monotone',
-                    tension: 0.4,
-                    borderWidth: 2.5,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointBackgroundColor: lineColor,
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 700, easing: 'easeOutCubic' },
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        enabled: true,
-                        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                        titleColor: '#ffffff',
-                        bodyColor: '#ffffff',
-                        displayColors: false,
-                        padding: 10,
-                        callbacks: {
-                            label: function(context) {
-                                return 'Refunds: ' + formatCurrency(context.parsed.y);
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false, drawBorder: false },
-                        ticks: { color: tickColor, maxRotation: 0 }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: gridColor, drawBorder: false },
-                        ticks: {
-                            color: tickColor,
-                            callback: function(value) {
-                                return '₹' + value.toLocaleString('en-IN');
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
+    // Note: renderRefundChart function removed - chart is now in Reports tab
+    // Chart rendering is handled by reports-charts.js module
 
     /**
      * Load refund history from the API with pagination and filters
@@ -7650,10 +7538,8 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
             // Call renderRefundMetricsCards with metrics data
             renderRefundMetricsCards(metrics);
 
-            // Call renderRefundChart with monthly chart data
-            if (metrics.monthlyRefundChart && Array.isArray(metrics.monthlyRefundChart)) {
-                renderRefundChart(metrics.monthlyRefundChart);
-            }
+            // Note: Refund chart is now in Reports tab, not Finance tab
+            // Chart rendering is handled by reports-charts.js module
 
             console.log('Loaded refund metrics:', metrics);
         })
@@ -7765,130 +7651,8 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
         }
     }
 
-    /**
-     * Render refund trend chart using Chart.js
-     * Sub-task 6.3: Create renderRefundChart function in admin.js
-     * @param {Array} monthlyData - Array of monthly refund data
-     */
-    function renderRefundChart(monthlyData) {
-        const canvas = q('refund-chart');
-        if (!canvas) {
-            console.warn('Refund chart canvas not found');
-            return;
-        }
-
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js not available');
-            return;
-        }
-
-        // Destroy existing chart instance if present
-        if (state.refundChart) {
-            try {
-                state.refundChart.destroy();
-                state.refundChart = null;
-            } catch(e) {
-                console.warn('Failed to destroy previous refund chart', e);
-            }
-        }
-
-        // Prepare data for chart
-        const labels = monthlyData.map(item => {
-            try {
-                const date = new Date(item.month + '-01');
-                return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-            } catch(e) {
-                return item.month;
-            }
-        });
-
-        const data = monthlyData.map(item => item.refundAmount || 0);
-
-        const ctx = canvas.getContext('2d');
-
-        // Create gradient fill
-        let gradient;
-        try {
-            gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 260);
-            gradient.addColorStop(0, 'rgba(239, 68, 68, 0.22)');
-            gradient.addColorStop(1, 'rgba(239, 68, 68, 0.02)');
-        } catch(e) {
-            gradient = 'rgba(239, 68, 68, 0.12)';
-        }
-
-        // Get theme colors
-        const lineColor = '#ef4444';
-        const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--card-border').trim() || 'rgba(239,68,68,0.2)';
-        const tickColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#9ca3af';
-
-        // Create Chart.js line chart for monthly refund trend
-        state.refundChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Refund Amount',
-                    data: data,
-                    borderColor: lineColor,
-                    backgroundColor: gradient,
-                    fill: true,
-                    cubicInterpolationMode: 'monotone',
-                    tension: 0.4,
-                    borderWidth: 2.5,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointBackgroundColor: lineColor,
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 700, easing: 'easeOutCubic' },
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: { 
-                        display: true,
-                        position: 'top'
-                    },
-                    tooltip: {
-                        enabled: true,
-                        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                        titleColor: '#ffffff',
-                        bodyColor: '#ffffff',
-                        displayColors: false,
-                        padding: 10,
-                        callbacks: {
-                            label: function(context) {
-                                // Format currency values in tooltips
-                                return 'Refunds: ' + formatCurrency(context.parsed.y * 100);
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false, drawBorder: false },
-                        ticks: { color: tickColor, maxRotation: 0 }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: gridColor, drawBorder: false },
-                        ticks: {
-                            color: tickColor,
-                            callback: function(value) {
-                                return '₹' + value.toLocaleString('en-IN');
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        // Store chart instance in window.refundChartInstance for external access
-        window.refundChartInstance = state.refundChart;
-    }
+    // Note: renderRefundChart function removed (duplicate) - chart is now in Reports tab
+    // Chart rendering is handled by reports-charts.js module
 
     /**
      * Load refund history with pagination

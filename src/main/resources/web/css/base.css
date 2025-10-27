@@ -18,22 +18,22 @@
     --icon-color-light: #4a5568;
     --heading-color-light: #2d3748;
 
-    /* Dark theme variables */
-    --bg-gradient-dark-1: #121218;
-    --bg-gradient-dark-2: #1a1a2c;
-    --bg-gradient-dark-3: #151520;
-    --text-color-dark: #f0f0f0;
-    --text-secondary-dark: #a0a0b0;
-    --card-bg-dark: rgba(30, 30, 45, 0.5);
-    --card-border-dark: rgba(60, 60, 80, 0.2);
-    --card-hover-bg-dark: rgba(40, 40, 60, 0.7);
-    --card-hover-border-dark: rgba(80, 80, 120, 0.4);
-    --card-shadow-dark: rgba(0, 0, 0, 0.15);
-    --header-border-dark: rgba(60, 60, 80, 0.2);
-    --content-bg-dark: rgba(25, 25, 40, 0.3);
-    --content-border-dark: rgba(60, 60, 80, 0.2);
-    --icon-color-dark: #8ab4f8;
-    --heading-color-dark: #ffffff;
+    /* Dark theme variables - Soothing palette */
+    --bg-gradient-dark-1: #2a2438;
+    --bg-gradient-dark-2: #3d3550;
+    --bg-gradient-dark-3: #2f2a3e;
+    --text-color-dark: #e8e4f0;
+    --text-secondary-dark: #b8b0c8;
+    --card-bg-dark: rgba(58, 50, 75, 0.6);
+    --card-border-dark: rgba(120, 100, 140, 0.25);
+    --card-hover-bg-dark: rgba(68, 58, 90, 0.75);
+    --card-hover-border-dark: rgba(140, 120, 170, 0.45);
+    --card-shadow-dark: rgba(0, 0, 0, 0.2);
+    --header-border-dark: rgba(120, 100, 140, 0.25);
+    --content-bg-dark: rgba(48, 42, 62, 0.4);
+    --content-border-dark: rgba(120, 100, 140, 0.25);
+    --icon-color-dark: #a8c5f0;
+    --heading-color-dark: #f5f2fa;
 
     /* Default to dark theme */
     --bg-gradient-1: var(--bg-gradient-dark-1);

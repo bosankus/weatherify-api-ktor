@@ -516,114 +516,136 @@ function renderServiceForm(service, isEditMode) {
     const modalTitle = isEditMode ? 'Edit Service' : 'Create New Service';
     
     const modalContent = `
-        <form id="service-form" class="service-form">
-            <!-- Basic Information -->
-            <div class="form-section">
-                <h3 class="form-section-title">Basic Information</h3>
-                
-                <div class="form-group">
-                    <label for="service-code">Service Code *</label>
-                    <input 
-                        type="text" 
-                        id="service-code" 
-                        name="serviceCode" 
-                        required
-                        ${isEditMode ? 'disabled' : ''}
-                        value="${escapeHtml(service?.serviceCode || '')}"
-                        placeholder="PREMIUM_PLUS"
-                        pattern="[A-Z0-9_]+"
-                        title="Uppercase letters, numbers, and underscores only"
-                    />
-                    <small>Uppercase alphanumeric with underscores (e.g., PREMIUM_PLUS)</small>
+        <div class="service-form-modal">
+            <!-- Header Card -->
+            <div style="
+                background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+                border-radius: 8px;
+                padding: 1.25rem;
+                margin-bottom: 1.25rem;
+                color: #ffffff;
+            ">
+                <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                    ${isEditMode ? 'Editing Service' : 'New Service'}
+                </div>
+                <div style="font-size: 1.5rem; font-weight: 700;">
+                    ${isEditMode ? escapeHtml(service?.displayName || 'Service') : 'Create Service'}
+                </div>
+                ${isEditMode ? `<div style="font-size: 0.875rem; opacity: 0.85; margin-top: 0.25rem;"><code style="background: rgba(255,255,255,0.2); padding: 0.25rem 0.5rem; border-radius: 4px;">${escapeHtml(service?.serviceCode || '')}</code></div>` : ''}
+            </div>
+
+            <form id="service-form" class="service-form">
+                <!-- Basic Information -->
+                <div class="form-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <h3 style="margin: 0 0 1rem 0; font-size: 1rem; font-weight: 600; color: var(--heading-color);">Basic Information</h3>
+                    
+                    <div class="form-group">
+                        <label for="service-code">Service Code *</label>
+                        <input 
+                            type="text" 
+                            id="service-code" 
+                            name="serviceCode" 
+                            required
+                            ${isEditMode ? 'disabled' : ''}
+                            value="${escapeHtml(service?.serviceCode || '')}"
+                            placeholder="PREMIUM_PLUS"
+                            pattern="[A-Z0-9_]+"
+                            title="Uppercase letters, numbers, and underscores only"
+                        />
+                        <small>Uppercase alphanumeric with underscores</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="display-name">Display Name *</label>
+                        <input 
+                            type="text" 
+                            id="display-name" 
+                            name="displayName" 
+                            required
+                            value="${escapeHtml(service?.displayName || '')}"
+                            placeholder="Premium Plus"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">Description *</label>
+                        <textarea 
+                            id="description" 
+                            name="description" 
+                            required
+                            rows="2"
+                            maxlength="500"
+                            placeholder="Describe the service..."
+                        >${escapeHtml(service?.description || '')}</textarea>
+                        <small>Max 500 characters</small>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="display-name">Display Name *</label>
-                    <input 
-                        type="text" 
-                        id="display-name" 
-                        name="displayName" 
-                        required
-                        value="${escapeHtml(service?.displayName || '')}"
-                        placeholder="Premium Plus"
-                    />
+                <!-- Pricing Tiers -->
+                <div class="form-section" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%); border: 2px solid var(--card-border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem;">
+                        <div style="width: 4px; height: 24px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); border-radius: 2px;"></div>
+                        <h3 style="margin: 0; font-size: 1.125rem; font-weight: 700; color: var(--heading-color);">Pricing Tiers</h3>
+                    </div>
+                    <div id="pricing-tiers-container"></div>
+                    <button type="button" class="btn-secondary btn-sm" id="add-pricing-tier-btn" style="margin-top: 1rem; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; border: none; padding: 0.625rem 1.25rem; font-weight: 600;">
+                        + Add Tier
+                    </button>
                 </div>
 
-                <div class="form-group">
-                    <label for="description">Description *</label>
-                    <textarea 
-                        id="description" 
-                        name="description" 
-                        required
-                        rows="3"
-                        maxlength="500"
-                        placeholder="Describe the service offering..."
-                    >${escapeHtml(service?.description || '')}</textarea>
-                    <small>Maximum 500 characters</small>
-                </div>
-            </div>
-
-            <!-- Pricing Tiers -->
-            <div class="form-section">
-                <h3 class="form-section-title">Pricing Tiers</h3>
-                <div id="pricing-tiers-container"></div>
-                <button type="button" class="btn-secondary btn-sm" id="add-pricing-tier-btn">
-                    + Add Pricing Tier
-                </button>
-            </div>
-
-            <!-- Features -->
-            <div class="form-section">
-                <h3 class="form-section-title">Features</h3>
-                <div id="features-container"></div>
-                <button type="button" class="btn-secondary btn-sm" id="add-feature-btn">
-                    + Add Feature
-                </button>
-            </div>
-
-            <!-- Limits Configuration -->
-            <div class="form-section">
-                <h3 class="form-section-title">Limits Configuration (Optional)</h3>
-                <div id="limits-container"></div>
-                <button type="button" class="btn-secondary btn-sm" id="add-limit-btn">
-                    + Add Limit
-                </button>
-            </div>
-
-            <!-- Availability Dates -->
-            <div class="form-section">
-                <h3 class="form-section-title">Availability (Optional)</h3>
-                
-                <div class="form-group">
-                    <label for="availability-start">Start Date</label>
-                    <input 
-                        type="datetime-local" 
-                        id="availability-start" 
-                        name="availabilityStart"
-                        value="${service?.availabilityStart ? formatDateTimeLocal(service.availabilityStart) : ''}"
-                    />
+                <!-- Features -->
+                <div class="form-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <h3 style="margin: 0 0 1rem 0; font-size: 1rem; font-weight: 600; color: var(--heading-color);">Features</h3>
+                    <div id="features-container"></div>
+                    <button type="button" class="btn-secondary btn-sm" id="add-feature-btn" style="margin-top: 0.5rem;">
+                        + Add Feature
+                    </button>
                 </div>
 
-                <div class="form-group">
-                    <label for="availability-end">End Date</label>
-                    <input 
-                        type="datetime-local" 
-                        id="availability-end" 
-                        name="availabilityEnd"
-                        value="${service?.availabilityEnd ? formatDateTimeLocal(service.availabilityEnd) : ''}"
-                    />
-                </div>
-            </div>
+                <!-- Limits Configuration -->
+                <details class="form-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <summary style="cursor: pointer; font-size: 1rem; font-weight: 600; color: var(--heading-color); margin-bottom: 1rem;">Limits (Optional)</summary>
+                    <div id="limits-container"></div>
+                    <button type="button" class="btn-secondary btn-sm" id="add-limit-btn" style="margin-top: 0.5rem;">
+                        + Add Limit
+                    </button>
+                </details>
 
-            <!-- Form Actions -->
-            <div class="form-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" id="service-submit-btn">
-                    <span id="service-submit-text">${isEditMode ? 'Update Service' : 'Create Service'}</span>
-                    <span id="service-submit-spinner" class="loading-spinner" style="display: none;"></span>
-                </button>
-            </div>
-        </form>
+                <!-- Availability Dates -->
+                <details class="form-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <summary style="cursor: pointer; font-size: 1rem; font-weight: 600; color: var(--heading-color); margin-bottom: 1rem;">Availability (Optional)</summary>
+                    
+                    <div class="form-group">
+                        <label for="availability-start">Start Date</label>
+                        <input 
+                            type="datetime-local" 
+                            id="availability-start" 
+                            name="availabilityStart"
+                            value="${service?.availabilityStart ? formatDateTimeLocal(service.availabilityStart) : ''}"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="availability-end">End Date</label>
+                        <input 
+                            type="datetime-local" 
+                            id="availability-end" 
+                            name="availabilityEnd"
+                            value="${service?.availabilityEnd ? formatDateTimeLocal(service.availabilityEnd) : ''}"
+                        />
+                    </div>
+                </details>
+
+                <!-- Form Actions -->
+                <div class="form-actions" style="margin-top: 1.5rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="service-submit-btn">
+                        <span id="service-submit-text">${isEditMode ? 'Update Service' : 'Create Service'}</span>
+                        <span id="service-submit-spinner" class="loading-spinner" style="display: none;"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
     `;
 
     showModal(modalTitle, modalContent);
@@ -704,31 +726,26 @@ function addPricingTierRow(tier) {
 
     const row = document.createElement('div');
     row.className = 'dynamic-row';
+    row.style.cssText = 'background: var(--card-bg); border: 2px solid var(--endpoint-border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; position: relative; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.05);';
     row.innerHTML = `
-        <div class="dynamic-row-content">
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Amount (in paise) *</label>
-                    <input 
-                        type="number" 
-                        class="pricing-tier-amount" 
-                        required
-                        min="1"
-                        value="${tier?.amount || ''}"
-                        placeholder="99900"
-                    />
-                </div>
-                <div class="form-group">
-                    <label>Currency</label>
-                    <input 
-                        type="text" 
-                        class="pricing-tier-currency" 
-                        value="${tier?.currency || 'INR'}"
-                        placeholder="INR"
-                    />
-                </div>
-                <div class="form-group">
-                    <label>Duration *</label>
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%); border-radius: 10px 10px 0 0;"></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; margin-top: 0.5rem;">
+            <div class="form-group">
+                <label style="font-size: 0.875rem; font-weight: 600; color: var(--text-color); margin-bottom: 0.5rem; display: block;">Amount (₹) *</label>
+                <input 
+                    type="number" 
+                    class="pricing-tier-amount" 
+                    required
+                    min="0.01"
+                    step="0.01"
+                    value="${tier?.amount ? (tier.amount / 100).toFixed(2) : ''}"
+                    placeholder="999.00"
+                    style="padding: 0.625rem 0.875rem; font-size: 0.9375rem; border: 1.5px solid var(--endpoint-border); border-radius: 8px; width: 100%; transition: all 0.2s ease;"
+                />
+            </div>
+            <div class="form-group">
+                <label style="font-size: 0.875rem; font-weight: 600; color: var(--text-color); margin-bottom: 0.5rem; display: block;">Duration *</label>
+                <div style="display: flex; gap: 0.625rem;">
                     <input 
                         type="number" 
                         class="pricing-tier-duration" 
@@ -736,42 +753,29 @@ function addPricingTierRow(tier) {
                         min="1"
                         value="${tier?.duration || ''}"
                         placeholder="1"
+                        style="padding: 0.625rem 0.875rem; font-size: 0.9375rem; border: 1.5px solid var(--endpoint-border); border-radius: 8px; flex: 1; transition: all 0.2s ease;"
                     />
-                </div>
-                <div class="form-group">
-                    <label>Duration Type *</label>
-                    <select class="pricing-tier-duration-type" required>
+                    <select class="pricing-tier-duration-type" required style="padding: 0.625rem 0.875rem; font-size: 0.9375rem; border: 1.5px solid var(--endpoint-border); border-radius: 8px; flex: 1; transition: all 0.2s ease;">
                         <option value="DAYS" ${tier?.durationType === 'DAYS' ? 'selected' : ''}>Days</option>
                         <option value="MONTHS" ${tier?.durationType === 'MONTHS' ? 'selected' : ''}>Months</option>
                         <option value="YEARS" ${tier?.durationType === 'YEARS' ? 'selected' : ''}>Years</option>
                     </select>
                 </div>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" class="pricing-tier-default" ${tier?.isDefault ? 'checked' : ''}>
-                        Default Tier
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" class="pricing-tier-featured" ${tier?.isFeatured ? 'checked' : ''}>
-                        Featured
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label>Display Order</label>
-                    <input 
-                        type="number" 
-                        class="pricing-tier-order" 
-                        min="0"
-                        value="${tier?.displayOrder || 0}"
-                    />
-                </div>
-            </div>
         </div>
-        <button type="button" class="btn-remove" title="Remove tier">×</button>
+        <div style="display: flex; gap: 1.5rem; align-items: center; font-size: 0.9375rem; padding: 0.75rem; background: var(--endpoint-bg); border-radius: 8px;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 500;">
+                <input type="checkbox" class="pricing-tier-default" ${tier?.isDefault ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
+                <span>Default</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 500;">
+                <input type="checkbox" class="pricing-tier-featured" ${tier?.isFeatured ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
+                <span>Featured</span>
+            </label>
+            <input type="hidden" class="pricing-tier-currency" value="${tier?.currency || 'INR'}">
+            <input type="hidden" class="pricing-tier-order" value="${tier?.displayOrder || 0}">
+        </div>
+        <button type="button" class="btn-remove" title="Remove" style="position: absolute; top: 1.5rem; right: 1rem; background: rgba(239, 68, 68, 0.1); border: 1.5px solid rgba(239, 68, 68, 0.3); color: #ef4444; font-size: 1.25rem; cursor: pointer; padding: 0; width: 32px; height: 32px; line-height: 1; border-radius: 8px; transition: all 0.2s ease; font-weight: 700;">×</button>
     `;
 
     const removeBtn = row.querySelector('.btn-remove');
@@ -792,36 +796,27 @@ function addFeatureRow(feature) {
 
     const row = document.createElement('div');
     row.className = 'dynamic-row';
+    row.style.cssText = 'background: var(--endpoint-bg); border: 1px solid var(--endpoint-border); border-radius: 6px; padding: 0.875rem; margin-bottom: 0.75rem; position: relative;';
     row.innerHTML = `
-        <div class="dynamic-row-content">
-            <div class="form-group" style="flex: 1;">
-                <label>Feature Description *</label>
-                <input 
-                    type="text" 
-                    class="feature-description" 
-                    required
-                    maxlength="200"
-                    value="${escapeHtml(feature?.description || '')}"
-                    placeholder="Unlimited API calls"
-                />
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" class="feature-highlighted" ${feature?.isHighlighted ? 'checked' : ''}>
-                    Highlighted
-                </label>
-            </div>
-            <div class="form-group">
-                <label>Display Order</label>
-                <input 
-                    type="number" 
-                    class="feature-order" 
-                    min="0"
-                    value="${feature?.displayOrder || 0}"
-                />
-            </div>
+        <div class="form-group" style="margin-bottom: 0.5rem;">
+            <input 
+                type="text" 
+                class="feature-description" 
+                required
+                maxlength="200"
+                value="${escapeHtml(feature?.description || '')}"
+                placeholder="Feature description..."
+                style="padding: 0.5rem; font-size: 0.875rem; width: 100%;"
+            />
         </div>
-        <button type="button" class="btn-remove" title="Remove feature">×</button>
+        <div style="display: flex; gap: 1rem; align-items: center; font-size: 0.875rem;">
+            <label style="display: flex; align-items: center; gap: 0.375rem; cursor: pointer;">
+                <input type="checkbox" class="feature-highlighted" ${feature?.isHighlighted ? 'checked' : ''}>
+                Highlighted
+            </label>
+            <input type="hidden" class="feature-order" value="${feature?.displayOrder || 0}">
+        </div>
+        <button type="button" class="btn-remove" title="Remove" style="position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; padding: 0; width: 24px; height: 24px; line-height: 1;">×</button>
     `;
 
     const removeBtn = row.querySelector('.btn-remove');
@@ -842,20 +837,22 @@ function addLimitRow(limit) {
 
     const row = document.createElement('div');
     row.className = 'dynamic-row';
+    row.style.cssText = 'background: var(--endpoint-bg); border: 1px solid var(--endpoint-border); border-radius: 6px; padding: 0.875rem; margin-bottom: 0.75rem; position: relative;';
     row.innerHTML = `
-        <div class="dynamic-row-content">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
             <div class="form-group">
-                <label>Limit Key *</label>
+                <label style="font-size: 0.8125rem;">Key *</label>
                 <input 
                     type="text" 
                     class="limit-key" 
                     required
                     value="${escapeHtml(limit?.key || '')}"
                     placeholder="api_calls"
+                    style="padding: 0.5rem; font-size: 0.875rem;"
                 />
             </div>
             <div class="form-group">
-                <label>Value *</label>
+                <label style="font-size: 0.8125rem;">Value *</label>
                 <input 
                     type="number" 
                     class="limit-value" 
@@ -863,27 +860,29 @@ function addLimitRow(limit) {
                     min="0"
                     value="${limit?.value || ''}"
                     placeholder="10000"
+                    style="padding: 0.5rem; font-size: 0.875rem;"
                 />
             </div>
             <div class="form-group">
-                <label>Unit *</label>
+                <label style="font-size: 0.8125rem;">Unit *</label>
                 <input 
                     type="text" 
                     class="limit-unit" 
                     required
                     value="${escapeHtml(limit?.unit || '')}"
                     placeholder="requests/day"
+                    style="padding: 0.5rem; font-size: 0.875rem;"
                 />
             </div>
             <div class="form-group">
-                <label>Type *</label>
-                <select class="limit-type" required>
+                <label style="font-size: 0.8125rem;">Type *</label>
+                <select class="limit-type" required style="padding: 0.5rem; font-size: 0.875rem;">
                     <option value="HARD" ${limit?.type === 'HARD' ? 'selected' : ''}>Hard</option>
                     <option value="SOFT" ${limit?.type === 'SOFT' ? 'selected' : ''}>Soft</option>
                 </select>
             </div>
         </div>
-        <button type="button" class="btn-remove" title="Remove limit">×</button>
+        <button type="button" class="btn-remove" title="Remove" style="position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; padding: 0; width: 24px; height: 24px; line-height: 1;">×</button>
     `;
 
     const removeBtn = row.querySelector('.btn-remove');
@@ -914,8 +913,9 @@ function handleServiceFormSubmit(serviceId, isEditMode) {
     // Collect pricing tiers
     const pricingTiers = [];
     document.querySelectorAll('#pricing-tiers-container .dynamic-row').forEach(row => {
+        const amountInRupees = parseFloat(row.querySelector('.pricing-tier-amount').value);
         const tier = {
-            amount: parseInt(row.querySelector('.pricing-tier-amount').value),
+            amount: Math.round(amountInRupees * 100), // Convert rupees to paise
             currency: row.querySelector('.pricing-tier-currency').value.trim(),
             duration: parseInt(row.querySelector('.pricing-tier-duration').value),
             durationType: row.querySelector('.pricing-tier-duration-type').value,

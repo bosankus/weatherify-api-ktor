@@ -79,16 +79,21 @@ object WebResources {
     private val componentsCss = readResourceFile("/web/css/components.css")
     private val themeToggleCss = readResourceFile("/web/css/theme-toggle.css")
     private val adminHeaderCss = readResourceFile("/web/css/admin-header.css")
+    private val adminUsersCss = readResourceFile("/web/css/admin-users.css")
     private val headerCss = readResourceFile("/web/css/header.css")
 
     // JavaScript file contents
     private val themeJs = readResourceFile("/web/js/theme.js")
     private val utilsJs = readResourceFile("/web/js/utils.js")
     private val authJs = readResourceFile("/web/js/auth.js")
+    private val adminDataCacheJs = readResourceFile("/web/js/admin-data-cache.js")
+    private val adminTabManagerJs = readResourceFile("/web/js/admin-tab-manager.js")
+    private val adminUsersJs = readResourceFile("/web/js/admin-users.js")
     private val adminJs = readResourceFile("/web/js/admin.js")
     private val financeAdminJs = readResourceFile("/web/js/finance-admin.js")
     private val refundAdminJs = readResourceFile("/web/js/refund-admin.js")
     private val serviceCatalogAdminJs = readResourceFile("/web/js/service-catalog-admin.js")
+    private val reportsChartsJs = readResourceFile("/web/js/reports-charts.js")
     private val adminHeaderJs = readResourceFile("/web/js/admin-header.js")
     private val headerJs = readResourceFile("/web/js/header.js")
     private val decodeJs = readResourceFile("/web/js/decode.js")
@@ -125,6 +130,7 @@ object WebResources {
                 raw(componentsCss)
                 raw(themeToggleCss)
                 raw(headerCss)
+                raw(adminUsersCss)
             }
         }
     }
@@ -208,6 +214,23 @@ object WebResources {
             attributes["src"] = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
             attributes["crossorigin"] = "anonymous"
         }
+        // Include performance optimization scripts FIRST (before other admin scripts)
+        head.script {
+            unsafe {
+                raw(adminDataCacheJs)
+            }
+        }
+        head.script {
+            unsafe {
+                raw(adminTabManagerJs)
+            }
+        }
+        // Include admin users module (before main admin.js)
+        head.script {
+            unsafe {
+                raw(adminUsersJs)
+            }
+        }
         // Include admin JavaScript directly in the HTML
         head.script {
             unsafe {
@@ -230,6 +253,12 @@ object WebResources {
         head.script {
             unsafe {
                 raw(serviceCatalogAdminJs)
+            }
+        }
+        // Include reports charts JavaScript
+        head.script {
+            unsafe {
+                raw(reportsChartsJs)
             }
         }
         // Ensure admin dashboard initializes after DOM is ready

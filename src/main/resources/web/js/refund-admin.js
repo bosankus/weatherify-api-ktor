@@ -222,26 +222,35 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
 
     const modalContent = `
         <div class="refund-modal-content">
-            <div class="refund-details">
-                <div class="detail-row">
-                    <span class="label">Payment ID:</span>
-                    <span class="value"><code>${escapeHtml(payment.razorpayPaymentId)}</code></span>
+            <div style="
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                border-radius: 8px;
+                padding: 1.25rem;
+                margin-bottom: 1.25rem;
+                color: #ffffff;
+            ">
+                <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Refundable Amount</div>
+                <div style="font-size: 2rem; font-weight: 700; margin-bottom: 0.75rem;">₹${refundableInRupees}</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.875rem;">
+                    <div>
+                        <div style="opacity: 0.85; margin-bottom: 0.25rem;">Original</div>
+                        <div style="font-weight: 600;">₹${amountInRupees}</div>
+                    </div>
+                    <div>
+                        <div style="opacity: 0.85; margin-bottom: 0.25rem;">Refunded</div>
+                        <div style="font-weight: 600;">₹${refundedInRupees}</div>
+                    </div>
                 </div>
+            </div>
+
+            <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
                 <div class="detail-row">
-                    <span class="label">User Email:</span>
+                    <span class="label">User</span>
                     <span class="value">${escapeHtml(payment.userEmail || 'N/A')}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="label">Original Amount:</span>
-                    <span class="value">₹${amountInRupees}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">Already Refunded:</span>
-                    <span class="value">₹${refundedInRupees}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">Refundable:</span>
-                    <span class="value refundable">₹${refundableInRupees}</span>
+                <div class="detail-row" style="border-bottom: none;">
+                    <span class="label">Payment ID</span>
+                    <span class="value"><code style="font-size: 0.8125rem;">${escapeHtml(payment.razorpayPaymentId)}</code></span>
                 </div>
             </div>
 
@@ -255,7 +264,7 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                 </div>
 
                 <div class="form-group" id="partial-amount-group" style="display: none;">
-                    <label for="refund-amount">Refund Amount (₹)</label>
+                    <label for="refund-amount">Amount (₹)</label>
                     <input 
                         type="number" 
                         id="refund-amount" 
@@ -263,10 +272,10 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                         min="0.01" 
                         max="${refundableInRupees}"
                         step="0.01"
-                        placeholder="Enter amount in rupees"
+                        placeholder="Enter amount"
                     />
                     <small style="display: block; color: var(--text-secondary); margin-top: 0.25rem;">
-                        Maximum: ₹${refundableInRupees}
+                        Max: ₹${refundableInRupees}
                     </small>
                 </div>
 
@@ -275,7 +284,7 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                     <select id="refund-reason" name="reason" required>
                         <option value="CUSTOMER_REQUEST">Customer Request</option>
                         <option value="DUPLICATE_PAYMENT">Duplicate Payment</option>
-                        <option value="FRAUDULENT">Fraudulent Transaction</option>
+                        <option value="FRAUDULENT">Fraudulent</option>
                         <option value="SERVICE_NOT_PROVIDED">Service Not Provided</option>
                         <option value="OTHER">Other</option>
                     </select>
@@ -287,7 +296,7 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                         id="refund-notes" 
                         name="notes" 
                         rows="2"
-                        placeholder="Add any additional notes..."
+                        placeholder="Additional notes..."
                     ></textarea>
                 </div>
 
@@ -371,10 +380,10 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                         if (response.status === true) {
                             showMessage('success', response.message || 'Refund initiated successfully');
                             closeModal();
-                            // Reload payment history to reflect changes
-                            if (typeof loadPaymentHistory === 'function') {
-                                loadPaymentHistory();
-                            }
+                            
+                            // Update only the specific payment row instead of reloading entire list
+                            updatePaymentRowAfterRefund(payment.razorpayPaymentId);
+                            
                             // Reload financial metrics to reflect refund in total revenue
                             if (typeof loadFinancialMetrics === 'function') {
                                 loadFinancialMetrics();
@@ -400,6 +409,98 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
             });
         }
     }, 100);
+}
+
+/**
+ * Update a specific payment row after refund without reloading entire list
+ * @param {string} paymentId - The payment ID that was refunded
+ */
+function updatePaymentRowAfterRefund(paymentId) {
+    if (!paymentId) return;
+
+    // Find the payment row in the table
+    const tbody = document.getElementById('payments-table-body');
+    if (!tbody) return;
+
+    // Find the row with this payment ID
+    const rows = tbody.querySelectorAll('tr');
+    let targetRow = null;
+    let payment = null;
+
+    for (const row of rows) {
+        const txnCell = row.querySelector('td:nth-child(6) code'); // Transaction ID is 6th column
+        if (txnCell && txnCell.textContent === paymentId) {
+            targetRow = row;
+            
+            // Extract payment data from the row
+            payment = {
+                userEmail: row.querySelector('td:nth-child(1)')?.textContent || 'N/A',
+                amount: parseFloat(row.querySelector('td:nth-child(2)')?.textContent.replace('₹', '') || '0') * 100, // Convert to paise
+                currency: row.querySelector('td:nth-child(3)')?.textContent || 'INR',
+                paymentMethod: row.querySelector('td:nth-child(4)')?.textContent || 'N/A',
+                status: row.querySelector('td:nth-child(5)')?.textContent || 'PENDING',
+                transactionId: paymentId,
+                razorpayPaymentId: paymentId,
+                createdAt: row.querySelector('td:nth-child(7)')?.textContent || ''
+            };
+            break;
+        }
+    }
+
+    if (!targetRow || !payment) {
+        console.debug('Payment row not found, falling back to full reload');
+        if (typeof loadPaymentHistory === 'function') {
+            loadPaymentHistory();
+        }
+        return;
+    }
+
+    // Fetch fresh refund data for this payment
+    window.RefundAPI.getRefundsForPayment(paymentId)
+        .then(response => {
+            if (response.status === true && response.data) {
+                const refundSummary = response.data;
+                const totalRefunded = refundSummary.totalRefunded || 0;
+                const originalAmount = refundSummary.originalAmount || 0;
+                const isFullyRefunded = refundSummary.isFullyRefunded || false;
+
+                // Update payment object with refund info
+                payment.refundedAmount = totalRefunded;
+                if (isFullyRefunded) {
+                    payment.status = 'REFUNDED';
+                    // Update status cell
+                    const statusCell = targetRow.querySelector('td:nth-child(5)');
+                    if (statusCell) {
+                        statusCell.textContent = 'REFUNDED';
+                    }
+                }
+
+                // Prepare refund data
+                const refundData = {
+                    totalRefunded,
+                    originalAmount,
+                    isFullyRefunded,
+                    refunds: refundSummary.refunds,
+                    summary: refundSummary
+                };
+
+                // Update the actions cell with new refund button/badge
+                const actionsCell = targetRow.querySelector('.payment-actions');
+                if (actionsCell && typeof addRefundButtonToPaymentRow === 'function') {
+                    // Clear existing content
+                    actionsCell.innerHTML = '';
+                    // Re-render the action buttons with updated refund data
+                    addRefundButtonToPaymentRow(targetRow, payment, refundData);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error updating payment row:', error);
+            // Fallback to full reload on error
+            if (typeof loadPaymentHistory === 'function') {
+                loadPaymentHistory();
+            }
+        });
 }
 
 /**
@@ -705,9 +806,9 @@ function showRefundDetailsModal(refundSummary) {
     } else if (hasPending) {
         statusBanner = `
             <div class="status-banner status-banner-warning">
-                <div class="banner-icon">⏳</div>
+                <div class="banner-icon">⟳</div>
                 <div class="banner-content">
-                    <div class="banner-title">Refund Processing</div>
+                    <div class="banner-title">Processing</div>
                     <div class="banner-message">Refund is being processed. This may take a few minutes.</div>
                 </div>
             </div>
@@ -729,7 +830,7 @@ function showRefundDetailsModal(refundSummary) {
             refund.status === 'FAILED' ? 'badge-failed' : 'badge-pending';
         
         const statusIcon = refund.status === 'PROCESSED' ? '✓' :
-            refund.status === 'FAILED' ? '✗' : '⏳';
+            refund.status === 'FAILED' ? '✗' : '⟳';
         
         // Calculate processing time
         let processingTime = 'N/A';
@@ -777,7 +878,7 @@ function showRefundDetailsModal(refundSummary) {
                     <div>
                         <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Amount</div>
                         <div style="font-size: 1.125rem; font-weight: 600; color: var(--text-color);">
-                            ₹${((refund.amount || 0) / 100).toFixed(2)}
+                            ₹${(refund.amount || 0).toFixed(2)}
                         </div>
                     </div>
                     
@@ -823,7 +924,7 @@ function showRefundDetailsModal(refundSummary) {
     }).join('');
 
     const modalContent = `
-        <div class="refund-details-modal" style="max-width: 900px;">
+        <div class="refund-details-modal">
             ${statusBanner}
             
             <div style="
@@ -869,7 +970,7 @@ function showRefundDetailsModal(refundSummary) {
                         Refund History (${refunds.length})
                     </h3>
                     <button class="btn btn-secondary btn-sm" id="refresh-status-btn" onclick="refreshRefundStatus('${escapeHtml(paymentId)}')">
-                        <span id="refresh-icon">🔄</span> Refresh Status
+                        <span id="refresh-icon" style="font-size: 1rem;">↻</span> Refresh
                     </button>
                 </div>
                 ${refundsHtml || '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">No refunds found</div>'}
@@ -926,39 +1027,51 @@ function showPaymentDetailsModal(payment) {
         return;
     }
 
+    const amount = (payment.amount || 0).toFixed(2);
+    const status = payment.status || 'PENDING';
+    const statusClass = status === 'verified' || status === 'SUCCESS' ? 'status-processed' : 
+                       status === 'FAILED' ? 'status-failed' : 'status-pending';
+
     const modalContent = `
         <div class="payment-details-modal">
-            <div class="detail-row">
-                <span class="label">Payment ID:</span>
-                <span class="value"><code>${escapeHtml(payment.id || 'N/A')}</code></span>
+            <div style="
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 8px;
+                padding: 1.25rem;
+                margin-bottom: 1.25rem;
+                color: #ffffff;
+            ">
+                <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Amount</div>
+                <div style="font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem;">₹${amount}</div>
+                <div style="font-size: 0.875rem; opacity: 0.85;">${payment.currency || 'INR'}</div>
             </div>
-            <div class="detail-row">
-                <span class="label">Transaction ID:</span>
-                <span class="value"><code>${escapeHtml(payment.transactionId || 'N/A')}</code></span>
+
+            <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                <div class="detail-row">
+                    <span class="label">Status</span>
+                    <span class="status-badge ${statusClass}">${escapeHtml(status)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">User Email</span>
+                    <span class="value">${escapeHtml(payment.userEmail || 'N/A')}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Payment Method</span>
+                    <span class="value">${escapeHtml(payment.paymentMethod || 'N/A')}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Transaction ID</span>
+                    <span class="value"><code style="font-size: 0.8125rem;">${escapeHtml(payment.transactionId || 'N/A')}</code></span>
+                </div>
+                <div class="detail-row" style="border-bottom: none;">
+                    <span class="label">Created</span>
+                    <span class="value">${formatDate(payment.createdAt)}</span>
+                </div>
             </div>
-            <div class="detail-row">
-                <span class="label">User Email:</span>
-                <span class="value">${escapeHtml(payment.userEmail || 'N/A')}</span>
+
+            <div style="text-align: right;">
+                <button class="btn btn-secondary" onclick="closeModal()">Close</button>
             </div>
-            <div class="detail-row">
-                <span class="label">Amount:</span>
-                <span class="value">${payment.currency || 'INR'} ${(payment.amount || 0).toFixed(2)}</span>
-            </div>
-            <div class="detail-row">
-                <span class="label">Payment Method:</span>
-                <span class="value">${escapeHtml(payment.paymentMethod || 'N/A')}</span>
-            </div>
-            <div class="detail-row">
-                <span class="label">Status:</span>
-                <span class="value"><span class="payment-status payment-status-${(payment.status || 'pending').toLowerCase()}">${escapeHtml(payment.status || 'PENDING')}</span></span>
-            </div>
-            <div class="detail-row">
-                <span class="label">Created At:</span>
-                <span class="value">${formatDate(payment.createdAt)}</span>
-            </div>
-        </div>
-        <div style="margin-top: 1.5rem; text-align: right;">
-            <button class="btn btn-secondary" onclick="closeModal()">Close</button>
         </div>
     `;
 

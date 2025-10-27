@@ -8,7 +8,6 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import util.Constants
@@ -121,19 +120,7 @@ class EmailServiceImpl(private val httpClient: HttpClient) : EmailService {
         }
 
         return try {
-            val subject = "Refund Notification - ₹${String.format("%.2f", amount)}"
-            val htmlContent = """
-                <!DOCTYPE html>
-                <html>
-                <body>
-                    <h2>Refund Notification</h2>
-                    <p>Refund ID: $refundId</p>
-                    <p>Amount: ₹${String.format("%.2f", amount)}</p>
-                    <p>Payment ID: $paymentId</p>
-                    <p>Status: $status</p>
-                </body>
-                </html>
-            """.trimIndent()
+            val (subject, htmlContent) = buildRefundEmailContent(refundId, amount, paymentId, status)
 
             val emailPayload = SendGridEmail(
                 personalizations = listOf(
@@ -165,6 +152,377 @@ class EmailServiceImpl(private val httpClient: HttpClient) : EmailService {
         } catch (e: Exception) {
             logger.error("Failed to send refund notification to $userEmail", e)
             Result.error("Failed to send refund email: ${e.message}", e)
+        }
+    }
+
+    private fun buildRefundEmailContent(
+        refundId: String,
+        amount: Double,
+        paymentId: String,
+        status: String
+    ): Pair<String, String> {
+        val formattedAmount = "₹${String.format("%.2f", amount)}"
+
+        return when (status.lowercase()) {
+            "initiated" -> {
+                val subject = "Refund Initiated - $formattedAmount"
+                val html = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <style>
+                            body {
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                                line-height: 1.6;
+                                color: #333;
+                                max-width: 600px;
+                                margin: 0 auto;
+                                padding: 20px;
+                            }
+                            .container {
+                                background-color: #f9f9f9;
+                                border-radius: 8px;
+                                padding: 30px;
+                                border: 1px solid #e0e0e0;
+                            }
+                            .header {
+                                text-align: center;
+                                margin-bottom: 30px;
+                            }
+                            .header h1 {
+                                color: #2c3e50;
+                                margin: 0;
+                                font-size: 24px;
+                            }
+                            .content {
+                                background-color: white;
+                                padding: 25px;
+                                border-radius: 6px;
+                                margin-bottom: 20px;
+                            }
+                            .info-box {
+                                background-color: #d1ecf1;
+                                border-left: 4px solid #17a2b8;
+                                padding: 15px;
+                                margin: 20px 0;
+                                border-radius: 4px;
+                            }
+                            .details {
+                                background-color: #f8f9fa;
+                                padding: 15px;
+                                border-radius: 4px;
+                                margin: 15px 0;
+                            }
+                            .details p {
+                                margin: 8px 0;
+                            }
+                            .footer {
+                                text-align: center;
+                                color: #666;
+                                font-size: 14px;
+                                margin-top: 20px;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="header">
+                                <h1>Refund Initiated</h1>
+                            </div>
+                            <div class="content">
+                                <p>Hello,</p>
+                                <p>We're writing to confirm that your refund has been initiated and is being processed.</p>
+
+                                <div class="info-box">
+                                    <strong>Refund Amount:</strong> $formattedAmount
+                                </div>
+
+                                <div class="details">
+                                    <p><strong>Refund ID:</strong> $refundId</p>
+                                    <p><strong>Payment ID:</strong> $paymentId</p>
+                                    <p><strong>Status:</strong> Processing</p>
+                                </div>
+
+                                <p>Your refund is being processed and should be credited to your original payment method within 5-7 business days.</p>
+
+                                <p>You will receive another notification once the refund has been successfully processed.</p>
+
+                                <p>If you have any questions, please don't hesitate to contact our support team.</p>
+                            </div>
+                            <div class="footer">
+                                <p>Thank you for using Androidplay</p>
+                                <p style="font-size: 12px; color: #999;">This is an automated message. Please do not reply to this email.</p>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                """.trimIndent()
+                Pair(subject, html)
+            }
+
+            "processed" -> {
+                val subject = "Refund Completed - $formattedAmount"
+                val html = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <style>
+                            body {
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                                line-height: 1.6;
+                                color: #333;
+                                max-width: 600px;
+                                margin: 0 auto;
+                                padding: 20px;
+                            }
+                            .container {
+                                background-color: #f9f9f9;
+                                border-radius: 8px;
+                                padding: 30px;
+                                border: 1px solid #e0e0e0;
+                            }
+                            .header {
+                                text-align: center;
+                                margin-bottom: 30px;
+                            }
+                            .header h1 {
+                                color: #28a745;
+                                margin: 0;
+                                font-size: 24px;
+                            }
+                            .content {
+                                background-color: white;
+                                padding: 25px;
+                                border-radius: 6px;
+                                margin-bottom: 20px;
+                            }
+                            .success-box {
+                                background-color: #d4edda;
+                                border-left: 4px solid #28a745;
+                                padding: 15px;
+                                margin: 20px 0;
+                                border-radius: 4px;
+                            }
+                            .details {
+                                background-color: #f8f9fa;
+                                padding: 15px;
+                                border-radius: 4px;
+                                margin: 15px 0;
+                            }
+                            .details p {
+                                margin: 8px 0;
+                            }
+                            .footer {
+                                text-align: center;
+                                color: #666;
+                                font-size: 14px;
+                                margin-top: 20px;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="header">
+                                <h1>✓ Refund Completed</h1>
+                            </div>
+                            <div class="content">
+                                <p>Hello,</p>
+                                <p>Great news! Your refund has been successfully processed.</p>
+
+                                <div class="success-box">
+                                    <strong>Refund Amount:</strong> $formattedAmount
+                                </div>
+
+                                <div class="details">
+                                    <p><strong>Refund ID:</strong> $refundId</p>
+                                    <p><strong>Payment ID:</strong> $paymentId</p>
+                                    <p><strong>Status:</strong> Completed</p>
+                                </div>
+
+                                <p>The refund amount has been credited to your original payment method. Depending on your bank or payment provider, it may take 5-7 business days for the amount to reflect in your account.</p>
+
+                                <p>If you don't see the refund in your account after 7 business days, please contact your bank or payment provider.</p>
+
+                                <p>Thank you for your patience!</p>
+                            </div>
+                            <div class="footer">
+                                <p>Thank you for using Androidplay</p>
+                                <p style="font-size: 12px; color: #999;">This is an automated message. Please do not reply to this email.</p>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                """.trimIndent()
+                Pair(subject, html)
+            }
+
+            "failed" -> {
+                val subject = "Refund Failed - $formattedAmount"
+                val html = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <style>
+                            body {
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                                line-height: 1.6;
+                                color: #333;
+                                max-width: 600px;
+                                margin: 0 auto;
+                                padding: 20px;
+                            }
+                            .container {
+                                background-color: #f9f9f9;
+                                border-radius: 8px;
+                                padding: 30px;
+                                border: 1px solid #e0e0e0;
+                            }
+                            .header {
+                                text-align: center;
+                                margin-bottom: 30px;
+                            }
+                            .header h1 {
+                                color: #dc3545;
+                                margin: 0;
+                                font-size: 24px;
+                            }
+                            .content {
+                                background-color: white;
+                                padding: 25px;
+                                border-radius: 6px;
+                                margin-bottom: 20px;
+                            }
+                            .error-box {
+                                background-color: #f8d7da;
+                                border-left: 4px solid #dc3545;
+                                padding: 15px;
+                                margin: 20px 0;
+                                border-radius: 4px;
+                            }
+                            .details {
+                                background-color: #f8f9fa;
+                                padding: 15px;
+                                border-radius: 4px;
+                                margin: 15px 0;
+                            }
+                            .details p {
+                                margin: 8px 0;
+                            }
+                            .footer {
+                                text-align: center;
+                                color: #666;
+                                font-size: 14px;
+                                margin-top: 20px;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="header">
+                                <h1>Refund Failed</h1>
+                            </div>
+                            <div class="content">
+                                <p>Hello,</p>
+                                <p>We're writing to inform you that your refund could not be processed.</p>
+
+                                <div class="error-box">
+                                    <strong>Refund Amount:</strong> $formattedAmount
+                                </div>
+
+                                <div class="details">
+                                    <p><strong>Refund ID:</strong> $refundId</p>
+                                    <p><strong>Payment ID:</strong> $paymentId</p>
+                                    <p><strong>Status:</strong> Failed</p>
+                                </div>
+
+                                <p>Unfortunately, the refund could not be completed due to a technical issue. Our team has been notified and will investigate this matter.</p>
+
+                                <p>We will attempt to process your refund again, or our support team will contact you directly to resolve this issue.</p>
+
+                                <p>We apologize for any inconvenience this may have caused.</p>
+                            </div>
+                            <div class="footer">
+                                <p>Thank you for using Androidplay</p>
+                                <p style="font-size: 12px; color: #999;">This is an automated message. Please do not reply to this email.</p>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                """.trimIndent()
+                Pair(subject, html)
+            }
+
+            else -> {
+                val subject = "Refund Update - $formattedAmount"
+                val html = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <style>
+                            body {
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                                line-height: 1.6;
+                                color: #333;
+                                max-width: 600px;
+                                margin: 0 auto;
+                                padding: 20px;
+                            }
+                            .container {
+                                background-color: #f9f9f9;
+                                border-radius: 8px;
+                                padding: 30px;
+                                border: 1px solid #e0e0e0;
+                            }
+                            .content {
+                                background-color: white;
+                                padding: 25px;
+                                border-radius: 6px;
+                            }
+                            .details {
+                                background-color: #f8f9fa;
+                                padding: 15px;
+                                border-radius: 4px;
+                                margin: 15px 0;
+                            }
+                            .details p {
+                                margin: 8px 0;
+                            }
+                            .footer {
+                                text-align: center;
+                                color: #666;
+                                font-size: 14px;
+                                margin-top: 20px;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="content">
+                                <h2>Refund Update</h2>
+                                <div class="details">
+                                    <p><strong>Refund ID:</strong> $refundId</p>
+                                    <p><strong>Amount:</strong> $formattedAmount</p>
+                                    <p><strong>Payment ID:</strong> $paymentId</p>
+                                    <p><strong>Status:</strong> $status</p>
+                                </div>
+                            </div>
+                            <div class="footer">
+                                <p>Thank you for using Androidplay</p>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                """.trimIndent()
+                Pair(subject, html)
+            }
         }
     }
 

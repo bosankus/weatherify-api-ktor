@@ -15,17 +15,17 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import org.slf4j.LoggerFactory
+import util.Constants
 import java.time.Instant
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.*
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import org.slf4j.LoggerFactory
-import util.Constants
 
 /** Implementation of RefundService that handles refund operations. */
 class RefundServiceImpl(
@@ -33,7 +33,8 @@ class RefundServiceImpl(
     private val paymentRepository: PaymentRepository,
     private val userRepository: UserRepository,
     private val emailService: EmailService,
-    private val subscriptionService: domain.service.SubscriptionService
+    private val subscriptionService: domain.service.SubscriptionService,
+    private val notificationService: domain.service.NotificationService
 ) : RefundService {
 
     private val logger = LoggerFactory.getLogger(RefundServiceImpl::class.java)
@@ -198,8 +199,9 @@ class RefundServiceImpl(
                 )
             }
 
-            // 6. Send notification email (don't fail if email fails)
+            // 6. Send notification email and push notification (don't fail if notifications fail)
             try {
+                // Send email notification
                 emailService.sendRefundNotification(
                     userEmail = payment.userEmail,
                     refundId = refund.refundId,
@@ -208,8 +210,15 @@ class RefundServiceImpl(
                     status = "initiated"
                 )
                 logger.info("Refund notification email sent to ${payment.userEmail}")
+
+                // Send push notification
+                sendRefundPushNotification(
+                    userEmail = payment.userEmail,
+                    amount = refund.amount / 100.0,
+                    status = "initiated"
+                )
             } catch (e: Exception) {
-                logger.warn("Failed to send refund notification email", e)
+                logger.warn("Failed to send refund notifications", e)
             }
 
             // 7. Automatically cancel subscription after successful refund with retry logic
@@ -897,16 +906,18 @@ class RefundServiceImpl(
             }
             logger.info("Refund status updated successfully in database: $refundId -> $newStatus")
 
-            // 6. Send notification emails based on status change
+            // 6. Send notification emails and push notifications based on status change
             try {
-                logger.debug("Fetching refund details to send notification email")
+                logger.debug("Fetching refund details to send notifications")
                 val refundResult = refundRepository.getRefundById(refundId)
                 if (refundResult is Result.Success && refundResult.data != null) {
                     val refund = refundResult.data
 
                     when (newStatus) {
                         RefundStatus.PROCESSED -> {
-                            logger.debug("Sending refund processed notification to ${refund.userEmail}")
+                            logger.debug("Sending refund processed notifications to ${refund.userEmail}")
+
+                            // Send email notification
                             emailService.sendRefundNotification(
                                 userEmail = refund.userEmail,
                                 refundId = refund.refundId,
@@ -915,10 +926,19 @@ class RefundServiceImpl(
                                 status = "processed"
                             )
                             logger.info("Refund processed notification email sent to ${refund.userEmail}")
+
+                            // Send push notification
+                            sendRefundPushNotification(
+                                userEmail = refund.userEmail,
+                                amount = refund.amount / 100.0,
+                                status = "processed"
+                            )
                         }
 
                         RefundStatus.FAILED -> {
-                            logger.debug("Sending refund failed notification to ${refund.userEmail}")
+                            logger.debug("Sending refund failed notifications to ${refund.userEmail}")
+
+                            // Send email notification
                             emailService.sendRefundNotification(
                                 userEmail = refund.userEmail,
                                 refundId = refund.refundId,
@@ -927,18 +947,25 @@ class RefundServiceImpl(
                                 status = "failed"
                             )
                             logger.info("Refund failed notification email sent to ${refund.userEmail}")
+
+                            // Send push notification
+                            sendRefundPushNotification(
+                                userEmail = refund.userEmail,
+                                amount = refund.amount / 100.0,
+                                status = "failed"
+                            )
                         }
 
                         RefundStatus.PENDING -> {
-                            logger.debug("Refund status is PENDING, no notification email sent")
+                            logger.debug("Refund status is PENDING, no notification sent")
                         }
                     }
                 } else {
-                    logger.warn("Could not fetch refund details for email notification: $refundId")
+                    logger.warn("Could not fetch refund details for notifications: $refundId")
                 }
             } catch (e: Exception) {
-                logger.warn("Failed to send refund status notification email", e)
-                // Don't fail the webhook processing if email fails
+                logger.warn("Failed to send refund status notifications", e)
+                // Don't fail the webhook processing if notifications fail
             }
 
             logger.info("Webhook processed successfully for refund: $refundId, event: $eventType, new status: $newStatus")
@@ -977,6 +1004,91 @@ class RefundServiceImpl(
         } catch (e: Exception) {
             logger.error("Exception during webhook signature verification", e)
             false
+        }
+    }
+
+    /**
+     * Send push notification for refund status update.
+     * Fetches user's FCM token and sends notification if available.
+     */
+    private suspend fun sendRefundPushNotification(
+        userEmail: String,
+        amount: Double,
+        status: String
+    ) {
+        try {
+            logger.debug("Attempting to send push notification to $userEmail for refund $status")
+
+            // Get user's FCM token
+            val userResult = userRepository.findUserByEmail(userEmail)
+            if (userResult is Result.Success && userResult.data != null) {
+                val user = userResult.data
+                val fcmToken = user.fcmToken
+
+                if (fcmToken.isNullOrBlank()) {
+                    logger.debug("No FCM token found for user $userEmail, skipping push notification")
+                    return
+                }
+
+                // Build notification content based on status
+                val (title, body) = when (status.lowercase()) {
+                    "initiated" -> {
+                        Pair(
+                            "Refund Initiated",
+                            "Your refund of ₹${
+                                String.format(
+                                    "%.2f",
+                                    amount
+                                )
+                            } is being processed. You'll be notified once completed."
+                        )
+                    }
+
+                    "processed" -> {
+                        Pair(
+                            "Refund Completed",
+                            "Your refund of ₹${String.format("%.2f", amount)} has been processed successfully."
+                        )
+                    }
+
+                    "failed" -> {
+                        Pair(
+                            "Refund Failed",
+                            "Your refund of ₹${
+                                String.format(
+                                    "%.2f",
+                                    amount
+                                )
+                            } could not be processed. Please contact support."
+                        )
+                    }
+
+                    else -> {
+                        Pair(
+                            "Refund Update",
+                            "Your refund of ₹${String.format("%.2f", amount)} status: $status"
+                        )
+                    }
+                }
+
+                // Send push notification
+                val notificationResult = notificationService.sendNotification(
+                    token = fcmToken,
+                    title = title,
+                    body = body
+                )
+
+                if (notificationResult.isSuccess) {
+                    logger.info("Push notification sent successfully to $userEmail for refund $status")
+                } else {
+                    logger.warn("Failed to send push notification to $userEmail: ${notificationResult.exceptionOrNull()?.message}")
+                }
+            } else {
+                logger.warn("Could not find user $userEmail for push notification")
+            }
+        } catch (e: Exception) {
+            logger.warn("Exception while sending push notification to $userEmail", e)
+            // Don't throw - notifications are best-effort
         }
     }
 }
