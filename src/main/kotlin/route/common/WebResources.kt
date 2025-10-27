@@ -35,16 +35,62 @@ object WebResources {
         }
     }
 
+    /**
+     * Include Firebase Analytics for web tracking
+     * This initializes Firebase with the project configuration and enables analytics
+     */
+    fun includeFirebaseAnalytics(head: HEAD) {
+        head.script {
+            attributes["type"] = "module"
+            unsafe {
+                raw(
+                    """
+                    // Import the functions you need from the SDKs you need
+                    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+                    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-analytics.js";
+                    
+                    // Your web app's Firebase configuration
+                    const firebaseConfig = {
+                      apiKey: "AIzaSyDwt4UFPfOPAFJL876I7nkAIFU9jM4r5ho",
+                      authDomain: "weatherify-mvvm.firebaseapp.com",
+                      projectId: "weatherify-mvvm",
+                      storageBucket: "weatherify-mvvm.firebasestorage.app",
+                      messagingSenderId: "1017382896100",
+                      appId: "1:1017382896100:web:f3742e383a820e7c7447f1",
+                      measurementId: "G-RVYWKNSDS7"
+                    };
+                    
+                    // Initialize Firebase
+                    try {
+                      const app = initializeApp(firebaseConfig);
+                      const analytics = getAnalytics(app);
+                      console.log('Firebase Analytics initialized successfully');
+                    } catch (error) {
+                      console.error('Error initializing Firebase Analytics:', error);
+                    }
+                    """.trimIndent()
+                )
+            }
+        }
+    }
+
     // CSS file contents
     private val baseCss = readResourceFile("/web/css/base.css")
     private val componentsCss = readResourceFile("/web/css/components.css")
     private val themeToggleCss = readResourceFile("/web/css/theme-toggle.css")
+    private val adminHeaderCss = readResourceFile("/web/css/admin-header.css")
+    private val headerCss = readResourceFile("/web/css/header.css")
 
     // JavaScript file contents
     private val themeJs = readResourceFile("/web/js/theme.js")
     private val utilsJs = readResourceFile("/web/js/utils.js")
     private val authJs = readResourceFile("/web/js/auth.js")
     private val adminJs = readResourceFile("/web/js/admin.js")
+    private val financeAdminJs = readResourceFile("/web/js/finance-admin.js")
+    private val refundAdminJs = readResourceFile("/web/js/refund-admin.js")
+    private val serviceCatalogAdminJs = readResourceFile("/web/js/service-catalog-admin.js")
+    private val adminHeaderJs = readResourceFile("/web/js/admin-header.js")
+    private val headerJs = readResourceFile("/web/js/header.js")
     private val decodeJs = readResourceFile("/web/js/decode.js")
 
     /**
@@ -78,6 +124,19 @@ object WebResources {
                 raw(baseCss)
                 raw(componentsCss)
                 raw(themeToggleCss)
+                raw(headerCss)
+            }
+        }
+    }
+
+    /**
+     * Include admin header CSS in the HTML head
+     * @param head The HEAD element to add the CSS to
+     */
+    fun includeAdminHeaderCss(head: HEAD) {
+        head.style {
+            unsafe {
+                raw(adminHeaderCss)
             }
         }
     }
@@ -93,6 +152,7 @@ object WebResources {
                 raw(themeJs)
                 raw(utilsJs)
                 raw(authJs)
+                raw(headerJs)
 
                 // Initialize the app with a single DOMContentLoaded event listener
                 raw(
@@ -152,6 +212,42 @@ object WebResources {
         head.script {
             unsafe {
                 raw(adminJs)
+            }
+        }
+        // Include finance admin JavaScript
+        head.script {
+            unsafe {
+                raw(financeAdminJs)
+            }
+        }
+        // Include refund admin JavaScript
+        head.script {
+            unsafe {
+                raw(refundAdminJs)
+            }
+        }
+        // Include service catalog admin JavaScript
+        head.script {
+            unsafe {
+                raw(serviceCatalogAdminJs)
+            }
+        }
+        // Ensure admin dashboard initializes after DOM is ready
+        head.script {
+            unsafe {
+                raw(
+                    """
+                    document.addEventListener('DOMContentLoaded', function() {
+                        try {
+                            if (typeof initializeAdmin === 'function') {
+                                initializeAdmin();
+                            }
+                        } catch (e) {
+                            console.error('Error initializing admin dashboard:', e);
+                        }
+                    });
+                    """
+                )
             }
         }
     }

@@ -47,6 +47,8 @@ The project includes the following documentation files:
   and their relationships.
 - **[Data Flows Documentation](docs/data-flows.md)**: Detailed sequence diagrams for key data flows
   in the application.
+- **[Database Indexes](docs/database-indexes.md)**: Documentation of database indexes for query optimization,
+  including index creation, management, and performance considerations.
 
 ## API Endpoints
 
@@ -150,6 +152,12 @@ Deletes feedback by ID.
 - `JWT_REALM`: JWT realm
 - `WEATHER_API_KEY`: OpenWeatherMap API key (for local development)
 - `DB_CONNECTION_STRING`: MongoDB connection string (for local development)
+- `SENDGRID_API_KEY`: SendGrid API key (optional, for email notifications)
+- `FROM_EMAIL`: Email address to send from (optional, default: noreply@androidplay.com)
+- `FROM_NAME`: Display name for email sender (optional, default: Androidplay)
+
+See `.env.example` for a complete list of environment variables
+and [Email Configuration Guide](docs/email-configuration.md) for detailed email setup instructions.
 
 ### Running Locally
 

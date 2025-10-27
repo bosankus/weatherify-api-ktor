@@ -1,0 +1,189 @@
+/* Header Component Styles for Weatherify */
+
+/* Base header container with sticky positioning and backdrop blur */
+.app-header {
+    width: 100%;
+    background: transparent; /* Make header transparent */
+    border-bottom: 1px solid transparent; /* Remove visible border for full transparency */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+/* Header container with max-width constraint */
+.app-header__container {
+    width: 100%;
+    margin: 0;
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Brand section with flexbox layout */
+.app-header__brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Logo link with hover effects */
+.app-header__logo-link {
+    text-decoration: none;
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.app-header__logo-link:hover {
+    transform: translateY(-1px);
+}
+
+/* Logo with gradient text */
+.app-header__logo {
+    font-size: 1.75rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #6b7dbb, #3b4f7d);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+    cursor: pointer;
+    letter-spacing: -0.01em;
+}
+
+/* Subtitle with badge appearance */
+.app-header__subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    background: rgba(59, 79, 125, 0.1);
+    white-space: nowrap;
+    transition: color 0.3s ease, background 0.3s ease;
+}
+
+/* Hidden subtitle state */
+.app-header__subtitle.hidden {
+    display: none;
+}
+
+/* Spacer for flex layout */
+.app-header__spacer {
+    flex: 1;
+}
+
+/* Action icons container with proper spacing */
+.app-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* User info styling */
+.app-header__user-info {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    transition: color 0.3s ease;
+}
+
+/* Logout button styling */
+.app-header__logout-btn {
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #3b4f7d, #2d3748);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+    white-space: nowrap;
+}
+
+.app-header__logout-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.app-header__logout-btn:active {
+    transform: translateY(0);
+}
+
+/* Custom action container */
+.app-header__custom-action {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+/* Tablet and below (≤768px) - reduce font sizes */
+@media (max-width: 768px) {
+    .app-header__container {
+        padding: 0.875rem 1.5rem;
+    }
+
+    .app-header__logo {
+        font-size: 1.5rem;
+    }
+
+    .app-header__subtitle {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.6rem;
+    }
+
+    .app-header__actions {
+        gap: 0.75rem;
+    }
+
+    .app-header__user-info {
+        font-size: 0.8rem;
+    }
+
+    .app-header__logout-btn {
+        padding: 0.45rem 0.85rem;
+        font-size: 0.8rem;
+    }
+}
+
+/* Mobile (≤480px) - keep horizontal layout */
+@media (max-width: 480px) {
+    .app-header__container {
+        padding: 0.75rem 1rem;
+    }
+
+    .app-header__brand {
+        gap: 0.5rem;
+    }
+
+    .app-header__logo {
+        font-size: 1.35rem;
+    }
+
+    .app-header__subtitle {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.5rem;
+    }
+
+    .app-header__actions {
+        gap: 0.5rem;
+    }
+
+    .app-header__user-info {
+        font-size: 0.75rem;
+    }
+
+    .app-header__logout-btn {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+        min-height: 44px;
+        min-width: 44px;
+    }
+}

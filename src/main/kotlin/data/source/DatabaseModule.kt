@@ -4,6 +4,8 @@ import bose.ankush.data.model.Feedback
 import bose.ankush.data.model.User
 import bose.ankush.data.model.Weather
 import bose.ankush.util.getSecretValue
+import com.mongodb.ConnectionString
+import com.mongodb.MongoClientSettings
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
@@ -18,6 +20,7 @@ import org.bson.conversions.Bson
 import org.slf4j.LoggerFactory
 import util.Constants
 import java.io.Closeable
+import java.util.concurrent.TimeUnit
 
 /**
  * Database module that provides MongoDB connections and collections.
@@ -31,8 +34,24 @@ class DatabaseModule(
     private val logger = LoggerFactory.getLogger(DatabaseModule::class.java)
     private val connectionString: String by lazy { getSecretValue(connectionStringSecretName) }
     private val client: MongoClient by lazy {
-        logger.info("Creating MongoDB client with database: $dbName")
-        MongoClient.create(connectionString)
+        logger.info("Creating MongoDB client with database: $dbName and optimized connection pool")
+        val settings = MongoClientSettings.builder()
+            .applyConnectionString(ConnectionString(connectionString))
+            .applyToConnectionPoolSettings { builder ->
+                builder
+                    .maxSize(100)
+                    .minSize(10)
+                    .maxWaitTime(2, TimeUnit.SECONDS)
+                    .maxConnectionIdleTime(30, TimeUnit.SECONDS)
+            }
+            .applyToSocketSettings { builder ->
+                builder
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(10, TimeUnit.SECONDS)
+            }
+            .build()
+
+        MongoClient.create(settings)
     }
     private val database: MongoDatabase by lazy { client.getDatabase(dbName) }
 
@@ -42,7 +61,7 @@ class DatabaseModule(
     }
 
     /**
-     * Create necessary indexes for collections
+     * Create the necessary indexes for collections
      */
     private fun createIndexes() {
         runBlocking {
@@ -53,6 +72,86 @@ class DatabaseModule(
                     Indexes.ascending(Constants.Database.EMAIL_FIELD),
                     IndexOptions().unique(true)
                 )
+
+                // Create indexes for refunds collection
+                val refundsCollection = getRefundsCollection()
+
+                // Unique index on refundId
+                refundsCollection.createIndex(
+                    Indexes.ascending("refundId"),
+                    IndexOptions().unique(true)
+                )
+
+                // Index on paymentId for querying refunds by payment
+                refundsCollection.createIndex(
+                    Indexes.ascending("paymentId")
+                )
+
+                // Index on userEmail for querying refunds by user
+                refundsCollection.createIndex(
+                    Indexes.ascending("userEmail")
+                )
+
+                // Index on status for filtering by refund status
+                refundsCollection.createIndex(
+                    Indexes.ascending("status")
+                )
+
+                // Index on createdAt for sorting and date range queries (descending for recent first)
+                refundsCollection.createIndex(
+                    Indexes.descending("createdAt")
+                )
+
+                // Index on processedBy for tracking admin actions
+                refundsCollection.createIndex(
+                    Indexes.ascending("processedBy")
+                )
+
+                // Compound index on status + createdAt for filtered queries with sorting
+                refundsCollection.createIndex(
+                    Indexes.compoundIndex(
+                        Indexes.ascending("status"),
+                        Indexes.descending("createdAt")
+                    )
+                )
+
+                // Compound index on paymentId + status for refund summary queries
+                refundsCollection.createIndex(
+                    Indexes.compoundIndex(
+                        Indexes.ascending("paymentId"),
+                        Indexes.ascending("status")
+                    )
+                )
+
+                // Create indexes for payments collection
+                val paymentsCollection = getPaymentsCollection()
+
+                // Index on razorpay_payment_id for transaction lookups
+                paymentsCollection.createIndex(
+                    Indexes.ascending("razorpay_payment_id")
+                )
+
+                // Compound index on userEmail + status for user payment queries
+                paymentsCollection.createIndex(
+                    Indexes.compoundIndex(
+                        Indexes.ascending("userEmail"),
+                        Indexes.ascending("status")
+                    )
+                )
+
+                // Compound index on serviceType + status for revenue calculations
+                paymentsCollection.createIndex(
+                    Indexes.compoundIndex(
+                        Indexes.ascending("serviceType"),
+                        Indexes.ascending("status")
+                    )
+                )
+
+                // Index on createdAt for sorting
+                paymentsCollection.createIndex(
+                    Indexes.descending("createdAt")
+                )
+
                 logger.info("Indexes created successfully")
             } catch (e: Exception) {
                 logger.error("Failed to create indexes", e)
@@ -109,6 +208,38 @@ class DatabaseModule(
      */
     fun getWeatherCollection(): MongoCollection<Weather> {
         return getCollection<Weather>(Constants.Database.WEATHER_COLLECTION)
+    }
+
+    /**
+     * Get the payment collection
+     * @return The payment collection
+     */
+    fun getPaymentsCollection(): MongoCollection<bose.ankush.data.model.Payment> {
+        return getCollection<bose.ankush.data.model.Payment>(Constants.Database.PAYMENTS_COLLECTION)
+    }
+
+    /**
+     * Get the refunds collection
+     * @return The refunds collection
+     */
+    fun getRefundsCollection(): MongoCollection<bose.ankush.data.model.Refund> {
+        return getCollection<bose.ankush.data.model.Refund>(Constants.Database.REFUNDS_COLLECTION)
+    }
+
+    /**
+     * Get the services collection
+     * @return The services collection
+     */
+    fun getServicesCollection(): MongoCollection<bose.ankush.data.model.ServiceConfig> {
+        return getCollection<bose.ankush.data.model.ServiceConfig>("services")
+    }
+
+    /**
+     * Get the service history collection
+     * @return The service history collection
+     */
+    fun getServiceHistoryCollection(): MongoCollection<bose.ankush.data.model.ServiceHistory> {
+        return getCollection<bose.ankush.data.model.ServiceHistory>("service_history")
     }
 
     /**

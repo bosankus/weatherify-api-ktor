@@ -13,7 +13,9 @@ function toggleTheme() {
         const isDarkTheme = !htmlElement.classList.contains('light-theme');
 
         // Get toggle position for animation
-        const toggleElement = document.querySelector('.toggle');
+        // Support both regular and admin theme toggle elements
+        const toggleElement = document.querySelector('.toggle') || 
+                             document.querySelector('.admin-header__theme-toggle');
         let x = window.innerWidth / 2;
         let y = window.innerHeight / 2;
 
@@ -115,10 +117,13 @@ function toggleTheme() {
 /**
  * Initialize theme toggle functionality
  * Sets up the theme based on saved preference or system preference
+ * Supports both 'theme-toggle' and 'admin-theme-toggle' IDs
  */
 function initializeTheme() {
     try {
-        const themeToggle = document.getElementById('theme-toggle');
+        // Support both regular and admin theme toggle IDs
+        const themeToggle = document.getElementById('theme-toggle') || 
+                           document.getElementById('admin-theme-toggle');
         if (!themeToggle) {
             console.warn('Theme toggle element not found');
             return;
@@ -142,7 +147,9 @@ function initializeTheme() {
         themeToggle.addEventListener('change', toggleTheme);
         
         // Add click event listener to the theme toggle label for better touch/click response
-        const themeToggleLabel = document.querySelector('.toggle');
+        // Support both regular and admin theme toggle labels
+        const themeToggleLabel = document.querySelector('.toggle') || 
+                                 document.querySelector('.admin-header__theme-toggle');
         if (themeToggleLabel) {
             themeToggleLabel.addEventListener('click', function(e) {
                 // Prevent the click from triggering the checkbox's change event twice

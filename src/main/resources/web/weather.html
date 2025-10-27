@@ -10,11 +10,40 @@
 
         gtag('config', 'G-EBVRVNN6JF');
     </script>
+
+    <!-- Firebase Analytics -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-analytics.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+          apiKey: "AIzaSyDwt4UFPfOPAFJL876I7nkAIFU9jM4r5ho",
+          authDomain: "weatherify-mvvm.firebaseapp.com",
+          projectId: "weatherify-mvvm",
+          storageBucket: "weatherify-mvvm.firebasestorage.app",
+          messagingSenderId: "1017382896100",
+          appId: "1:1017382896100:web:f3742e383a820e7c7447f1",
+          measurementId: "G-RVYWKNSDS7"
+        };
+
+        // Initialize Firebase
+        try {
+          const app = initializeApp(firebaseConfig);
+          const analytics = getAnalytics(app);
+          console.log('Firebase Analytics initialized successfully');
+        } catch (error) {
+          console.error('Error initializing Firebase Analytics:', error);
+        }
+    </script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weather Dashboard - Androidplay Weather API</title>
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/components.css">
+    <link href="css/header.css" rel="stylesheet">
     <link rel="stylesheet" href="css/theme-toggle.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -206,17 +235,53 @@
         }
 
         .error-message {
-            background-color: rgba(220, 38, 38, 0.1);
-            color: #dc2626;
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-            font-size: 0.95rem;
             display: none;
+            align-items: flex-start;
+            gap: 12px;
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+            animation: slideDown 0.3s ease;
         }
 
         .error-message.visible {
-            display: block;
+            display: flex;
+        }
+
+        .error-message::before {
+            content: "⚠";
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .error-message-text {
+            flex: 1;
+            color: #dc2626;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .weather-results {
@@ -293,29 +358,45 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="brand-text">
-                <h1 class="logo">Androidplay</h1>
-                <span class="subtitle">Weather API</span>
+<!-- Header Component -->
+<header class="app-header" role="banner">
+    <div class="app-header__container">
+        <!-- Brand section with logo and subtitle -->
+        <div class="app-header__brand">
+            <a
+                aria-label="Weatherify Home"
+                class="app-header__logo-link"
+                href="/weather"
+                id="header-logo-link"
+            >
+                <h1 class="app-header__logo">Weatherify</h1>
+            </a>
+            <span
+                class="app-header__subtitle"
+                data-default-subtitle="Weather API"
+                id="header-subtitle"
+            >
+                    Weather Dashboard
+                </span>
             </div>
-            <div style="flex-grow: 1;"></div>
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <!-- Theme toggle -->
-                <label class="toggle" style="position: relative; cursor: pointer; margin-right: 0.5rem;">
-                    <input type="checkbox" id="theme-toggle">
-                </label>
+
+        <!-- Spacer for flex layout -->
+        <div class="app-header__spacer"></div>
+
+        <!-- Actions container - populated dynamically by JavaScript -->
+        <div
+            aria-label="Header actions"
+            class="app-header__actions"
+            id="header-actions"
+            role="navigation"
+        >
+            <!-- Action icons will be inserted here by header.js -->
             </div>
         </div>
+</header>
 
+<div class="container">
         <div class="dashboard-container">
-            <div class="dashboard-header">
-                <h2 class="dashboard-title">Weather Dashboard</h2>
-                <div class="user-info">
-                    <span id="user-email" class="user-email"></span>
-                    <button id="logout-button" class="logout-button">Logout</button>
-                </div>
-            </div>
 
             <div id="error-message" class="error-message"></div>
 
@@ -350,6 +431,7 @@
     <script src="js/theme.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/auth.js"></script>
+<script src="js/header.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Check authentication
@@ -358,52 +440,21 @@
                 return;
             }
 
-            // Get user info for display
-            const userInfo = getUserInfo();
-            if (userInfo && userInfo.email) {
-                const userEmailElement = document.querySelector('.user-email');
-                if (userEmailElement) {
-                    userEmailElement.textContent = userInfo.email;
-                }
-            }
+            // Initialize header component
+            initializeHeader({
+                homeUrl: '/weather',
+                subtitle: 'Weather Dashboard',
+                actions: [
+                    { type: 'theme-toggle' },
+                    { type: 'user-info' },
+                    { type: 'logout' }
+                ]
+            });
+
             const weatherForm = document.getElementById('weather-form');
             const submitButton = document.getElementById('submit-button');
             const errorMessage = document.getElementById('error-message');
             const weatherResults = document.getElementById('weather-results');
-            const userEmail = document.getElementById('user-email');
-            const logoutButton = document.getElementById('logout-button');
-
-            // Check if user is authenticated
-            if (!isAuthenticated()) {
-                // Not authenticated, redirect to login
-                window.location.href = '/login?error=auth_required';
-                return;
-            }
-
-            // Display user email from JWT token
-            try {
-                const token = getToken();
-                if (token) {
-                    // Parse JWT token (without validation)
-                    const base64Url = token.split('.')[1];
-                    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                    }).join(''));
-
-                    const payload = JSON.parse(jsonPayload);
-                    if (payload.email) {
-                        userEmail.textContent = payload.email;
-                    }
-                }
-            } catch (error) {
-                console.error('Error parsing JWT token:', error);
-            }
-
-            // Handle logout
-            logoutButton.addEventListener('click', function() {
-                logout();
-            });
 
             // Handle form submission
             weatherForm.addEventListener('submit', function(e) {
@@ -669,7 +720,7 @@
 
             // Helper function to show error message
             function showError(message) {
-                errorMessage.textContent = message;
+                errorMessage.innerHTML = `<span class="error-message-text">${message}</span>`;
                 errorMessage.classList.add('visible');
 
                 // Hide error after 5 seconds

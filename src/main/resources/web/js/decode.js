@@ -1,5 +1,43 @@
 (function(){
   var CURRENT_MODE = 'json'; // 'json' | 'xml' | 'protobuf'
+  
+  // Format configuration system
+  var FORMAT_CONFIGS = {
+    json: {
+      type: 'json',
+      placeholder: '{\n  "hello": "world",\n  "n": 123,\n  "ok": true\n}',
+      fileExtension: 'json',
+      mimeType: 'application/json',
+      supportsAutoFix: true,
+      supportsSortKeys: true,
+      supportsUnescape: true,
+      supportsMockAPI: true,
+      supportsMinify: true
+    },
+    xml: {
+      type: 'xml',
+      placeholder: '<person>\n  <name>Ada</name>\n  <skills>\n    <skill lang="Kotlin" exp="5"/>\n    <skill lang="JS" exp="7"/>\n  </skills>\n  <active>true</active>\n  <score>99.5</score>\n</person>',
+      fileExtension: 'xml',
+      mimeType: 'application/xml',
+      supportsAutoFix: false,
+      supportsSortKeys: false,
+      supportsUnescape: false,
+      supportsMockAPI: false,
+      supportsMinify: true
+    },
+    protobuf: {
+      type: 'protobuf',
+      placeholder: 'Paste Base64-encoded Protobuf bytes here (e.g., CgNBZGE=). We will show a hex dump.',
+      fileExtension: 'bin',
+      mimeType: 'application/octet-stream',
+      supportsAutoFix: false,
+      supportsSortKeys: false,
+      supportsUnescape: false,
+      supportsMockAPI: false,
+      supportsMinify: false
+    }
+  };
+  
   function getMode(){
     var sel = document.getElementById('format-select');
     var val = sel && sel.value ? sel.value.toLowerCase() : CURRENT_MODE;
@@ -11,6 +49,10 @@
     CURRENT_MODE = mode;
     var sel = document.getElementById('format-select');
     if (sel) sel.value = mode;
+  }
+  function getFormatConfig(){
+    var mode = getMode();
+    return FORMAT_CONFIGS[mode] || FORMAT_CONFIGS.json;
   }
   function byId(id){ return document.getElementById(id); }
   function escapeHtml(s){
@@ -141,17 +183,36 @@
     return { ok:false, error: parsed.error || 'Invalid JSON', fixed: fixed };
   }
   function autoFixNow(){
-    if (getMode() !== 'json'){ var err = byId('error-box'); if (err){ err.textContent = 'Auto Fix is available only in JSON mode.'; err.style.display='block'; } return; }
+    if (getMode() !== 'json'){ 
+      var err = byId('error-box'); 
+      if (err){ 
+        err.textContent = 'Auto Fix is available only in JSON mode.'; 
+        err.style.display='block'; 
+      } 
+      return; 
+    }
     var inp = byId('json-input'); if (!inp) return;
     var text = inp.value || '';
     if (!text.trim()){ formatNow(); return; }
+    
+    var originalLength = text.length;
     var res = attemptAutoFix(text);
+    
     if (res.ok){
       inp.value = res.pretty;
       formatNow();
+      var changes = Math.abs(res.pretty.length - originalLength);
+      showToast('Auto-fix successful! Applied ' + changes + ' character changes.', 'success');
     } else {
+      var fixedLength = (res.fixed || text).length;
+      var changes = Math.abs(fixedLength - originalLength);
       inp.value = res.fixed || text;
       formatNow();
+      if (changes > 0){
+        showToast('Applied ' + changes + ' fixes, but JSON is still invalid. Check errors below.', 'error');
+      } else {
+        showToast('Could not auto-fix. Check errors below.', 'error');
+      }
     }
   }
   function unescapeNow(){
@@ -259,21 +320,25 @@
   }
 
   function updateUiForMode(){
-    var mode = getMode();
-    var idsJsonOnly = ['btn-autofix','btn-sort','btn-create-mock','btn-unescape'];
-    idsJsonOnly.forEach(function(id){ var el = byId(id); if (el){ el.disabled = (mode !== 'json'); }});
-    if (mode !== 'json'){ hideMockBox(); }
+    var config = getFormatConfig();
+    var btnAutofix = byId('btn-autofix');
+    var btnSort = byId('btn-sort');
+    var btnUnescape = byId('btn-unescape');
+    var btnCreateMock = byId('btn-create-mock');
+    var btnMinify = byId('btn-minify');
+    
+    if (btnAutofix) btnAutofix.disabled = !config.supportsAutoFix;
+    if (btnSort) btnSort.disabled = !config.supportsSortKeys;
+    if (btnUnescape) btnUnescape.disabled = !config.supportsUnescape;
+    if (btnCreateMock) btnCreateMock.disabled = !config.supportsMockAPI;
+    if (btnMinify) btnMinify.disabled = !config.supportsMinify;
+    
+    if (!config.supportsMockAPI){ hideMockBox(); }
   }
   function updatePlaceholderForMode(){
     var inp = byId('json-input'); if (!inp) return;
-    var mode = getMode();
-    if (mode === 'xml'){
-      inp.placeholder = '<person>\n  <name>Ada</name>\n  <skills>\n    <skill lang="Kotlin" exp="5"/>\n    <skill lang="JS" exp="7"/>\n  </skills>\n  <active>true</active>\n  <score>99.5</score>\n</person>';
-    } else if (mode === 'protobuf'){
-      inp.placeholder = 'Paste Base64-encoded Protobuf bytes here (e.g., CgNBZGE=). We will show a hex dump.';
-    } else {
-      inp.placeholder = '{\n  "hello":"world",\n  "n":123,\n  "ok":true\n}';
-    }
+    var config = getFormatConfig();
+    inp.placeholder = config.placeholder;
   }
 
   function showMockBox(url, id){
@@ -312,47 +377,88 @@
   }
   async function createMock(){
     var err = byId('error-box');
+    var btn = byId('btn-create-mock');
     var payload = getJsonForMock();
+    
+    // Validation before creating mock
     if (!payload){
       if (err){ err.textContent = 'Please provide valid JSON to create a mock.'; err.style.display = 'block'; }
+      showToast('Invalid JSON for mock API', 'error');
       return;
     }
+    
+    // Add loading state
+    if (btn){
+      btn.disabled = true;
+      btn.textContent = 'Creating...';
+    }
+    
     try {
       var res = await fetch('/mock/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
       var txt = await res.text();
       var data = {};
       try { data = JSON.parse(txt); } catch(_e) { data = { status:false, message: 'Unexpected response' }; }
+      
       if (!res.ok || !data || data.status === false){
         var msg = (data && data.message) ? data.message : ('Failed to create mock: ' + res.status);
         if (err){ err.textContent = msg; err.style.display = 'block'; }
+        showToast('Failed to create mock API', 'error');
         return;
       }
+      
       var url = data.data && data.data.url;
       var id = data.data && data.data.id;
       if (url && id){
         showMockBox(url, id);
         if (err) { err.style.display = 'none'; }
+        showToast('Mock API created successfully!', 'success');
       }
     } catch (e){
       if (err){ err.textContent = 'Network error while creating mock'; err.style.display = 'block'; }
+      showToast('Network error while creating mock', 'error');
+    } finally {
+      // Remove loading state
+      if (btn){
+        btn.disabled = false;
+        btn.textContent = 'Create Mock API';
+      }
     }
   }
   async function resetMock(){
-    var box = byId('mock-api-box'); var err = byId('error-box');
+    var box = byId('mock-api-box'); 
+    var err = byId('error-box');
+    var btn = byId('btn-mock-reset');
+    
     if (!box) return;
     var id = box.getAttribute('data-mock-id');
     if (!id){ hideMockBox(); return; }
+    
+    // Add loading state
+    if (btn){
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+    }
+    
     try {
       var res = await fetch('/mock/' + encodeURIComponent(id), { method: 'DELETE' });
       if (!res.ok){
         // Even if failed, hide the box to avoid blocking the user
         console.warn('Failed to delete mock', await res.text());
+        showToast('Failed to delete mock, but hiding it anyway', 'error');
+      } else {
+        showToast('Mock API deleted successfully', 'success');
       }
     } catch(e){
       console.warn('Error deleting mock', e);
+      showToast('Error deleting mock', 'error');
+    } finally {
+      hideMockBox();
+      if (err) { err.style.display = 'none'; }
+      if (btn){
+        btn.disabled = false;
+        btn.textContent = 'Reset';
+      }
     }
-    hideMockBox();
-    if (err) { err.style.display = 'none'; }
   }
   function copyMockUrl(){
     var urlEl = byId('mock-url'); if (!urlEl) return;
@@ -360,7 +466,251 @@
     if (!url) return;
     var tmp = document.createElement('textarea');
     tmp.value = url; document.body.appendChild(tmp); tmp.select();
-    try { document.execCommand('copy'); } finally { document.body.removeChild(tmp); }
+    try { 
+      document.execCommand('copy');
+      showToast('URL copied to clipboard!', 'success');
+    } finally { document.body.removeChild(tmp); }
+  }
+
+  // Debounce helper for real-time formatting
+  var debounceTimer = null;
+  function debounce(func, delay){
+    return function(){
+      var context = this, args = arguments;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function(){ func.apply(context, args); }, delay);
+    };
+  }
+
+  // Toast notification system
+  function showToast(message, type){
+    var toast = document.getElementById('toast-notification');
+    if (!toast){
+      toast = document.createElement('div');
+      toast.id = 'toast-notification';
+      toast.style.cssText = 'position:fixed;top:80px;right:20px;padding:12px 20px;border-radius:8px;font-weight:500;z-index:10000;opacity:0;box-shadow:0 4px 12px rgba(0,0,0,0.15);pointer-events:none;';
+      document.body.appendChild(toast);
+    }
+    
+    toast.textContent = message;
+    if (type === 'success'){
+      toast.style.background = 'rgba(16, 185, 129, 0.95)';
+      toast.style.color = '#fff';
+    } else if (type === 'error'){
+      toast.style.background = 'rgba(239, 68, 68, 0.95)';
+      toast.style.color = '#fff';
+    } else {
+      toast.style.background = 'rgba(59, 130, 246, 0.95)';
+      toast.style.color = '#fff';
+    }
+    
+    // Trigger animation
+    toast.style.animation = 'fadeInSlide 0.3s ease forwards';
+    toast.style.opacity = '1';
+    
+    setTimeout(function(){
+      toast.style.animation = 'fadeOut 0.3s ease forwards';
+      setTimeout(function(){
+        toast.style.opacity = '0';
+      }, 300);
+    }, 3000);
+  }
+
+  // XML minify helper
+  function xmlMinify(xmlText){
+    var res = xmlParserResult(xmlText);
+    if (!res.ok) return res;
+    try {
+      var serializer = new XMLSerializer();
+      var minified = serializer.serializeToString(res.doc).replace(/>\s+</g, '><');
+      return { ok: true, min: minified };
+    } catch(e){
+      return { ok: false, error: e.message || 'XML minify error' };
+    }
+  }
+
+  // Format and display output
+  function formatNow(forceFormat){
+    var inp = byId('json-input');
+    var out = byId('code-output');
+    var err = byId('error-box');
+    var gutter = byId('line-gutter');
+    if (!inp || !out || !err || !gutter) return;
+    
+    var text = (inp.value || '').trim();
+    var mode = getMode();
+    
+    // Clear previous errors
+    err.style.display = 'none';
+    err.textContent = '';
+    
+    if (!text){
+      out.textContent = '';
+      gutter.innerHTML = '';
+      return;
+    }
+    
+    if (mode === 'json'){
+      try {
+        var obj = JSON.parse(text);
+        var pretty = JSON.stringify(obj, null, 2);
+        out.innerHTML = syntaxHighlight(pretty);
+        var lines = computeLines(pretty);
+        gutter.innerHTML = buildGutter(lines, -1);
+      } catch(e){
+        // Show detailed error with line/column info
+        var errorMsg = e.message || 'Invalid JSON';
+        var line = null, column = null;
+        
+        // Try to extract line and column from error message
+        var match = errorMsg.match(/position\s+(\d+)/i);
+        if (match){
+          var pos = parseInt(match[1], 10);
+          var lines = text.substring(0, pos).split('\n');
+          line = lines.length;
+          column = lines[lines.length - 1].length + 1;
+        } else {
+          match = errorMsg.match(/line\s+(\d+)/i);
+          if (match) line = parseInt(match[1], 10);
+          match = errorMsg.match(/column\s+(\d+)/i);
+          if (match) column = parseInt(match[1], 10);
+        }
+        
+        // Display error with line/column info
+        var errorText = 'Syntax Error: ' + errorMsg;
+        if (line !== null){
+          errorText += ' at line ' + line;
+          if (column !== null) errorText += ', column ' + column;
+        }
+        err.textContent = errorText;
+        err.style.display = 'block';
+        
+        // Highlight error line in gutter
+        if (line !== null){
+          var textLines = text.split('\n');
+          gutter.innerHTML = buildGutter(textLines.length, line);
+        }
+        
+        // Show raw text in output
+        out.textContent = text;
+      }
+    } else if (mode === 'xml'){
+      var xmlRes = xmlParserResult(text);
+      if (xmlRes.ok){
+        try {
+          var serializer = new XMLSerializer();
+          var formatted = serializer.serializeToString(xmlRes.doc);
+          // Basic pretty print
+          formatted = formatted.replace(/></g, '>\n<');
+          out.textContent = formatted;
+          gutter.innerHTML = buildGutter(computeLines(formatted), -1);
+        } catch(e){
+          out.textContent = text;
+          gutter.innerHTML = buildGutter(computeLines(text), -1);
+        }
+      } else {
+        // Show XML error
+        var xmlError = 'XML Error: ' + xmlRes.error;
+        if (xmlRes.line !== null && xmlRes.line !== undefined){
+          xmlError += ' at line ' + xmlRes.line;
+          if (xmlRes.column !== null && xmlRes.column !== undefined){
+            xmlError += ', column ' + xmlRes.column;
+          }
+        }
+        err.textContent = xmlError;
+        err.style.display = 'block';
+        
+        // Highlight error line
+        if (xmlRes.line){
+          var xmlLines = text.split('\n');
+          gutter.innerHTML = buildGutter(xmlLines.length, xmlRes.line);
+        }
+        
+        out.textContent = text;
+      }
+    } else if (mode === 'protobuf'){
+      // Protobuf: decode base64 and show hex dump
+      try {
+        var decoded = atob(text);
+        var hex = '';
+        var ascii = '';
+        for(var i = 0; i < decoded.length; i++){
+          var byte = decoded.charCodeAt(i);
+          hex += ('0' + byte.toString(16)).slice(-2) + ' ';
+          ascii += (byte >= 32 && byte <= 126) ? decoded.charAt(i) : '.';
+          if ((i + 1) % 16 === 0){
+            hex += '  ' + ascii + '\n';
+            ascii = '';
+          }
+        }
+        if (ascii){
+          hex += '  ' + ascii;
+        }
+        out.textContent = hex || 'Empty data';
+        gutter.innerHTML = buildGutter(computeLines(hex || 'Empty data'), -1);
+      } catch(e){
+        err.textContent = 'Error: Invalid Base64 encoding';
+        err.style.display = 'block';
+        out.textContent = text;
+        gutter.innerHTML = buildGutter(computeLines(text), -1);
+      }
+    }
+  }
+
+  // Copy output to clipboard
+  function copyOutput(){
+    var out = byId('code-output');
+    if (!out) return;
+    var text = out.innerText || out.textContent || '';
+    if (!text.trim()){
+      showToast('Nothing to copy', 'error');
+      return;
+    }
+    
+    var tmp = document.createElement('textarea');
+    tmp.value = text;
+    document.body.appendChild(tmp);
+    tmp.select();
+    try {
+      document.execCommand('copy');
+      showToast('Copied to clipboard!', 'success');
+    } catch(e){
+      showToast('Failed to copy', 'error');
+    } finally {
+      document.body.removeChild(tmp);
+    }
+  }
+
+  // Download output as file
+  function downloadOutput(){
+    var out = byId('code-output');
+    if (!out) return;
+    var text = out.innerText || out.textContent || '';
+    if (!text.trim()){
+      showToast('Nothing to download', 'error');
+      return;
+    }
+    
+    var config = getFormatConfig();
+    var blob = new Blob([text], { type: config.mimeType });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'output.' + config.fileExtension;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Downloaded successfully!', 'success');
+  }
+
+  // Insert sample data
+  function insertSample(){
+    var inp = byId('json-input');
+    if (!inp) return;
+    var config = getFormatConfig();
+    inp.value = config.placeholder;
+    formatNow();
   }
 
   function initDecode(){
@@ -379,7 +729,7 @@
     var btnMockReset = byId('btn-mock-reset');
     var sel = byId('format-select');
 
-    if (inp){ inp.addEventListener('input', function(){ formatNow(); }); }
+    if (inp){ inp.addEventListener('input', debounce(formatNow, 300)); }
     if (btnFmt){ btnFmt.addEventListener('click', function(){ formatNow(true); }); }
     if (btnFix){ btnFix.addEventListener('click', autoFixNow); }
     if (btnUnesc){ btnUnesc.addEventListener('click', unescapeNow); }

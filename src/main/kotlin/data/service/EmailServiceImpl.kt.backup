@@ -1,0 +1,469 @@
+package data.service
+
+import bose.ankush.util.getSecretValue
+import domain.model.Result
+import domain.service.EmailService
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
+import util.Constants
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+@Serializable
+data class SendGridEmail(
+    val personalizations: List<Personalization>,
+    val from: EmailAddress,
+    val subject: String,
+    val content: List<Content>,
+    val attachments: List<Attachment>? = null
+)
+
+@Serializable
+data class Personalization(
+    val to: List<EmailAddress>
+)
+
+@Serializable
+data class EmailAddress(
+    val email: String,
+    val name: String? = null
+)
+
+@Serializable
+data class Content(
+    val type: String,
+    val value: String
+)
+
+@Serializable
+data class Attachment(
+    val content: String,  // Base64 encoded content
+    val type: String,     // MIME type
+    val filename: String,
+    val disposition: String = "attachment"
+)
+
+class EmailServiceImpl(private val httpClient: HttpClient) : EmailService {
+    private val logger = LoggerFactory.getLogger(EmailServiceImpl::class.java)
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private val sendGridApiKey = getSecretValue(Constants.Auth.SENDGRID_API_KEY)
+    private val fromEmail = System.getenv(Con) ?: "noreply@androidplay.com"
+    private val fromName = System.getenv("FROM_NAME") ?: "Androidplay"
+
+    override suspend fun sendCancellationEmail(
+        userEmail: String,
+        subscriptionEndDate: String
+    ): Result<Boolean> {
+        logger.debug("Sending cancellation email to: $userEmail")
+
+        if (sendGridApiKey.isBlank()) {
+            logger.warn("SendGrid API key not configured. Skipping email to $userEmail")
+            return Result.success(false)
+        }
+
+        return try {
+            val formattedDate = formatDate(subscriptionEndDate)
+            val htmlContent = buildCancellationEmailHtml(formattedDate)
+
+            val emailPayload = SendGridEmail(
+                personalizations = listOf(
+                    Personalization(
+                        to = listOf(EmailAddress(email = userEmail))
+                    )
+                ),
+                from = EmailAddress(email = fromEmail, name = fromName),
+                subject = "Your Subscription Has Been Cancelled",
+                content = listOf(
+                    Content(type = "text/html", value = htmlContent)
+                )
+            )
+
+            val response = httpClient.post("https://api.sendgrid.com/v3/mail/send") {
+                header("Authorization", "Bearer $sendGridApiKey")
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(emailPayload))
+            }
+
+            if (response.status.isSuccess()) {
+                logger.info("Cancellation email sent successfully to: $userEmail")
+                Result.success(true)
+            } else {
+                val errorBody = response.bodyAsText()
+                logger.error("Failed to send email. Status: ${response.status}, Body: $errorBody")
+                Result.error("Failed to send email: ${response.status}")
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to send cancellation email to $userEmail", e)
+            Result.error("Failed to send email: ${e.message}", e)
+        }
+    }
+
+    override suspend fun sendRefundNotification(
+        userEmail: String,
+        refundId: String,
+        amount: Double,
+        paymentId: String,
+        status: String
+    ): Result<Boolean> {
+        logger.debug("Sending refund notification email to: $userEmail (status: $status)")
+
+        if (sendGridApiKey.isBlank()) {
+            logger.warn("SendGrid API key not configured. Skipping email to $userEmail")
+            return Result.success(false)
+        }
+
+        return try {
+            val htmlContent = buildRefundNotificationEmailHtml(refundId, amount, paymentId, status)
+            val subject = when (status.lowercase()) {
+                "initiated" -> "Refund Initiated - ₹${String.format("%.2f", amount)}"
+                "processed" -> "Refund Processed - ₹${String.format("%.2f", amount)}"
+                else -> "Refund Update - ₹${String.format("%.2f", amount)}"
+            }
+
+            val emailPayload = SendGridEmail(
+                personalizations = listOf(
+                    Personalization(
+                        to = listOf(EmailAddress(email = userEmail))
+                    )
+                ),
+                from = EmailAddress(email = fromEmail, name = fromName),
+                subject = subject,
+                content = listOf(
+                    Content(type = "text/html", value = htmlContent)
+                )
+            )
+
+            val response = httpClient.post("https://api.sendgrid.com/v3/mail/send") {
+                header("Authorization", "Bearer $sendGridApiKey")
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(emailPayload))
+            }
+
+            if (response.status.isSuccess()) {
+                logger.info("Refund notification email sent successfully to: $userEmail")
+                Result.success(true)
+            } else {
+                val errorBody = response.bodyAsText()
+                logger.error("Failed to send refund email. Status: ${response.status}, Body: $errorBody")
+                Result.error("Failed to send refund email: ${response.status}")
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to send refund notification email to $userEmail", e)
+            Result.error("Failed to send refund email: ${e.message}", e)
+        }
+    }
+
+    private fun formatDate(dateString: String): String {
+        return try {
+            val instant = Instant.parse(dateString)
+            val formatter = DateTimeFormatter.ofPattern("MMMM dd, yyyy")
+                .withZone(ZoneId.systemDefault())
+            formatter.format(instant)
+        } catch (e: Exception) {
+            logger.warn("Failed to format date: $dateString", e)
+            dateString
+        }
+    }
+
+    private fun buildCancellationEmailHtml(endDate: String): String {
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                        line-height: 1.6;
+                        color: #333;
+                        max-width: 600px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }
+                    .container {
+                        background-color: #f9f9f9;
+                        border-radius: 8px;
+                        padding: 30px;
+                        border: 1px solid #e0e0e0;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 30px;
+                    }
+                    .header h1 {
+                        color: #2c3e50;
+                        margin: 0;
+                        font-size: 24px;
+                    }
+                    .content {
+                        background-color: white;
+                        padding: 25px;
+                        border-radius: 6px;
+                        margin-bottom: 20px;
+                    }
+                    .info-box {
+                        background-color: #fff3cd;
+                        border-left: 4px solid #ffc107;
+                        padding: 15px;
+                        margin: 20px 0;
+                        border-radius: 4px;
+                    }
+                    .footer {
+                        text-align: center;
+                        color: #666;
+                        font-size: 14px;
+                        margin-top: 20px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>Subscription Cancelled</h1>
+                    </div>
+                    <div class="content">
+                        <p>Hello,</p>
+                        <p>We're writing to confirm that your premium subscription has been cancelled as requested.</p>
+
+                        <div class="info-box">
+                            <strong>Important:</strong> You will continue to have access to premium features until <strong>$endDate</strong>.
+                        </div>
+
+                        <p>After this date, your account will revert to the free tier. You can resubscribe at any time to regain access to premium features.</p>
+
+                        <p>If you cancelled by mistake or have changed your mind, you can reactivate your subscription anytime before the end date.</p>
+
+                        <p>We're sorry to see you go! If you have any feedback about why you cancelled, we'd love to hear from you.</p>
+                    </div>
+                    <div class="footer">
+                        <p>Thank you for using Androidplay</p>
+                        <p style="font-size: 12px; color: #999;">This is an automated message. Please do not reply to this email.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
+    override suspend fun sendEmailWithAttachment(
+        userEmail: String,
+        subject: String,
+        htmlContent: String,
+        attachmentData: ByteArray,
+        attachmentFilename: String
+    ): Result<Boolean> {
+        logger.debug("Sending email with attachment to: $userEmail")
+
+        if (sendGridApiKey.isBlank()) {
+            logger.warn("SendGrid API key not configured. Skipping email to $userEmail")
+            return Result.success(false)
+        }
+
+        return try {
+            // Encode attachment data to Base64
+            val base64Content = java.util.Base64.getEncoder().encodeToString(attachmentData)
+
+            val emailPayload = SendGridEmail(
+                personalizations = listOf(
+                    Personalization(
+                        to = listOf(EmailAddress(email = userEmail))
+                    )
+                ),
+                from = EmailAddress(email = fromEmail, name = fromName),
+                subject = subject,
+                content = listOf(
+                    Content(type = "text/html", value = htmlContent)
+                ),
+                attachments = listOf(
+                    Attachment(
+                        content = base64Content,
+                        type = "application/pdf",
+                        filename = attachmentFilename,
+                        disposition = "attachment"
+                    )
+                )
+            )
+
+            val response = httpClient.post("https://api.sendgrid.com/v3/mail/send") {
+                header("Authorization", "Bearer $sendGridApiKey")
+                contentType(ContentType.Application.Json)
+                setBody(emailPayload)
+            }
+
+            if (response.status.isSuccess()) {
+                logger.info("Email with attachment sent successfully to: $userEmail")
+                Result.success(true)
+            } else {
+                val errorBody = response.bodyAsText()
+                logger.error("Failed to send email with attachment. Status: ${response.status}, Body: $errorBody")
+                Result.error("Failed to send email: ${response.status}")
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to send email with attachment to $userEmail", e)
+            Result.error("Failed to send email: ${e.message}", e)
+        }
+    }
+
+    private fun buildRefundNotificationEmailHtml(
+        refundId: String,
+        amount: Double,
+        paymentId: String,
+        status: String
+    ): String {
+        val isInitiated = status.lowercase() == "initiated"
+        val isProcessed = status.lowercase() == "processed"
+
+        val title = when {
+            isInitiated -> "Refund Initiated"
+            isProcessed -> "Refund Processed"
+            else -> "Refund Update"
+        }
+
+        val statusColor = when {
+            isInitiated -> "#ffc107"
+            isProcessed -> "#28a745"
+            else -> "#6c757d"
+        }
+
+        val statusBgColor = when {
+            isInitiated -> "#fff3cd"
+            isProcessed -> "#d4edda"
+            else -> "#e2e3e5"
+        }
+
+        val mainMessage = when {
+            isInitiated -> "We're writing to confirm that a refund has been initiated for your payment."
+            isProcessed -> "Great news! Your refund has been processed successfully."
+            else -> "This is an update regarding your refund request."
+        }
+
+        val timelineMessage = when {
+            isInitiated -> "Your refund is being processed. Depending on your bank, it may take 5-7 business days for the amount to reflect in your account."
+            isProcessed -> "The refund amount should appear in your account within 5-7 business days, depending on your bank's processing time."
+            else -> "Please check your account for the refund status."
+        }
+
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                        line-height: 1.6;
+                        color: #333;
+                        max-width: 600px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }
+                    .container {
+                        background-color: #f9f9f9;
+                        border-radius: 8px;
+                        padding: 30px;
+                        border: 1px solid #e0e0e0;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 30px;
+                    }
+                    .header h1 {
+                        color: #2c3e50;
+                        margin: 0;
+                        font-size: 24px;
+                    }
+                    .content {
+                        background-color: white;
+                        padding: 25px;
+                        border-radius: 6px;
+                        margin-bottom: 20px;
+                    }
+                    .info-box {
+                        background-color: $statusBgColor;
+                        border-left: 4px solid $statusColor;
+                        padding: 15px;
+                        margin: 20px 0;
+                        border-radius: 4px;
+                    }
+                    .details-table {
+                        width: 100%;
+                        margin: 20px 0;
+                        border-collapse: collapse;
+                    }
+                    .details-table td {
+                        padding: 10px;
+                        border-bottom: 1px solid #e0e0e0;
+                    }
+                    .details-table td:first-child {
+                        font-weight: 600;
+                        color: #666;
+                        width: 40%;
+                    }
+                    .amount {
+                        font-size: 28px;
+                        font-weight: bold;
+                        color: #28a745;
+                        text-align: center;
+                        margin: 20px 0;
+                    }
+                    .footer {
+                        text-align: center;
+                        color: #666;
+                        font-size: 14px;
+                        margin-top: 20px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>$title</h1>
+                    </div>
+                    <div class="content">
+                        <p>Hello,</p>
+                        <p>$mainMessage</p>
+
+                        <div class="amount">
+                            ₹${String.format("%.2f", amount)}
+                        </div>
+
+                        <table class="details-table">
+                            <tr>
+                                <td>Refund ID:</td>
+                                <td>$refundId</td>
+                            </tr>
+                            <tr>
+                                <td>Payment ID:</td>
+                                <td>$paymentId</td>
+                            </tr>
+                            <tr>
+                                <td>Status:</td>
+                                <td style="text-transform: capitalize;">$status</td>
+                            </tr>
+                        </table>
+
+                        <div class="info-box">
+                            <strong>Timeline:</strong> $timelineMessage
+                        </div>
+
+                        <p>If you have any questions about this refund, please don't hesitate to contact our support team.</p>
+                    </div>
+                    <div class="footer">
+                        <p>Thank you for using Androidplay</p>
+                        <p style="font-size: 12px; color: #999;">This is an automated message. Please do not reply to this email.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+}

@@ -59,6 +59,61 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
                 else -> null
             }
 
+            // Parse subscriptions from the document
+            val subscriptions = try {
+                val subsArray = doc.get("subscriptions") as? List<*>
+                subsArray?.mapNotNull { subDoc ->
+                    if (subDoc is Document) {
+                        try {
+                            bose.ankush.data.model.Subscription(
+                                service = bose.ankush.data.model.ServiceType.valueOf(
+                                    subDoc.getString("service") ?: "PREMIUM_ONE"
+                                ),
+                                startDate = subDoc.getString("startDate") ?: "",
+                                endDate = subDoc.getString("endDate") ?: "",
+                                status = bose.ankush.data.model.SubscriptionStatus.valueOf(
+                                    subDoc.getString("status") ?: "ACTIVE"
+                                ),
+                                sourcePaymentId = subDoc.getString("sourcePaymentId"),
+                                createdAt = subDoc.getString("createdAt") ?: java.time.Instant.now().toString(),
+                                cancelledAt = subDoc.getString("cancelledAt"),
+                                gracePeriodEnd = subDoc.getString("gracePeriodEnd")
+                            )
+                        } catch (e: Exception) {
+                            logger.warn("Failed to parse subscription: ${e.message}")
+                            null
+                        }
+                    } else null
+                } ?: emptyList()
+            } catch (e: Exception) {
+                logger.warn("Failed to parse subscriptions array: ${e.message}")
+                emptyList()
+            }
+
+            // Parse notification records from the document
+            val notificationsSent = try {
+                val notifArray = doc.get("notificationsSent") as? List<*>
+                notifArray?.mapNotNull { notifDoc ->
+                    if (notifDoc is Document) {
+                        try {
+                            bose.ankush.data.model.NotificationRecord(
+                                type = bose.ankush.data.model.NotificationType.valueOf(
+                                    notifDoc.getString("type") ?: "SUBSCRIPTION_EXPIRED"
+                                ),
+                                sentAt = notifDoc.getString("sentAt") ?: "",
+                                subscriptionId = notifDoc.getString("subscriptionId") ?: ""
+                            )
+                        } catch (e: Exception) {
+                            logger.warn("Failed to parse notification record: ${e.message}")
+                            null
+                        }
+                    } else null
+                } ?: emptyList()
+            } catch (e: Exception) {
+                logger.warn("Failed to parse notificationsSent array: ${e.message}")
+                emptyList()
+            }
+
             val user = User(
                 id = ObjectId(idStr),
                 email = doc.getString("email"),
@@ -74,7 +129,9 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
                 ipAddress = doc.getString("ipAddress"),
                 registrationSource = doc.getString("registrationSource"),
                 isPremium = (doc.get("isPremium") as? Boolean) ?: false,
-                fcmToken = doc.getString("fcmToken")
+                fcmToken = doc.getString("fcmToken"),
+                subscriptions = subscriptions,
+                notificationsSent = notificationsSent
             )
 
             logger.debug("User found: $email")
@@ -172,6 +229,14 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
             if (user.isPremium != existingUser.isPremium) updates["isPremium"] = user.isPremium
             if (user.fcmToken != null && user.fcmToken != existingUser.fcmToken) updates["fcmToken"] =
                 user.fcmToken
+
+            // Always update subscriptions and notifications if they differ
+            if (user.subscriptions != existingUser.subscriptions) {
+                updates["subscriptions"] = user.subscriptions
+            }
+            if (user.notificationsSent != existingUser.notificationsSent) {
+                updates["notificationsSent"] = user.notificationsSent
+            }
 
             if (updates.isEmpty()) {
                 logger.info("No changes detected for user: ${user.email}")

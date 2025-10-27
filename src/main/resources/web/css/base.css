@@ -341,56 +341,6 @@ html.light-theme .success-message {
     }
 }
 
-/* Header styles */
-.header {
-    width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 1.5rem 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: none;
-    background-color: var(--card-bg);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    position: relative;
-    z-index: 10;
-}
-
-.header .brand-text {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-}
-
-.header .logo {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: var(--heading-color);
-    margin: 0;
-}
-
-.header .subtitle {
-    font-size: 1rem;
-    color: var(--text-secondary);
-    margin-left: 1rem;
-    padding-left: 1rem;
-    border-left: 1px solid var(--header-border);
-    line-height: 1.8rem;
-}
-
-.header .nav-icon {
-    color: var(--icon-color);
-    cursor: pointer;
-    font-size: 1.5rem;
-    transition: color 0.2s ease;
-}
-
-.header .nav-icon:hover {
-    color: var(--heading-color);
-}
-
 /* Login heading style */
 .login-heading {
     margin-top: 0;

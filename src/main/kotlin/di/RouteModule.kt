@@ -19,6 +19,9 @@ val routeModule = module {
     single<RouteRegistrar>(named("terms")) { TermsAndConditionsRoutesRegistrar }
     single<RouteRegistrar>(named("privacy")) { PrivacyPolicyRoutesRegistrar }
     single<RouteRegistrar>(named("payments")) { PaymentRoutesRegistrar }
+    single<RouteRegistrar>(named("subscriptions")) { SubscriptionRoutesRegistrar }
+    single<RouteRegistrar>(named("refunds")) { RefundRoutesRegistrar }
+    single<RouteRegistrar>(named("serviceCatalog")) { ServiceCatalogRoutesRegistrar }
     single<RouteRegistrar>(named("mock")) { MockRoutesRegistrar }
     single<RouteRegistrar>(named("decode")) { DecodeRoutesRegistrar }
     single<RouteRegistrar>(named("pollingengine")) { PollingEngineRoutesRegistrar }
@@ -35,6 +38,9 @@ val routeModule = module {
             get(named("terms")),
             get(named("privacy")),
             get(named("payments")),
+            get(named("subscriptions")),
+            get(named("refunds")),
+            get(named("serviceCatalog")),
             get(named("mock")),
             get(named("decode")),
             get(named("pollingengine"))

@@ -1,5 +1,6 @@
 package bose.ankush.route
 
+import bose.ankush.data.model.SubscriptionStatus
 import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.WebResources
 import bose.ankush.route.common.respondError
@@ -18,6 +19,8 @@ import kotlinx.html.*
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
+import util.AuthHelper
+import util.AuthHelper.authenticateAdmin
 import util.AuthHelper.getAuthenticatedAdminOrRespond
 import util.AuthHelper.isAdminToken
 import util.AuthHelper.isTokenValid
@@ -27,11 +30,15 @@ import java.time.Year
 @Serializable
 data class AdminLoginRequest(val email: String, val password: String)
 
+@Serializable
+data class AdminCancelSubscriptionRequest(val userEmail: String)
+
 /**
  * Helper function to set up common HTML head elements
  */
 fun HEAD.setupHead(title: String, includeAdminJs: Boolean = false) {
     WebResources.includeGoogleTag(this)
+    WebResources.includeFirebaseAnalytics(this)
     title { +title }
     meta { charset = "UTF-8" }
     meta {
@@ -71,49 +78,49 @@ fun HEAD.setupHead(title: String, includeAdminJs: Boolean = false) {
 }
 
 /**
- * Helper function to create the header with logo and theme toggle
+ * Helper function to create the admin header with logo and theme toggle
+ * Uses the new admin-header component structure
  */
 fun createHeader(container: DIV) {
-    container.div {
-        classes = setOf("header")
-        div {
-            classes = setOf("brand-text")
-            h1 {
-                classes = setOf("logo")
-                +"Androidplay"
-            }
-            span {
-                classes = setOf("subtitle")
-                +"Admin Portal"
-            }
-        }
-        div {
-            style = "flex-grow: 1;"
-        }
-        div {
-            style = "display: flex; align-items: center; gap: 1rem;"
+    container.header {
+        classes = setOf("app-header")
+        attributes["role"] = "banner"
 
-            // Theme toggle
-            label {
-                classes = setOf("toggle")
-                style = "position: relative; cursor: pointer; margin-right: 0.5rem;"
+        div {
+            classes = setOf("app-header__container")
 
-                input {
-                    type = InputType.checkBox
-                    id = "theme-toggle"
+            // Brand section with logo and subtitle
+            div {
+                classes = setOf("app-header__brand")
+                a {
+                    href = "/weather"
+                    id = "header-logo-link"
+                    classes = setOf("app-header__logo-link")
+                    attributes["aria-label"] = "Androidplay Home"
+                    h1 {
+                        classes = setOf("app-header__logo")
+                        +"Androidplay"
+                    }
                 }
-
-                div {
-                    // This div becomes the toggle button
+                span {
+                    id = "header-subtitle"
+                    classes = setOf("app-header__subtitle")
+                    attributes["data-default-subtitle"] = "ADMIN PORTAL"
+                    +"ADMIN PORTAL"
                 }
             }
 
-            // GitHub icon
-            span {
-                classes = setOf("material-icons", "nav-icon", "github-link")
-                id = "github-link"
-                attributes["data-url"] = "https://github.com/bosankus/weatherify-api-ktor"
-                +"code"
+            // Spacer for flex layout
+            div {
+                classes = setOf("app-header__spacer")
+            }
+
+            // Actions container - populated dynamically by header.js
+            div {
+                id = "header-actions"
+                classes = setOf("app-header__actions")
+                attributes["role"] = "navigation"
+                attributes["aria-label"] = "Header actions"
             }
         }
     }
@@ -154,29 +161,254 @@ private suspend fun serveLoginPage(
                         """
                         // Admin login page specific JavaScript
                         function initializeApp() {
+                            // Initialize shared header component
+                            if (typeof initializeHeader === 'function') {
+                                initializeHeader({
+                                    homeUrl: '/admin',
+                                    subtitle: 'ADMIN PORTAL',
+                                    actions: [ { type: 'theme-toggle' } ]
+                                });
+                            }
+
                             // Initialize theme toggle functionality
                             initializeTheme();
 
+                            // Initialize banner notification system
+                            ensureBannerStyles();
+
+                            // Initialize custom checkbox styles
+                            ensureCheckboxStyles();
+
                             // Initialize login form
                             initializeLoginForm();
+                        }
 
-                            // Initialize GitHub link
-                            const githubLink = document.getElementById('github-link');
-                            if (githubLink) {
-                                githubLink.addEventListener('click', function() {
-                                    const url = this.getAttribute('data-url');
-                                    if (url) {
-                                        window.open(url, '_blank');
+                        // Ensure custom checkbox styles are available
+                        function ensureCheckboxStyles() {
+                            if (document.getElementById('custom-checkbox-styles')) return;
+                            const style = document.createElement('style');
+                            style.id = 'custom-checkbox-styles';
+                            style.textContent = `
+                                input[type="checkbox"] {
+                                    appearance: none;
+                                    -webkit-appearance: none;
+                                    -moz-appearance: none;
+                                    width: 20px;
+                                    height: 20px;
+                                    border: 2px solid var(--card-border, #d1d5db);
+                                    border-radius: 6px;
+                                    background: var(--card-bg, #ffffff);
+                                    cursor: pointer;
+                                    position: relative;
+                                    transition: all 0.2s ease;
+                                    flex-shrink: 0;
+                                }
+                                input[type="checkbox"]:hover {
+                                    border-color: #6366f1;
+                                    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+                                }
+                                input[type="checkbox"]:checked {
+                                    background: #6366f1;
+                                    border-color: #6366f1;
+                                }
+                                input[type="checkbox"]:checked::after {
+                                    content: '';
+                                    position: absolute;
+                                    left: 6px;
+                                    top: 2px;
+                                    width: 5px;
+                                    height: 10px;
+                                    border: solid white;
+                                    border-width: 0 2px 2px 0;
+                                    transform: rotate(45deg);
+                                }
+                                input[type="checkbox"]:focus {
+                                    outline: none;
+                                    border-color: #6366f1;
+                                    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+                                }
+                                input[type="checkbox"]:disabled {
+                                    opacity: 0.5;
+                                    cursor: not-allowed;
+                                }
+                            `;
+                            document.head.appendChild(style);
+                        }
+
+                        // Ensure banner styles are available
+                        function ensureBannerStyles() {
+                            if (document.getElementById('banner-styles')) return;
+                            const style = document.createElement('style');
+                            style.id = 'banner-styles';
+                            style.textContent = `
+                                .banner-container {
+                                    position: fixed;
+                                    top: 20px;
+                                    right: 20px;
+                                    z-index: 10000;
+                                    display: flex;
+                                    flex-direction: column;
+                                    gap: 12px;
+                                    pointer-events: none;
+                                    max-width: 420px;
+                                }
+                                .banner {
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 12px;
+                                    padding: 16px 18px;
+                                    border-radius: 12px;
+                                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+                                    backdrop-filter: blur(20px) saturate(180%);
+                                    -webkit-backdrop-filter: blur(20px) saturate(180%);
+                                    border: 1px solid rgba(255, 255, 255, 0.18);
+                                    opacity: 0;
+                                    transform: translateX(450px);
+                                    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                                    pointer-events: auto;
+                                    cursor: pointer;
+                                    min-width: 320px;
+                                }
+                                .banner-visible { opacity: 1; transform: translateX(0); }
+                                .banner-hide { opacity: 0; transform: translateX(450px); }
+                                .banner-icon-wrapper {
+                                    flex-shrink: 0;
+                                    width: 32px;
+                                    height: 32px;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    border-radius: 50%;
+                                    font-size: 16px;
+                                    font-weight: 700;
+                                    background: rgba(255, 255, 255, 0.25);
+                                    backdrop-filter: blur(8px);
+                                    -webkit-backdrop-filter: blur(8px);
+                                }
+                                .banner-content {
+                                    flex: 1;
+                                    min-width: 0;
+                                    display: flex;
+                                    flex-direction: column;
+                                    gap: 3px;
+                                }
+                                .banner-title { font-weight: 600; font-size: 14px; line-height: 1.4; }
+                                .banner-message { font-size: 13px; line-height: 1.5; opacity: 0.95; word-wrap: break-word; }
+                                .banner-close {
+                                    flex-shrink: 0;
+                                    width: 28px;
+                                    height: 28px;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    border-radius: 50%;
+                                    font-size: 18px;
+                                    opacity: 0.7;
+                                    transition: all 0.2s ease;
+                                    cursor: pointer;
+                                    margin-left: 4px;
+                                    background: rgba(255, 255, 255, 0.1);
+                                }
+                                .banner-close:hover {
+                                    opacity: 1;
+                                    background: rgba(255, 255, 255, 0.2);
+                                    transform: scale(1.1);
+                                }
+                                .banner-success {
+                                    background: rgba(16, 185, 129, 0.15);
+                                    border-color: rgba(16, 185, 129, 0.3);
+                                    color: #10b981;
+                                }
+                                .banner-error {
+                                    background: rgba(239, 68, 68, 0.15);
+                                    border-color: rgba(239, 68, 68, 0.3);
+                                    color: #ef4444;
+                                }
+                                .banner-info {
+                                    background: rgba(59, 130, 246, 0.15);
+                                    border-color: rgba(59, 130, 246, 0.3);
+                                    color: #3b82f6;
+                                }
+                                .banner-warning {
+                                    background: rgba(245, 158, 11, 0.15);
+                                    border-color: rgba(245, 158, 11, 0.3);
+                                    color: #f59e0b;
+                                }
+                                @media (max-width: 768px) {
+                                    .banner-container {
+                                        top: 10px;
+                                        right: 10px;
+                                        left: 10px;
+                                        max-width: none;
                                     }
-                                });
+                                    .banner {
+                                        min-width: auto;
+                                        padding: 14px 16px;
+                                    }
+                                }
+                            `;
+                            document.head.appendChild(style);
+                        }
+
+                        // Show banner notification
+                        function showBanner(type, message, timeout) {
+                            const duration = typeof timeout === 'number' ? timeout : 5000;
+                            let container = document.getElementById('banner-container');
+                            if (!container) {
+                                container = document.createElement('div');
+                                container.id = 'banner-container';
+                                container.className = 'banner-container';
+                                document.body.appendChild(container);
                             }
+
+                            const banner = document.createElement('div');
+                            const t = ['success', 'error', 'info', 'warning'].includes(type) ? type : 'info';
+                            banner.className = 'banner banner-' + t;
+
+                            const iconWrapper = document.createElement('div');
+                            iconWrapper.className = 'banner-icon-wrapper';
+                            const iconMap = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+                            iconWrapper.textContent = iconMap[t] || 'ℹ';
+
+                            const content = document.createElement('div');
+                            content.className = 'banner-content';
+
+                            const text = document.createElement('div');
+                            text.className = 'banner-message';
+                            text.textContent = message || '';
+                            content.appendChild(text);
+
+                            const closeBtn = document.createElement('div');
+                            closeBtn.className = 'banner-close';
+                            closeBtn.textContent = '×';
+
+                            banner.appendChild(iconWrapper);
+                            banner.appendChild(content);
+                            banner.appendChild(closeBtn);
+                            container.appendChild(banner);
+
+                            requestAnimationFrame(() => {
+                                requestAnimationFrame(() => {
+                                    banner.classList.add('banner-visible');
+                                });
+                            });
+
+                            const hide = () => {
+                                banner.classList.remove('banner-visible');
+                                banner.classList.add('banner-hide');
+                                setTimeout(() => {
+                                    if (banner.parentNode) banner.parentNode.removeChild(banner);
+                                }, 400);
+                            };
+
+                            const timer = setTimeout(hide, duration);
+                            banner.addEventListener('click', () => { clearTimeout(timer); hide(); });
+                            closeBtn.addEventListener('click', (e) => { e.stopPropagation(); clearTimeout(timer); hide(); });
                         }
 
                         function initializeLoginForm() {
                             const loginForm = document.getElementById('login-form');
                             const loginButton = document.getElementById('login-button');
-                            const errorMessage = document.getElementById('error-message');
-                            const successMessage = document.getElementById('success-message');
 
                             if (!loginForm || !loginButton) return;
 
@@ -186,32 +418,27 @@ private suspend fun serveLoginPage(
 
                             if (errorParam) {
                                 if (errorParam === 'auth_required') {
-                                    showError('Please login to access the admin dashboard');
+                                    showBanner('error', 'Please login to access the admin dashboard');
                                 } else if (errorParam === 'session_expired') {
-                                    showError('Your session has expired. Please login again.');
+                                    showBanner('warning', 'Your session has expired. Please login again.');
                                 } else if (errorParam === 'access_denied') {
-                                    showError('Access denied. You do not have administrator privileges.');
+                                    showBanner('error', 'Access denied. You do not have administrator privileges.');
                                 }
                             }
 
                             // Check if already logged in with admin role
                             const token = localStorage.getItem('jwt_token');
                             if (token) {
-                                // Verify if token is valid and has admin role
                                 fetch('/admin/dashboard', {
-                                    headers: {
-                                        'Authorization': 'Bearer ' + token
-                                    }
+                                    headers: { 'Authorization': 'Bearer ' + token }
                                 })
                                 .then(response => {
                                     if (response.ok) {
-                                        // User is authenticated and has admin role, redirect to dashboard
                                         window.location.href = '/admin/dashboard';
                                     }
                                 })
                                 .catch(error => {
                                     console.error('Error checking authentication:', error);
-                                    // Clear invalid token
                                     localStorage.removeItem('jwt_token');
                                 });
                             }
@@ -223,40 +450,27 @@ private suspend fun serveLoginPage(
                                 const email = document.getElementById('email').value;
                                 const password = document.getElementById('password').value;
 
-                                // Validate inputs
                                 if (!email || !password) {
-                                    showError('Please enter both email and password');
+                                    showBanner('error', 'Please enter both email and password');
                                     return;
                                 }
 
-                                // Show loading state
                                 loginButton.classList.add('loading');
                                 loginButton.disabled = true;
 
-                                // Send login request
                                 fetch('/admin/login', {
                                     method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        email: email,
-                                        password: password
-                                    })
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ email: email, password: password })
                                 })
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.status === true) {
-                                        // Login successful
-                                        showSuccess('Login successful! Redirecting to dashboard...');
+                                        showBanner('success', 'Login successful! Redirecting to dashboard...');
 
-                                        // Store token using consistent key
-                                        console.log('Storing token in localStorage:', data.data.token.substring(0, 10) + '...');
                                         localStorage.setItem('jwt_token', data.data.token);
 
-                                        // Store user info for role-based access
                                         try {
-                                            // Parse the JWT to get user info
                                             const token = data.data.token;
                                             const tokenParts = token.split('.');
                                             if (tokenParts.length === 3) {
@@ -264,7 +478,6 @@ private suspend fun serveLoginPage(
                                                 const userInfo = {
                                                     email: payload.email || email,
                                                     role: payload.role || 'USER',
-                                                    // Handle isActive as either boolean or string
                                                     isActive: payload.isActive === 'false' ? false : Boolean(payload.isActive)
                                                 };
                                                 localStorage.setItem('user_info', JSON.stringify(userInfo));
@@ -273,78 +486,32 @@ private suspend fun serveLoginPage(
                                             console.error('Error parsing JWT token:', e);
                                         }
 
-                                        // Redirect to intended destination or dashboard
                                         setTimeout(() => {
                                             const intendedDestination = sessionStorage.getItem('intendedDestination');
-
-                                            // Use the navigateToAdminPage function which handles token authentication properly
                                             if (typeof navigateToAdminPage === 'function') {
-                                                console.log('Using navigateToAdminPage function for redirection');
                                                 if (intendedDestination && intendedDestination.startsWith('/admin')) {
-                                                    console.log('Redirecting to intended destination:', intendedDestination);
                                                     sessionStorage.removeItem('intendedDestination');
                                                     navigateToAdminPage(intendedDestination);
                                                 } else {
-                                                    console.log('Redirecting to dashboard');
                                                     navigateToAdminPage('/admin/dashboard');
                                                 }
                                             } else {
-                                                // Fallback if navigateToAdminPage is not available
-                                                console.error('navigateToAdminPage function not found, this should not happen');
-                                                // Redirect to login page with error
                                                 window.location.href = '/admin/login?error=auth_required';
                                             }
                                         }, 1000);
                                     } else {
-                                        // Login failed
                                         loginButton.classList.remove('loading');
                                         loginButton.disabled = false;
-                                        showError(data.message || 'Invalid email or password');
+                                        showBanner('error', data.message || 'Invalid email or password');
                                     }
                                 })
                                 .catch(error => {
-                                    // Remove loading state
                                     loginButton.classList.remove('loading');
                                     loginButton.disabled = false;
-                                    showError('An error occurred. Please try again.');
+                                    showBanner('error', 'An error occurred. Please try again.');
                                     console.error('Login error:', error);
                                 });
                             });
-                        }
-
-                        // Helper function to show error message
-                        function showError(message) {
-                            const errorMessage = document.getElementById('error-message');
-                            const successMessage = document.getElementById('success-message');
-
-                            if (!errorMessage || !successMessage) return;
-
-                            errorMessage.textContent = message;
-                            errorMessage.classList.add('visible');
-                            successMessage.classList.remove('visible');
-
-                            // Scroll to the error message to ensure it's visible
-                            errorMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-                            // Hide error after 6 seconds
-                            setTimeout(() => {
-                                errorMessage.classList.remove('visible');
-                            }, 6000);
-                        }
-
-                        // Helper function to show success message
-                        function showSuccess(message) {
-                            const errorMessage = document.getElementById('error-message');
-                            const successMessage = document.getElementById('success-message');
-
-                            if (!errorMessage || !successMessage) return;
-
-                            successMessage.textContent = message;
-                            successMessage.classList.add('visible');
-                            errorMessage.classList.remove('visible');
-
-                            // Scroll to the success message to ensure it's visible
-                            successMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }
                         """
                     )
@@ -353,7 +520,9 @@ private suspend fun serveLoginPage(
         }
         body {
             div {
-                classes = setOf("container")
+                classes = setOf("container", "main-container")
+                style =
+                    "max-width: 100%; width: 100%; margin: 0; padding: 1rem 2rem; box-sizing: border-box;"
 
                 // Header with logo and theme toggle
                 createHeader(this)
@@ -361,6 +530,7 @@ private suspend fun serveLoginPage(
                 // Content area with login form
                 div {
                     classes = setOf("content-area")
+                    style = "margin-top: 2rem;"
                     h2 {
                         classes = setOf("login-heading")
                         +"Admin Login"
@@ -418,25 +588,6 @@ private suspend fun serveLoginPage(
                                 style = "text-align: center; width: 100%;"
                                 +"Login"
                             }
-                        }
-
-                        // Error and success messages (moved below login button)
-                        div {
-                            id = "error-message"
-                            classes = setOf(
-                                "message",
-                                "error-message",
-                                if (errorMessage != null) "visible" else ""
-                            )
-                            style = "margin-top: 1.5rem; width: 100%;"
-                            if (errorMessage != null) {
-                                +errorMessage
-                            }
-                        }
-                        div {
-                            id = "success-message"
-                            classes = setOf("message", "success-message")
-                            style = "margin-top: 1.5rem; width: 100%;"
                         }
                     }
                 }
@@ -708,17 +859,691 @@ fun Route.adminAuthRoute() {
             call.respondRedirect("/admin/login", permanent = false)
         }
 
-        get("/dashboard") {
-            // Use unified authentication helper for admin dashboard
-            val admin = call.getAuthenticatedAdminOrRespond()
-            if (admin == null) {
-                // Authentication failed, redirect to login with appropriate error
-                call.respondRedirect("/admin/login?error=auth_required", permanent = false)
-                return@get
+        // Admin subscription management endpoints
+        route("/subscriptions") {
+            // GET /admin/subscriptions - Get all subscriptions with pagination and filtering
+            get {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    return@get
+                }
+
+                try {
+                    // Parse and validate query parameters
+                    val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
+                    val pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 10
+                    val statusFilter = call.request.queryParameters["status"]?.let { statusStr ->
+                        try {
+                            SubscriptionStatus.valueOf(statusStr.uppercase())
+                        } catch (e: IllegalArgumentException) {
+                            call.respondError(
+                                "Invalid status filter. Valid values: ACTIVE, EXPIRED, CANCELLED, GRACE_PERIOD",
+                                null,
+                                HttpStatusCode.BadRequest
+                            )
+                            return@get
+                        }
+                    }
+
+                    // Validate pagination parameters
+                    if (page < 1) {
+                        call.respondError(
+                            "Invalid page parameter. Must be >= 1",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@get
+                    }
+
+                    if (pageSize < 1 || pageSize > 100) {
+                        call.respondError(
+                            "Invalid pageSize parameter. Must be between 1 and 100",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@get
+                    }
+
+                    logger.info("Admin ${admin.email} requesting subscriptions: page=$page, pageSize=$pageSize, status=$statusFilter")
+
+                    val subscriptionService: domain.service.SubscriptionService by application.inject()
+                    when (val result = subscriptionService.getAllSubscriptions(page, pageSize, statusFilter)) {
+                        is Result.Success -> {
+                            call.respondSuccess(
+                                "Subscriptions retrieved successfully",
+                                result.data,
+                                HttpStatusCode.OK
+                            )
+                        }
+
+                        is Result.Error -> {
+                            logger.error("Failed to get subscriptions: ${result.message}")
+                            call.respondError(
+                                result.message,
+                                null,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.error("Error processing admin subscriptions request", e)
+                    call.respondError(
+                        "Failed to retrieve subscriptions: ${e.message}",
+                        null,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
             }
 
-            val userEmail = admin.email
-            logger.info("Serving admin dashboard to admin user: $userEmail")
+            // GET /admin/subscriptions/analytics - Get subscription analytics
+            get("/analytics") {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    return@get
+                }
+
+                try {
+                    logger.info("Admin ${admin.email} requesting subscription analytics")
+
+                    val subscriptionService: domain.service.SubscriptionService by application.inject()
+                    when (val result = subscriptionService.getSubscriptionAnalytics()) {
+                        is Result.Success -> {
+                            call.respondSuccess(
+                                "Analytics retrieved successfully",
+                                result.data,
+                                HttpStatusCode.OK
+                            )
+                        }
+
+                        is Result.Error -> {
+                            logger.error("Failed to get subscription analytics: ${result.message}")
+                            call.respondError(
+                                result.message,
+                                null,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.error("Error processing subscription analytics request", e)
+                    call.respondError(
+                        "Failed to retrieve analytics: ${e.message}",
+                        null,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+
+            // POST /admin/subscriptions/cancel - Admin cancels a user's subscription
+            post("/cancel") {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    logger.warn("Unauthorized cancel subscription attempt")
+                    return@post
+                }
+
+                try {
+                    logger.info("Received cancel subscription request from admin: ${admin.email}")
+                    val requestBody = call.receiveText()
+                    logger.info("Request body: $requestBody")
+
+                    val request = try {
+                        kotlinx.serialization.json.Json.decodeFromString<AdminCancelSubscriptionRequest>(requestBody)
+                    } catch (e: Exception) {
+                        logger.error("Failed to parse request body: $requestBody", e)
+                        call.respondError(
+                            "Invalid request format: ${e.message}",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    // Validate request
+                    if (request.userEmail.isBlank()) {
+                        logger.warn("Empty user email in cancel request")
+                        call.respondError(
+                            "User email is required",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    logger.info("Admin ${admin.email} cancelling subscription for user: ${request.userEmail}")
+
+                    val subscriptionService: domain.service.SubscriptionService by application.inject()
+                    when (val result = subscriptionService.cancelUserSubscription(admin.email, request.userEmail)) {
+                        is Result.Success -> {
+                            logger.info("Successfully cancelled subscription for ${request.userEmail}")
+                            call.respondSuccess(
+                                "Subscription cancelled successfully",
+                                result.data,
+                                HttpStatusCode.OK
+                            )
+                        }
+
+                        is Result.Error -> {
+                            logger.error("Failed to cancel subscription for ${request.userEmail}: ${result.message}")
+                            call.respondError(
+                                result.message,
+                                null,
+                                HttpStatusCode.BadRequest
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.error("Error processing admin subscription cancellation", e)
+                    call.respondError(
+                        "Failed to cancel subscription: ${e.message}",
+                        null,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+        }
+
+        // Admin finance management endpoints
+        route("/finance") {
+            // GET /admin/finance/metrics - Get financial metrics
+            get("/metrics") {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    return@get
+                }
+
+                try {
+                    // Audit log: Financial metrics request
+                    val timestamp = java.time.Instant.now().toString()
+                    logger.info("[AUDIT] [$timestamp] Financial Metrics Request - Admin: ${admin.email}, Action: VIEW_FINANCIAL_METRICS")
+
+                    val financialService: domain.service.FinancialService by application.inject()
+                    when (val result = financialService.getFinancialMetrics()) {
+                        is Result.Success -> {
+                            logger.info("[AUDIT] [$timestamp] Financial Metrics Request - Admin: ${admin.email}, Status: SUCCESS")
+                            call.respondSuccess(
+                                "Financial metrics retrieved successfully",
+                                result.data,
+                                HttpStatusCode.OK
+                            )
+                        }
+
+                        is Result.Error -> {
+                            logger.error("[AUDIT] [$timestamp] Financial Metrics Request - Admin: ${admin.email}, Status: FAILED, Error: ${result.message}")
+                            call.respondError(
+                                result.message,
+                                null,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    val timestamp = java.time.Instant.now().toString()
+                    logger.error(
+                        "[AUDIT] [$timestamp] Financial Metrics Request - Admin: ${admin.email}, Status: ERROR, Exception: ${e.message}",
+                        e
+                    )
+                    call.respondError(
+                        "Failed to retrieve financial metrics: ${e.message}",
+                        null,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+
+            // GET /admin/finance/payments - Get payment history with pagination and filtering
+            get("/payments") {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    return@get
+                }
+
+                try {
+                    // Parse and validate query parameters
+                    val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
+                    val pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 50
+                    val status = call.request.queryParameters["status"]
+                    val startDate = call.request.queryParameters["startDate"]
+                    val endDate = call.request.queryParameters["endDate"]
+
+                    // Validate pagination parameters
+                    if (page < 1) {
+                        call.respondError(
+                            "Invalid page parameter. Must be >= 1",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@get
+                    }
+
+                    if (pageSize < 1 || pageSize > 100) {
+                        call.respondError(
+                            "Invalid pageSize parameter. Must be between 1 and 100",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@get
+                    }
+
+                    // Validate date parameters if provided
+                    if (startDate != null && startDate.isNotBlank()) {
+                        try {
+                            java.time.LocalDate.parse(startDate)
+                        } catch (e: Exception) {
+                            call.respondError(
+                                "Invalid start date format. Please use ISO format (YYYY-MM-DD)",
+                                null,
+                                HttpStatusCode.BadRequest
+                            )
+                            return@get
+                        }
+                    }
+
+                    if (endDate != null && endDate.isNotBlank()) {
+                        try {
+                            java.time.LocalDate.parse(endDate)
+                        } catch (e: Exception) {
+                            call.respondError(
+                                "Invalid end date format. Please use ISO format (YYYY-MM-DD)",
+                                null,
+                                HttpStatusCode.BadRequest
+                            )
+                            return@get
+                        }
+                    }
+
+                    // Validate date range if both dates are provided
+                    if (startDate != null && endDate != null && startDate.isNotBlank() && endDate.isNotBlank()) {
+                        try {
+                            val start = java.time.LocalDate.parse(startDate)
+                            val end = java.time.LocalDate.parse(endDate)
+                            if (start.isAfter(end)) {
+                                call.respondError(
+                                    "Start date must be before or equal to end date",
+                                    null,
+                                    HttpStatusCode.BadRequest
+                                )
+                                return@get
+                            }
+                        } catch (e: Exception) {
+                            // Already handled above
+                        }
+                    }
+
+                    // Audit log: Payment history request
+                    val timestamp = java.time.Instant.now().toString()
+                    logger.info("[AUDIT] [$timestamp] Payment History Request - Admin: ${admin.email}, Action: VIEW_PAYMENT_HISTORY, Page: $page, PageSize: $pageSize, Status: $status, StartDate: $startDate, EndDate: $endDate")
+
+                    val financialService: domain.service.FinancialService by application.inject()
+                    when (val result = financialService.getPaymentHistory(page, pageSize, status, startDate, endDate)) {
+                        is Result.Success -> {
+                            logger.info("[AUDIT] [$timestamp] Payment History Request - Admin: ${admin.email}, Status: SUCCESS, RecordsReturned: ${result.data.payments.size}")
+                            call.respondSuccess(
+                                "Payment history retrieved successfully",
+                                result.data,
+                                HttpStatusCode.OK
+                            )
+                        }
+
+                        is Result.Error -> {
+                            logger.error("[AUDIT] [$timestamp] Payment History Request - Admin: ${admin.email}, Status: FAILED, Error: ${result.message}")
+                            call.respondError(
+                                result.message,
+                                null,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    val timestamp = java.time.Instant.now().toString()
+                    logger.error(
+                        "[AUDIT] [$timestamp] Payment History Request - Admin: ${admin.email}, Status: ERROR, Exception: ${e.message}",
+                        e
+                    )
+                    call.respondError(
+                        "Failed to retrieve payment history: ${e.message}",
+                        null,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+
+            // GET /admin/finance/user-transactions - Get user transactions for bill generation
+            get("/user-transactions") {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    return@get
+                }
+
+                try {
+                    val userEmail = call.request.queryParameters["userEmail"]
+
+                    // Validate userEmail parameter
+                    if (userEmail.isNullOrBlank()) {
+                        call.respondError(
+                            "User email is required",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@get
+                    }
+
+                    // Validate email format
+                    if (!util.ValidationUtils.isValidEmail(userEmail)) {
+                        call.respondError(
+                            "Invalid email format",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@get
+                    }
+
+                    logger.info("Admin ${admin.email} requesting transactions for user: $userEmail")
+
+                    val financialService: domain.service.FinancialService by application.inject()
+                    when (val result = financialService.getUserTransactions(userEmail)) {
+                        is Result.Success -> {
+                            call.respondSuccess(
+                                "User transactions retrieved successfully",
+                                result.data,
+                                HttpStatusCode.OK
+                            )
+                        }
+
+                        is Result.Error -> {
+                            logger.error("Failed to get user transactions: ${result.message}")
+                            call.respondError(
+                                result.message,
+                                null,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.error("Error processing user transactions request", e)
+                    call.respondError(
+                        "Failed to retrieve user transactions: ${e.message}",
+                        null,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+
+            // POST /admin/finance/generate-bill - Generate and optionally send PDF bill
+            post("/generate-bill") {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    return@post
+                }
+
+                var targetUserEmail = "unknown"
+                try {
+                    val request = call.receive<bose.ankush.data.model.BillGenerationRequest>()
+                    targetUserEmail = request.userEmail
+
+                    // Validate request
+                    if (request.userEmail.isBlank()) {
+                        call.respondError(
+                            "User email is required",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    // Validate email format using ValidationUtils
+                    if (!util.ValidationUtils.isValidEmail(request.userEmail)) {
+                        call.respondError(
+                            "Invalid email format. Please provide a valid email address",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    if (request.paymentIds.isEmpty() && request.subscriptionIds.isEmpty()) {
+                        call.respondError(
+                            "At least one payment or subscription ID is required",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    // Audit log: Bill generation request
+                    val timestamp = java.time.Instant.now().toString()
+                    logger.info(
+                        "[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Action: GENERATE_BILL, TargetUser: ${request.userEmail}, PaymentIDs: ${
+                            request.paymentIds.joinToString(
+                                ","
+                            )
+                        }, SubscriptionIDs: ${request.subscriptionIds.joinToString(",")}, SendViaEmail: ${request.sendViaEmail}"
+                    )
+
+                    val billService: domain.service.BillService by application.inject()
+
+                    if (request.sendViaEmail) {
+                        // Generate and send bill via email
+                        when (val result = billService.generateAndSendBill(
+                            admin.email,
+                            request.userEmail,
+                            request.paymentIds,
+                            request.subscriptionIds
+                        )) {
+                            is Result.Success -> {
+                                logger.info("[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Status: SUCCESS, TargetUser: ${request.userEmail}, DeliveryMethod: EMAIL")
+                                call.respondSuccess(
+                                    result.data.message,
+                                    result.data,
+                                    HttpStatusCode.OK
+                                )
+                            }
+
+                            is Result.Error -> {
+                                logger.error("[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Status: FAILED, TargetUser: ${request.userEmail}, Error: ${result.message}")
+                                call.respondError(
+                                    result.message,
+                                    null,
+                                    HttpStatusCode.InternalServerError
+                                )
+                            }
+                        }
+                    } else {
+                        // Generate bill and return PDF for download
+                        when (val result = billService.generateBill(
+                            request.userEmail,
+                            request.paymentIds,
+                            request.subscriptionIds
+                        )) {
+                            is Result.Success -> {
+                                val pdfBytes = result.data
+                                val timestampMillis = System.currentTimeMillis()
+                                val filename = "invoice-${request.userEmail.replace("@", "-")}-$timestampMillis.pdf"
+
+                                logger.info("[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Status: SUCCESS, TargetUser: ${request.userEmail}, DeliveryMethod: DOWNLOAD, FileSize: ${pdfBytes.size} bytes")
+
+                                call.response.header(
+                                    HttpHeaders.ContentDisposition,
+                                    "attachment; filename=\"$filename\""
+                                )
+                                call.respondBytes(
+                                    pdfBytes,
+                                    ContentType.Application.Pdf,
+                                    HttpStatusCode.OK
+                                )
+                            }
+
+                            is Result.Error -> {
+                                logger.error("[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Status: FAILED, TargetUser: ${request.userEmail}, Error: ${result.message}")
+                                call.respondError(
+                                    result.message,
+                                    null,
+                                    HttpStatusCode.InternalServerError
+                                )
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    val timestamp = java.time.Instant.now().toString()
+                    logger.error(
+                        "[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Status: ERROR, TargetUser: $targetUserEmail, Exception: ${e.message}",
+                        e
+                    )
+                    call.respondError(
+                        "Failed to generate bill: ${e.message}",
+                        null,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+        }
+
+        // Admin tools endpoints
+        route("/tools") {
+            // POST /admin/tools/export-financial-data - Export financial data to CSV
+            post("/export-financial-data") {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    return@post
+                }
+
+                var exportType = "unknown"
+                try {
+                    val request = call.receive<bose.ankush.data.model.FinancialExportRequest>()
+                    exportType = request.exportType.name
+
+                    // Validate date range
+                    if (request.startDate.isBlank() || request.endDate.isBlank()) {
+                        call.respondError(
+                            "Start date and end date are required",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    // Parse dates to validate format and order
+                    val start: java.time.LocalDate
+                    val end: java.time.LocalDate
+
+                    try {
+                        start = java.time.LocalDate.parse(request.startDate)
+                        end = java.time.LocalDate.parse(request.endDate)
+                    } catch (e: java.time.format.DateTimeParseException) {
+                        call.respondError(
+                            "Invalid date format. Please use ISO format (YYYY-MM-DD)",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    } catch (e: Exception) {
+                        call.respondError(
+                            "Invalid date format. Please use ISO format (YYYY-MM-DD)",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    // Validate date order
+                    if (start.isAfter(end)) {
+                        call.respondError(
+                            "Start date must be before or equal to end date",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    // Validate date range is not too large (max 2 years)
+                    val daysBetween = java.time.temporal.ChronoUnit.DAYS.between(start, end)
+                    if (daysBetween > 730) {
+                        call.respondError(
+                            "Date range is too large. Maximum allowed range is 2 years (730 days)",
+                            null,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+
+                    // Audit log: Financial export request
+                    val timestamp = java.time.Instant.now().toString()
+                    logger.info("[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Action: EXPORT_FINANCIAL_DATA, ExportType: ${request.exportType}, StartDate: ${request.startDate}, EndDate: ${request.endDate}")
+
+                    val financialService: domain.service.FinancialService by application.inject()
+
+                    // Generate CSV based on export type
+                    val csvResult = when (request.exportType) {
+                        bose.ankush.data.model.ExportType.PAYMENTS ->
+                            financialService.exportPayments(request.startDate, request.endDate)
+
+                        bose.ankush.data.model.ExportType.SUBSCRIPTIONS ->
+                            financialService.exportSubscriptions(request.startDate, request.endDate)
+
+                        bose.ankush.data.model.ExportType.BOTH ->
+                            financialService.exportBoth(request.startDate, request.endDate)
+                    }
+
+                    when (csvResult) {
+                        is Result.Success -> {
+                            val csvData = csvResult.data
+                            val timestampMillis = System.currentTimeMillis()
+                            val filename =
+                                "financial-export-${request.exportType.name.lowercase()}-$timestampMillis.csv"
+
+                            logger.info("[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Status: SUCCESS, ExportType: ${request.exportType}, FileSize: ${csvData.length} bytes, RecordCount: ${csvData.lines().size - 1}")
+
+                            call.response.header(
+                                HttpHeaders.ContentDisposition,
+                                "attachment; filename=\"$filename\""
+                            )
+                            call.respondText(
+                                csvData,
+                                ContentType.Text.CSV,
+                                HttpStatusCode.OK
+                            )
+                        }
+
+                        is Result.Error -> {
+                            logger.error("[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Status: FAILED, ExportType: ${request.exportType}, Error: ${csvResult.message}")
+                            call.respondError(
+                                csvResult.message,
+                                null,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    val timestamp = java.time.Instant.now().toString()
+                    logger.error(
+                        "[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Status: ERROR, ExportType: $exportType, Exception: ${e.message}",
+                        e
+                    )
+                    call.respondError(
+                        "Failed to export financial data: ${e.message}",
+                        null,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+        }
+
+        get("/dashboard") {
+            // Check authentication without responding (to allow redirect)
+            val authResult = call.authenticateAdmin()
+
+            when (authResult) {
+                is AuthHelper.AuthResult.Failure -> {
+                    // Authentication failed, redirect to login with appropriate error
+                    logger.info("Unauthenticated access to dashboard, redirecting to login")
+                    call.respondRedirect("/admin/login?error=auth_required", permanent = false)
+                    return@get
+                }
+
+                is AuthHelper.AuthResult.Success -> {
+                    val admin = authResult.user
+                    val userEmail = admin.email
+                    logger.info("Serving admin dashboard to admin user: $userEmail")
 
             // Respond with the admin dashboard HTML
             call.respondHtml(HttpStatusCode.OK) {
@@ -733,10 +1558,10 @@ fun Route.adminAuthRoute() {
                                 """
                                 /* Admin dashboard specific styles */
                                 .admin-container {
-    /* Align with shared container/content-area widths */
+    /* Full width with padding on sides */
     position: relative;
     width: 100%;
-    max-width: 1400px;
+    max-width: none;
     margin: 0 auto 2rem auto;
     padding: 1.5rem 2rem;
     background: var(--content-bg);
@@ -847,28 +1672,33 @@ fun Route.adminAuthRoute() {
                                 }
 
                                 /* Users table breathing space and styling */
+                                .dashboard-card-content {
+                                    overflow-x: auto;
+                                }
                                 .dashboard-card-content table {
                                     width: 100%;
-                                    table-layout: fixed;
+                                    table-layout: auto;
                                     border-collapse: separate !important;
                                     border-spacing: 0 10px;
+                                    min-width: 800px;
                                 }
                                 .dashboard-card-content table.users-table th,
                                 .dashboard-card-content table.users-table td {
-                                    overflow: hidden;
-                                    text-overflow: ellipsis;
-                                    white-space: nowrap;
+                                    overflow: visible;
+                                    text-overflow: clip;
+                                    white-space: normal;
+                                    word-break: break-word;
                                 }
                                 .dashboard-card-content table.users-table th:nth-child(1),
-                                .dashboard-card-content table.users-table td:nth-child(1) { width: 34%; }
+                                .dashboard-card-content table.users-table td:nth-child(1) { min-width: 200px; }
                                 .dashboard-card-content table.users-table th:nth-child(2),
-                                .dashboard-card-content table.users-table td:nth-child(2) { width: 18%; }
+                                .dashboard-card-content table.users-table td:nth-child(2) { min-width: 140px; }
                                 .dashboard-card-content table.users-table th:nth-child(3),
-                                .dashboard-card-content table.users-table td:nth-child(3) { width: 18%; }
+                                .dashboard-card-content table.users-table td:nth-child(3) { min-width: 120px; }
                                 .dashboard-card-content table.users-table th:nth-child(4),
-                                .dashboard-card-content table.users-table td:nth-child(4) { width: 15%; }
+                                .dashboard-card-content table.users-table td:nth-child(4) { min-width: 100px; }
                                 .dashboard-card-content table.users-table th:nth-child(5),
-                                .dashboard-card-content table.users-table td:nth-child(5) { width: 15%; }
+                                .dashboard-card-content table.users-table td:nth-child(5) { min-width: 100px; }
                                 .dashboard-card-content thead th {
                                     text-align: left;
                                     padding: 12px 14px;
@@ -1009,19 +1839,25 @@ fun Route.adminAuthRoute() {
                                 .info-message { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
                                 .hidden { display: none; }
 
-                                /* Toast notifications */
-                                .toast-container { position: fixed; top: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 9999; }
-                                .toast { min-width: 260px; max-width: 420px; padding: 0.75rem 1rem; border-radius: 8px; background: var(--endpoint-bg, var(--card-bg)); color: var(--text-color); border: 1px solid var(--endpoint-border, var(--card-border)); box-shadow: 0 8px 24px var(--card-shadow); display: flex; align-items: center; gap: 0.6rem; transform: translateX(120%); opacity: 0; transition: transform 0.25s ease, opacity 0.25s ease; }
-                                .toast-visible { transform: translateX(0); opacity: 1; }
-                                .toast-hide { transform: translateX(120%); opacity: 0; }
-                                .toast .toast-icon { font-size: 20px; line-height: 1; }
-                                .toast-success { border-left: 4px solid #10b981; }
-                                .toast-error { border-left: 4px solid #ef4444; }
-                                .toast-info { border-left: 4px solid #3b82f6; }
-                                .toast-success .toast-icon { color: #10b981; }
-                                .toast-error .toast-icon { color: #ef4444; }
-                                .toast-info .toast-icon { color: #3b82f6; }
-                                .toast-message { flex: 1; }
+                                /* Banner notifications */
+                                .banner-container { position: fixed; top: 0; left: 0; right: 0; z-index: 10000; display: flex; flex-direction: column; gap: 0; pointer-events: none; }
+                                .banner { display: flex; align-items: center; gap: 12px; padding: 14px 20px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid; opacity: 0; transform: translateY(-100%); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; cursor: pointer; }
+                                .banner-visible { opacity: 1; transform: translateY(0); }
+                                .banner-hide { opacity: 0; transform: translateY(-100%); }
+                                .banner-icon-wrapper { flex-shrink: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 14px; font-weight: 700; }
+                                .banner-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+                                .banner-title { font-weight: 600; font-size: 14px; line-height: 1.4; }
+                                .banner-message { font-size: 13px; line-height: 1.5; opacity: 0.9; word-wrap: break-word; }
+                                .banner-close { flex-shrink: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 20px; opacity: 0.6; transition: opacity 0.2s ease, background 0.2s ease; cursor: pointer; margin-left: 8px; }
+                                .banner-close:hover { opacity: 1; background: rgba(0, 0, 0, 0.1); }
+                                .banner-success { background: rgba(16, 185, 129, 0.95); border-color: rgba(16, 185, 129, 0.3); color: #ffffff; }
+                                .banner-success .banner-icon-wrapper { background: rgba(255, 255, 255, 0.2); color: #ffffff; }
+                                .banner-error { background: rgba(239, 68, 68, 0.95); border-color: rgba(239, 68, 68, 0.3); color: #ffffff; }
+                                .banner-error .banner-icon-wrapper { background: rgba(255, 255, 255, 0.2); color: #ffffff; }
+                                .banner-info { background: rgba(59, 130, 246, 0.95); border-color: rgba(59, 130, 246, 0.3); color: #ffffff; }
+                                .banner-info .banner-icon-wrapper { background: rgba(255, 255, 255, 0.2); color: #ffffff; }
+                                .banner-warning { background: rgba(245, 158, 11, 0.95); border-color: rgba(245, 158, 11, 0.3); color: #ffffff; }
+                                .banner-warning .banner-icon-wrapper { background: rgba(255, 255, 255, 0.2); color: #ffffff; }
 
                                 /* Loader skeleton */
                                 .skeleton { background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.2), rgba(255,255,255,0)); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
@@ -1052,6 +1888,322 @@ fun Route.adminAuthRoute() {
                                 ::-webkit-scrollbar-thumb:hover {
                                     background: var(--card-hover-border);
                                 }
+
+                                /* Ensure body and html take full width */
+                                html, body {
+                                    width: 100%;
+                                    margin: 0;
+                                    padding: 0;
+                                    overflow-x: hidden;
+                                }
+
+                                /* Main container full width */
+                                .container, .main-container {
+                                    max-width: none !important;
+                                    width: 100% !important;
+                                }
+
+                                /* Finance Tab Styles */
+                                .finance-summary {
+                                    display: grid;
+                                    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                                    gap: 1rem;
+                                    margin-bottom: 2rem;
+                                }
+
+                                .metric-card {
+                                    background: var(--endpoint-bg);
+                                    border: 1px solid var(--endpoint-border);
+                                    border-radius: 10px;
+                                    padding: 1.5rem;
+                                    transition: all 0.3s ease;
+                                }
+
+                                .metric-card:hover {
+                                    border-color: var(--card-hover-border);
+                                    box-shadow: 0 4px 12px var(--card-shadow);
+                                    transform: translateY(-2px);
+                                }
+
+                                .metric-label {
+                                    font-size: 0.875rem;
+                                    color: var(--text-secondary);
+                                    margin-bottom: 0.5rem;
+                                    font-weight: 500;
+                                }
+
+                                .metric-value {
+                                    font-size: 1.75rem;
+                                    font-weight: 700;
+                                    color: var(--card-title);
+                                    font-family: 'JetBrains Mono', monospace;
+                                }
+
+                                .finance-chart-container {
+                                    background: var(--endpoint-bg);
+                                    border: 1px solid var(--endpoint-border);
+                                    border-radius: 10px;
+                                    padding: 1.5rem;
+                                    margin-bottom: 2rem;
+                                    min-height: 300px;
+                                }
+
+                                .finance-actions {
+                                    display: flex;
+                                    flex-wrap: wrap;
+                                    gap: 1rem;
+                                    align-items: center;
+                                    margin-bottom: 1.5rem;
+                                    padding: 1rem;
+                                    background: var(--endpoint-bg);
+                                    border: 1px solid var(--endpoint-border);
+                                    border-radius: 10px;
+                                }
+
+                                .btn {
+                                    padding: 0.6rem 1.2rem;
+                                    border-radius: 8px;
+                                    font-weight: 500;
+                                    cursor: pointer;
+                                    transition: all 0.2s ease;
+                                    border: none;
+                                    display: inline-flex;
+                                    align-items: center;
+                                    gap: 0.5rem;
+                                }
+
+                                .btn-primary {
+                                    background: #6366f1;
+                                    color: white;
+                                }
+
+                                .btn-primary:hover {
+                                    background: #4f46e5;
+                                    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+                                }
+
+                                .btn-secondary {
+                                    background: var(--endpoint-bg);
+                                    color: var(--text-color);
+                                    border: 1px solid var(--endpoint-border);
+                                }
+
+                                .btn-secondary:hover {
+                                    border-color: var(--card-hover-border);
+                                    background: var(--card-hover-bg);
+                                }
+
+                                .date-input {
+                                    padding: 0.5rem 0.75rem;
+                                    border: 1px solid var(--endpoint-border);
+                                    border-radius: 6px;
+                                    background: var(--card-bg);
+                                    color: var(--text-color);
+                                    font-size: 0.875rem;
+                                    transition: all 0.2s ease;
+                                }
+
+                                .date-input:focus {
+                                    outline: none;
+                                    border-color: var(--card-hover-border);
+                                    box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+                                }
+
+                                .payments-table {
+                                    width: 100%;
+                                    border-collapse: collapse;
+                                    background: var(--card-bg);
+                                }
+
+                                .payments-table thead {
+                                    background: var(--endpoint-bg);
+                                    border-bottom: 2px solid var(--endpoint-border);
+                                }
+
+                                .payments-table th {
+                                    padding: 0.75rem 1rem;
+                                    text-align: left;
+                                    font-weight: 600;
+                                    color: var(--card-title);
+                                    font-size: 0.875rem;
+                                    white-space: nowrap;
+                                    vertical-align: middle;
+                                }
+
+                                .payments-table td {
+                                    padding: 0.75rem 1rem;
+                                    border-bottom: 1px solid var(--endpoint-border);
+                                    color: var(--text-color);
+                                    font-size: 0.875rem;
+                                    vertical-align: middle;
+                                }
+
+                                .payments-table th:nth-child(5),
+                                .payments-table td:nth-child(5) {
+                                    text-align: center;
+                                }
+
+                                .payments-table th:nth-child(8),
+                                .payments-table td:nth-child(8) {
+                                    text-align: center;
+                                }
+
+                                /* Refunds table specific alignment */
+                                .refunds-table th:nth-child(4),
+                                .refunds-table td:nth-child(4) {
+                                    text-align: center;
+                                }
+
+                                .refunds-table th:nth-child(8),
+                                .refunds-table td:nth-child(8) {
+                                    text-align: center;
+                                }
+
+                                /* Simple status badges */
+                                .status-badge {
+                                    display: inline-block;
+                                    padding: 0.25rem 0.75rem;
+                                    border-radius: 4px;
+                                    font-size: 0.75rem;
+                                    font-weight: 600;
+                                    text-transform: uppercase;
+                                    letter-spacing: 0.025em;
+                                }
+
+                                .status-processed {
+                                    background: rgba(16, 185, 129, 0.15);
+                                    color: #059669;
+                                    border: 1px solid rgba(16, 185, 129, 0.3);
+                                }
+
+                                .status-pending {
+                                    background: rgba(245, 158, 11, 0.15);
+                                    color: #d97706;
+                                    border: 1px solid rgba(245, 158, 11, 0.3);
+                                }
+
+                                .status-failed {
+                                    background: rgba(239, 68, 68, 0.15);
+                                    color: #dc2626;
+                                    border: 1px solid rgba(239, 68, 68, 0.3);
+                                }
+
+                                [data-theme="dark"] .status-processed {
+                                    background: rgba(16, 185, 129, 0.2);
+                                    color: #86efac;
+                                }
+
+                                [data-theme="dark"] .status-pending {
+                                    background: rgba(245, 158, 11, 0.2);
+                                    color: #fde047;
+                                }
+
+                                [data-theme="dark"] .status-failed {
+                                    background: rgba(239, 68, 68, 0.2);
+                                    color: #fca5a5;
+                                }
+
+                                .payments-table tbody tr {
+                                    transition: background 0.2s ease;
+                                }
+
+                                .payments-table tbody tr:hover {
+                                    background: var(--endpoint-bg);
+                                }
+
+                                .payment-status {
+                                    display: inline-block;
+                                    padding: 0.25rem 0.75rem;
+                                    border-radius: 9999px;
+                                    font-size: 0.75rem;
+                                    font-weight: 600;
+                                    text-transform: uppercase;
+                                }
+
+                                .payment-status-success {
+                                    background: rgba(16, 185, 129, 0.15);
+                                    color: #10b981;
+                                    border: 1px solid rgba(16, 185, 129, 0.3);
+                                }
+
+                                .payment-status-failed {
+                                    background: rgba(239, 68, 68, 0.15);
+                                    color: #ef4444;
+                                    border: 1px solid rgba(239, 68, 68, 0.3);
+                                }
+
+                                .payment-status-pending {
+                                    background: rgba(245, 158, 11, 0.15);
+                                    color: #f59e0b;
+                                    border: 1px solid rgba(245, 158, 11, 0.3);
+                                }
+
+                                .payment-status-refunded {
+                                    background: rgba(59, 130, 246, 0.15);
+                                    color: #3b82f6;
+                                    border: 1px solid rgba(59, 130, 246, 0.3);
+                                }
+
+                                /* KPI Card Styles */
+                                .kpi-card {
+                                    cursor: default;
+                                }
+
+                                .kpi-card:hover {
+                                    transform: translateY(-4px);
+                                    box-shadow: 0 8px 24px var(--card-shadow);
+                                    border-color: var(--card-hover-border);
+                                }
+
+                                /* Responsive adjustments */
+                                @media (max-width: 1024px) {
+                                    .admin-container {
+                                        padding: 1rem;
+                                    }
+                                    .container, .main-container {
+                                        padding: 0.5rem 1rem !important;
+                                    }
+                                    .finance-summary {
+                                        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                                    }
+                                    .finance-actions {
+                                        flex-direction: column;
+                                        align-items: stretch;
+                                    }
+                                    .finance-actions > * {
+                                        width: 100%;
+                                    }
+                                }
+
+                                @media (max-width: 768px) {
+                                    .finance-summary {
+                                        grid-template-columns: 1fr;
+                                    }
+                                    .metric-value {
+                                        font-size: 1.5rem;
+                                    }
+                                    .payments-table {
+                                        font-size: 0.75rem;
+                                    }
+                                    .payments-table th,
+                                    .payments-table td {
+                                        padding: 0.5rem;
+                                    }
+                                    #reports-kpis {
+                                        grid-template-columns: 1fr;
+                                    }
+                                    .kpi-card {
+                                        padding: 1rem;
+                                    }
+                                    #reports-header {
+                                        flex-direction: column;
+                                        align-items: flex-start;
+                                    }
+                                    #reports-refresh-btn {
+                                        width: 100%;
+                                        justify-content: center;
+                                    }
+                                }
                                 """
                             )
                         }
@@ -1068,6 +2220,8 @@ fun Route.adminAuthRoute() {
                                             const tabs = document.querySelectorAll('.tab');
                                             const panels = document.querySelectorAll('.tab-panel');
                                             let iamLoaded = false;
+                                            let financeLoaded = false;
+                                            let serviceCatalogLoaded = false;
                                             function activateTab(name){
                                                 tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
                                                 panels.forEach(p => p.classList.toggle('active', p.id === name));
@@ -1075,6 +2229,18 @@ fun Route.adminAuthRoute() {
                                                     iamLoaded = true;
                                                     if (typeof loadUsers === 'function') {
                                                         loadUsers(1, 10);
+                                                    }
+                                                }
+                                                if(name === 'finance' && !financeLoaded){
+                                                    financeLoaded = true;
+                                                    if (typeof initializeFinanceTab === 'function') {
+                                                        initializeFinanceTab();
+                                                    }
+                                                }
+                                                if(name === 'service-catalog' && !serviceCatalogLoaded){
+                                                    serviceCatalogLoaded = true;
+                                                    if (typeof initializeServiceCatalog === 'function') {
+                                                        initializeServiceCatalog();
                                                     }
                                                 }
                                             }
@@ -1097,7 +2263,7 @@ fun Route.adminAuthRoute() {
                     div {
                         classes = setOf("container", "main-container")
                         style =
-                            "max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box;" // <-- Ensure fixed width
+                            "max-width: 100%; width: 100%; margin: 0; padding: 1rem 2rem; box-sizing: border-box;" // <-- Full width with padding
 
                         createHeader(this)
 
@@ -1113,20 +2279,6 @@ fun Route.adminAuthRoute() {
                                     classes = setOf("admin-title")
                                     +"Dashboard"
                                 }
-                                div {
-                                    classes = setOf("admin-user-info")
-                                    span { +"Logged in as: " }
-                                    span {
-                                        classes = setOf("admin-user-email")
-                                        id = "admin-email"
-                                        +userEmail
-                                    }
-                                    span {
-                                        classes = setOf("admin-logout")
-                                        id = "logout-button"
-                                        +"Logout"
-                                    }
-                                }
                             }
 
                             // Dashboard content
@@ -1134,25 +2286,6 @@ fun Route.adminAuthRoute() {
                                 classes = setOf("dashboard-content")
                                 style =
                                     "display: grid; gap: 2rem; width: 100%; box-sizing: border-box;" // <-- Always full width
-
-                                // Welcome section (dismissible; shown once)
-                                div {
-                                    classes = setOf("dashboard-section")
-                                    id = "welcome-section"
-                                    style =
-                                        "position: relative; min-width: 0; width: 100%; box-sizing: border-box;" // <-- Always full width
-                                    div {
-                                        classes = setOf("dashboard-card")
-                                        div {
-                                            classes = setOf("dashboard-card-title")
-                                            +"Overview"
-                                        }
-                                        div {
-                                            classes = setOf("dashboard-card-content")
-                                            +"This is the admin dashboard for the Androidplay Weather API. Here you can manage users, view statistics, and perform administrative tasks."
-                                        }
-                                    }
-                                }
 
                                 // Tabs section
                                 div {
@@ -1191,6 +2324,20 @@ fun Route.adminAuthRoute() {
                                                 raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>build_circle</span> Tools")
                                             }
                                         }
+                                        span {
+                                            classes = setOf("tab")
+                                            attributes["data-tab"] = "subscriptions"
+                                            unsafe {
+                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>card_membership</span> Subscriptions")
+                                            }
+                                        }
+                                        span {
+                                            classes = setOf("tab")
+                                            attributes["data-tab"] = "service-catalog"
+                                            unsafe {
+                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>inventory_2</span> Service Catalog")
+                                            }
+                                        }
                                     }
 
                                     // Tabs content panels
@@ -1220,12 +2367,12 @@ fun Route.adminAuthRoute() {
 
                                                             <table class="users-table">
                                                                 <colgroup>
-                                                                    <col style="width:32%">
-                                                                    <col style="width:18%">
-                                                                    <col style="width:18%">
-                                                                    <col style="width:14%">
-                                                                    <col style="width:10%">
-                                                                    <col style="width:8%">
+                                                                    <col style="min-width:200px">
+                                                                    <col style="min-width:140px">
+                                                                    <col style="min-width:120px">
+                                                                    <col style="min-width:100px">
+                                                                    <col style="min-width:100px">
+                                                                    <col style="min-width:80px">
                                                                 </colgroup>
                                                                 <thead>
                                                                     <tr>
@@ -1254,9 +2401,387 @@ fun Route.adminAuthRoute() {
                                             id = "finance"
                                             style =
                                                 "width: 100%; box-sizing: border-box;" // <-- Always full width
+
+                                            // Financial Summary Cards
+                                            div {
+                                                classes = setOf("finance-summary")
+
+                                                // Total Revenue Card
+                                                div {
+                                                    classes = setOf("metric-card")
+                                                    div {
+                                                        classes = setOf("metric-label")
+                                                        +"Total Revenue"
+                                                    }
+                                                    div {
+                                                        classes = setOf("metric-value")
+                                                        id = "total-revenue"
+                                                        +"$0.00"
+                                                    }
+                                                }
+
+                                                // Monthly Revenue Card
+                                                div {
+                                                    classes = setOf("metric-card")
+                                                    div {
+                                                        classes = setOf("metric-label")
+                                                        +"Monthly Revenue"
+                                                    }
+                                                    div {
+                                                        classes = setOf("metric-value")
+                                                        id = "monthly-revenue"
+                                                        +"$0.00"
+                                                    }
+                                                }
+
+                                                // Active Subscriptions Revenue Card
+                                                div {
+                                                    classes = setOf("metric-card")
+                                                    div {
+                                                        classes = setOf("metric-label")
+                                                        +"Active Subscriptions Revenue"
+                                                    }
+                                                    div {
+                                                        classes = setOf("metric-value")
+                                                        id = "active-sub-revenue"
+                                                        +"$0.00"
+                                                    }
+                                                }
+
+                                                // Total Payments Card
+                                                div {
+                                                    classes = setOf("metric-card")
+                                                    div {
+                                                        classes = setOf("metric-label")
+                                                        +"Total Payments"
+                                                    }
+                                                    div {
+                                                        classes = setOf("metric-value")
+                                                        id = "total-payments"
+                                                        +"0"
+                                                    }
+                                                }
+                                            }
+
+                                            // Revenue Chart Container
+                                            div {
+                                                classes = setOf("finance-chart-container")
+                                                canvas {
+                                                    id = "revenue-chart"
+                                                }
+                                            }
+
+                                            // Payment History Section
+                                            div {
+                                                classes = setOf("finance-actions")
+
+                                                button {
+                                                    id = "generate-bill-btn"
+                                                    classes = setOf("btn", "btn-primary")
+                                                    unsafe {
+                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>receipt</span> Generate Bill")
+                                                    }
+                                                }
+
+                                                select {
+                                                    id = "payment-status-filter"
+                                                    classes = setOf("role-select")
+                                                    option {
+                                                        value = ""
+                                                        +"All Statuses"
+                                                    }
+                                                    option {
+                                                        value = "SUCCESS"
+                                                        +"Success"
+                                                    }
+                                                    option {
+                                                        value = "FAILED"
+                                                        +"Failed"
+                                                    }
+                                                    option {
+                                                        value = "PENDING"
+                                                        +"Pending"
+                                                    }
+                                                    option {
+                                                        value = "REFUNDED"
+                                                        +"Refunded"
+                                                    }
+                                                }
+
+                                                input {
+                                                    type = InputType.date
+                                                    id = "payment-date-from"
+                                                    classes = setOf("date-input")
+                                                    placeholder = "Start Date"
+                                                }
+
+                                                input {
+                                                    type = InputType.date
+                                                    id = "payment-date-to"
+                                                    classes = setOf("date-input")
+                                                    placeholder = "End Date"
+                                                }
+                                            }
+
+                                            // Payment History Table
                                             div {
                                                 classes = setOf("dashboard-card-content")
-                                                +"Financial metrics and billing summaries will appear here."
+                                                style = "overflow-x: auto;"
+
+                                                table {
+                                                    classes = setOf("payments-table")
+                                                    thead {
+                                                        tr {
+                                                            th { +"User Email" }
+                                                            th { +"Amount" }
+                                                            th { +"Currency" }
+                                                            th { +"Payment Method" }
+                                                            th {
+                                                                style = "text-align: center;"
+                                                                +"Status"
+                                                            }
+                                                            th { +"Transaction ID" }
+                                                            th { +"Date" }
+                                                            th {
+                                                                style = "text-align: center;"
+                                                                +"Actions"
+                                                            }
+                                                        }
+                                                    }
+                                                    tbody {
+                                                        id = "payments-table-body"
+                                                        tr {
+                                                            td {
+                                                                colSpan = "8"
+                                                                style =
+                                                                    "text-align: center; padding: 2rem; color: var(--text-secondary);"
+                                                                +"Loading payment history..."
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Pagination Controls
+                                            div {
+                                                id = "payments-pagination"
+                                                style =
+                                                    "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
+                                            }
+
+                                            // Refund Analytics Section
+                                            div {
+                                                style =
+                                                    "margin-top: 3rem; padding-top: 2rem; border-top: 2px solid var(--card-border);"
+
+                                                // Section Header
+                                                h2 {
+                                                    style =
+                                                        "color: var(--card-title); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;"
+                                                    unsafe {
+                                                        raw("<span class='material-icons' style='font-size:24px;'>money_off</span> Refund Analytics")
+                                                    }
+                                                }
+
+                                                // Refund Metrics Cards
+                                                div {
+                                                    classes = setOf("finance-summary")
+                                                    style = "margin-bottom: 1.5rem;"
+
+                                                    // Total Refunds Card
+                                                    div {
+                                                        classes = setOf("metric-card")
+                                                        div {
+                                                            classes = setOf("metric-label")
+                                                            +"Total Refunds"
+                                                        }
+                                                        div {
+                                                            classes = setOf("metric-value")
+                                                            id = "total-refunds"
+                                                            +"$0.00"
+                                                        }
+                                                    }
+
+                                                    // Monthly Refunds Card
+                                                    div {
+                                                        classes = setOf("metric-card")
+                                                        div {
+                                                            classes = setOf("metric-label")
+                                                            +"Monthly Refunds"
+                                                        }
+                                                        div {
+                                                            classes = setOf("metric-value")
+                                                            id = "monthly-refunds"
+                                                            +"$0.00"
+                                                        }
+                                                    }
+
+                                                    // Refund Rate Card
+                                                    div {
+                                                        classes = setOf("metric-card")
+                                                        div {
+                                                            classes = setOf("metric-label")
+                                                            +"Refund Rate"
+                                                        }
+                                                        div {
+                                                            classes = setOf("metric-value")
+                                                            id = "refund-rate"
+                                                            +"0.00%"
+                                                        }
+                                                    }
+
+                                                    // Instant Refunds Card
+                                                    div {
+                                                        classes = setOf("metric-card")
+                                                        div {
+                                                            classes = setOf("metric-label")
+                                                            +"Instant Refunds"
+                                                        }
+                                                        div {
+                                                            classes = setOf("metric-value")
+                                                            id = "instant-refunds"
+                                                            +"0"
+                                                        }
+                                                    }
+
+                                                    // Normal Refunds Card
+                                                    div {
+                                                        classes = setOf("metric-card")
+                                                        div {
+                                                            classes = setOf("metric-label")
+                                                            +"Normal Refunds"
+                                                        }
+                                                        div {
+                                                            classes = setOf("metric-value")
+                                                            id = "normal-refunds"
+                                                            +"0"
+                                                        }
+                                                    }
+
+                                                    // Average Processing Time Card
+                                                    div {
+                                                        classes = setOf("metric-card")
+                                                        div {
+                                                            classes = setOf("metric-label")
+                                                            +"Avg Processing Time"
+                                                        }
+                                                        div {
+                                                            classes = setOf("metric-value")
+                                                            id = "avg-processing-time"
+                                                            +"0.0h"
+                                                        }
+                                                    }
+                                                }
+
+                                                // Refund Chart Container
+                                                div {
+                                                    classes = setOf("finance-chart-container")
+                                                    style = "margin-bottom: 1.5rem;"
+                                                    canvas {
+                                                        id = "refund-chart"
+                                                    }
+                                                }
+
+                                                // Refund History Section
+                                                div {
+                                                    classes = setOf("finance-actions")
+
+                                                    button {
+                                                        id = "export-refunds-btn"
+                                                        classes = setOf("btn", "btn-secondary")
+                                                        unsafe {
+                                                            raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>download</span> Export Refunds")
+                                                        }
+                                                    }
+
+                                                    select {
+                                                        id = "refund-status-filter"
+                                                        classes = setOf("role-select")
+                                                        option {
+                                                            value = ""
+                                                            +"All Statuses"
+                                                        }
+                                                        option {
+                                                            value = "PENDING"
+                                                            +"Pending"
+                                                        }
+                                                        option {
+                                                            value = "PROCESSED"
+                                                            +"Processed"
+                                                        }
+                                                        option {
+                                                            value = "FAILED"
+                                                            +"Failed"
+                                                        }
+                                                    }
+
+                                                    input {
+                                                        type = InputType.date
+                                                        id = "refund-date-from"
+                                                        classes = setOf("date-input")
+                                                        placeholder = "Start Date"
+                                                    }
+
+                                                    input {
+                                                        type = InputType.date
+                                                        id = "refund-date-to"
+                                                        classes = setOf("date-input")
+                                                        placeholder = "End Date"
+                                                    }
+                                                }
+
+                                                // Refund History Table
+                                                div {
+                                                    classes = setOf("dashboard-card-content")
+                                                    style = "overflow-x: auto;"
+
+                                                    // Loader
+                                                    div {
+                                                        id = "refunds-loader"
+                                                        classes = setOf("loading-spinner")
+                                                        style = "display: none; margin: 2rem auto;"
+                                                    }
+
+                                                    table {
+                                                        classes = setOf("payments-table", "refunds-table")
+                                                        thead {
+                                                            tr {
+                                                                th { +"Refund ID" }
+                                                                th { +"User Email" }
+                                                                th { +"Amount" }
+                                                                th {
+                                                                    style = "text-align: center;"
+                                                                    +"Status"
+                                                                }
+                                                                th { +"Type" }
+                                                                th { +"Processed By" }
+                                                                th { +"Date" }
+                                                                th {
+                                                                    style = "text-align: center;"
+                                                                    +"Actions"
+                                                                }
+                                                            }
+                                                        }
+                                                        tbody {
+                                                            id = "refunds-table-body"
+                                                            tr {
+                                                                td {
+                                                                    colSpan = "8"
+                                                                    style =
+                                                                        "text-align: center; padding: 2rem; color: var(--text-secondary);"
+                                                                    +"Loading refund history..."
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Refund Pagination Controls
+                                                div {
+                                                    id = "refunds-pagination"
+                                                    style =
+                                                        "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
+                                                }
                                             }
                                         }
 
@@ -1269,52 +2794,137 @@ fun Route.adminAuthRoute() {
                                             div {
                                                 classes = setOf("dashboard-card")
                                                 div {
-                                                    classes = setOf("dashboard-card-title")
-                                                    unsafe {
-                                                        raw(
-                                                            """
-                                                        <span style="display:inline-flex; align-items:center; gap:6px; position:relative;">
-                                                            <span class="material-icons" style="font-size:18px;vertical-align:middle;">analytics</span>
-                                                            <span>Usage Reports</span>
-                                                        </span>
-                                                        """
-                                                        )
-                                                    }
-                                                }
-                                                div {
                                                     classes = setOf("dashboard-card-content")
                                                     unsafe {
                                                         raw(
                                                             """
-                                                        <div id="reports-controls" style="display:flex;gap:.75rem;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:.75rem">
-                                                            <div style="display:flex;gap:.5rem;align-items:center">
-                                                                <label for="reports-range" style="color:var(--text-secondary);font-size:.9rem">Range</label>
-                                                                <select id="reports-range" class="role-select">
-                                                                    <option value="7">Last 7 days</option>
-                                                                    <option value="30" selected>Last 30 days</option>
-                                                                    <option value="90">Last 90 days</option>
-                                                                </select>
+                                                        <!-- Enhanced Header Section -->
+                                                        <div id="reports-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+                                                            <div style="display:flex;align-items:center;gap:0.75rem;">
+                                                                <span class="material-icons" style="font-size:28px;color:#6366f1;">analytics</span>
+                                                                <div>
+                                                                    <h3 style="margin:0;font-size:1.5rem;font-weight:600;color:var(--card-title);">Analytics & Reports</h3>
+                                                                    <div id="reports-last-updated" style="font-size:0.85rem;color:var(--text-secondary);margin-top:0.25rem;">
+                                                                        Last updated: Never
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <div style="color:var(--text-secondary);font-size:.85rem">
-                                                                Data derived from the latest users list
+                                                            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+                                                                <button id="reports-export-btn" class="btn btn-secondary" style="display:flex;align-items:center;gap:0.5rem;" aria-label="Export report data to CSV">
+                                                                    <span class="material-icons" style="font-size:18px;">download</span>
+                                                                    <span>Export CSV</span>
+                                                                </button>
+                                                                <button id="reports-refresh-btn" class="btn btn-secondary" style="display:flex;align-items:center;gap:0.5rem;" aria-label="Refresh reports data">
+                                                                    <span class="material-icons" style="font-size:18px;">refresh</span>
+                                                                    <span>Refresh</span>
+                                                                    <span id="reports-refresh-spinner" class="loading-spinner" style="display:none;margin-left:0.25rem;"></span>
+                                                                </button>
                                                             </div>
                                                         </div>
-                                                        <div id="reports-kpis" style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:.75rem;margin:.5rem 0 1rem 0">
-                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
-                                                                <div style="font-size:.8rem;color:var(--text-secondary)">New users</div>
-                                                                <div id="kpi-new-users" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+
+                                                        <!-- Time Range Selector -->
+                                                        <div id="reports-controls" style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
+                                                            <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
+                                                                <div style="flex:1;min-width:200px;">
+                                                                    <label for="reports-range" style="display:block;color:var(--text-secondary);font-size:.9rem;margin-bottom:0.5rem;font-weight:500;">Time Range</label>
+                                                                    <select id="reports-range" class="role-select" style="width:100%;">
+                                                                        <option value="7">Last 7 days</option>
+                                                                        <option value="30" selected>Last 30 days</option>
+                                                                        <option value="90">Last 90 days</option>
+                                                                        <option value="180">Last 6 months</option>
+                                                                        <option value="365">Last year</option>
+                                                                        <option value="custom">Custom range</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div id="custom-date-range" style="display:none;flex:2;min-width:300px;">
+                                                                    <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
+                                                                        <div style="flex:1;min-width:140px;">
+                                                                            <label for="reports-start-date" style="display:block;color:var(--text-secondary);font-size:.9rem;margin-bottom:0.5rem;font-weight:500;">Start Date</label>
+                                                                            <input type="date" id="reports-start-date" class="role-select" style="width:100%;padding:0.5rem;border:1px solid var(--card-border);border-radius:6px;background:var(--card-bg);color:var(--text-color);" />
+                                                                        </div>
+                                                                        <div style="flex:1;min-width:140px;">
+                                                                            <label for="reports-end-date" style="display:block;color:var(--text-secondary);font-size:.9rem;margin-bottom:0.5rem;font-weight:500;">End Date</label>
+                                                                            <input type="date" id="reports-end-date" class="role-select" style="width:100%;padding:0.5rem;border:1px solid var(--card-border);border-radius:6px;background:var(--card-bg);color:var(--text-color);" />
+                                                                        </div>
+                                                                        <button id="apply-custom-range" class="btn btn-secondary" style="padding:0.5rem 1rem;">Apply</button>
+                                                                    </div>
+                                                                    <div id="date-range-error" style="display:none;color:#ef4444;font-size:0.85rem;margin-top:0.5rem;"></div>
+                                                                </div>
                                                             </div>
-                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
-                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Active rate</div>
-                                                                <div id="kpi-active-rate" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                        </div>
+                                                        <!-- Enhanced KPI Cards Grid -->
+                                                        <div id="reports-kpis" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:1rem;margin-bottom:2rem;">
+                                                            <!-- Total Users Card -->
+                                                            <div class="kpi-card" style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:12px;padding:1.5rem;transition:all 0.3s ease;position:relative;overflow:hidden;">
+                                                                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg, #6366f1, #8b5cf6);"></div>
+                                                                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                                                                    <div style="width:40px;height:40px;border-radius:10px;background:rgba(99, 102, 241, 0.1);display:flex;align-items:center;justify-content:center;">
+                                                                        <span class="material-icons" style="font-size:24px;color:#6366f1;">group</span>
+                                                                    </div>
+                                                                    <div style="font-size:0.85rem;color:var(--text-secondary);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">Total Users</div>
+                                                                </div>
+                                                                <div id="kpi-total-users" style="font-size:2rem;font-weight:700;color:var(--card-title);line-height:1;">—</div>
                                                             </div>
-                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
-                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Admins</div>
-                                                                <div id="kpi-admins" style="font-size:1.2rem;font-weight:700;color:var(--card-title)">—</div>
+
+                                                            <!-- New Users Card -->
+                                                            <div class="kpi-card" style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:12px;padding:1.5rem;transition:all 0.3s ease;position:relative;overflow:hidden;">
+                                                                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg, #10b981, #059669);"></div>
+                                                                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                                                                    <div style="width:40px;height:40px;border-radius:10px;background:rgba(16, 185, 129, 0.1);display:flex;align-items:center;justify-content:center;">
+                                                                        <span class="material-icons" style="font-size:24px;color:#10b981;">person_add</span>
+                                                                    </div>
+                                                                    <div style="font-size:0.85rem;color:var(--text-secondary);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">New Users</div>
+                                                                </div>
+                                                                <div id="kpi-new-users" style="font-size:2rem;font-weight:700;color:var(--card-title);line-height:1;">—</div>
+                                                                <div id="kpi-new-users-subtitle" style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.5rem;">in selected period</div>
                                                             </div>
-                                                            <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
-                                                                <div style="font-size:.8rem;color:var(--text-secondary)">Premium users</div>
-                                                                <div id="kpi-premium" style="font-size:1.2rem;font-weight:700;color:var(--card-title)">—</div>
+
+                                                            <!-- Active Rate Card -->
+                                                            <div class="kpi-card" style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:12px;padding:1.5rem;transition:all 0.3s ease;position:relative;overflow:hidden;">
+                                                                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg, #3b82f6, #2563eb);"></div>
+                                                                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                                                                    <div style="width:40px;height:40px;border-radius:10px;background:rgba(59, 130, 246, 0.1);display:flex;align-items:center;justify-content:center;">
+                                                                        <span class="material-icons" style="font-size:24px;color:#3b82f6;">check_circle</span>
+                                                                    </div>
+                                                                    <div style="font-size:0.85rem;color:var(--text-secondary);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">Active Rate</div>
+                                                                </div>
+                                                                <div id="kpi-active-rate" style="font-size:2rem;font-weight:700;color:var(--card-title);line-height:1;">—</div>
+                                                            </div>
+
+                                                            <!-- Premium Users Card -->
+                                                            <div class="kpi-card" style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:12px;padding:1.5rem;transition:all 0.3s ease;position:relative;overflow:hidden;">
+                                                                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg, #f59e0b, #d97706);"></div>
+                                                                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                                                                    <div style="width:40px;height:40px;border-radius:10px;background:rgba(245, 158, 11, 0.1);display:flex;align-items:center;justify-content:center;">
+                                                                        <span class="material-icons" style="font-size:24px;color:#f59e0b;">star</span>
+                                                                    </div>
+                                                                    <div style="font-size:0.85rem;color:var(--text-secondary);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">Premium Users</div>
+                                                                </div>
+                                                                <div id="kpi-premium" style="font-size:2rem;font-weight:700;color:var(--card-title);line-height:1;">—</div>
+                                                            </div>
+
+                                                            <!-- Growth Rate Card -->
+                                                            <div class="kpi-card" style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:12px;padding:1.5rem;transition:all 0.3s ease;position:relative;overflow:hidden;">
+                                                                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg, #8b5cf6, #7c3aed);"></div>
+                                                                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                                                                    <div style="width:40px;height:40px;border-radius:10px;background:rgba(139, 92, 246, 0.1);display:flex;align-items:center;justify-content:center;">
+                                                                        <span class="material-icons" style="font-size:24px;color:#8b5cf6;">trending_up</span>
+                                                                    </div>
+                                                                    <div style="font-size:0.85rem;color:var(--text-secondary);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">Growth Rate</div>
+                                                                </div>
+                                                                <div id="kpi-growth-rate" style="font-size:2rem;font-weight:700;color:var(--card-title);line-height:1;">—</div>
+                                                            </div>
+
+                                                            <!-- Retention Rate Card -->
+                                                            <div class="kpi-card" style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:12px;padding:1.5rem;transition:all 0.3s ease;position:relative;overflow:hidden;">
+                                                                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg, #ec4899, #db2777);"></div>
+                                                                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                                                                    <div style="width:40px;height:40px;border-radius:10px;background:rgba(236, 72, 153, 0.1);display:flex;align-items:center;justify-content:center;">
+                                                                        <span class="material-icons" style="font-size:24px;color:#ec4899;">autorenew</span>
+                                                                    </div>
+                                                                    <div style="font-size:0.85rem;color:var(--text-secondary);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">Retention Rate</div>
+                                                                </div>
+                                                                <div id="kpi-retention-rate" style="font-size:2rem;font-weight:700;color:var(--card-title);line-height:1;">—</div>
                                                             </div>
                                                         </div>
                                                         <div style="position:relative;min-height:260px">
@@ -1389,7 +2999,175 @@ fun Route.adminAuthRoute() {
                                                                         </div>
                                                                     </div>
                                                                 </div>
+                                                                <div class="tool-item" role="listitem">
+                                                                    <span class="material-icons tool-icon" aria-hidden="true">file_download</span>
+                                                                    <div class="tool-content">
+                                                                        <div class="tool-title">Export Financial Data</div>
+                                                                        <div class="tool-desc">Export payment and subscription records to CSV format for financial reconciliation and reporting.</div>
+                                                                        <div class="tool-actions">
+                                                                            <button id="export-financial-btn" class="btn btn-secondary" aria-label="Export financial data">Export</button>
+                                                                            <span id="export-financial-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             </div>
+                                                            """
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Subscriptions Panel
+                                        div {
+                                            classes = setOf("tab-panel")
+                                            id = "subscriptions"
+                                            style = "width: 100%; box-sizing: border-box;"
+                                            div {
+                                                classes = setOf("dashboard-card")
+                                                div {
+                                                    classes = setOf("dashboard-card-content")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                            <div id="subscriptions-success-message" class="message success-message hidden"></div>
+                                                            <div id="subscriptions-error-message" class="message error-message hidden"></div>
+
+                                                            <!-- Analytics Summary Cards -->
+                                                            <div class="subscription-stats" style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr));gap:.75rem;margin-bottom:1.5rem">
+                                                                <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                    <div style="font-size:.8rem;color:var(--text-secondary)">Active Subscriptions</div>
+                                                                    <div id="stat-active" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                                </div>
+                                                                <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                    <div style="font-size:.8rem;color:var(--text-secondary)">Total Revenue</div>
+                                                                    <div id="stat-revenue" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                                </div>
+                                                                <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                    <div style="font-size:.8rem;color:var(--text-secondary)">Expired</div>
+                                                                    <div id="stat-expired" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                                </div>
+                                                                <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
+                                                                    <div style="font-size:.8rem;color:var(--text-secondary)">Cancelled</div>
+                                                                    <div id="stat-cancelled" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                                </div>
+                                                            </div>
+
+                                                            <!-- Status Filter -->
+                                                            <div class="subscription-filters" style="margin-bottom:1rem">
+                                                                <select id="status-filter" class="role-select">
+                                                                    <option value="">All Statuses</option>
+                                                                    <option value="ACTIVE">Active</option>
+                                                                    <option value="EXPIRED">Expired</option>
+                                                                    <option value="CANCELLED">Cancelled</option>
+                                                                    <option value="GRACE_PERIOD">Grace Period</option>
+                                                                </select>
+                                                            </div>
+
+                                                            <div id="subscriptions-loader" class="skeleton" style="height:8px;width:100%;display:none;"></div>
+
+                                                            <!-- Subscriptions Table -->
+                                                            <table class="users-table subscriptions-table">
+                                                                <colgroup>
+                                                                    <col style="min-width:180px">
+                                                                    <col style="min-width:100px">
+                                                                    <col style="min-width:120px">
+                                                                    <col style="min-width:120px">
+                                                                    <col style="min-width:100px">
+                                                                    <col style="min-width:90px">
+                                                                    <col style="min-width:90px">
+                                                                    <col style="min-width:80px">
+                                                                </colgroup>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>User Email</th>
+                                                                        <th>Service</th>
+                                                                        <th>Start Date</th>
+                                                                        <th>End Date</th>
+                                                                        <th>Status</th>
+                                                                        <th>Days Left</th>
+                                                                        <th>Amount</th>
+                                                                        <th class="actions-col" aria-label="Actions"></th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody id="subscriptions-table-body"></tbody>
+                                                            </table>
+
+                                                            <!-- Pagination -->
+                                                            <div id="subscriptions-pagination" style="display:flex;gap:0.5rem;margin-top:1rem;"></div>
+                                                            """
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Service Catalog Panel
+                                        div {
+                                            classes = setOf("tab-panel")
+                                            id = "service-catalog"
+                                            style = "width: 100%; box-sizing: border-box;"
+                                            div {
+                                                classes = setOf("dashboard-card")
+                                                div {
+                                                    classes = setOf("dashboard-card-content")
+                                                    unsafe {
+                                                        raw(
+                                                            """
+                                                            <!-- Service Catalog Controls -->
+                                                            <div class="service-catalog-controls" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center;">
+                                                                <input
+                                                                    type="text"
+                                                                    id="service-search-input"
+                                                                    placeholder="Search services..."
+                                                                    class="form-control"
+                                                                    style="flex: 1; min-width: 200px; padding: 0.5rem 0.75rem; border: 1px solid var(--endpoint-border); border-radius: 6px; background: var(--card-bg); color: var(--text-color);"
+                                                                />
+                                                                <select id="service-status-filter" class="role-select" style="min-width: 150px;">
+                                                                    <option value="ALL">All Statuses</option>
+                                                                    <option value="ACTIVE">Active</option>
+                                                                    <option value="INACTIVE">Inactive</option>
+                                                                    <option value="ARCHIVED">Archived</option>
+                                                                </select>
+                                                                <button id="create-service-btn" class="btn btn-primary">
+                                                                    <span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>add</span>
+                                                                    Create Service
+                                                                </button>
+                                                            </div>
+
+                                                            <div id="service-catalog-loader" class="skeleton" style="height:8px;width:100%;display:none;"></div>
+
+                                                            <!-- Services Table -->
+                                                            <table class="users-table services-table">
+                                                                <colgroup>
+                                                                    <col style="min-width:200px">
+                                                                    <col style="min-width:100px">
+                                                                    <col style="min-width:120px">
+                                                                    <col style="min-width:120px">
+                                                                    <col style="min-width:140px">
+                                                                    <col style="min-width:200px">
+                                                                </colgroup>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Service Code / Name</th>
+                                                                        <th style="text-align: center;">Status</th>
+                                                                        <th style="text-align: center;">Active Subs</th>
+                                                                        <th style="text-align: right;">Starting Price</th>
+                                                                        <th>Created At</th>
+                                                                        <th style="text-align: center;">Actions</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody id="services-table-body">
+                                                                    <tr>
+                                                                        <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                                                            Loading services...
+                                                                        </td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+
+                                                            <!-- Pagination -->
+                                                            <div id="service-pagination" style="display:flex;gap:0.5rem;margin-top:1rem;justify-content:center;"></div>
                                                             """
                                                         )
                                                     }
@@ -1458,6 +3236,8 @@ fun Route.adminAuthRoute() {
                         // Footer
                         createFooter(this)
                     }
+                }
+            }
                 }
             }
         }

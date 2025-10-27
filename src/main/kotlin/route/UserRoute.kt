@@ -7,6 +7,7 @@ import bose.ankush.util.WeatherCache
 import config.Environment
 import domain.model.Result
 import domain.repository.UserRepository
+import domain.service.NotificationService
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -24,6 +25,7 @@ import util.AuthHelper.getAuthenticatedAdminOrRespond
  */
 fun Route.userRoute() {
     val userRepository: UserRepository by application.inject()
+    val notificationService: NotificationService by application.inject()
 
     // FCM token registration endpoint (email-based)
     post("/user/{email}/fcm-token") {
@@ -398,40 +400,30 @@ fun Route.userRoute() {
                         return@post
                     }
 
-                    // If a Cloud Function URL is configured, attempt to call it; otherwise, return success.
-                    val fnUrl = Environment.getFcmFunctionUrl()
-                    if (fnUrl.isNullOrBlank()) {
-                        call.respondSuccess("Notification queued", mapOf("email" to email))
-                        return@post
-                    }
+                    // Send notification using Firebase Admin SDK
+                    val title = req.title?.takeIf { it.isNotBlank() } ?: "Promotion"
+                    val body = req.body?.takeIf { it.isNotBlank() } ?: "Enjoy new features in our app!"
 
-                    try {
-                        val client = WeatherCache.getWeatherClient()
-                        val payload = mapOf(
-                            "token" to token,
-                            "title" to (req.title ?: "Promotion"),
-                            "body" to (req.body ?: "Enjoy new features in our app!")
-                        )
-                        val resp = client.post(fnUrl) {
-                            setBody(payload)
-                        }
-                        val ok = resp.status.value in 200..299
-                        if (ok) {
-                            call.respondSuccess("Notification sent", mapOf("email" to email))
-                        } else {
+                    val result = notificationService.sendNotification(token, title, body)
+
+                    result.fold(
+                        onSuccess = { messageId ->
+                            call.respondSuccess(
+                                "Notification sent successfully",
+                                mapOf(
+                                    "email" to email,
+                                    "messageId" to messageId
+                                )
+                            )
+                        },
+                        onFailure = { error ->
                             call.respondError(
-                                "Failed to send notification via function (status ${'$'}{resp.status.value})",
+                                "Failed to send notification: ${error.message}",
                                 Unit,
-                                HttpStatusCode.BadGateway
+                                HttpStatusCode.InternalServerError
                             )
                         }
-                    } catch (_: Exception) {
-                        call.respondError(
-                            "Failed to send notification: ${'$'}{e.message}",
-                            Unit,
-                            HttpStatusCode.BadGateway
-                        )
-                    }
+                    )
                 }
 
                 is Result.Error -> {

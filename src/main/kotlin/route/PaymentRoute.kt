@@ -30,6 +30,45 @@ private val razorpayClient: HttpClient by lazy {
 
 private val relaxedJson: Json = Json { ignoreUnknownKeys = true }
 
+/**
+ * Fetches order details from Razorpay API
+ * @param orderId The Razorpay order ID
+ * @param keyId Razorpay API key ID
+ * @param keySecret Razorpay API key secret
+ * @return RazorpayOrderDetailsResponse containing order information or null if fetch fails
+ */
+private suspend fun fetchRazorpayOrderDetails(
+    orderId: String,
+    keyId: String,
+    keySecret: String
+): RazorpayOrderDetailsResponse? {
+    return try {
+        val basic = Base64.getEncoder().encodeToString("$keyId:$keySecret".toByteArray())
+        val response: HttpResponse = razorpayClient.get("https://api.razorpay.com/v1/orders/$orderId") {
+            headers.append(HttpHeaders.Authorization, "Basic $basic")
+        }
+
+        val bodyText = response.bodyAsText()
+        if (response.status.value in 200..299) {
+            try {
+                relaxedJson.decodeFromString(
+                    RazorpayOrderDetailsResponse.serializer(),
+                    bodyText
+                )
+            } catch (e: Exception) {
+                paymentLogger.warn("Failed to parse order details response for $orderId", e)
+                null
+            }
+        } else {
+            paymentLogger.warn("Failed to fetch order details for $orderId: ${response.status}")
+            null
+        }
+    } catch (e: Exception) {
+        paymentLogger.warn("Exception while fetching order details for $orderId", e)
+        null
+    }
+}
+
 
 
 /** Payment routes: create order and verify payment */
@@ -207,6 +246,14 @@ fun Route.paymentRoute() {
         // Use authenticated user's email
         val userEmail = user.email
 
+        // Fetch order details from Razorpay to get amount, currency, and receipt
+        val keyId = getSecretValue(Constants.Auth.RAZORPAY_KEY_ID)
+        val orderDetails = fetchRazorpayOrderDetails(orderId, keyId, secret)
+
+        if (orderDetails == null) {
+            paymentLogger.warn("Could not fetch order details for $orderId, proceeding without amount data")
+        }
+
         // Persist payment and update subscription
         // Fetch user by email to link payment and update subscriptions
         val dbUser = try {
@@ -225,25 +272,43 @@ fun Route.paymentRoute() {
             return@post
         }
 
-        // Determine subscription window (30 days)
+        // Determine subscription window using ServiceTypeResolver
+        // Fetch duration from service catalog for dynamic configuration
+        val serviceType = ServiceType.PREMIUM_ONE
+        val duration = util.ServiceTypeResolver.getDefaultDurationInSeconds(serviceType) ?: (30L * 24L * 60L * 60L)
         val nowInstant = java.time.Instant.now()
         val startDate = nowInstant.toString()
-        val endDate = nowInstant.plusSeconds(30L * 24L * 60L * 60L).toString()
+        val endDate = nowInstant.plusSeconds(duration).toString()
 
         // Admin tracking context
         val ip = call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
             ?: call.request.headers["X-Real-IP"]
         val ua = call.request.headers["User-Agent"]
 
+        // Create payment record
+        // ServiceType enum is maintained for backward compatibility
+        // ServiceTypeResolver provides access to full service configuration
+        // Resolve service configuration to get pricing details
+        val serviceConfig = when (val result = util.ServiceTypeResolver.resolveServiceType(serviceType)) {
+            is domain.model.Result.Success -> result.data
+            is domain.model.Result.Error -> {
+                paymentLogger.warn("Could not resolve service configuration for $serviceType: ${result.message}")
+                null
+            }
+        }
+
         val payment = Payment(
             userEmail = userEmail,
             orderId = orderId,
             paymentId = paymentId,
             signature = signature,
+            amount = orderDetails?.amount,
+            currency = orderDetails?.currency ?: serviceConfig?.pricingTiers?.firstOrNull()?.currency,
+            receipt = orderDetails?.receipt,
             status = "verified",
             verifiedAt = startDate,
             userId = dbUser.id.toHexString(),
-            serviceType = ServiceType.PREMIUM_ONE,
+            serviceType = serviceType,
             subscriptionStart = startDate,
             subscriptionEnd = endDate,
             requestIp = ip,
@@ -275,8 +340,12 @@ fun Route.paymentRoute() {
                 it.copy(status = SubscriptionStatus.EXPIRED)
             } else it
         }
+        // Create new subscription
+        // ServiceType enum is maintained for backward compatibility
+        // ServiceTypeResolver provides access to full service configuration
+        // The subscription uses the resolved duration and service details
         val newSubscription = Subscription(
-            service = ServiceType.PREMIUM_ONE,
+            service = serviceType,
             startDate = startDate,
             endDate = endDate,
             status = SubscriptionStatus.ACTIVE,

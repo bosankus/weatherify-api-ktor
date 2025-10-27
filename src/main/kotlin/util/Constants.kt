@@ -17,6 +17,7 @@ object Constants {
         const val WEATHER_COLLECTION = "weather"
         const val USERS_COLLECTION = "users"
         const val PAYMENTS_COLLECTION = "payments"
+        const val REFUNDS_COLLECTION = "refunds"
 
         // Field names
         const val ID_FIELD = "_id"
@@ -42,6 +43,9 @@ object Constants {
         const val DB_CONNECTION_STRING_SECRET = "db-connection-string"
         const val RAZORPAY_SECRET = "razorpay-secret"
         const val RAZORPAY_KEY_ID = "razorpay-key-id"
+        const val RAZORPAY_WEBHOOK_SECRET = "razorpay-webhook-secret"
+        const val SENDGRID_API_KEY = "sendgrid-api-key"
+        const val FIREBASE_SERVICE_ACCOUNT_KEY = "firebase-service-account-key"
 
         // Password validation messages
         const val INVALID_EMAIL_FORMAT = "Invalid email format"
@@ -83,6 +87,27 @@ object Constants {
 
         // Parameter values
         const val EXCLUDE_MINUTELY = "minutely"
+    }
+
+    /**
+     * Subscription related constants
+     */
+    object Subscription {
+        // Subscription configuration
+        const val DEFAULT_GRACE_PERIOD_HOURS = 72L
+        const val DEFAULT_SUBSCRIPTION_DAYS = 30L
+        const val DEFAULT_EXPIRY_CHECK_INTERVAL_MINUTES = 720L // 12 hours
+
+        // User-facing subscription endpoints
+        const val SUBSCRIPTIONS_BASE = "/subscriptions"
+        const val SUBSCRIPTIONS_STATUS = "$SUBSCRIPTIONS_BASE/status"
+        const val SUBSCRIPTIONS_HISTORY = "$SUBSCRIPTIONS_BASE/history"
+        const val SUBSCRIPTIONS_CANCEL = "$SUBSCRIPTIONS_BASE/cancel"
+
+        // Admin subscription endpoints
+        const val ADMIN_SUBSCRIPTIONS = "/admin/subscriptions"
+        const val ADMIN_SUBSCRIPTIONS_ANALYTICS = "$ADMIN_SUBSCRIPTIONS/analytics"
+        const val ADMIN_SUBSCRIPTIONS_CANCEL = "$ADMIN_SUBSCRIPTIONS/cancel"
     }
 
     /**
@@ -147,6 +172,10 @@ object Constants {
         const val WEATHER_URL = "WEATHER_URL"
         const val AIR_POLLUTION_URL = "AIR_POLLUTION_URL"
 
+        // Subscription environment variables
+        const val GRACE_PERIOD_HOURS = "GRACE_PERIOD_HOURS"
+        const val SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_MINUTES = "SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_MINUTES"
+
         // Notifications / FCM
         const val FCM_FUNCTION_URL = "FCM_FUNCTION_URL" // Optional: HTTPS Cloud Function endpoint
         // const val FCM_SERVER_KEY = "FCM_SERVER_KEY"     // Optional: Legacy FCM server key
@@ -155,5 +184,14 @@ object Constants {
         const val GA_MEASUREMENT_ID = "GA_MEASUREMENT_ID"
         const val GA_API_SECRET = "GA_API_SECRET"
         const val GA_ENABLED = "GA_ENABLED" // "true" to enable server-side analytics
+
+        // Email configuration (SendGrid API)
+        const val SENDGRID_API_KEY = "SENDGRID_API_KEY"
+        const val FROM_EMAIL = "FROM_EMAIL"
+        const val FROM_NAME = "FROM_NAME"
+
+        // Refund feature flags
+        const val REFUND_FEATURE_ENABLED = "REFUND_FEATURE_ENABLED"
+        const val INSTANT_REFUND_ENABLED = "INSTANT_REFUND_ENABLED"
     }
 }

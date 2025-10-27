@@ -12,14 +12,38 @@ automatic_scaling:
   max_idle_instances: 2
 
 env_variables:
+  # Project Configuration
   GCP_PROJECT_ID: "1017382896100"
   DB_NAME: "weatherify-app-db"
+
+  # Weather API Configuration
   WEATHER_URL: "https://api.openweathermap.org/data/3.0/onecall"
   AIR_POLLUTION_URL: "https://api.openweathermap.org/data/2.5/air_pollution"
+
+  # JWT Configuration
   JWT_EXPIRATION: "3600000"
   JWT_AUDIENCE: "jwt-audience"
   JWT_ISSUER: "jwt-issuer"
   JWT_REALM: "jwt-realm"
+
+  # Analytics (GA4) Configuration
   GA_ENABLED: "true"
-  GA_TRACKING_ID: "G-EBVRVNN6JF	"
+  GA_TRACKING_ID: "G-EBVRVNN6JF"
   GA_MEASUREMENT_ID: "G-LWRPRSSDRY"
+  GA_API_SECRET: ""  # Add your GA4 API secret here if needed
+
+  # Firebase Configuration
+  # Path to Firebase service account key (relative to JAR location)
+  FIREBASE_SERVICE_ACCOUNT_KEY: "./serviceAccountKey.json"
+
+  # Subscription Configuration
+  GRACE_PERIOD_HOURS: "72"  # 3 days grace period
+  SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_MINUTES: "720"  # Check every 12 hours
+
+  # SendingGrid Configuration
+  FROM_NAME: "Androidplay Inc."
+  FROM_EMAIL: "ankush@androidplay.in"
+
+  # Refund Feature Configuration
+  REFUND_FEATURE_ENABLED: "true"
+  INSTANT_REFUND_ENABLED: "true"

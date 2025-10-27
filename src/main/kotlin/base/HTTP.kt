@@ -10,6 +10,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
 
 fun Application.configureHTTP() {
+    // Note: Compression plugin will be added once dependency is resolved
+    // For now, focusing on other performance optimizations
+    
     install(DefaultHeaders) {
         header("X-Engine", "Ktor") // will send this header with each response
         // Content-Type is automatically set by Ktor based on the response type

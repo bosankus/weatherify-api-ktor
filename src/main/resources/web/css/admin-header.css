@@ -1,0 +1,257 @@
+/* Admin Header Component Styles */
+
+/* CSS Custom Properties for Theming */
+:root {
+  /* Dark theme (default) */
+  --admin-header-bg: #1a1a2e;
+  --admin-header-title: #6b7dbb;
+  --admin-header-subtitle: #8892b0;
+  --admin-header-icon: #8892b0;
+  --admin-header-border: rgba(255, 255, 255, 0.1);
+  --admin-header-hover: rgba(255, 255, 255, 0.1);
+}
+
+.light-theme {
+  /* Light theme overrides */
+  --admin-header-bg: #f8f9fa;
+  --admin-header-title: #3b4f7d;
+  --admin-header-subtitle: #5a6268;
+  --admin-header-icon: #5a6268;
+  --admin-header-border: rgba(0, 0, 0, 0.1);
+  --admin-header-hover: rgba(0, 0, 0, 0.05);
+}
+
+/* Header Container */
+.admin-header {
+  background-color: var(--admin-header-bg);
+  border-bottom: 1px solid var(--admin-header-border);
+  padding: 1rem 2rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  overflow-x: hidden;
+}
+
+.admin-header__container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* Brand Section (Left) */
+.admin-header__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.admin-header__title {
+  color: var(--admin-header-title);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.2;
+  transition: color 0.3s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-header__subtitle {
+  color: var(--admin-header-subtitle);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: color 0.3s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Spacer for flex layout */
+.admin-header__spacer {
+  flex-grow: 1;
+}
+
+/* Actions Section (Right) */
+.admin-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-shrink: 0;
+}
+
+/* Code Bracket Icon */
+.admin-header__code-icon {
+  color: var(--admin-header-icon);
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  transition: color 0.3s ease, transform 0.2s ease;
+  cursor: default;
+  user-select: none;
+}
+
+.admin-header__code-icon:hover {
+  transform: scale(1.1);
+}
+
+/* Theme Toggle */
+.admin-header__theme-toggle {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+  cursor: pointer;
+}
+
+.admin-header__theme-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.admin-header__theme-icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--admin-header-icon);
+  border-radius: 26px;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.admin-header__theme-icon:hover {
+  background-color: var(--admin-header-title);
+  transform: scale(1.05);
+}
+
+.admin-header__theme-icon::before {
+  content: "🌙";
+  position: absolute;
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--admin-header-bg);
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.admin-header__theme-toggle input:checked + .admin-header__theme-icon::before {
+  content: "☀️";
+  transform: translateX(24px);
+}
+
+.admin-header__theme-toggle input:focus + .admin-header__theme-icon {
+  box-shadow: 0 0 0 3px var(--admin-header-hover);
+}
+
+/* Responsive Design */
+
+/* Tablet screens (768px - 1024px) */
+@media (max-width: 1024px) {
+  .admin-header {
+    padding: 0.875rem 1.5rem;
+  }
+
+  .admin-header__title {
+    font-size: 1.375rem;
+  }
+
+  .admin-header__subtitle {
+    font-size: 0.7rem;
+  }
+
+  .admin-header__brand {
+    gap: 0.875rem;
+  }
+
+  .admin-header__actions {
+    gap: 1.25rem;
+  }
+
+  .admin-header__code-icon {
+    font-size: 1.125rem;
+  }
+}
+
+/* Mobile screens (<768px) */
+@media (max-width: 767px) {
+  .admin-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .admin-header__title {
+    font-size: 1.25rem;
+  }
+
+  .admin-header__subtitle {
+    font-size: 0.65rem;
+  }
+
+  .admin-header__brand {
+    gap: 0.75rem;
+  }
+
+  .admin-header__actions {
+    gap: 1rem;
+  }
+
+  .admin-header__code-icon {
+    font-size: 1rem;
+  }
+
+  .admin-header__theme-toggle {
+    width: 44px;
+    height: 24px;
+  }
+
+  .admin-header__theme-icon::before {
+    height: 18px;
+    width: 18px;
+    font-size: 0.7rem;
+  }
+
+  .admin-header__theme-toggle input:checked + .admin-header__theme-icon::before {
+    transform: translateX(20px);
+  }
+}
+
+/* Extra small screens (<480px) */
+@media (max-width: 479px) {
+  .admin-header {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .admin-header__title {
+    font-size: 1.125rem;
+  }
+
+  .admin-header__subtitle {
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+  }
+
+  .admin-header__brand {
+    gap: 0.625rem;
+  }
+
+  .admin-header__actions {
+    gap: 0.875rem;
+  }
+
+  .admin-header__code-icon {
+    font-size: 0.95rem;
+  }
+}

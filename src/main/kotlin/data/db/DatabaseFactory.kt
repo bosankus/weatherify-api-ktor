@@ -29,11 +29,67 @@ object DatabaseFactory {
         database.getCollection<Payment>(Constants.Database.PAYMENTS_COLLECTION)
 
     init {
-        // Create a unique index on the email field to ensure email uniqueness
+        // Create indexes for optimized queries
         kotlinx.coroutines.runBlocking {
+            // === USER COLLECTION INDEXES ===
+
+            // Unique index on email field to ensure email uniqueness
             usersCollection.createIndex(
                 Indexes.ascending(Constants.Database.EMAIL_FIELD),
                 IndexOptions().unique(true)
+            )
+
+            // Index on isPremium field for filtering premium users
+            usersCollection.createIndex(
+                Indexes.ascending("isPremium")
+            )
+
+            // Index on subscriptions.status for subscription status queries
+            usersCollection.createIndex(
+                Indexes.ascending("subscriptions.status")
+            )
+
+            // Index on subscriptions.endDate for expiration checks
+            usersCollection.createIndex(
+                Indexes.ascending("subscriptions.endDate")
+            )
+
+            // Index on subscriptions.createdAt for date range filtering in exports
+            usersCollection.createIndex(
+                Indexes.ascending("subscriptions.createdAt")
+            )
+
+            // === PAYMENT COLLECTION INDEXES ===
+
+            // Index on userEmail field in payments collection for user payment lookups
+            paymentsCollection.createIndex(
+                Indexes.ascending("userEmail")
+            )
+
+            // Index on status field for filtering payments by status (SUCCESS, FAILED, etc.)
+            // Used in payment history filtering
+            paymentsCollection.createIndex(
+                Indexes.ascending("status")
+            )
+
+            // Index on createdAt field for date range queries and sorting
+            // Critical for financial exports and payment history pagination
+            paymentsCollection.createIndex(
+                Indexes.descending("createdAt")
+            )
+
+            // Compound index on status and createdAt for efficient filtered queries
+            // Optimizes queries that filter by status AND sort by date
+            paymentsCollection.createIndex(
+                Indexes.compoundIndex(
+                    Indexes.ascending("status"),
+                    Indexes.descending("createdAt")
+                )
+            )
+
+            // Index on paymentId for quick lookups when matching subscriptions to payments
+            paymentsCollection.createIndex(
+                Indexes.ascending("paymentId")
             )
         }
     }

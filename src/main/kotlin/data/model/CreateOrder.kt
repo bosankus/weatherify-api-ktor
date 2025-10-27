@@ -64,3 +64,22 @@ data class CreateOrderResponse(
     val status: String? = null,
     @SerialName("created_at") val createdAt: Long? = null,
 )
+
+/**
+ * Response model for fetching order details from Razorpay API
+ * Used to retrieve order information including amount, currency, and receipt
+ */
+@Serializable
+data class RazorpayOrderDetailsResponse(
+    val id: String,
+    val entity: String? = null,
+    val amount: Int,
+    @SerialName("amount_paid") val amountPaid: Int? = null,
+    @SerialName("amount_due") val amountDue: Int? = null,
+    val currency: String,
+    val receipt: String? = null,
+    val status: String? = null,
+    val attempts: Int? = null,
+    val notes: Map<String, String>? = null,
+    @SerialName("created_at") val createdAt: Long? = null
+)

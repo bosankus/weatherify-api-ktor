@@ -1,0 +1,53 @@
+<!-- Header Component Template -->
+<!--
+  Usage: Copy this template into your HTML page and initialize with JavaScript
+
+  Example initialization:
+  <script>
+    initializeHeader({
+      homeUrl: '/weather',
+      subtitle: 'Weather Dashboard',
+      actions: [
+        { type: 'theme-toggle' },
+        { type: 'user-info' },
+        { type: 'logout' }
+      ]
+    });
+  </script>
+-->
+
+<header class="app-header" role="banner">
+    <div class="app-header__container">
+        <!-- Brand section with logo and subtitle -->
+        <div class="app-header__brand">
+            <a
+                aria-label="Androidplay Home"
+                class="app-header__logo-link"
+                href="/weather"
+                id="header-logo-link"
+            >
+                <h1 class="app-header__logo">Androidplay</h1>
+            </a>
+            <span
+                class="app-header__subtitle"
+                data-default-subtitle="ADMIN PORTAL"
+                id="header-subtitle"
+            >
+        ADMIN PORTAL
+      </span>
+        </div>
+
+        <!-- Spacer for flex layout -->
+        <div class="app-header__spacer"></div>
+
+        <!-- Actions container - populated dynamically by JavaScript -->
+        <div
+            aria-label="Header actions"
+            class="app-header__actions"
+            id="header-actions"
+            role="navigation"
+        >
+            <!-- Action icons will be inserted here by header.js -->
+        </div>
+    </div>
+</header>

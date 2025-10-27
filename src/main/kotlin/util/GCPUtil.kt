@@ -64,6 +64,28 @@ internal fun getSecretValue(secretName: String): String {
                 }
             }
 
+            "razorpay-webhook-secret" -> {
+                val envValue = System.getenv("RAZORPAY_WEBHOOK_SECRET")
+                if (!envValue.isNullOrBlank()) {
+                    println("Using RAZORPAY_WEBHOOK_SECRET environment variable for development")
+                    envValue
+                } else {
+                    println("Using dummy Razorpay webhook secret for development")
+                    "dummy_razorpay_webhook_secret"
+                }
+            }
+
+            "sendgrid-api-key" -> {
+                val envValue = System.getenv("SENDGRID_API_KEY")
+                if (!envValue.isNullOrBlank()) {
+                    println("Using SENDGRID_API_KEY environment variable for development")
+                    envValue
+                } else {
+                    println("WARNING: SendGrid API key not configured. Email functionality will be disabled.")
+                    ""
+                }
+            }
+
             else -> {
                 println("Using dummy value for unknown secret: $secretName")
                 "dummy_value_for_$secretName"
@@ -151,6 +173,28 @@ internal fun getSecretValue(secretName: String): String {
                 } else {
                     System.err.println("WARNING: Using dummy Razorpay key id as fallback")
                     "dummy_razorpay_key_id"
+                }
+            }
+
+            "razorpay-webhook-secret" -> {
+                val envValue = System.getenv("RAZORPAY_WEBHOOK_SECRET")
+                if (!envValue.isNullOrBlank()) {
+                    System.err.println("Using RAZORPAY_WEBHOOK_SECRET environment variable as fallback")
+                    envValue
+                } else {
+                    System.err.println("WARNING: Using dummy Razorpay webhook secret as fallback")
+                    "dummy_razorpay_webhook_secret"
+                }
+            }
+
+            "sendgrid-api-key" -> {
+                val envValue = System.getenv("SENDGRID_API_KEY")
+                if (!envValue.isNullOrBlank()) {
+                    System.err.println("Using SENDGRID_API_KEY environment variable as fallback")
+                    envValue
+                } else {
+                    System.err.println("WARNING: SendGrid API key not configured. Email functionality will be disabled.")
+                    ""
                 }
             }
 

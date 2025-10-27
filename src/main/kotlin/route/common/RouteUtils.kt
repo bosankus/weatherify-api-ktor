@@ -9,9 +9,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 
-/**
- * Responds with a success message
- */
+/** Responds with a success message */
 suspend inline fun <reified T> ApplicationCall.respondSuccess(
     message: String,
     data: T,
@@ -20,11 +18,7 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
     // Ensure data is null for Unit responses while preserving generic type
     val actualData: T? = if (data is Unit) null else data
 
-    val response: ApiResponse<T?> = ApiResponse(
-        status = true,
-        message = message,
-        data = actualData
-    )
+    val response: ApiResponse<T?> = ApiResponse(status = true, message = message, data = actualData)
 
     // Build a Json instance consistent with HTTP configuration
     val json = Json {
@@ -49,9 +43,7 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
     respondText(text = body, contentType = ContentType.Application.Json, status = status)
 }
 
-/**
- * Responds with an error message
- */
+/** Responds with an error message */
 suspend inline fun <reified T> ApplicationCall.respondError(
     message: String,
     data: T,
@@ -60,11 +52,8 @@ suspend inline fun <reified T> ApplicationCall.respondError(
     // Ensure data is null for Unit responses while preserving generic type
     val actualData: T? = if (data is Unit) null else data
 
-    val response: ApiResponse<T?> = ApiResponse(
-        status = false,
-        message = message,
-        data = actualData
-    )
+    val response: ApiResponse<T?> =
+        ApiResponse(status = false, message = message, data = actualData)
 
     val json = Json {
         prettyPrint = true

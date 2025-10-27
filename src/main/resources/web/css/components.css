@@ -1,51 +1,5 @@
 /* Common component styles for Weatherify web pages */
 
-/* Header styles */
-.header {
-    text-align: left;
-    margin-bottom: 3rem;
-    position: relative;
-    padding: 1.5rem 0;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    background: transparent;
-    border-bottom: none;
-    margin-top: 1rem;
-}
-
-.brand-text {
-    display: flex;
-    align-items: center;
-    position: relative;
-}
-
-.logo {
-    font-size: 1.75rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #6b7dbb, #3b4f7d);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-    letter-spacing: -0.01em;
-    position: relative;
-    transition: all 0.3s ease;
-    margin-right: 1rem;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.subtitle {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    background: rgba(59, 79, 125, 0.1);
-}
-
 /* Content area styles */
 .content-area {
     background: var(--content-bg);
@@ -135,25 +89,6 @@
         padding: 0 1rem;
     }
 
-    .header {
-        padding: 1rem 0;
-        margin-bottom: 2rem;
-        flex-wrap: wrap;
-    }
-
-    .brand-text {
-        align-items: center;
-    }
-
-    .logo {
-        font-size: 1.5rem;
-        margin-right: 0.5rem;
-    }
-
-    .subtitle {
-        font-size: 0.75rem;
-    }
-
     .content-area {
         padding: 1.5rem;
     }
@@ -169,24 +104,6 @@
 
 /* Small mobile devices */
 @media (max-width: 480px) {
-    .header {
-        justify-content: space-between;
-    }
-
-    .brand-text {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .logo {
-        margin-right: 0;
-        margin-bottom: 0.25rem;
-    }
-
-    .subtitle {
-        font-size: 0.7rem;
-    }
-
     .content-area {
         padding: 1.25rem;
     }
@@ -240,25 +157,1881 @@
 
 
 /* Announcement banner refinements */
-.announcement-banner { border:1px solid var(--card-border); background: var(--card-bg); border-left-width:4px; border-left-style: solid; padding: 10px 12px; border-radius: 8px; }
-.announcement-banner__severity { font-weight: 700; text-transform: uppercase; font-size: 12px; margin-bottom: 4px; }
-.announcement-banner__message { color: var(--text-color); }
-.announcement-banner__meta { margin-top: 4px; color: var(--text-secondary); font-size: 12px; }
+.announcement-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  padding: 14px 16px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
 
-.announcement-banner.is-info { border-left-color: #3b82f6; }
-.announcement-banner.is-info .announcement-banner__severity { color:#3b82f6; }
+.announcement-banner:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
 
-.announcement-banner.is-warning { border-left-color: #f59e0b; }
-.announcement-banner.is-warning .announcement-banner__severity { color:#f59e0b; }
+.announcement-banner__icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+}
 
-.announcement-banner.is-critical { border-left-color: #ef4444; }
-.announcement-banner.is-critical .announcement-banner__severity { color:#ef4444; }
+.announcement-banner__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.announcement-banner__severity {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.announcement-banner__message {
+  color: var(--text-color);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.announcement-banner__meta {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.announcement-banner.is-info {
+  background: rgba(59, 130, 246, 0.05);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.announcement-banner.is-info .announcement-banner__icon {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.announcement-banner.is-info .announcement-banner__severity {
+  color: #3b82f6;
+}
+
+.announcement-banner.is-warning {
+  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.announcement-banner.is-warning .announcement-banner__icon {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.announcement-banner.is-warning .announcement-banner__severity {
+  color: #f59e0b;
+}
+
+.announcement-banner.is-critical {
+  background: rgba(239, 68, 68, 0.05);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.announcement-banner.is-critical .announcement-banner__icon {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.announcement-banner.is-critical .announcement-banner__severity {
+  color: #ef4444;
+}
 
 /* Muted text utility */
 .text-muted { color: var(--text-secondary); }
+
+/* Inline message containers (for static messages in forms/pages) */
+.message {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid;
+  margin-bottom: 1rem;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: slideDown 0.3s ease;
+}
+
+.message.hidden {
+  display: none;
+}
+
+.message.visible {
+  display: flex;
+}
+
+.message::before {
+  content: "";
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.message-content {
+  flex: 1;
+  min-width: 0;
+  word-wrap: break-word;
+}
+
+.success-message {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #059669;
+}
+
+.success-message::before {
+  content: "✓";
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.error-message {
+  background: rgba(239, 68, 68, 0.05);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #dc2626;
+}
+
+.error-message::before {
+  content: "⚠";
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.info-message {
+  background: rgba(59, 130, 246, 0.05);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #2563eb;
+}
+
+.info-message::before {
+  content: "ℹ";
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.warning-message {
+  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #d97706;
+}
+
+.warning-message::before {
+  content: "⚠";
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+/* Responsive message styles */
+@media (max-width: 768px) {
+  .message {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  
+  .message::before {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+}
 
 
 /* Pill radio styling for compact severity selections */
 .pill-radio { cursor: pointer; border:1px solid var(--card-border); padding:6px 10px; border-radius:14px; display:inline-flex; align-items:center; gap:6px; color: var(--text-color); background: var(--card-bg); transition: border-color 0.2s ease, background 0.2s ease; }
 .pill-radio:hover { border-color: var(--card-hover-border); background: var(--card-hover-bg); }
 .pill-radio input { accent-color: #6366f1; }
+
+/* Refund button wrapper styles */
+.refund-button-wrapper {
+    margin-top: 12px;
+}
+
+.refund-button-container {
+    margin-top: 12px;
+}
+
+/* Badge styles for various statuses - Modern Design */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.875rem;
+    border-radius: 16px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+    border: 1.5px solid transparent;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* Status-specific badge styles with modern colors */
+.badge-pending {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #78350f;
+    border-color: #fbbf24;
+}
+
+.badge-pending::before {
+    background: #f59e0b;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.badge-processed,
+.badge-verified,
+.badge-success {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #064e3b;
+    border-color: #34d399;
+}
+
+.badge-processed::before,
+.badge-verified::before,
+.badge-success::before {
+    background: #10b981;
+}
+
+.badge-failed {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: #7f1d1d;
+    border-color: #f87171;
+}
+
+.badge-failed::before {
+    background: #ef4444;
+}
+
+/* Note: Refund action badges now use btn-details styling for consistency */
+
+.badge-admin {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1e3a8a;
+    border-color: #60a5fa;
+    margin-left: 8px;
+}
+
+.badge-admin::before {
+    background: #3b82f6;
+}
+
+.badge-premium {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #78350f;
+    border-color: #fbbf24;
+    margin-left: 8px;
+}
+
+.badge-premium::before {
+    background: #f59e0b;
+}
+
+/* Subscription status badges - matching verified status badge style */
+.badge-active {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #064e3b;
+    border-color: #34d399;
+}
+
+.badge-active::before {
+    background: #10b981;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.badge-expired {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: #7f1d1d;
+    border-color: #f87171;
+}
+
+.badge-expired::before {
+    background: #ef4444;
+}
+
+.badge-cancelled {
+    background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
+    color: #374151;
+    border-color: #9ca3af;
+}
+
+.badge-cancelled::before {
+    background: #6b7280;
+}
+
+.badge-grace_period {
+    background: linear-gradient(135deg, #e9d5ff 0%, #d8b4fe 100%);
+    color: #581c87;
+    border-color: #a855f7;
+}
+
+.badge-grace_period::before {
+    background: #8b5cf6;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* Pulse animation for active/pending states */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.1);
+    }
+}
+
+/* Refund Modal Styles */
+.refund-modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    max-width: 500px;
+}
+
+.refund-details {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 0.875rem;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-row .label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.detail-row .value {
+    color: var(--text-color);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.detail-row .value.refundable {
+    font-weight: 700;
+    color: #10b981;
+    font-size: 1.125rem;
+}
+
+/* Refund Form Styles */
+.refund-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+}
+
+.refund-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.refund-form .form-group label {
+    font-weight: 600;
+    color: var(--text-color);
+    font-size: 0.875rem;
+}
+
+.refund-form .form-group input,
+.refund-form .form-group select,
+.refund-form .form-group textarea {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text-color);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.refund-form .form-group input:focus,
+.refund-form .form-group select:focus,
+.refund-form .form-group textarea:focus {
+    outline: none;
+    border-color: var(--card-hover-border);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.refund-form .form-group textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.refund-form .form-group small {
+    font-size: 0.75rem;
+}
+
+.refund-form .radio-group {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.refund-form .radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: 500;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    transition: background 0.2s ease;
+}
+
+.refund-form .radio-group label:hover {
+    background: var(--card-hover-bg);
+}
+
+.refund-form .radio-group input[type="radio"] {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
+    accent-color: #6366f1;
+}
+
+.refund-form .form-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+}
+
+/* Refund Metrics Cards */
+.refund-metrics-cards {
+    margin-bottom: 2rem;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.metric-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.metric-card:hover {
+    border-color: var(--card-hover-border);
+    box-shadow: 0 4px 12px var(--card-shadow);
+    transform: translateY(-2px);
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-color);
+    margin-bottom: 0.25rem;
+    line-height: 1.2;
+}
+
+.metric-subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Refund History Styles */
+.refund-history-item {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.refund-history-item:hover {
+    border-color: var(--card-hover-border);
+    box-shadow: 0 2px 8px var(--card-shadow);
+}
+
+.refund-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.refund-id {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.875rem;
+    color: var(--text-color);
+    font-weight: 500;
+}
+
+.refund-history-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.summary-section,
+.refunds-section {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 1.25rem;
+}
+
+.summary-section h3,
+.refunds-section h3 {
+    color: var(--heading-color);
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* Refund Chart Styles */
+#refund-chart {
+    max-width: 100%;
+    height: 300px;
+    margin-top: 1rem;
+}
+
+.refund-chart-container {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+/* Refund History Table Styles */
+.refund-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.refund-history-table thead {
+    background: var(--card-hover-bg);
+    border-bottom: 2px solid var(--card-border);
+}
+
+.refund-history-table th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-color);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.refund-history-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--card-border);
+    color: var(--text-color);
+    font-size: 0.9rem;
+}
+
+.refund-history-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.refund-history-table tbody tr:hover {
+    background: var(--card-hover-bg);
+}
+
+.refund-history-table code {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.85rem;
+    background: var(--card-hover-bg);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+
+/* Refund Pagination Styles */
+.refund-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    padding: 1rem;
+}
+
+.refund-pagination button {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text-color);
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    font-size: 0.875rem;
+}
+
+.refund-pagination button:hover:not(:disabled) {
+    background: var(--card-hover-bg);
+    border-color: var(--card-hover-border);
+}
+
+.refund-pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.refund-pagination button.active {
+    background: #6366f1;
+    border-color: #6366f1;
+    color: white;
+}
+
+/* Refund Section Container */
+.refunds-section-container {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 2px solid var(--card-border);
+}
+
+.refunds-section-container h2 {
+    color: var(--heading-color);
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+/* Responsive Styles for Refund Components */
+@media (max-width: 768px) {
+    .refund-modal-content {
+        gap: 0.875rem;
+    }
+
+    .refund-details {
+        padding: 0.75rem;
+    }
+
+    .detail-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.125rem;
+        padding: 0.5rem 0;
+    }
+    
+    .detail-row .label,
+    .detail-row .value {
+        font-size: 0.8125rem;
+    }
+    
+    .detail-row .value.refundable {
+        font-size: 1rem;
+    }
+
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .metric-card {
+        padding: 1rem;
+    }
+
+    .metric-value {
+        font-size: 1.5rem;
+    }
+
+    .refund-form .radio-group {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .refund-form .form-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .refund-form .form-actions button {
+        width: 100%;
+    }
+
+    .refund-history-table {
+        font-size: 0.85rem;
+    }
+
+    .refund-history-table th,
+    .refund-history-table td {
+        padding: 0.5rem;
+    }
+
+    .refund-pagination {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    .refund-pagination button {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .refund-modal-content {
+        gap: 0.75rem;
+    }
+
+    .metric-value {
+        font-size: 1.25rem;
+    }
+
+    .metric-label,
+    .metric-subtitle {
+        font-size: 0.8rem;
+    }
+
+    .refund-history-item {
+        padding: 0.75rem;
+    }
+
+    .refund-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    /* Make table scrollable on very small screens */
+    .refund-history-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .refund-history-table {
+        min-width: 600px;
+    }
+}
+
+/* Payment and Refund Button Styles */
+.btn-refund,
+.btn-details {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    font-family: 'Space Grotesk', sans-serif;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+}
+
+.btn-refund {
+    background-color: #ef4444;
+    color: white;
+    border-color: #ef4444;
+}
+
+.btn-refund:hover {
+    background-color: #dc2626;
+    border-color: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-details {
+    background-color: #6b7280;
+    color: white;
+    border-color: #6b7280;
+}
+
+.btn-details:hover {
+    background-color: #4b5563;
+    border-color: #4b5563;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-sm {
+    padding: 0.3rem 0.65rem;
+    font-size: 0.8125rem;
+}
+
+/* Payment Status Badges */
+.payment-status {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.payment-status-verified,
+.payment-status-success {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.payment-status-pending {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.payment-status-failed {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.payment-status-refunded {
+    background-color: #e0e7ff;
+    color: #3730a3;
+}
+
+/* Refund Badges */
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-refunded {
+    background-color: #e0e7ff;
+    color: #3730a3;
+}
+
+.badge-partial-refund {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+/* Payment Actions Cell */
+.payment-actions {
+    text-align: center !important;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+/* Payment Details Modal */
+.payment-details-modal .detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--content-border, #e5e7eb);
+}
+
+.payment-details-modal .detail-row:last-child {
+    border-bottom: none;
+}
+
+.payment-details-modal .label {
+    font-weight: 600;
+    color: var(--text-secondary, #6b7280);
+}
+
+.payment-details-modal .value {
+    color: var(--text-primary, #1f2937);
+}
+
+.payment-details-modal code {
+    background-color: var(--code-bg, #f3f4f6);
+    padding: 0.125rem 0.375rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+
+
+/* Refund Status Banner Styles */
+.status-banner {
+    display: flex;
+    align-items: flex-start;
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border-left: 4px solid;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.status-banner-success {
+    background-color: rgba(34, 197, 94, 0.1);
+    border-left-color: #22c55e;
+    color: #166534;
+}
+
+.status-banner-warning {
+    background-color: rgba(251, 191, 36, 0.1);
+    border-left-color: #fbbf24;
+    color: #92400e;
+}
+
+.status-banner-error {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-left-color: #ef4444;
+    color: #991b1b;
+}
+
+[data-theme="dark"] .status-banner-success {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: #86efac;
+}
+
+[data-theme="dark"] .status-banner-warning {
+    background-color: rgba(251, 191, 36, 0.15);
+    color: #fde047;
+}
+
+[data-theme="dark"] .status-banner-error {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+}
+
+.banner-icon {
+    font-size: 1.5rem;
+    margin-right: 1rem;
+    flex-shrink: 0;
+}
+
+.banner-content {
+    flex: 1;
+}
+
+.banner-title {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.banner-message {
+    font-size: 0.875rem;
+    opacity: 0.9;
+}
+
+/* Refund Status Badges */
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge-processed {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.badge-pending {
+    background-color: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+}
+
+.badge-failed {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+[data-theme="dark"] .badge-processed {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: #86efac;
+}
+
+[data-theme="dark"] .badge-pending {
+    background-color: rgba(251, 191, 36, 0.2);
+    color: #fde047;
+}
+
+[data-theme="dark"] .badge-failed {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+}
+
+/* Refund Details Modal Styles */
+.refund-details-modal .summary-section,
+.refund-details-modal .refunds-section {
+    margin-bottom: 1.5rem;
+}
+
+.refund-details-modal h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--heading-color);
+}
+
+.refund-history-item {
+    background: var(--card-bg, #f9fafb);
+    border: 1px solid var(--card-border, #e5e7eb);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+[data-theme="dark"] .refund-history-item {
+    background: var(--card-bg, #1f2937);
+    border-color: var(--card-border, #374151);
+}
+
+.refund-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--card-border, #e5e7eb);
+}
+
+[data-theme="dark"] .refund-header {
+    border-bottom-color: var(--card-border, #374151);
+}
+
+.refund-id {
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    font-size: 0.875rem;
+}
+
+.detail-row .label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.detail-row .value {
+    color: var(--text-primary);
+    text-align: right;
+}
+
+.detail-row .value.refundable {
+    color: #22c55e;
+    font-weight: 600;
+}
+
+/* Refresh button animation */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Button styles for refund actions */
+.btn-refund {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-refund:hover {
+    background-color: #dc2626;
+}
+
+.btn-refund:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.btn-details {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-details:hover {
+    background-color: #2563eb;
+}
+
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+}
+
+/* Refunds Table Styles */
+.refunds-table th:nth-child(4),
+.refunds-table td:nth-child(4) {
+    text-align: center;
+}
+
+.refunds-table th:nth-child(8),
+.refunds-table td:nth-child(8) {
+    text-align: center;
+}
+
+.refund-actions {
+    text-align: center !important;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+/* Simple Status Badges for Refunds */
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.status-processed {
+    background: rgba(16, 185, 129, 0.15);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="dark"] .status-processed {
+    background: rgba(16, 185, 129, 0.2);
+    color: #86efac;
+}
+
+[data-theme="dark"] .status-pending {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fde047;
+}
+
+[data-theme="dark"] .status-failed {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+}
+
+/* Service Catalog Styles */
+.service-catalog-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.form-control {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--endpoint-border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text-color);
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--card-hover-border);
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.status-active {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-badge.status-inactive {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-badge.status-archived {
+    background: rgba(107, 114, 128, 0.15);
+    color: #6b7280;
+    border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.875rem;
+}
+
+.btn-details {
+    background: var(--endpoint-bg);
+    color: var(--text-color);
+    border: 1px solid var(--endpoint-border);
+}
+
+.btn-details:hover {
+    border-color: var(--card-hover-border);
+    background: var(--card-hover-bg);
+}
+
+.btn-warning {
+    background: #f59e0b;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #d97706;
+}
+
+.btn-success {
+    background: #10b981;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #059669;
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+/* Service Form Styles */
+.service-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.form-section {
+    padding: 1rem;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--endpoint-border);
+    border-radius: 8px;
+}
+
+.form-section-title {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--card-title);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--endpoint-border);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text-color);
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--card-hover-border);
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+}
+
+.form-group small {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.dynamic-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    padding: 1rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+}
+
+.dynamic-row-content {
+    flex: 1;
+}
+
+.btn-remove {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--endpoint-border);
+    background: var(--endpoint-bg);
+    color: var(--text-color);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-remove:hover {
+    background: #ef4444;
+    color: white;
+    border-color: #ef4444;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    padding-top: 1rem;
+    border-top: 1px solid var(--card-border);
+}
+
+/* Service Detail Modal Styles */
+.service-detail-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.service-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.service-detail-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.overview-section {
+    margin-bottom: 1.5rem;
+}
+
+.overview-section h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--card-title);
+}
+
+.pricing-tiers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.pricing-tier-card {
+    padding: 1rem;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--endpoint-border);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.pricing-tier-card:hover {
+    border-color: var(--card-hover-border);
+    box-shadow: 0 4px 12px var(--card-shadow);
+}
+
+.tier-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.tier-amount {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--card-title);
+}
+
+.tier-duration {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.tier-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.badge-default {
+    background: rgba(99, 102, 241, 0.15);
+    color: #6366f1;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.badge-featured {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.features-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--endpoint-border);
+    border-radius: 6px;
+}
+
+.feature-item.highlighted {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.feature-icon {
+    font-size: 1.25rem;
+}
+
+.feature-text {
+    flex: 1;
+    color: var(--text-color);
+}
+
+.limits-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.limit-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--endpoint-border);
+    border-radius: 6px;
+}
+
+.limit-key {
+    font-weight: 600;
+    color: var(--card-title);
+}
+
+.limit-value {
+    flex: 1;
+    color: var(--text-color);
+}
+
+.badge-hard {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-soft {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.detail-row {
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem 0;
+}
+
+.detail-row .label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 120px;
+}
+
+.detail-row .value {
+    color: var(--text-color);
+}
+
+/* Analytics Styles */
+.analytics-section {
+    margin-bottom: 2rem;
+}
+
+.analytics-section h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--card-title);
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.popular-tier {
+    padding: 1rem;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--endpoint-border);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.monthly-trend-chart {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+    height: 200px;
+    padding: 1rem;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--endpoint-border);
+    border-radius: 8px;
+}
+
+.chart-bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.chart-bars {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+    height: 150px;
+    width: 100%;
+}
+
+.chart-bar {
+    flex: 1;
+    min-height: 4px;
+    border-radius: 4px 4px 0 0;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.chart-bar:hover {
+    opacity: 0.8;
+}
+
+.chart-bar-count {
+    background: #6366f1;
+}
+
+.chart-bar-revenue {
+    background: #10b981;
+}
+
+.bar-value {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-color);
+    white-space: nowrap;
+}
+
+.chart-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chart-legend {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    justify-content: center;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-color);
+}
+
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+}
+
+.legend-count {
+    background: #6366f1;
+}
+
+.legend-revenue {
+    background: #10b981;
+}
+
+/* History Styles */
+.history-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.history-entry {
+    padding: 1rem;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--endpoint-border);
+    border-radius: 8px;
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.history-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.history-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.history-created {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.history-updated {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.history-status-changed {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.history-archived {
+    background: rgba(107, 114, 128, 0.15);
+    color: #6b7280;
+    border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.history-restored {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.history-date {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.history-user {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.history-user-label {
+    color: var(--text-secondary);
+}
+
+.history-user-email {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.history-changes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.changes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.change-item {
+    padding: 0.75rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+}
+
+.change-field {
+    font-weight: 600;
+    color: var(--card-title);
+    margin-bottom: 0.5rem;
+}
+
+.change-values {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.change-old,
+.change-new {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.change-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.change-value {
+    color: var(--text-color);
+}
+
+.change-arrow {
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+}

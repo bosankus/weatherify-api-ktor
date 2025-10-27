@@ -16,7 +16,14 @@ application {
     mainClass = "bose.ankush.ApplicationKt"
 
     val isDevelopment: Boolean = project.ext.has("development")
-    applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")
+    applicationDefaultJvmArgs = listOf(
+        "-Dio.ktor.development=$isDevelopment",
+        "-Xms512m",
+        "-Xmx1g",
+        "-XX:+UseG1GC",
+        "-XX:MaxGCPauseMillis=200",
+        "-XX:+UseStringDeduplication"
+    )
 }
 
 java {
@@ -66,6 +73,12 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.koin.ktor)
     implementation(libs.koin.logger.slf4j)
+
+    // Firebase Admin SDK for push notifications
+    implementation(libs.firebase.admin)
+
+    // PDF Generation
+    implementation("com.itextpdf:itext7-core:7.2.5")
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)

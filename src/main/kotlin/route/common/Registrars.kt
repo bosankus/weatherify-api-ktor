@@ -78,3 +78,21 @@ object PollingEngineRoutesRegistrar : RouteRegistrar {
         with(root) { pollingEngineRoute() }
     }
 }
+
+object SubscriptionRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { subscriptionRoute() }
+    }
+}
+
+object RefundRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { refundRoute() }
+    }
+}
+
+object ServiceCatalogRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { serviceCatalogRoute() }
+    }
+}
