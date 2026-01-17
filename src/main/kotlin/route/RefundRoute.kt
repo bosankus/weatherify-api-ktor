@@ -27,9 +27,9 @@ fun Route.refundRoute() {
     val refundService: RefundService by application.inject()
 
     // Admin refund routes - require admin authentication
-    route("/admin/refunds") {
+    route("/refunds") {
 
-        // POST /admin/refunds/initiate - Initiate a refund
+        // POST /refunds/initiate - Initiate a refund
         post("/initiate") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
             refundLogger.info("Admin ${admin.email} initiating refund")
@@ -92,7 +92,7 @@ fun Route.refundRoute() {
             }
         }
 
-        // GET /admin/refunds/{refundId} - Get refund details
+        // GET /refunds/{refundId} - Get refund details
         get("/{refundId}") {
             call.getAuthenticatedAdminOrRespond() ?: return@get
 
@@ -126,7 +126,7 @@ fun Route.refundRoute() {
             }
         }
 
-        // GET /admin/refunds/payment/{paymentId} - Get all refunds for a payment
+        // GET /refunds/payment/{paymentId} - Get all refunds for a payment
         get("/payment/{paymentId}") {
             call.getAuthenticatedAdminOrRespond() ?: return@get
 
@@ -160,7 +160,7 @@ fun Route.refundRoute() {
             }
         }
 
-        // GET /admin/refunds/payment/{paymentId}/check - Check refund status from Razorpay
+        // GET /refunds/payment/{paymentId}/check - Check refund status from Razorpay
         get("/payment/{paymentId}/check") {
             call.getAuthenticatedAdminOrRespond() ?: return@get
 
@@ -194,7 +194,7 @@ fun Route.refundRoute() {
             }
         }
 
-        // GET /admin/refunds/history - Get refund history with pagination and filtering
+        // GET /refunds/history - Get refund history with pagination and filtering
         get("/history") {
             call.getAuthenticatedAdminOrRespond() ?: return@get
 
@@ -228,7 +228,7 @@ fun Route.refundRoute() {
             val status = if (statusParam != null) {
                 try {
                     RefundStatus.valueOf(statusParam.uppercase())
-                } catch (e: IllegalArgumentException) {
+                } catch (_: IllegalArgumentException) {
                     call.respondError(
                         message = "Invalid status value. Must be one of: PENDING, PROCESSED, FAILED",
                         data = Unit,
@@ -255,7 +255,7 @@ fun Route.refundRoute() {
             }
         }
 
-        // GET /admin/refunds/metrics - Get refund metrics for dashboard
+        // GET /refunds/metrics - Get refund metrics for dashboard
         get("/metrics") {
             call.getAuthenticatedAdminOrRespond() ?: return@get
 
@@ -274,7 +274,7 @@ fun Route.refundRoute() {
             }
         }
 
-        // GET /admin/refunds/export - Export refunds to CSV
+        // GET /refunds/export - Export refunds to CSV
         get("/export") {
             call.getAuthenticatedAdminOrRespond() ?: return@get
 

@@ -293,16 +293,16 @@
          */
         async getPayments(page = 1, pageSize = 20, filters = {}, forceRefresh = false) {
             if (forceRefresh) {
-                window.AdminDataCache.invalidatePattern('/admin/payments');
+                window.AdminDataCache.invalidatePattern('/payments');
             }
 
             return window.AdminDataCache.get(
-                '/admin/payments',
+                '/payments',
                 { page, pageSize, ...filters },
                 CACHE_CONFIG.PAYMENTS,
                 async () => {
                     // Implement actual payment fetch logic here
-                    const url = `/admin/payments?page=${page}&pageSize=${pageSize}`;
+                    const url = `/payments?page=${page}&pageSize=${pageSize}`;
                     const response = await fetch(url, {
                         method: 'GET',
                         credentials: 'include',
@@ -324,16 +324,16 @@
          */
         async getRefunds(page = 1, pageSize = 20, filters = {}, forceRefresh = false) {
             if (forceRefresh) {
-                window.AdminDataCache.invalidatePattern('/admin/refunds');
+                window.AdminDataCache.invalidatePattern('/refunds');
             }
 
             return window.AdminDataCache.get(
-                '/admin/refunds/history',
+                '/refunds/history',
                 { page, pageSize, ...filters },
                 CACHE_CONFIG.REFUNDS,
                 async () => {
                     const params = new URLSearchParams({ page, pageSize, ...filters });
-                    const url = `/admin/refunds/history?${params}`;
+                    const url = `/refunds/history?${params}`;
                     
                     const response = await fetch(url, {
                         method: 'GET',
@@ -356,15 +356,15 @@
          */
         async getRefundMetrics(forceRefresh = false) {
             if (forceRefresh) {
-                window.AdminDataCache.invalidate('/admin/refunds/metrics', {});
+                window.AdminDataCache.invalidate('/refunds/metrics', {});
             }
 
             return window.AdminDataCache.get(
-                '/admin/refunds/metrics',
+                '/refunds/metrics',
                 {},
                 CACHE_CONFIG.METRICS,
                 async () => {
-                    const response = await fetch('/admin/refunds/metrics', {
+                    const response = await fetch('/refunds/metrics', {
                         method: 'GET',
                         credentials: 'include',
                         headers: { 'Accept': 'application/json' }
@@ -385,16 +385,16 @@
          */
         async getServices(page = 1, pageSize = 20, filters = {}, forceRefresh = false) {
             if (forceRefresh) {
-                window.AdminDataCache.invalidatePattern('/admin/services');
+                window.AdminDataCache.invalidatePattern('/services');
             }
 
             return window.AdminDataCache.get(
-                '/admin/services',
+                '/services',
                 { page, pageSize, ...filters },
                 CACHE_CONFIG.SERVICES,
                 async () => {
                     const params = new URLSearchParams({ page, pageSize, ...filters });
-                    const url = `/admin/services?${params}`;
+                    const url = `/services?${params}`;
                     
                     const response = await fetch(url, {
                         method: 'GET',
@@ -420,15 +420,15 @@
         },
 
         invalidatePayments() {
-            window.AdminDataCache.invalidatePattern('/admin/payments');
+            window.AdminDataCache.invalidatePattern('/payments');
         },
 
         invalidateRefunds() {
-            window.AdminDataCache.invalidatePattern('/admin/refunds');
+            window.AdminDataCache.invalidatePattern('/refunds');
         },
 
         invalidateServices() {
-            window.AdminDataCache.invalidatePattern('/admin/services');
+            window.AdminDataCache.invalidatePattern('/services');
         },
 
         /**

@@ -44,21 +44,6 @@ object DatabaseFactory {
                 Indexes.ascending("isPremium")
             )
 
-            // Index on subscriptions.status for subscription status queries
-            usersCollection.createIndex(
-                Indexes.ascending("subscriptions.status")
-            )
-
-            // Index on subscriptions.endDate for expiration checks
-            usersCollection.createIndex(
-                Indexes.ascending("subscriptions.endDate")
-            )
-
-            // Index on subscriptions.createdAt for date range filtering in exports
-            usersCollection.createIndex(
-                Indexes.ascending("subscriptions.createdAt")
-            )
-
             // === PAYMENT COLLECTION INDEXES ===
 
             // Index on userEmail field in payments collection for user payment lookups
@@ -87,7 +72,7 @@ object DatabaseFactory {
                 )
             )
 
-            // Index on paymentId for quick lookups when matching subscriptions to payments
+            // Index on paymentId for quick lookups
             paymentsCollection.createIndex(
                 Indexes.ascending("paymentId")
             )
@@ -168,17 +153,20 @@ object DatabaseFactory {
     }
 
     /** List recent payments, most recent first */
+    @Suppress("unused")
     suspend fun listRecentPayments(limit: Int = 100): List<Payment> {
         val lim = if (limit <= 0) 100 else minOf(limit, 1000)
         return paymentsCollection.find().sort(Document("createdAt", -1)).limit(lim).toList()
     }
 
     /** Get all verified payments (for summary aggregation) */
+    @Suppress("unused")
     suspend fun getAllVerifiedPayments(): List<Payment> {
         return paymentsCollection.find(Document("status", "verified")).toList()
     }
 
     /** Count all payments */
+    @Suppress("unused")
     suspend fun countAllPayments(): Long {
         return try {
             paymentsCollection.countDocuments()
@@ -188,6 +176,7 @@ object DatabaseFactory {
     }
 
     /** Count all verified payments */
+    @Suppress("unused")
     suspend fun countVerifiedPayments(): Long {
         return try {
             paymentsCollection.countDocuments(Document("status", "verified"))
@@ -197,6 +186,7 @@ object DatabaseFactory {
     }
 
     /** Update a user */
+    @Suppress("unused")
     suspend fun updateUser(user: User): Boolean {
         val query = createQuery("email", user.email)
         return executeDbOperation {

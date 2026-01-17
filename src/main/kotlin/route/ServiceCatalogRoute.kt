@@ -25,9 +25,9 @@ fun Route.serviceCatalogRoute() {
     val serviceCatalogService: ServiceCatalogService by application.inject()
 
     // Admin service catalog routes - require admin authentication
-    route("/admin/services") {
+    route("/services") {
 
-        // GET /admin/services - List all services with pagination and filtering
+        // GET /services - List all services with pagination and filtering
         get {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
             serviceCatalogLogger.info("Admin ${admin.email} listing services")
@@ -61,7 +61,7 @@ fun Route.serviceCatalogRoute() {
             val status = if (statusParam != null) {
                 try {
                     ServiceStatus.valueOf(statusParam.uppercase())
-                } catch (e: IllegalArgumentException) {
+                } catch (_: IllegalArgumentException) {
                     call.respondError(
                         message = "Invalid status value. Must be one of: ACTIVE, INACTIVE, ARCHIVED",
                         data = Unit,
@@ -90,7 +90,7 @@ fun Route.serviceCatalogRoute() {
             }
         }
 
-        // POST /admin/services - Create a new service
+        // POST /services - Create a new service
         post {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
             serviceCatalogLogger.info("Admin ${admin.email} creating new service")
@@ -158,7 +158,7 @@ fun Route.serviceCatalogRoute() {
             }
         }
 
-        // GET /admin/services/:id - Get service details with analytics and history
+        // GET /services/:id - Get service details with analytics and history
         get("/{id}") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
 
@@ -196,7 +196,7 @@ fun Route.serviceCatalogRoute() {
             }
         }
 
-        // PUT /admin/services/:id - Update an existing service
+        // PUT /services/:id - Update an existing service
         put("/{id}") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@put
 
@@ -264,7 +264,7 @@ fun Route.serviceCatalogRoute() {
             }
         }
 
-        // PATCH /admin/services/:id/status - Change service status
+        // PATCH /services/:id/status - Change service status
         patch("/{id}/status") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@patch
 
@@ -307,7 +307,7 @@ fun Route.serviceCatalogRoute() {
                     val statusCode = when {
                         result.message.contains("not found", ignoreCase = true) -> HttpStatusCode.NotFound
                         result.message.contains("invalid transition", ignoreCase = true) -> HttpStatusCode.BadRequest
-                        result.message.contains("active subscriptions", ignoreCase = true) -> HttpStatusCode.BadRequest
+                        result.message.contains("active purchases", ignoreCase = true) -> HttpStatusCode.BadRequest
                         result.message.contains("cannot", ignoreCase = true) -> HttpStatusCode.BadRequest
                         else -> HttpStatusCode.InternalServerError
                     }
@@ -316,7 +316,7 @@ fun Route.serviceCatalogRoute() {
             }
         }
 
-        // POST /admin/services/:id/clone - Clone an existing service
+        // POST /services/:id/clone - Clone an existing service
         post("/{id}/clone") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
 
@@ -376,7 +376,7 @@ fun Route.serviceCatalogRoute() {
             }
         }
 
-        // GET /admin/services/:id/analytics - Get service analytics
+        // GET /services/:id/analytics - Get service analytics
         get("/{id}/analytics") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
 

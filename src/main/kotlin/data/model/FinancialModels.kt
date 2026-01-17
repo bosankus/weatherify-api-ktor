@@ -1,7 +1,6 @@
 package bose.ankush.data.model
 
 import kotlinx.serialization.Serializable
-import java.time.LocalDate
 
 /**
  * Financial metrics response for admin dashboard
@@ -10,7 +9,6 @@ import java.time.LocalDate
 data class FinancialMetrics(
     val totalRevenue: Double,
     val monthlyRevenue: Double,
-    val activeSubscriptionsRevenue: Double,
     val totalPaymentsCount: Int,
     val monthlyRevenueChart: List<MonthlyRevenue>,
     // Refund metrics
@@ -71,8 +69,26 @@ data class PaginationInfo(
 data class BillGenerationRequest(
     val userEmail: String,
     val paymentIds: List<String>,
-    val subscriptionIds: List<String>,
     val sendViaEmail: Boolean
+)
+
+/**
+ * Bill types for payment-level bill generation.
+ */
+@Serializable
+enum class BillType {
+    ORIGINAL_BILL,
+    REFUND_ADJUSTMENT_BILL,
+    NET_AMOUNT_BILL,
+    REFUND_RECEIPT
+}
+
+/**
+ * Payment bill generation request.
+ */
+@Serializable
+data class PaymentBillRequest(
+    val billType: BillType
 )
 
 /**
@@ -100,10 +116,9 @@ data class FinancialExportRequest(
  * Export type enum
  */
 @Serializable
+@Suppress("unused")
 enum class ExportType {
-    PAYMENTS,
-    SUBSCRIPTIONS,
-    BOTH
+    PAYMENTS
 }
 
 /**
@@ -113,20 +128,5 @@ enum class ExportType {
 data class UserTransactionsResponse(
     val userEmail: String,
     val userName: String?,
-    val payments: List<PaymentDto>,
-    val subscriptions: List<SubscriptionDto>
-)
-
-/**
- * Subscription DTO for bill generation
- */
-@Serializable
-data class SubscriptionDto(
-    val id: String,
-    val service: String,
-    val startDate: String,
-    val endDate: String,
-    val status: String,
-    val amount: Double?,
-    val currency: String?
+    val payments: List<PaymentDto>
 )

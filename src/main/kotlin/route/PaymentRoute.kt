@@ -6,6 +6,9 @@ import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.SignatureUtil
 import bose.ankush.util.getSecretValue
+import domain.model.Result
+import domain.service.BillService
+import domain.service.NotificationService
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -16,9 +19,14 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
+import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.*
 
 private val paymentLogger = LoggerFactory.getLogger("PaymentRoute")
@@ -73,6 +81,8 @@ private suspend fun fetchRazorpayOrderDetails(
 
 /** Payment routes: create order and verify payment */
 fun Route.paymentRoute() {
+    val billService: BillService by application.inject()
+    val notificationService: NotificationService by application.inject()
     // POST /create-order -> Create Razorpay order server-side
     post(Constants.Api.CREATE_ORDER_ENDPOINT) {
         call.getAuthenticatedUserOrRespond() ?: return@post
@@ -254,8 +264,7 @@ fun Route.paymentRoute() {
             paymentLogger.warn("Could not fetch order details for $orderId, proceeding without amount data")
         }
 
-        // Persist payment and update subscription
-        // Fetch user by email to link payment and update subscriptions
+        // Persist payment and link to user
         val dbUser = try {
             DatabaseFactory.findUserByEmail(userEmail)
         } catch (e: Exception) {
@@ -272,13 +281,8 @@ fun Route.paymentRoute() {
             return@post
         }
 
-        // Determine subscription window using ServiceTypeResolver
-        // Fetch duration from service catalog for dynamic configuration
         val serviceType = ServiceType.PREMIUM_ONE
-        val duration = util.ServiceTypeResolver.getDefaultDurationInSeconds(serviceType) ?: (30L * 24L * 60L * 60L)
-        val nowInstant = java.time.Instant.now()
-        val startDate = nowInstant.toString()
-        val endDate = nowInstant.plusSeconds(duration).toString()
+        val verifiedAt = Instant.now().toString()
 
         // Admin tracking context
         val ip = call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
@@ -290,8 +294,8 @@ fun Route.paymentRoute() {
         // ServiceTypeResolver provides access to full service configuration
         // Resolve service configuration to get pricing details
         val serviceConfig = when (val result = util.ServiceTypeResolver.resolveServiceType(serviceType)) {
-            is domain.model.Result.Success -> result.data
-            is domain.model.Result.Error -> {
+            is Result.Success -> result.data
+            is Result.Error -> {
                 paymentLogger.warn("Could not resolve service configuration for $serviceType: ${result.message}")
                 null
             }
@@ -306,11 +310,9 @@ fun Route.paymentRoute() {
             currency = orderDetails?.currency ?: serviceConfig?.pricingTiers?.firstOrNull()?.currency,
             receipt = orderDetails?.receipt,
             status = "verified",
-            verifiedAt = startDate,
+            verifiedAt = verifiedAt,
             userId = dbUser.id.toHexString(),
             serviceType = serviceType,
-            subscriptionStart = startDate,
-            subscriptionEnd = endDate,
             requestIp = ip,
             userAgent = ua
         )
@@ -334,46 +336,68 @@ fun Route.paymentRoute() {
             return@post
         }
 
-        // Update user's subscription history and active status
-        val updatedExisting = dbUser.subscriptions.map {
-            if (it.status == SubscriptionStatus.ACTIVE) {
-                it.copy(status = SubscriptionStatus.EXPIRED)
-            } else it
-        }
-        // Create new subscription
-        // ServiceType enum is maintained for backward compatibility
-        // ServiceTypeResolver provides access to full service configuration
-        // The subscription uses the resolved duration and service details
-        val newSubscription = Subscription(
-            service = serviceType,
-            startDate = startDate,
-            endDate = endDate,
-            status = SubscriptionStatus.ACTIVE,
-            sourcePaymentId = payment.id
-        )
-        val updatedUser = dbUser.copy(
-            subscriptions = updatedExisting + newSubscription,
-            isPremium = true
-        )
-
-        val userUpdated = try {
-            DatabaseFactory.updateUser(updatedUser)
+        try {
+            when (val emailResult = billService.sendPaymentBillEmail(userEmail, paymentId)) {
+                is Result.Success -> {
+                    val sent = emailResult.data == true
+                    paymentLogger.info("Payment bill email sent to $userEmail: $sent")
+                }
+                is Result.Error -> {
+                    paymentLogger.warn("Failed to send payment bill email to $userEmail: ${emailResult.message}")
+                }
+            }
         } catch (e: Exception) {
-            paymentLogger.error("Failed to update user subscription for user=$userEmail", e)
-            false
+            paymentLogger.warn("Failed to send payment bill email to $userEmail", e)
         }
 
-        if (!userUpdated) {
-            call.respondError(
-                message = "Payment stored but failed to update subscription",
-                data = Unit,
-                status = HttpStatusCode.InternalServerError
-            )
-            return@post
+        try {
+            val fcmToken = dbUser.fcmToken
+            if (!fcmToken.isNullOrBlank()) {
+                val serviceName = serviceConfig?.displayName
+                    ?: payment.serviceType?.name
+                    ?: "Service"
+                val expiryText = serviceConfig?.pricingTiers
+                    ?.firstOrNull { it.isDefault }
+                    ?.let { tier ->
+                        val baseInstant = try {
+                            Instant.parse(payment.verifiedAt ?: payment.createdAt)
+                        } catch (_: Exception) {
+                            Instant.now()
+                        }
+                        val baseDate = ZonedDateTime.ofInstant(baseInstant, ZoneId.systemDefault())
+                        val expiryDate = when (tier.durationType) {
+                            DurationType.DAYS -> baseDate.plusDays(tier.duration.toLong())
+                            DurationType.MONTHS -> baseDate.plusMonths(tier.duration.toLong())
+                            DurationType.YEARS -> baseDate.plusYears(tier.duration.toLong())
+                        }
+                        DateTimeFormatter.ofPattern("MMM dd, yyyy").format(expiryDate)
+                    } ?: "N/A"
+
+                val title = "Subscription activated"
+                val body = "$serviceName subscribed successfully. Expires on $expiryText."
+
+                val notificationResult = notificationService.sendNotification(
+                    token = fcmToken,
+                    title = title,
+                    body = body
+                )
+
+                if (notificationResult.isSuccess) {
+                    paymentLogger.info("Payment push notification sent to $userEmail")
+                } else {
+                    paymentLogger.warn(
+                        "Failed to send payment push notification to $userEmail: ${notificationResult.exceptionOrNull()?.message}"
+                    )
+                }
+            } else {
+                paymentLogger.debug("No FCM token for $userEmail; skipping payment notification")
+            }
+        } catch (e: Exception) {
+            paymentLogger.warn("Failed to send payment push notification to $userEmail", e)
         }
 
         call.respondSuccess(
-            message = "Payment verified, stored and subscription activated",
+            message = "Payment verified and stored",
             data = VerifyPaymentResponse(verified = true),
             status = HttpStatusCode.OK
         )

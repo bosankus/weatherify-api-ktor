@@ -88,6 +88,28 @@ window.UserRoute = window.UserRoute || {
             body: JSON.stringify({ isPremium: !!isPremium })
         });
     },
+    resetPassword(email, newPassword) {
+        const url = `/admin/users/${encodeURIComponent(email)}/reset-password`;
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ newPassword })
+        });
+    },
+    deleteUser(email) {
+        const url = `/admin/users/${encodeURIComponent(email)}`;
+        return fetch(url, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+    },
     notify(email, payload) {
         const url = `/admin/users/${encodeURIComponent(email)}/notify`;
         return fetch(url, {
@@ -106,7 +128,7 @@ window.UserRoute = window.UserRoute || {
  * Call admin endpoint to clear weather cache
  */
 function clearWeatherCache() {
-    return fetch('/admin/cache/clear', {
+    return fetch('/cache/clear', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -125,7 +147,7 @@ function clearWeatherCache() {
 }
 
 function runHealthCheck() {
-    return fetch('/admin/tools/health', {
+    return fetch('/tools/health', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Accept': 'application/json' }
@@ -144,7 +166,7 @@ function runHealthCheck() {
 }
 
 function runWarmup() {
-    return fetch('/admin/tools/warmup', {
+    return fetch('/tools/warmup', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
@@ -176,63 +198,183 @@ function escapeHtml(str){
         .replace(/'/g, '&#039;');
 }
 
-// Ensure modal CSS/HTML and helpers exist for Admin dashboard (mirrors HomeRoute modal UI)
+// Enhanced modal system with accessibility and focus management
+let modalFocusTrap = null;
+let previousActiveElement = null;
+
+// Ensure modal CSS/HTML and helpers exist for Admin dashboard
 function ensureAdminModal(){
     try {
-        // Inject CSS once
-        if (!document.getElementById('admin-modal-style')) {
-            const style = document.createElement('style');
-            style.id = 'admin-modal-style';
-            style.textContent = `
-            .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.8); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); opacity: 0; transition: opacity 0.3s ease; }
-            .modal-content { background: var(--modal-bg, var(--card-bg)); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border: 1px solid var(--modal-border, var(--card-border)); border-radius: 12px; margin: 5% auto; padding: 2rem; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; position: relative; transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s ease; transform: translateY(20px); }
-            .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; position: absolute; right: 1.5rem; top: 1rem; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s ease; user-select: none; }
-            .close:hover, .close:focus { color: #fff; background-color: rgba(255, 255, 255, 0.1); }
-            .modal h2 { color: var(--modal-title, var(--card-title)); margin-bottom: 1.5rem; font-size: 1.75rem; font-weight: 600; }
-            `;
-            document.head.appendChild(style);
+        // Load modal CSS if not already loaded
+        if (!document.getElementById('modal-css-link')) {
+            const link = document.createElement('link');
+            link.id = 'modal-css-link';
+            link.rel = 'stylesheet';
+            link.href = '/web/css/modal.css';
+            document.head.appendChild(link);
         }
-        // Inject HTML once
+        
+        // No fallback CSS needed - using modal.css
+        
+        // Inject HTML once - support both old and new structure
         if (!document.getElementById('apiModal')) {
             const modal = document.createElement('div');
             modal.id = 'apiModal';
             modal.className = 'modal';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            modal.setAttribute('aria-labelledby', 'modalTitle');
+            // Ensure modal is positioned correctly with inline styles as fallback
+            modal.style.cssText = 'display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; overflow-y: auto;';
             modal.innerHTML = `
                 <div class="modal-content">
-                    <span class="close" id="modal-close">×</span>
-                    <h2 id="modalTitle">Details</h2>
-                    <div id="modalContent"></div>
+                    <div class="modal-header" id="modalHeader" style="display: none;">
+                        <div class="modal-title-section">
+                            <h2 class="modal-title" id="modalTitle">Details</h2>
+                            <p class="modal-subtitle" id="modalSubtitle" style="display: none;"></p>
+                        </div>
+                        <button class="modal-close" id="modal-close" aria-label="Close modal" type="button">×</button>
+                    </div>
+                    <div class="modal-body" id="modalContent"></div>
+                    <div class="modal-footer" id="modalFooter" style="display: none;"></div>
+                    <!-- Legacy structure for backward compatibility -->
+                    <span class="close" id="modal-close-legacy" style="display: none;">×</span>
+                    <h2 id="modalTitleLegacy" style="display: none;">Details</h2>
                 </div>
             `;
             document.body.appendChild(modal);
+            
+            // Event listeners
             const closeBtn = modal.querySelector('#modal-close');
+            const closeBtnLegacy = modal.querySelector('#modal-close-legacy');
             if (closeBtn) closeBtn.addEventListener('click', closeModal);
+            if (closeBtnLegacy) closeBtnLegacy.addEventListener('click', closeModal);
             window.addEventListener('click', function(event){ if (event.target === modal) closeModal(); });
         }
     } catch (e) { console.warn('Failed to ensure admin modal', e); }
 }
 
-function showModal(title, content) {
+/**
+ * Show modal with enhanced structure
+ * @param {string} title - Modal title
+ * @param {string} content - Modal content HTML
+ * @param {Object} options - Optional configuration
+ * @param {string} options.subtitle - Optional subtitle
+ * @param {string} options.footer - Optional footer HTML
+ * @param {string} options.size - Modal size: 'default', 'large', 'extra-large'
+ * @param {boolean} options.useLegacy - Use legacy structure (default: false)
+ */
+function showModal(title, content, options = {}) {
     try {
         ensureAdminModal();
         const modal = document.getElementById('apiModal');
-        const modalTitle = document.getElementById('modalTitle');
         const modalContent = document.getElementById('modalContent');
         const modalContentDiv = modal ? modal.querySelector('.modal-content') : null;
-        if (!modal || !modalTitle || !modalContent || !modalContentDiv) return;
-        modalTitle.textContent = title;
-        modalContent.innerHTML = content;
-        modal.style.opacity = '0';
-        modalContentDiv.style.transform = 'translateY(20px)';
-        modal.style.display = 'block';
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                modal.style.opacity = '1';
-                modalContentDiv.style.transform = 'translateY(0)';
-            });
-        });
+        if (!modal || !modalContent || !modalContentDiv) return;
+        
+        // Handle modal size
+        modalContentDiv.classList.remove('modal-large', 'modal-extra-large');
+        if (options.size === 'large') {
+            modalContentDiv.classList.add('modal-large');
+        } else if (options.size === 'extra-large') {
+            modalContentDiv.classList.add('modal-extra-large');
+        }
+        
+        // Determine if we should use legacy mode
+        // Use legacy only if explicitly requested AND no subtitle/footer provided
+        const useLegacy = options.useLegacy === true && !options.subtitle && !options.footer;
+        
+        if (useLegacy) {
+            // Legacy structure for backward compatibility
+            const modalTitleLegacy = document.getElementById('modalTitleLegacy');
+            const closeBtnLegacy = modal.querySelector('#modal-close-legacy');
+            const modalHeader = document.getElementById('modalHeader');
+            const modalFooter = document.getElementById('modalFooter');
+            
+            if (modalTitleLegacy) {
+                modalTitleLegacy.textContent = title;
+                modalTitleLegacy.style.display = 'block';
+            }
+            if (closeBtnLegacy) closeBtnLegacy.style.display = 'block';
+            if (modalHeader) modalHeader.style.display = 'none';
+            if (modalFooter) modalFooter.style.display = 'none';
+            
+            modalContent.innerHTML = content;
+        } else {
+            // New enhanced structure
+            const modalTitle = document.getElementById('modalTitle');
+            const modalSubtitle = document.getElementById('modalSubtitle');
+            const modalHeader = document.getElementById('modalHeader');
+            const modalFooter = document.getElementById('modalFooter');
+            const modalTitleLegacy = document.getElementById('modalTitleLegacy');
+            const closeBtnLegacy = modal.querySelector('#modal-close-legacy');
+            
+            if (modalTitle) modalTitle.textContent = title;
+            if (modalSubtitle) {
+                if (options.subtitle) {
+                    modalSubtitle.textContent = options.subtitle;
+                    modalSubtitle.style.display = 'block';
+                } else {
+                    modalSubtitle.style.display = 'none';
+                }
+            }
+            if (modalHeader) modalHeader.style.display = 'flex';
+            if (modalFooter) {
+                if (options.footer) {
+                    modalFooter.innerHTML = options.footer;
+                    modalFooter.style.display = 'flex';
+                } else {
+                    // Hide footer initially
+                    modalFooter.style.display = 'none';
+                }
+            }
+            if (modalTitleLegacy) modalTitleLegacy.style.display = 'none';
+            if (closeBtnLegacy) closeBtnLegacy.style.display = 'none';
+            
+            modalContent.innerHTML = content;
+        }
+        
+        // Store previous active element for focus restoration
+        previousActiveElement = document.activeElement;
+        
+        // Reset any previous inline styles that might interfere
+        modal.style.opacity = '';
+        modalContentDiv.style.transform = '';
+        modalContentDiv.style.opacity = '';
+        
+        // Ensure modal is positioned correctly
+        modal.style.position = 'fixed';
+        modal.style.zIndex = '10000';
+        modal.style.left = '0';
+        modal.style.top = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+        
+        // Force reflow to ensure display:flex is applied before adding active class
+        void modal.offsetHeight;
+        
+        // Add active class to trigger CSS transitions
+        modal.classList.add('active');
+        
         document.body.style.overflow = 'hidden';
         document.addEventListener('keydown', handleEscKey);
+        
+        // Setup focus trap
+        setupFocusTrap(modal);
+        
+        // Focus first focusable element
+        setTimeout(() => {
+            const firstFocusable = modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (firstFocusable) {
+                firstFocusable.focus();
+            } else {
+                const closeBtn = modal.querySelector('#modal-close, #modal-close-legacy');
+                if (closeBtn) closeBtn.focus();
+            }
+        }, 100);
     } catch (e) { console.error('Error showing modal', e); }
 }
 
@@ -241,17 +383,84 @@ function closeModal() {
         const modal = document.getElementById('apiModal');
         const modalContentDiv = modal ? modal.querySelector('.modal-content') : null;
         if (!modal || !modalContentDiv) return;
-        const transitionDuration = (typeof getTransitionDuration === 'function') ? getTransitionDuration(modal) : 300;
+        
+        // Remove focus trap
+        removeFocusTrap();
+        
+        // Hide modal with animation
         requestAnimationFrame(() => {
             modal.style.opacity = '0';
-            modalContentDiv.style.transform = 'translateY(20px)';
-            setTimeout(() => { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }, transitionDuration);
+            modalContentDiv.style.transform = 'translateY(30px) scale(0.96)';
+            modalContentDiv.style.opacity = '0';
+            setTimeout(() => {
+                modal.style.display = 'none';
+                modal.classList.remove('active');
+                // Reset all inline styles
+                modal.style.opacity = '';
+                modalContentDiv.style.opacity = '';
+                modalContentDiv.style.transform = '';
+                document.body.style.overflow = 'auto';
+            }, 300);
         });
+        
         document.removeEventListener('keydown', handleEscKey);
+        
+        // Restore focus to previous element
+        if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
+            try {
+                previousActiveElement.focus();
+            } catch (e) {
+                // Element might not be focusable anymore
+            }
+        }
+        previousActiveElement = null;
     } catch (e) { console.error('Error closing modal', e); }
 }
 
-function handleEscKey(event) { if (event.key === 'Escape') closeModal(); }
+function handleEscKey(event) {
+    if (event.key === 'Escape') {
+        const modal = document.getElementById('apiModal');
+        if (modal && modal.classList.contains('active')) {
+            closeModal();
+        }
+    }
+}
+
+// Focus trap management for accessibility
+function setupFocusTrap(modal) {
+    const focusableElements = modal.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+    
+    function trapFocus(e) {
+        if (e.key !== 'Tab') return;
+        
+        if (e.shiftKey) {
+            if (document.activeElement === firstFocusable) {
+                e.preventDefault();
+                lastFocusable.focus();
+            }
+        } else {
+            if (document.activeElement === lastFocusable) {
+                e.preventDefault();
+                firstFocusable.focus();
+            }
+        }
+    }
+    
+    modalFocusTrap = trapFocus;
+    modal.addEventListener('keydown', trapFocus);
+}
+
+function removeFocusTrap() {
+    const modal = document.getElementById('apiModal');
+    if (modal && modalFocusTrap) {
+        modal.removeEventListener('keydown', modalFocusTrap);
+        modalFocusTrap = null;
+    }
+}
 
 function buildHealthHtml(data){
     const badge = (b) => b ? '<span style="color:#10b981;font-weight:600;">OK</span>' : '<span style="color:#ef4444;font-weight:600;">FAIL</span>';
@@ -314,7 +523,7 @@ function initializeAdmin() {
         // Initialize shared header component
         if (typeof initializeHeader === 'function') {
             initializeHeader({
-                homeUrl: '/admin',
+                homeUrl: '/',
                 subtitle: 'ADMIN PORTAL',
                 actions: [ { type: 'theme-toggle' }, { type: 'user-info' }, { type: 'logout' } ]
             });
@@ -437,13 +646,20 @@ function initializeAdmin() {
         try {
             const iamPanel = document.getElementById('iam');
             const tbody = document.getElementById('users-table-body');
-            if (iamPanel && tbody && !window.__iamLoadedOnce) {
-                const hasRows = Array.isArray(tbody.rows) ? tbody.rows.length > 0 : tbody.children.length > 0;
-                if (!hasRows && typeof loadUsers === 'function') {
+        if (iamPanel && tbody && !window.__iamLoadedOnce) {
+            const hasRows = Array.isArray(tbody.rows) ? tbody.rows.length > 0 : tbody.children.length > 0;
+            if (!hasRows) {
+                if (window.UsersModule && typeof window.UsersModule.loadUsers === 'function') {
+                    window.__iamLoadedOnce = true;
+                    window.UsersModule.loadUsers(1, 10);
+                    return;
+                }
+                if (typeof loadUsers === 'function') {
                     window.__iamLoadedOnce = true;
                     loadUsers(1, 10);
                 }
             }
+        }
         } catch (e) {
             console.warn('IAM initial load guard failed:', e);
         }
@@ -461,6 +677,9 @@ function initializeAdmin() {
  * @param {number} pageSize - The number of users per page
  */
 function loadUsers(page, pageSize) {
+    if (window.UsersModule && typeof window.UsersModule.loadUsers === 'function') {
+        return window.UsersModule.loadUsers(page, pageSize);
+    }
     // Show inline loader only (avoid layout shift and flicker)
     try {
         const loader = document.getElementById('iam-loader');
@@ -488,6 +707,14 @@ function loadUsers(page, pageSize) {
             totalPages = pagination.totalPages;
             totalUsers = pagination.totalCount;
 
+            // Update table meta
+            try {
+                const meta = document.getElementById('users-table-meta');
+                if (meta) {
+                    meta.textContent = `${totalUsers} users · Page ${currentPage} of ${totalPages}`;
+                }
+            } catch (e) { /* ignore */ }
+
             // Render users table
             renderUsersTable(users);
 
@@ -505,7 +732,7 @@ function loadUsers(page, pageSize) {
             // If error is due to authentication, redirect to login
             if (error.message.includes('permission') || error.message.includes('authentication')) {
                 setTimeout(() => {
-                    window.location.href = '/admin/login?error=auth_required';
+                    window.location.href = '/login?error=auth_required';
                 }, 2000);
             }
         });
@@ -516,6 +743,11 @@ function loadUsers(page, pageSize) {
  * @param {Array} users - The array of users to display
  */
 function renderUsersTable(users) {
+    if (window.UsersModule && window.UsersModule.state && typeof window.UsersModule.applyFilters === 'function') {
+        window.UsersModule.state.users = Array.isArray(users) ? users : [];
+        window.UsersModule.applyFilters();
+        return;
+    }
     const tableBody = document.getElementById('users-table-body');
     const fragment = document.createDocumentFragment();
 
@@ -523,8 +755,7 @@ function renderUsersTable(users) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
         cell.colSpan = 6;
-        cell.textContent = 'No users found';
-        cell.style.textAlign = 'center';
+        cell.innerHTML = '<div class="users-cell-muted" style="padding: 1.25rem; text-align: center;">No users found</div>';
         row.appendChild(cell);
         fragment.appendChild(row);
         tableBody.replaceChildren(fragment);
@@ -534,29 +765,24 @@ function renderUsersTable(users) {
     users.forEach(user => {
         const row = document.createElement('tr');
 
-        // Email cell with badges
+        // User cell with email
         const emailCell = document.createElement('td');
-        const emailText = document.createElement('span');
-        emailText.textContent = user.email;
-        emailCell.appendChild(emailText);
+        const userCell = document.createElement('div');
+        userCell.className = 'users-cell-user';
 
-        if (user.role === 'ADMIN') {
-            const adminBadge = document.createElement('span');
-            adminBadge.className = 'badge badge-admin';
-            adminBadge.textContent = 'ADMIN';
-            emailCell.appendChild(adminBadge);
-        }
-        if (user.isPremium === true) {
-            const premiumBadge = document.createElement('span');
-            premiumBadge.className = 'badge badge-premium';
-            premiumBadge.textContent = 'PREMIUM';
-            emailCell.appendChild(premiumBadge);
-        }
+        const emailText = document.createElement('div');
+        emailText.className = 'users-cell-email';
+        emailText.textContent = user.email;
+        userCell.appendChild(emailText);
+
+        emailCell.appendChild(userCell);
         row.appendChild(emailCell);
 
         // Created at cell
         const createdAtCell = document.createElement('td');
-        createdAtCell.textContent = formatDate(user.createdAt);
+        const createdText = document.createElement('div');
+        createdText.textContent = formatDate(user.createdAt);
+        createdAtCell.appendChild(createdText);
         row.appendChild(createdAtCell);
 
         // Role cell
@@ -888,8 +1114,7 @@ function ensureCheckboxStyles() {
         }
 
         /* Larger checkboxes for specific contexts */
-        .payment-checkbox,
-        .subscription-checkbox {
+        .payment-checkbox {
             width: 20px;
             height: 20px;
         }
@@ -1493,8 +1718,31 @@ function bindJwtInspectorModal(){
 
         /**
          * Update filtered users based on current time range
+         * Handles both preset time ranges and custom date ranges
          */
         updateFilteredUsers() {
+            if (!Array.isArray(ReportsState.users)) {
+                ReportsState.filteredUsers = [];
+                return;
+            }
+            
+            // Handle custom date range
+            if (ReportsState.timeRange === 'custom' && ReportsState.customStart && ReportsState.customEnd) {
+                const start = parseDateSafe(ReportsState.customStart);
+                const end = parseDateSafe(ReportsState.customEnd);
+                
+                if (start && end) {
+                    ReportsState.filteredUsers = ReportsState.users.filter(user => {
+                        const createdAt = parseDateSafe(user.createdAt);
+                        return createdAt && createdAt >= start && createdAt <= endOfDay(end);
+                    });
+                } else {
+                    ReportsState.filteredUsers = [];
+                }
+                return;
+            }
+            
+            // Handle preset time ranges
             const days = parseInt(ReportsState.timeRange, 10) || 30;
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - days);
@@ -1847,6 +2095,7 @@ function bindJwtInspectorModal(){
             const kpis = calculateKPIs(ReportsState.users, users, days);
             
             // Update DOM elements with calculated KPIs
+            const elTotal = q('kpi-total-users');
             const elNew = q('kpi-new-users');
             const elAct = q('kpi-active-rate');
             const elAdm = q('kpi-admins');
@@ -1854,13 +2103,32 @@ function bindJwtInspectorModal(){
             const elGrowth = q('kpi-growth-rate');
             const elRetention = q('kpi-retention-rate');
             
-            if (elNew) elNew.textContent = String(kpis.newUsers);
-            if (elAct) elAct.textContent = kpis.activeRate;
-            if (elAdm) elAdm.textContent = String(kpis.adminUsers);
-            if (elPre) elPre.textContent = String(kpis.premiumUsers);
-            if (elGrowth) elGrowth.textContent = kpis.growthRate;
-            if (elRetention) elRetention.textContent = kpis.retentionRate;
-        } catch(e) { console.warn('Failed to update KPIs', e); }
+            // Update all KPI elements with proper null checks
+            if (elTotal) elTotal.textContent = String(kpis.totalUsers || 0);
+            if (elNew) elNew.textContent = String(kpis.newUsers || 0);
+            if (elAct) elAct.textContent = kpis.activeRate || '0%';
+            if (elAdm) elAdm.textContent = String(kpis.adminUsers || 0);
+            if (elPre) elPre.textContent = String(kpis.premiumUsers || 0);
+            if (elGrowth) elGrowth.textContent = kpis.growthRate || '0%';
+            if (elRetention) elRetention.textContent = kpis.retentionRate || '0%';
+            
+            console.log('KPIs updated:', kpis);
+        } catch(e) { 
+            console.error('Failed to update KPIs', e);
+            // Set fallback values on error
+            const elTotal = q('kpi-total-users');
+            const elNew = q('kpi-new-users');
+            const elAct = q('kpi-active-rate');
+            const elPre = q('kpi-premium');
+            const elGrowth = q('kpi-growth-rate');
+            const elRetention = q('kpi-retention-rate');
+            if (elTotal) elTotal.textContent = '—';
+            if (elNew) elNew.textContent = '—';
+            if (elAct) elAct.textContent = '—';
+            if (elPre) elPre.textContent = '—';
+            if (elGrowth) elGrowth.textContent = '—';
+            if (elRetention) elRetention.textContent = '—';
+        }
     }
 
     function lineColor(){ return '#6366f1'; }
@@ -1889,18 +2157,54 @@ function bindJwtInspectorModal(){
     function renderChart(series){
         const canvas = q('reports-chart');
         const empty = q('reports-empty');
-        if (!canvas) return;
-        const hasData = series.data.some(v => v > 0);
-        if (!hasData) {
-            if (empty) { empty.classList.remove('hidden'); empty.classList.add('visible'); }
-        } else {
-            if (empty) { empty.classList.add('hidden'); empty.classList.remove('visible'); }
-        }
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js not available');
-            if (empty) { empty.classList.remove('hidden'); empty.classList.add('visible'); empty.textContent = 'Chart library not available'; }
+        const chartsContainer = q('reports-charts-container');
+        
+        if (!canvas) {
+            console.warn('Chart canvas not found');
             return;
         }
+        
+        // Validate series data
+        if (!series || !Array.isArray(series.data) || !Array.isArray(series.labels)) {
+            console.warn('Invalid series data provided to renderChart');
+            if (empty) {
+                empty.textContent = 'Invalid chart data';
+                empty.classList.remove('hidden');
+                empty.classList.add('visible');
+            }
+            return;
+        }
+        
+        const hasData = series.data.some(v => v > 0);
+        
+        if (!hasData) {
+            // No data in the selected range - show empty state message
+            if (empty) {
+                empty.textContent = 'No user registrations in the selected time range';
+                empty.classList.remove('hidden');
+                empty.classList.add('visible');
+            }
+            // Still destroy any existing chart
+            destroyChart();
+            return;
+        }
+        
+        // Hide empty state when we have data
+        if (empty) {
+            empty.classList.add('hidden');
+            empty.classList.remove('visible');
+        }
+        
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js not available');
+            if (empty) {
+                empty.textContent = 'Chart library not available';
+                empty.classList.remove('hidden');
+                empty.classList.add('visible');
+            }
+            return;
+        }
+        
         destroyChart();
         const ctx = canvas.getContext('2d');
         
@@ -2085,7 +2389,9 @@ function bindJwtInspectorModal(){
         const errorBanner = q('reports-error-banner');
         if (errorBanner) {
             errorBanner.style.display = 'none';
-            errorBanner.innerHTML = '';
+            if (errorBanner.innerHTML !== undefined) {
+                errorBanner.innerHTML = '';
+            }
         }
     }
 
@@ -2120,7 +2426,7 @@ function bindJwtInspectorModal(){
             empty.classList.add('visible');
             
             // Add icon based on type
-            if (type === 'no-data') {
+            if (type === 'no-data' && empty) {
                 empty.innerHTML = `
                     <div style="text-align: center; padding: 3rem 1rem;">
                         <div style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 1rem;">📊</div>
@@ -2128,7 +2434,7 @@ function bindJwtInspectorModal(){
                         <div style="color: var(--text-secondary);">${message}</div>
                     </div>
                 `;
-            } else if (type === 'no-results') {
+            } else if (type === 'no-results' && empty) {
                 empty.innerHTML = `
                     <div style="text-align: center; padding: 3rem 1rem;">
                         <div style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 1rem;">🔍</div>
@@ -2179,26 +2485,67 @@ function bindJwtInspectorModal(){
     }
 
     function render(){
-        const days = getRangeDays();
-        const series = aggregateDaily(ReportsState.filteredUsers, days);
+        // Show loading state if data is being fetched
+        if (ReportsState.isLoading) {
+            const empty = q('reports-empty');
+            if (empty) {
+                empty.textContent = 'Loading report data...';
+                empty.classList.remove('hidden');
+                empty.classList.add('visible');
+            }
+            return;
+        }
         
-        // Check for errors first
+        const days = getRangeDays();
+        
+        // Check for errors first - differentiate between API errors and no data
         if (ReportsState.error) {
+            // API error - show error banner with retry option
             showErrorBanner(ReportsState.error, true);
-            // Don't return - still try to render what we have
+            // Still try to render what we have if available
+            if (!ReportsState.users || ReportsState.users.length === 0) {
+                // No cached data, show error state
+                const empty = q('reports-empty');
+                if (empty) {
+                    empty.innerHTML = `
+                        <div style="text-align: center; padding: 3rem 1rem;">
+                            <div style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 1rem;">⚠️</div>
+                            <div style="font-size: 1.25rem; font-weight: 600; color: var(--text-color); margin-bottom: 0.5rem;">Error Loading Data</div>
+                            <div style="color: var(--text-secondary); margin-bottom: 1rem;">${escapeHtml(ReportsState.error)}</div>
+                            <button id="reports-error-retry-btn" class="btn btn-primary" style="margin-top: 1rem;">Retry</button>
+                        </div>
+                    `;
+                    empty.classList.remove('hidden');
+                    empty.classList.add('visible');
+                    
+                    // Bind retry button
+                    setTimeout(() => {
+                        const retryBtn = q('reports-error-retry-btn');
+                        if (retryBtn) {
+                            retryBtn.addEventListener('click', function() {
+                                refreshReports();
+                            });
+                        }
+                    }, 0);
+                }
+                return;
+            }
         } else {
             hideErrorBanner();
         }
         
-        // Check for empty states
+        // Check for empty states - differentiate between no data vs no results in range
         if (!ReportsState.users || ReportsState.users.length === 0) {
-            // No users exist at all
+            // No users exist at all - this is a valid "no data" state, not an error
             showEmptyState('No users have been registered yet. Users will appear here once they sign up.', 'no-data');
             return;
         }
         
+        // Ensure filteredUsers is up to date
+        ReportsStateManager.updateFilteredUsers();
+        
         if (!ReportsState.filteredUsers || ReportsState.filteredUsers.length === 0) {
-            // No users in the selected time range
+            // No users in the selected time range - this is a valid "no results" state
             const rangeText = days === 'custom' ? 'the selected date range' : `the last ${days} days`;
             showEmptyState(`No users found in ${rangeText}. Try selecting a different time range.`, 'no-results');
             return;
@@ -2207,10 +2554,25 @@ function bindJwtInspectorModal(){
         // Hide empty state and show data
         hideEmptyState();
         
+        // Generate chart data
+        const series = aggregateDaily(ReportsState.filteredUsers, days);
+        
+        // Update KPIs with all users (for total counts) and filtered users (for period-specific metrics)
         updateKpis(ReportsState.filteredUsers, days, series);
+        
+        // Render charts
         renderChart(series);
         renderRoleChart();
         renderActiveInactiveChart();
+        
+        // Also trigger financial trends chart refresh if module is available
+        if (window.ReportsChartsModule && typeof window.ReportsChartsModule.loadFinancialTrendsChart === 'function') {
+            try {
+                window.ReportsChartsModule.loadFinancialTrendsChart();
+            } catch (e) {
+                console.warn('Failed to load financial trends chart:', e);
+            }
+        }
     }
 
     // ================= Additional Chart Functions =================
@@ -2525,7 +2887,7 @@ function bindJwtInspectorModal(){
 
     /**
      * Fetch all users with pagination support
-     * Implements loop to fetch all user pages from `/admin/users` endpoint
+     * Implements loop to fetch all user pages from `/users` endpoint
      * Handles API errors and displays appropriate error messages
      * Stores fetched data in ReportsState
      * Implements data caching for 5 minutes to reduce API calls
@@ -3128,18 +3490,28 @@ function bindJwtInspectorModal(){
      */
     function updateLastUpdatedTimestamp() {
         const timestampEl = q('reports-last-updated');
-        if (timestampEl && ReportsState.lastUpdated) {
+        if (timestampEl) {
             try {
-                const date = new Date(ReportsState.lastUpdated);
+                // Use lastUpdated from state, or current time if not set
+                const timestamp = ReportsState.lastUpdated || Date.now();
+                const date = new Date(timestamp);
+                
+                // Validate date
+                if (isNaN(date.getTime())) {
+                    timestampEl.textContent = 'Last updated: Never';
+                    return;
+                }
+                
                 const timeStr = date.toLocaleTimeString(undefined, { 
                     hour: '2-digit', 
-                    minute: '2-digit' 
+                    minute: '2-digit',
+                    hour12: true
                 });
                 const dateStr = date.toLocaleDateString(undefined, { 
                     month: 'short', 
                     day: 'numeric' 
                 });
-                timestampEl.textContent = `Last updated: ${dateStr} at ${timeStr}`;
+                timestampEl.textContent = `Last updated: ${dateStr} ${timeStr}`;
             } catch (e) {
                 console.warn('Failed to format timestamp:', e);
                 timestampEl.textContent = 'Last updated: Just now';
@@ -3160,17 +3532,30 @@ function bindJwtInspectorModal(){
         if (refreshBtn) refreshBtn.disabled = true;
         if (refreshSpinner) refreshSpinner.style.display = 'inline-block';
         
+        // Set loading state
+        ReportsStateManager.setLoading(true);
+        
         // Clear error state
         ReportsStateManager.clearError();
+        hideErrorBanner();
+        
+        // Show loading message
+        const empty = q('reports-empty');
+        if (empty) {
+            empty.textContent = 'Refreshing report data...';
+            empty.classList.remove('hidden');
+            empty.classList.add('visible');
+        }
         
         // Re-fetch all users with forceRefresh=true to bypass cache
         fetchAllUsers(true)
             .then(() => {
+                // Update timestamp immediately after successful fetch
+                ReportsStateManager.setUsers(ReportsState.users); // This updates lastUpdated
+                updateLastUpdatedTimestamp();
+                
                 // Re-render the reports
                 render();
-                
-                // Update timestamp
-                updateLastUpdatedTimestamp();
                 
                 // Show success notification
                 try {
@@ -3182,6 +3567,12 @@ function bindJwtInspectorModal(){
             .catch(err => {
                 console.error('Failed to refresh reports:', err);
                 
+                // Update timestamp even on error (to show when last attempt was made)
+                updateLastUpdatedTimestamp();
+                
+                // Re-render to show error state
+                render();
+                
                 // Show error notification
                 try {
                     showMessage('error', ReportsState.error || 'Failed to refresh reports');
@@ -3191,6 +3582,7 @@ function bindJwtInspectorModal(){
             })
             .finally(() => {
                 // Hide loading indicator
+                ReportsStateManager.setLoading(false);
                 if (refreshBtn) refreshBtn.disabled = false;
                 if (refreshSpinner) refreshSpinner.style.display = 'none';
             });
@@ -3732,11 +4124,9 @@ function createActionsCell(user){
         closeAllOverflowMenus();
         try {
             const email = user.email;
-            const content = buildSendNotificationContent(email);
-            showModal('Send Promotional Notification', content);
-            bindSendNotificationModal(email);
+            showNotificationPanel(email);
         } catch (err) {
-            console.error('Failed to open notification modal', err);
+            console.error('Failed to open notification panel', err);
             try { showErrorMessage('Failed to open notification dialog'); } catch(_){}
         }
     });
@@ -3796,682 +4186,818 @@ function createActionsCell(user){
     return td;
 }
 
-function sendPromotionalNotification(email){
-    const payload = { title: 'Promotion', body: 'Enjoy new features in our app!' };
-    return window.UserRoute.notify(email, payload)
-        .then(response => {
-            if (!response.ok) {
-                return response.json().catch(() => ({})).then(data => {
-                    const msg = (data && data.message) || 'Failed to send notification';
-                    throw new Error(msg);
-                });
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data && data.status === true) {
-                showSuccessMessage('Notification sent successfully');
-            } else {
-                throw new Error((data && data.message) || 'Failed to send notification');
-            }
-        })
-        .catch(err => {
-            showErrorMessage(err.message || 'Failed to send notification');
-        });
-}
 
 
-// ===== Send Promotional Notification Modal =====
-function buildSendNotificationContent(email){
+// ===== Elegant Notification Panel =====
+function showNotificationPanel(email) {
     try { email = String(email || ''); } catch(_) { email = ''; }
-    return [
-        '<div style="display:grid; gap:10px">',
-        `<div class="message info-message">Send a promotional push notification to <strong>${escapeHtml(email)}</strong>.</div>`,
-        '<div style="display:grid; gap:6px">',
-        '<label for="notif-title" style="color:var(--text-secondary)">Title</label>',
-        '<input id="notif-title" class="form-control" type="text" placeholder="Promotion" />',
-        '</div>',
-        '<div style="display:grid; gap:6px">',
-        '<label for="notif-body" style="color:var(--text-secondary)">Body</label>',
-        '<textarea id="notif-body" class="form-control" rows="4" placeholder="Write your message"></textarea>',
-        '</div>',
-        '<div id="notif-error" class="message error-message" style="display:none"></div>',
-        '<div style="display:flex; gap:8px; align-items:center">',
-        '<button id="notif-send-btn" class="btn btn-primary">Send</button>',
-        '<button id="notif-cancel-btn" class="btn btn-secondary">Cancel</button>',
-        '</div>',
-        '</div>'
-    ].join('');
-}
-
-function bindSendNotificationModal(email){
-    const titleEl = document.getElementById('notif-title');
-    const bodyEl = document.getElementById('notif-body');
-    const sendBtn = document.getElementById('notif-send-btn');
-    const cancelBtn = document.getElementById('notif-cancel-btn');
-    const errEl = document.getElementById('notif-error');
-    if (!sendBtn || !cancelBtn || !bodyEl) return;
-
-    // Pre-fill recommended default title
-    try { if (titleEl && !titleEl.value) titleEl.value = 'Promotion'; } catch(_){}
-
-    function showErr(msg){ if (errEl){ errEl.textContent = msg || 'Error'; errEl.style.display = 'block'; } }
-    function clearErr(){ if (errEl){ errEl.textContent = ''; errEl.style.display = 'none'; } }
-
-    cancelBtn.addEventListener('click', function(){ closeModal(); });
-
-    sendBtn.addEventListener('click', function(){
-        clearErr();
-        const title = (titleEl && typeof titleEl.value === 'string' && titleEl.value.trim()) ? titleEl.value.trim() : 'Promotion';
-        const body = (bodyEl && typeof bodyEl.value === 'string') ? bodyEl.value.trim() : '';
-        if (!body) { showErr('Body is required'); return; }
-        sendBtn.disabled = true;
-        const prevText = sendBtn.textContent;
-        sendBtn.textContent = 'Sending...';
-        window.UserRoute.notify(email, { title, body })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().catch(() => ({})).then(data => {
-                        const msg = (data && data.message) || 'Failed to send notification';
-                        throw new Error(msg);
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data && data.status === true) {
-                    try { showMessage('success', 'Notification sent successfully'); } catch(_) {}
-                    closeModal();
-                } else {
-                    throw new Error((data && data.message) || 'Failed to send notification');
-                }
-            })
-            .catch(err => {
-                showErr(err && err.message ? err.message : 'Failed to send notification');
-            })
-            .finally(() => {
-                sendBtn.disabled = false;
-                sendBtn.textContent = prevText || 'Send';
-            });
-    });
-}
-// ===== End Send Promotional Notification Modal =====
-
-
-// ================= Subscriptions Management =================
-(function(){
-    const state = {
-        initialized: false,
-        currentPage: 1,
-        pageSize: 10,
-        totalPages: 1,
-        totalCount: 0,
-        statusFilter: ''
-    };
-
-    function q(id){ return document.getElementById(id); }
-
-    /**
-     * Load subscriptions from the API with pagination and filtering
-     * @param {number} page - The page number to load
-     * @param {number} pageSize - The number of subscriptions per page
-     * @param {string} statusFilter - Optional status filter (ACTIVE, EXPIRED, CANCELLED, GRACE_PERIOD)
-     */
-    function loadSubscriptions(page, pageSize, statusFilter) {
-        page = page || 1;
-        pageSize = pageSize || 10;
-        statusFilter = statusFilter || '';
-
-        // Show loader
-        const loader = q('subscriptions-loader');
-        if (loader) loader.style.display = 'block';
-
-        // Build URL with query parameters
-        let url = `/admin/subscriptions?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
-        if (statusFilter) {
-            url += `&status=${encodeURIComponent(statusFilter)}`;
-        }
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'application/json' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        fetch(url, {
-            method: 'GET',
-            credentials: 'include',
-            headers
-        })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access subscriptions');
-                }
-                throw new Error('Failed to load subscriptions');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading subscriptions');
-            }
-
-            const data = payload.data;
-            const subscriptions = Array.isArray(data.subscriptions) ? data.subscriptions : [];
-
-            // Update state
-            state.currentPage = data.page || page;
-            state.pageSize = data.pageSize || pageSize;
-            state.totalPages = data.totalPages || 1;
-            state.totalCount = data.totalCount || 0;
-            state.statusFilter = statusFilter;
-
-            // Hide loader
-            if (loader) loader.style.display = 'none';
-
-            // Render subscriptions table
-            renderSubscriptionsTable(subscriptions);
-
-            // Render pagination
-            renderSubscriptionsPagination();
-
-            console.log('Loaded subscriptions:', subscriptions);
-        })
-        .catch(error => {
-            console.error('Error loading subscriptions:', error);
-            if (loader) loader.style.display = 'none';
-            showErrorMessage(error.message || 'Failed to load subscriptions');
-
-            // If error is due to authentication, redirect to login
-            if (error.message.includes('permission') || error.message.includes('authentication')) {
-                setTimeout(() => {
-                    window.location.href = '/admin/login?error=auth_required';
-                }, 2000);
-            }
-        });
+    
+    // Remove existing panel/backdrop if any
+    const existingPanel = document.getElementById('notification-panel');
+    if (existingPanel) {
+        existingPanel.remove();
     }
-
-    /**
-     * Load subscription analytics
-     */
-    function loadSubscriptionAnalytics() {
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'application/json' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        fetch('/admin/subscriptions/analytics', {
-            method: 'GET',
-            credentials: 'include',
-            headers
-        })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access analytics');
-                }
-                throw new Error('Failed to load analytics');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading analytics');
-            }
-
-            const analytics = payload.data;
-
-            // Update analytics cards
-            const statActive = q('stat-active');
-            const statRevenue = q('stat-revenue');
-            const statExpired = q('stat-expired');
-            const statCancelled = q('stat-cancelled');
-
-            if (statActive) statActive.textContent = analytics.totalActive || '0';
-            if (statRevenue) {
-                // Revenue is already in rupees from backend (converted from paise)
-                const revenue = Number(analytics.totalRevenue || 0);
-                statRevenue.textContent = '₹' + revenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            }
-            if (statExpired) statExpired.textContent = analytics.totalExpired || '0';
-            if (statCancelled) statCancelled.textContent = analytics.totalCancelled || '0';
-
-            console.log('Loaded analytics:', analytics);
-        })
-        .catch(error => {
-            console.error('Error loading analytics:', error);
-            showErrorMessage(error.message || 'Failed to load analytics');
-        });
+    const existingBackdrop = document.getElementById('notification-backdrop');
+    if (existingBackdrop) {
+        existingBackdrop.remove();
     }
-
-    /**
-     * Render the subscriptions table
-     * @param {Array} subscriptions - Array of subscription objects
-     */
-    function renderSubscriptionsTable(subscriptions) {
-        const tableBody = q('subscriptions-table-body');
-        if (!tableBody) return;
-
-        const fragment = document.createDocumentFragment();
-
-        if (subscriptions.length === 0) {
-            const row = document.createElement('tr');
-            const cell = document.createElement('td');
-            cell.colSpan = 8;
-            cell.textContent = 'No subscriptions found';
-            cell.style.textAlign = 'center';
-            row.appendChild(cell);
-            fragment.appendChild(row);
-            tableBody.replaceChildren(fragment);
-            return;
-        }
-
-        console.log('[Subscriptions] Rendering', subscriptions.length, 'subscriptions');
-        subscriptions.forEach(sub => {
-            console.log('[Subscriptions] Subscription data:', {
-                userEmail: sub.userEmail,
-                paymentId: sub.paymentId,
-                amount: sub.amount,
-                status: sub.status,
-                hasPaymentId: !!sub.paymentId
-            });
-            
-            const row = document.createElement('tr');
-
-            // User Email
-            const emailCell = document.createElement('td');
-            emailCell.textContent = sub.userEmail || 'N/A';
-            row.appendChild(emailCell);
-
-            // Service
-            const serviceCell = document.createElement('td');
-            serviceCell.textContent = sub.service || 'N/A';
-            row.appendChild(serviceCell);
-
-            // Start Date
-            const startCell = document.createElement('td');
-            startCell.textContent = formatDate(sub.startDate);
-            row.appendChild(startCell);
-
-            // End Date
-            const endCell = document.createElement('td');
-            endCell.textContent = formatDate(sub.endDate);
-            row.appendChild(endCell);
-
-            // Status as plain text
-            const statusCell = document.createElement('td');
-            const status = sub.status || 'UNKNOWN';
-            statusCell.textContent = status.replace('_', ' ');
-            statusCell.style.textAlign = 'center';
-            row.appendChild(statusCell);
-
-            // Days Left
-            const daysCell = document.createElement('td');
-            if (sub.daysRemaining != null && sub.daysRemaining >= 0) {
-                daysCell.textContent = sub.daysRemaining + ' days';
-            } else {
-                daysCell.textContent = '-';
+    
+    // Create panel container
+    const panel = document.createElement('div');
+    panel.id = 'notification-panel';
+    panel.className = 'notification-panel';
+    
+    // Add styles
+    if (!document.getElementById('notification-panel-styles')) {
+        const style = document.createElement('style');
+        style.id = 'notification-panel-styles';
+        style.textContent = `
+            .notification-panel {
+                position: fixed;
+                top: 0;
+                right: 0;
+                width: 420px;
+                max-width: 90vw;
+                height: 100vh;
+                background: var(--card-bg);
+                border-left: 1px solid var(--card-border);
+                box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+                z-index: 10001;
+                display: flex;
+                flex-direction: column;
+                transform: translateX(100%);
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                overflow: hidden;
             }
-            row.appendChild(daysCell);
-
-            // Amount - Convert from paise to rupees (Razorpay stores amounts in paise)
-            const amountCell = document.createElement('td');
-            if (sub.amount != null && sub.amount > 0) {
-                // Amount is always in paise, convert to rupees
-                const amountInRupees = sub.amount / 100;
-                amountCell.textContent = '₹' + amountInRupees.toLocaleString('en-IN', { 
-                    minimumFractionDigits: 2, 
-                    maximumFractionDigits: 2 
-                });
-            } else {
-                amountCell.textContent = '-';
+            .notification-panel.active {
+                transform: translateX(0);
             }
-            row.appendChild(amountCell);
-
-            // Actions
-            const actionsCell = document.createElement('td');
-            actionsCell.className = 'actions-col';
-            actionsCell.style.minWidth = '180px';
-            
-            // Create action buttons container
-            const actionsContainer = document.createElement('div');
-            actionsContainer.style.display = 'flex';
-            actionsContainer.style.gap = '0.5rem';
-            actionsContainer.style.alignItems = 'center';
-            actionsContainer.style.flexWrap = 'wrap';
-            
-            if (status === 'ACTIVE' || status === 'GRACE_PERIOD') {
-                // Refund button (show first if payment ID exists)
-                if (sub.paymentId) {
-                    console.log('[Subscriptions] Adding refund button for:', sub.userEmail, 'paymentId:', sub.paymentId);
-                    
-                    // Create a container for the refund button
-                    const refundContainer = document.createElement('div');
-                    refundContainer.style.display = 'inline-flex';
-                    refundContainer.style.alignItems = 'center';
-                    
-                    // Call renderRefundButton to handle refund status and button rendering
-                    renderRefundButton(sub.paymentId, refundContainer);
-                    
-                    actionsContainer.appendChild(refundContainer);
-                } else {
-                    console.warn('[Subscriptions] No payment ID for:', sub.userEmail);
+            .notification-panel-header {
+                padding: 1.5rem;
+                border-bottom: 1px solid var(--card-border);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, transparent 100%);
+            }
+            .notification-panel-header h3 {
+                margin: 0;
+                font-size: 1.25rem;
+                font-weight: 600;
+                color: var(--heading-color);
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+            .notification-panel-close {
+                width: 32px;
+                height: 32px;
+                border: none;
+                background: transparent;
+                border-radius: 8px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-secondary);
+                transition: all 0.2s ease;
+                position: relative;
+                overflow: hidden;
+            }
+            .notification-panel-close:hover {
+                background: var(--card-hover-bg);
+                color: var(--text-color);
+            }
+            .notification-panel-body {
+                flex: 1;
+                overflow-y: auto;
+                padding: 1.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+            .notification-panel-footer {
+                padding: 1.5rem;
+                border-top: 1px solid var(--card-border);
+                display: flex;
+                gap: 0.75rem;
+                background: var(--card-bg);
+            }
+            .notification-input-group {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .notification-input-label {
+                font-size: 0.875rem;
+                font-weight: 600;
+                color: var(--text-color);
+                display: flex;
+                align-items: center;
+                gap: 0.375rem;
+            }
+            .notification-input-label .required {
+                color: #ef4444;
+            }
+            .notification-input {
+                padding: 0.75rem;
+                border: 1.5px solid var(--card-border);
+                border-radius: 8px;
+                background: var(--card-bg);
+                color: var(--text-color);
+                font-size: 0.9375rem;
+                font-family: inherit;
+                transition: all 0.2s ease;
+                width: 100%;
+            }
+            .notification-input:focus {
+                outline: none;
+                border-color: #6366f1;
+                box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            }
+            .notification-textarea {
+                min-height: 120px;
+                resize: vertical;
+                font-family: inherit;
+            }
+            .notification-error {
+                padding: 0.75rem;
+                background: rgba(239, 68, 68, 0.1);
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                border-radius: 8px;
+                color: #fca5a5;
+                font-size: 0.875rem;
+                display: none;
+            }
+            .notification-error.show {
+                display: block;
+            }
+            .notification-btn {
+                flex: 1;
+                padding: 0.75rem 1.5rem;
+                border: none;
+                border-radius: 8px;
+                font-size: 0.9375rem;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                position: relative;
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.5rem;
+            }
+            .notification-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            .notification-btn-secondary {
+                background: var(--card-hover-bg);
+                color: var(--text-color);
+                border: 1.5px solid var(--card-border);
+            }
+            .notification-btn-secondary:hover:not(:disabled) {
+                background: var(--card-bg);
+                border-color: var(--text-secondary);
+            }
+            .notification-btn-primary {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+                color: white;
+                box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            }
+            .notification-btn-primary:hover:not(:disabled) {
+                transform: translateY(-1px);
+                box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+            }
+            .notification-btn-primary:active:not(:disabled) {
+                transform: translateY(0);
+            }
+            .ripple {
+                position: absolute;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.6);
+                transform: scale(0);
+                animation: ripple-animation 0.6s ease-out;
+                pointer-events: none;
+            }
+            @keyframes ripple-animation {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
                 }
-                
-                // Cancel button
-                const cancelBtn = document.createElement('button');
-                cancelBtn.className = 'btn btn-secondary';
-                cancelBtn.style.fontSize = '0.85rem';
-                cancelBtn.style.padding = '0.5rem 1rem';
-                cancelBtn.style.display = 'flex';
-                cancelBtn.style.alignItems = 'center';
-                cancelBtn.style.gap = '0.3rem';
-                cancelBtn.style.minWidth = '90px';
-                cancelBtn.style.justifyContent = 'center';
-                
-                const cancelText = document.createElement('span');
-                cancelText.textContent = 'Cancel';
-                cancelBtn.appendChild(cancelText);
-                
-                const cancelSpinner = document.createElement('span');
-                cancelSpinner.className = 'loading-spinner';
-                cancelSpinner.style.display = 'none';
-                cancelSpinner.style.width = '12px';
-                cancelSpinner.style.height = '12px';
-                cancelSpinner.style.border = '2px solid rgba(0,0,0,0.3)';
-                cancelSpinner.style.borderTopColor = 'var(--text-color)';
-                cancelSpinner.style.borderRadius = '50%';
-                cancelSpinner.style.animation = 'spin 0.6s linear infinite';
-                cancelBtn.appendChild(cancelSpinner);
-                
-                cancelBtn.addEventListener('click', function() {
-                    console.log('[Cancel] Attempting to cancel subscription for:', sub.userEmail);
-                    if (confirm(`Cancel subscription for ${sub.userEmail}?`)) {
-                        // Show loading state
-                        cancelText.style.display = 'none';
-                        cancelSpinner.style.display = 'inline-block';
-                        cancelBtn.disabled = true;
-                        
-                        console.log('[Cancel] Calling cancelUserSubscription with:', {
-                            userEmail: sub.userEmail,
-                            hasButton: !!cancelBtn,
-                            hasText: !!cancelText,
-                            hasSpinner: !!cancelSpinner
-                        });
-                        
-                        cancelUserSubscription(sub.userEmail, cancelBtn, cancelText, cancelSpinner);
-                    }
-                });
-                actionsContainer.appendChild(cancelBtn);
-            } else {
-                // Show status message for non-active subscriptions
-                const statusMsg = document.createElement('span');
-                statusMsg.style.fontSize = '0.85rem';
-                statusMsg.style.color = 'var(--text-secondary)';
-                statusMsg.textContent = status === 'CANCELLED' ? 'Cancelled' : 'No actions';
-                actionsContainer.appendChild(statusMsg);
             }
-            
-            actionsCell.appendChild(actionsContainer);
-            row.appendChild(actionsCell);
-
-            fragment.appendChild(row);
-        });
-
-        tableBody.replaceChildren(fragment);
-    }
-
-    /**
-     * Render pagination controls for subscriptions
-     */
-    function renderSubscriptionsPagination() {
-        const paginationContainer = q('subscriptions-pagination');
-        if (!paginationContainer) return;
-
-        paginationContainer.innerHTML = '';
-
-        if (state.totalPages <= 1) {
-            return;
-        }
-
-        // Previous button
-        const prevButton = document.createElement('button');
-        prevButton.className = `pagination-button ${state.currentPage === 1 ? 'disabled' : ''}`;
-        prevButton.textContent = 'Previous';
-        prevButton.disabled = state.currentPage === 1;
-        prevButton.addEventListener('click', () => {
-            if (state.currentPage > 1) {
-                loadSubscriptions(state.currentPage - 1, state.pageSize, state.statusFilter);
+            .notification-user-info {
+                padding: 1rem;
+                background: rgba(99, 102, 241, 0.05);
+                border: 1px solid rgba(99, 102, 241, 0.2);
+                border-radius: 8px;
+                font-size: 0.875rem;
+                color: var(--text-secondary);
             }
-        });
-        paginationContainer.appendChild(prevButton);
-
-        // Page buttons
-        const maxButtons = 5;
-        const startPage = Math.max(1, state.currentPage - Math.floor(maxButtons / 2));
-        const endPage = Math.min(state.totalPages, startPage + maxButtons - 1);
-
-        for (let i = startPage; i <= endPage; i++) {
-            const pageButton = document.createElement('button');
-            pageButton.className = `pagination-button ${i === state.currentPage ? 'active' : ''}`;
-            pageButton.textContent = i;
-            pageButton.addEventListener('click', () => {
-                if (i !== state.currentPage) {
-                    loadSubscriptions(i, state.pageSize, state.statusFilter);
+            .notification-user-info strong {
+                color: var(--text-color);
+            }
+            @media (max-width: 480px) {
+                .notification-panel {
+                    width: 100vw;
                 }
-            });
-            paginationContainer.appendChild(pageButton);
-        }
-
-        // Next button
-        const nextButton = document.createElement('button');
-        nextButton.className = `pagination-button ${state.currentPage === state.totalPages ? 'disabled' : ''}`;
-        nextButton.textContent = 'Next';
-        nextButton.disabled = state.currentPage === state.totalPages;
-        nextButton.addEventListener('click', () => {
-            if (state.currentPage < state.totalPages) {
-                loadSubscriptions(state.currentPage + 1, state.pageSize, state.statusFilter);
             }
-        });
-        paginationContainer.appendChild(nextButton);
+        `;
+        document.head.appendChild(style);
     }
-
-    /**
-     * Cancel a user's subscription (admin action)
-     * @param {string} userEmail - The email of the user whose subscription to cancel
-     * @param {HTMLElement} btn - The cancel button element (optional)
-     * @param {HTMLElement} textEl - The button text element (optional)
-     * @param {HTMLElement} spinnerEl - The button spinner element (optional)
-     */
-    function cancelUserSubscription(userEmail, btn, textEl, spinnerEl) {
-        console.log('[cancelUserSubscription] Called with:', { userEmail, hasBtn: !!btn, hasTextEl: !!textEl, hasSpinnerEl: !!spinnerEl });
+    
+    // Panel content
+    panel.innerHTML = `
+        <div class="notification-panel-header">
+            <h3>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                Send Notification
+            </h3>
+            <button class="notification-panel-close" aria-label="Close" type="button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="notification-panel-body">
+            <div class="notification-user-info">
+                Sending to: <strong>${escapeHtml(email)}</strong>
+            </div>
+            <div class="notification-input-group">
+                <label class="notification-input-label">
+                    Title
+                    <span class="required">*</span>
+                </label>
+                <input 
+                    type="text" 
+                    id="notif-panel-title" 
+                    class="notification-input" 
+                    placeholder="Enter notification title"
+                    autocomplete="off"
+                    value="Special Promotion"
+                />
+            </div>
+            <div class="notification-input-group">
+                <label class="notification-input-label">
+                    Message
+                    <span class="required">*</span>
+                </label>
+                <textarea 
+                    id="notif-panel-body" 
+                    class="notification-input notification-textarea" 
+                    placeholder="Write your message here..."
+                ></textarea>
+            </div>
+            <div id="notif-panel-error" class="notification-error"></div>
+        </div>
+        <div class="notification-panel-footer">
+            <button type="button" class="notification-btn notification-btn-secondary" id="notif-panel-cancel">
+                Cancel
+            </button>
+            <button type="button" class="notification-btn notification-btn-primary" id="notif-panel-send">
+                Send
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(panel);
+    
+    // Add ripple effect function
+    function addRipple(e) {
+        const button = e.currentTarget;
+        const ripple = document.createElement('span');
+        const rect = button.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const x = e.clientX - rect.left - size / 2;
+        const y = e.clientY - rect.top - size / 2;
         
-        if (!userEmail) {
-            console.error('[cancelUserSubscription] No user email provided');
-            showErrorMessage('User email is required');
-            if (btn && textEl && spinnerEl) {
-                textEl.style.display = 'inline';
-                spinnerEl.style.display = 'none';
-                btn.disabled = false;
-            }
-            return;
+        ripple.style.width = ripple.style.height = size + 'px';
+        ripple.style.left = x + 'px';
+        ripple.style.top = y + 'px';
+        ripple.className = 'ripple';
+        
+        button.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+    }
+    
+    // Bind events
+    const closeBtn = panel.querySelector('.notification-panel-close');
+    const cancelBtn = document.getElementById('notif-panel-cancel');
+    const sendBtn = document.getElementById('notif-panel-send');
+    const titleInput = document.getElementById('notif-panel-title');
+    const bodyInput = document.getElementById('notif-panel-body');
+    const errorDiv = document.getElementById('notif-panel-error');
+    
+    function closePanel() {
+        const backdropEl = document.getElementById('notification-backdrop');
+        if (backdropEl) {
+            backdropEl.style.opacity = '0';
+            setTimeout(() => backdropEl.remove(), 300);
         }
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        const requestBody = { userEmail: userEmail };
-        console.log('[cancelUserSubscription] Sending request:', {
-            url: '/admin/subscriptions/cancel',
-            method: 'POST',
-            body: requestBody,
-            hasToken: !!token
+        panel.classList.remove('active');
+        setTimeout(() => panel.remove(), 300);
+    }
+    
+    function showError(msg) {
+        if (errorDiv) {
+            errorDiv.textContent = msg || 'An error occurred';
+            errorDiv.classList.add('show');
+            errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+    
+    function clearError() {
+        if (errorDiv) {
+            errorDiv.textContent = '';
+            errorDiv.classList.remove('show');
+        }
+    }
+    
+    // Close handlers
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function(e) {
+            addRipple(e);
+            setTimeout(closePanel, 100);
         });
-
-        fetch('/admin/subscriptions/cancel', {
-            method: 'POST',
-            credentials: 'include',
-            headers,
-            body: JSON.stringify({ userEmail: userEmail })
-        })
-        .then(response => {
-            console.log('[cancelUserSubscription] Response received:', {
-                status: response.status,
-                ok: response.ok,
-                statusText: response.statusText
-            });
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function(e) {
+            addRipple(e);
+            setTimeout(closePanel, 100);
+        });
+    }
+    
+    // Send handler
+    if (sendBtn) {
+        sendBtn.addEventListener('click', function(e) {
+            addRipple(e);
+            clearError();
             
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to cancel subscriptions');
-                }
-                // Try to parse error response
-                return response.text().then(text => {
-                    console.error('[cancelUserSubscription] Error response text:', text);
-                    try {
-                        const data = JSON.parse(text);
-                        console.error('[cancelUserSubscription] Parsed error data:', data);
-                        throw new Error(data.message || 'Failed to cancel subscription');
-                    } catch (e) {
-                        console.error('[cancelUserSubscription] Failed to parse error response:', e);
-                        throw new Error(`Failed to cancel subscription (${response.status}): ${text || 'Unknown error'}`);
+            const title = (titleInput && titleInput.value.trim()) || 'Special Promotion';
+            const body = (bodyInput && bodyInput.value.trim()) || '';
+            
+            // Validation
+            if (title.length < 3) {
+                showError('Title must be at least 3 characters');
+                if (titleInput) titleInput.focus();
+                return;
+            }
+            
+            if (!body) {
+                showError('Message is required');
+                if (bodyInput) bodyInput.focus();
+                return;
+            }
+            
+            if (body.length < 10) {
+                showError('Message should be at least 10 characters');
+                if (bodyInput) bodyInput.focus();
+                return;
+            }
+            
+            // Disable and show loading
+            sendBtn.disabled = true;
+            const originalText = sendBtn.innerHTML;
+            sendBtn.innerHTML = '<span>Sending...</span>';
+            
+            // Send notification
+            window.UserRoute.notify(email, { title, body })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().catch(() => ({})).then(data => {
+                            throw new Error(data.message || 'Failed to send notification');
+                        });
                     }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.status === true) {
+                        try {
+                            showMessage('success', `Notification sent to ${escapeHtml(email)}`);
+                        } catch(_) {}
+                        setTimeout(closePanel, 300);
+                    } else {
+                        throw new Error(data.message || 'Failed to send notification');
+                    }
+                })
+                .catch(err => {
+                    showError(err.message || 'Failed to send notification');
+                    sendBtn.disabled = false;
+                    sendBtn.innerHTML = originalText;
                 });
-            }
-            return response.json();
-        })
-        .then(payload => {
-            console.log('[cancelUserSubscription] Success payload:', payload);
-            
-            // Reset button state on success
-            if (btn && textEl && spinnerEl) {
-                textEl.style.display = 'inline';
-                spinnerEl.style.display = 'none';
-                btn.disabled = false;
-            }
-            
-            if (payload && payload.status === true) {
-                console.log('[cancelUserSubscription] Subscription cancelled successfully');
-                showMessage('success', `Subscription cancelled successfully for ${userEmail}`);
-                // Reload subscriptions and analytics
-                loadSubscriptions(state.currentPage, state.pageSize, state.statusFilter);
-                loadSubscriptionAnalytics();
+        });
+    }
+    
+    // Close on escape key
+    const escapeHandler = function(e) {
+        if (e.key === 'Escape' && panel.classList.contains('active')) {
+            closePanel();
+            document.removeEventListener('keydown', escapeHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeHandler);
+    
+    // Close on backdrop click
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.35); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 10000; opacity: 0; transition: opacity 0.3s ease;';
+    backdrop.id = 'notification-backdrop';
+    backdrop.addEventListener('click', closePanel);
+    document.body.appendChild(backdrop);
+    
+    // Animate in
+    requestAnimationFrame(() => {
+        panel.classList.add('active');
+        backdrop.style.opacity = '1';
+    });
+    
+    // Focus on title input
+    setTimeout(() => {
+        if (titleInput) titleInput.focus();
+    }, 100);
+    
+}
+// ===== End Elegant Notification Panel =====
+
+window.showNotificationPanel = showNotificationPanel;
+
+// ===== Finance Sliding Panel =====
+function showFinancePanel(title, content, options = {}) {
+    const panelId = options.id || 'finance-panel';
+    const backdropId = options.backdropId || 'finance-backdrop';
+
+    const existingPanel = document.getElementById(panelId);
+    const existingBackdrop = document.getElementById(backdropId);
+    if (existingPanel && !options.forceNew) {
+        const titleEl = existingPanel.querySelector('.finance-panel-title');
+        if (titleEl) {
+            titleEl.textContent = title || 'Details';
+        }
+        const bodyEl = existingPanel.querySelector('.finance-panel-body');
+        if (bodyEl) {
+            bodyEl.innerHTML = content || '';
+            bodyEl.scrollTop = 0;
+        }
+        const footerEl = existingPanel.querySelector('.finance-panel-footer');
+        if (footerEl) {
+            if (options.footer) {
+                footerEl.innerHTML = options.footer;
+                footerEl.style.display = 'flex';
             } else {
-                console.error('[cancelUserSubscription] Unexpected payload status:', payload);
-                throw new Error(payload.message || 'Failed to cancel subscription');
+                footerEl.innerHTML = '';
+                footerEl.style.display = 'none';
             }
-        })
-        .catch(error => {
-            console.error('[cancelUserSubscription] Caught error:', error);
-            showErrorMessage(error.message || 'Failed to cancel subscription');
-            
-            // Reset button state on error
-            if (btn && textEl && spinnerEl) {
-                textEl.style.display = 'inline';
-                spinnerEl.style.display = 'none';
-                btn.disabled = false;
+        }
+        if (!existingPanel.classList.contains('active')) {
+            requestAnimationFrame(() => existingPanel.classList.add('active'));
+        }
+        if (existingBackdrop) {
+            existingBackdrop.style.opacity = '1';
+        }
+        document.body.style.overflow = 'hidden';
+        return;
+    }
+    if (existingPanel) existingPanel.remove();
+    if (existingBackdrop) existingBackdrop.remove();
+
+    if (!document.getElementById('finance-panel-styles')) {
+        const style = document.createElement('style');
+        style.id = 'finance-panel-styles';
+        style.textContent = `
+            .finance-panel {
+                position: fixed;
+                top: 0;
+                right: 0;
+                width: 520px;
+                max-width: 92vw;
+                height: 100vh;
+                background: var(--card-bg);
+                opacity: 1;
+                border-left: 1px solid var(--card-border);
+                box-shadow: -6px 0 28px rgba(0, 0, 0, 0.2);
+                z-index: 10002;
+                display: flex;
+                flex-direction: column;
+                transform: translateX(100%);
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                overflow: hidden;
             }
+            .finance-panel.active {
+                transform: translateX(0);
+            }
+            .finance-panel-header {
+                padding: 1.25rem 1.5rem;
+                border-bottom: 1px solid var(--card-border);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, transparent 100%);
+            }
+            .finance-panel-title {
+                margin: 0;
+                font-size: 1.125rem;
+                font-weight: 600;
+                color: var(--heading-color);
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+            .finance-panel-close {
+                width: 34px;
+                height: 34px;
+                border: none;
+                background: transparent;
+                border-radius: 8px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-secondary);
+                transition: all 0.2s ease;
+                position: relative;
+                overflow: hidden;
+            }
+            .finance-panel-close:hover {
+                background: var(--card-hover-bg);
+                color: var(--text-color);
+            }
+            .finance-panel-body {
+                flex: 1;
+                overflow-y: auto;
+                padding: 1.5rem;
+            }
+            .finance-panel-footer {
+                padding: 1rem 1.5rem;
+                border-top: 1px solid var(--card-border);
+                display: none;
+                gap: 0.75rem;
+                background: var(--card-bg);
+            }
+            .finance-panel button {
+                position: relative;
+                overflow: hidden;
+            }
+            .finance-card {
+                background: var(--card-bg);
+                border: 1px solid var(--card-border);
+                border-radius: 12px;
+                padding: 1rem 1.25rem;
+                box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+                margin-bottom: 1rem;
+            }
+            .finance-hero {
+                background: linear-gradient(135deg, rgba(99,102,241,0.16) 0%, rgba(15,23,42,0.06) 100%);
+                border: 1px solid rgba(99,102,241,0.2);
+                border-radius: 14px;
+                padding: 1.25rem;
+                color: var(--text-color);
+                margin-bottom: 1.25rem;
+            }
+            .finance-hero-value {
+                font-size: 2rem;
+                font-weight: 700;
+                margin: 0.25rem 0 0;
+            }
+            .finance-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 0.75rem;
+            }
+            .finance-kv {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 0.75rem;
+                padding: 0.6rem 0;
+                border-bottom: 1px solid var(--card-border);
+            }
+            .finance-kv:last-child {
+                border-bottom: none;
+                padding-bottom: 0;
+            }
+            .finance-kv__label {
+                color: var(--text-secondary);
+                font-size: 0.85rem;
+            }
+            .finance-kv__value {
+                color: var(--text-color);
+                font-weight: 600;
+                text-align: right;
+                max-width: 60%;
+                word-break: break-word;
+            }
+            .finance-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.35rem;
+                padding: 0.2rem 0.6rem;
+                border-radius: 999px;
+                font-size: 0.7rem;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                font-weight: 600;
+            }
+            .finance-pill.status-processed,
+            .finance-pill.badge-processed {
+                background: rgba(16, 185, 129, 0.18);
+                color: #059669;
+                border: 1px solid rgba(16, 185, 129, 0.35);
+            }
+            .finance-pill.status-failed,
+            .finance-pill.badge-failed {
+                background: rgba(239, 68, 68, 0.18);
+                color: #dc2626;
+                border: 1px solid rgba(239, 68, 68, 0.35);
+            }
+            .finance-pill.status-pending,
+            .finance-pill.badge-pending {
+                background: rgba(245, 158, 11, 0.18);
+                color: #d97706;
+                border: 1px solid rgba(245, 158, 11, 0.35);
+            }
+            .finance-code {
+                display: inline-block;
+                padding: 0.25rem 0.5rem;
+                background: var(--card-hover-bg);
+                border-radius: 6px;
+                font-size: 0.8rem;
+                word-break: break-all;
+                color: var(--text-color);
+            }
+            .finance-banner {
+                padding: 0.75rem 1rem;
+                border-radius: 10px;
+                border: 1px solid var(--card-border);
+                background: var(--card-hover-bg);
+                margin-bottom: 1rem;
+            }
+            .finance-panel-loading {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+            .finance-panel-loading__text {
+                color: var(--text-secondary);
+                font-size: 0.9rem;
+            }
+            .finance-skeleton {
+                background: linear-gradient(90deg, rgba(148, 163, 184, 0.12) 25%, rgba(148, 163, 184, 0.22) 37%, rgba(148, 163, 184, 0.12) 63%);
+                background-size: 400% 100%;
+                animation: finance-shimmer 1.3s ease infinite;
+                border-radius: 12px;
+            }
+            .finance-skeleton-line {
+                height: 12px;
+            }
+            .finance-skeleton-line--short {
+                width: 60%;
+            }
+            .finance-skeleton-hero {
+                height: 120px;
+            }
+            .finance-skeleton-card {
+                height: 160px;
+            }
+            .finance-ripple {
+                position: absolute;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.6);
+                transform: scale(0);
+                animation: finance-ripple 0.6s ease-out;
+                pointer-events: none;
+            }
+            @keyframes finance-ripple {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
+                }
+            }
+            @keyframes finance-shimmer {
+                0% {
+                    background-position: 100% 0;
+                }
+                100% {
+                    background-position: 0 0;
+                }
+            }
+            @media (max-width: 480px) {
+                .finance-panel {
+                    width: 100vw;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    const panel = document.createElement('div');
+    panel.id = panelId;
+    panel.className = 'finance-panel';
+    panel.innerHTML = `
+        <div class="finance-panel-header">
+            <h3 class="finance-panel-title">${escapeHtml(title || 'Details')}</h3>
+            <button class="finance-panel-close" aria-label="Close" type="button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="finance-panel-body">${content || ''}</div>
+        <div class="finance-panel-footer" id="${panelId}-footer"></div>
+    `;
+    document.body.appendChild(panel);
+
+    const footerEl = document.getElementById(`${panelId}-footer`);
+    if (footerEl && options.footer) {
+        footerEl.innerHTML = options.footer;
+        footerEl.style.display = 'flex';
+    }
+
+    function addRipple(e) {
+        const button = e.target.closest('button');
+        if (!button) return;
+        const ripple = document.createElement('span');
+        const rect = button.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const x = e.clientX - rect.left - size / 2;
+        const y = e.clientY - rect.top - size / 2;
+        ripple.style.width = ripple.style.height = `${size}px`;
+        ripple.style.left = `${x}px`;
+        ripple.style.top = `${y}px`;
+        ripple.className = 'finance-ripple';
+        button.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+    }
+
+    function closePanel() {
+        panel.classList.remove('active');
+        document.body.style.overflow = '';
+        const backdropEl = document.getElementById(backdropId);
+        if (backdropEl) {
+            backdropEl.style.opacity = '0';
+            setTimeout(() => backdropEl.remove(), 300);
+        }
+        setTimeout(() => panel.remove(), 300);
+        document.removeEventListener('keydown', escapeHandler);
+    }
+
+    const escapeHandler = function(e) {
+        if (e.key === 'Escape' && panel.classList.contains('active')) {
+            closePanel();
+        }
+    };
+
+    const closeBtn = panel.querySelector('.finance-panel-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function(e) {
+            addRipple(e);
+            setTimeout(closePanel, 80);
         });
     }
 
-    /**
-     * Initialize subscriptions tab
-     */
-    function ensureInitialized() {
-        if (state.initialized) return;
-        const panel = q('subscriptions');
-        if (!panel) return;
+    panel.addEventListener('click', addRipple);
 
-        // Load analytics
-        loadSubscriptionAnalytics();
+    const backdrop = document.createElement('div');
+    backdrop.id = backdropId;
+    backdrop.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 10001; opacity: 0; transition: opacity 0.3s ease;';
+    backdrop.addEventListener('click', closePanel);
+    document.body.appendChild(backdrop);
 
-        // Load subscriptions with default pagination
-        loadSubscriptions(1, 10, '');
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', escapeHandler);
 
-        // Bind status filter
-        const statusFilter = q('status-filter');
-        if (statusFilter && !statusFilter.dataset.bound) {
-            statusFilter.addEventListener('change', function() {
-                const filter = this.value;
-                loadSubscriptions(1, state.pageSize, filter);
-            });
-            statusFilter.dataset.bound = 'true';
-        }
-
-        // Add event listener for reload requests from refund module
-        if (!window._subscriptionReloadListenerBound) {
-            document.addEventListener('reloadSubscriptions', function(event) {
-                const detail = event.detail || {};
-                loadSubscriptions(
-                    detail.page || state.currentPage, 
-                    detail.pageSize || state.pageSize, 
-                    detail.statusFilter || state.statusFilter
-                );
-                loadSubscriptionAnalytics();
-            });
-            window._subscriptionReloadListenerBound = true;
-        }
-
-        state.initialized = true;
-    }
-
-    // Hook into admin init: click on Subscriptions tab should trigger initialization
-    document.addEventListener('DOMContentLoaded', function(){
-        try {
-            // Bind tab click
-            const tab = document.querySelector('.tab[data-tab="subscriptions"]');
-            if (tab && !tab.dataset.subscriptionsBound) {
-                tab.addEventListener('click', ensureInitialized);
-                tab.dataset.subscriptionsBound = 'true';
-            }
-            // If already active (unlikely), init immediately
-            const panel = q('subscriptions');
-            if (panel && panel.classList.contains('active')) {
-                ensureInitialized();
-            }
-        } catch(e) { console.warn('Subscriptions binding failed', e); }
+    requestAnimationFrame(() => {
+        panel.classList.add('active');
+        backdrop.style.opacity = '1';
     });
 
-    // Expose state and functions globally for refund module integration
-    window._subscriptionState = state;
-    window.SubscriptionsModule = {
-        loadSubscriptions,
-        loadSubscriptionAnalytics,
-        cancelUserSubscription,
-        getState: () => state
-    };
-})();
+    window.closeFinancePanel = closePanel;
+}
+// ===== End Finance Sliding Panel =====
+
+function getFinancePanelLoadingContent(message) {
+    const safeMessage = escapeHtml(message || 'Loading...');
+    return `
+        <div class="finance-panel-loading">
+            <div class="finance-panel-loading__text">${safeMessage}</div>
+            <div class="finance-skeleton finance-skeleton-hero"></div>
+            <div class="finance-skeleton finance-skeleton-line"></div>
+            <div class="finance-skeleton finance-skeleton-line finance-skeleton-line--short"></div>
+            <div class="finance-skeleton finance-skeleton-card"></div>
+        </div>
+    `;
+}
+
+window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 
 
 // ================= Refund Management =================
 (function(){
-    /**
-     * Render refund button for a subscription payment
-     * @param {Object} subscription - Subscription object with payment details
-     * @returns {string} HTML string for refund button
-     */
-    function renderRefundButton(subscription) {
-        if (!subscription || !subscription.paymentId) {
-            return '';
-        }
-
-        // Don't show refund button if subscription is already cancelled or expired
-        const status = subscription.status || '';
-        if (status === 'CANCELLED' || status === 'EXPIRED') {
-            return '';
-        }
-
-        return `
-            <button class="btn btn-secondary" 
-                    style="font-size: 0.85rem; padding: 0.4rem 0.8rem; margin-left: 0.5rem;"
-                    onclick="window.RefundModule.openRefundModal('${subscription.paymentId}', ${subscription.amount || 0}, '${subscription.userEmail || ''}')">
-                Refund
-            </button>
-        `;
-    }
-
     /**
      * Open refund modal for a payment
      * @param {string} paymentId - The payment ID to refund
@@ -4494,72 +5020,96 @@ function bindSendNotificationModal(email){
         const amountInRupees = (amount / 100).toFixed(2);
 
         const modalContent = `
-            <div class="refund-modal-content">
-                <div class="refund-payment-details" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
-                    <h3 style="margin: 0 0 0.5rem 0; color: var(--card-title); font-size: 1rem;">Payment Details</h3>
-                    <div style="display: grid; gap: 0.5rem; font-size: 0.9rem;">
-                        <div><strong>Payment ID:</strong> <code style="background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px;">${escapeHtml(paymentId)}</code></div>
-                        <div><strong>User Email:</strong> ${escapeHtml(userEmail)}</div>
-                        <div><strong>Original Amount:</strong> ₹${amountInRupees}</div>
+            <div class="refund-shell">
+                <div class="refund-hero">
+                    <div class="refund-hero-header">
+                        <div>
+                            <p class="refund-eyebrow">Payment</p>
+                            <h3 class="refund-hero-title">Initiate refund</h3>
+                            <p class="refund-hero-subtitle">Review the charge and choose the refund type.</p>
+                        </div>
+                        <div class="refund-hero-amount">
+                            <span class="refund-hero-amount-label">Original amount</span>
+                            <span class="refund-hero-amount-value">₹${amountInRupees}</span>
+                        </div>
+                    </div>
+                    <div class="refund-meta-grid">
+                        <div class="refund-meta-card">
+                            <span class="refund-meta-label">Payment ID</span>
+                            <span class="refund-meta-value"><code class="refund-code">${escapeHtml(paymentId)}</code></span>
+                        </div>
+                        <div class="refund-meta-card">
+                            <span class="refund-meta-label">User email</span>
+                            <span class="refund-meta-value">${escapeHtml(userEmail)}</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="refund-form">
-                    <div class="form-group" style="margin-bottom: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Refund Amount</label>
-                        <div style="display: flex; gap: 1rem; margin-bottom: 0.5rem;">
-                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="refund-type" value="full" checked onchange="window.RefundModule.toggleRefundAmount(this)">
-                                <span>Full Refund (₹${amountInRupees})</span>
-                            </label>
-                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                <input type="radio" name="refund-type" value="partial" onchange="window.RefundModule.toggleRefundAmount(this)">
-                                <span>Partial Refund</span>
-                            </label>
+                <div class="refund-form-card">
+                    <form id="refund-form" class="modal-form">
+                        <div class="modal-form-group">
+                            <label class="modal-form-label required">Refund type</label>
+                            <div class="refund-option-group">
+                                <label class="refund-option">
+                                    <input type="radio" name="refund-type" value="full" checked onchange="window.RefundModule.toggleRefundAmount(this)">
+                                    <div class="refund-option-content">
+                                        <span class="refund-option-title">Full refund</span>
+                                        <span class="refund-option-sub">Refund the full amount of ₹${amountInRupees}.</span>
+                                    </div>
+                                </label>
+                                <label class="refund-option">
+                                    <input type="radio" name="refund-type" value="partial" onchange="window.RefundModule.toggleRefundAmount(this)">
+                                    <div class="refund-option-content">
+                                        <span class="refund-option-title">Partial refund</span>
+                                        <span class="refund-option-sub">Set a custom amount below.</span>
+                                    </div>
+                                </label>
+                            </div>
                         </div>
-                        <input type="number" 
-                               id="refund-amount-input" 
-                               class="form-input" 
-                               placeholder="Enter amount in rupees" 
-                               min="1" 
-                               max="${amountInRupees}"
-                               step="0.01"
-                               disabled
-                               style="width: 100%; padding: 0.5rem; border: 1px solid var(--card-border); border-radius: 4px; background: var(--card-bg); color: var(--text-color);">
-                    </div>
 
-                    <div class="form-group" style="margin-bottom: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Refund Speed</label>
-                        <select id="refund-speed-select" 
-                                class="form-select" 
-                                style="width: 100%; padding: 0.5rem; border: 1px solid var(--card-border); border-radius: 4px; background: var(--card-bg); color: var(--text-color);">
-                            <option value="OPTIMUM">Instant (if eligible)</option>
-                            <option value="NORMAL">Normal (5-7 business days)</option>
-                        </select>
-                    </div>
+                        <div class="modal-form-group">
+                            <label for="refund-amount-input" class="modal-form-label">Refund amount (INR)</label>
+                            <input type="number" 
+                                   id="refund-amount-input" 
+                                   class="modal-form-input" 
+                                   placeholder="Enter amount in rupees" 
+                                   min="1" 
+                                   max="${amountInRupees}"
+                                   step="0.01"
+                                   disabled>
+                            <div class="modal-form-helper">Maximum refundable amount: ₹${amountInRupees}</div>
+                        </div>
 
-                    <div class="form-group" style="margin-bottom: 1rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Reason (Optional)</label>
-                        <textarea id="refund-reason-input" 
-                                  class="form-textarea" 
-                                  placeholder="Enter reason for refund (max 500 characters)" 
-                                  maxlength="500" 
-                                  rows="3"
-                                  style="width: 100%; padding: 0.5rem; border: 1px solid var(--card-border); border-radius: 4px; background: var(--card-bg); color: var(--text-color); resize: vertical;"></textarea>
-                    </div>
+                        <div class="modal-form-group">
+                            <label for="refund-speed-select" class="modal-form-label">Refund speed</label>
+                            <select id="refund-speed-select" class="modal-form-select">
+                                <option value="OPTIMUM">Instant (if eligible)</option>
+                                <option value="NORMAL">Normal (5-7 business days)</option>
+                            </select>
+                        </div>
 
-                    <div class="form-actions" style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
-                        <button class="btn btn-secondary" onclick="closeModal()" style="padding: 0.6rem 1.2rem;">Cancel</button>
-                        <button class="btn btn-primary" onclick="window.RefundModule.submitRefund()" style="padding: 0.6rem 1.2rem; background: #10b981;">
-                            <span id="refund-submit-text">Submit Refund</span>
-                            <span id="refund-submit-spinner" style="display: none;">Processing...</span>
-                        </button>
-                    </div>
+                        <div class="modal-form-group">
+                            <label for="refund-reason-input" class="modal-form-label">Reason (optional)</label>
+                            <textarea id="refund-reason-input" 
+                                      class="modal-form-textarea" 
+                                      placeholder="Share the reason for the refund (max 500 characters)" 
+                                      maxlength="500" 
+                                      rows="3"></textarea>
+                        </div>
+                    </form>
                 </div>
             </div>
         `;
+        
+        const footer = `
+            <button type="button" class="modal-btn modal-btn-secondary" onclick="closeModal()">Cancel</button>
+            <button type="button" class="modal-btn modal-btn-primary" onclick="window.RefundModule.submitRefund()">
+                <span id="refund-submit-text">Submit Refund</span>
+                <span id="refund-submit-spinner" class="loading-spinner" style="display: none; width: 1rem; height: 1rem; margin-left: 0.5rem;"></span>
+            </button>
+        `;
 
-        showModal('Initiate Refund', modalContent);
+        showFinancePanel('Initiate Refund', modalContent, { footer: footer });
     }
 
     /**
@@ -4641,7 +5191,7 @@ function bindSendNotificationModal(email){
         }
 
         // Submit refund request
-        fetch('/admin/refunds/initiate', {
+        fetch('/refunds/initiate', {
             method: 'POST',
             credentials: 'include',
             headers,
@@ -4657,62 +5207,17 @@ function bindSendNotificationModal(email){
         })
         .then(payload => {
             if (payload && payload.success) {
-                showMessage('success', `Refund initiated successfully for ${context.userEmail}. Cancelling subscription...`);
-                
-                // Automatically cancel the subscription after successful refund
-                return fetch('/admin/subscriptions/cancel', {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers,
-                    body: JSON.stringify({ userEmail: context.userEmail })
-                })
-                .then(cancelResponse => {
-                    if (cancelResponse.ok) {
-                        return cancelResponse.json().then(cancelPayload => {
-                            if (cancelPayload && cancelPayload.status === true) {
-                                showMessage('success', `Refund processed and subscription cancelled for ${context.userEmail}`);
-                            }
-                        });
-                    }
-                    // Don't throw error if cancel fails - refund was successful
-                    console.warn('Refund successful but subscription cancellation failed');
-                })
-                .catch(cancelError => {
-                    console.warn('Refund successful but subscription cancellation failed:', cancelError);
-                    // Still show success for refund
-                });
-            } else {
-                throw new Error(payload.message || 'Failed to initiate refund');
+                showMessage('success', `Refund initiated successfully for ${context.userEmail}.`);
+                return null;
             }
+            throw new Error(payload.message || 'Failed to initiate refund');
         })
         .then(() => {
             closeModal();
             
-            // Refresh subscription view - use the subscription module's state
-            const subscriptionsPanel = document.getElementById('subscriptions');
-            if (subscriptionsPanel) {
-                // Try to find the loadSubscriptions function in the subscriptions module scope
-                const subState = window._subscriptionState || { currentPage: 1, pageSize: 10, statusFilter: '' };
-                // Trigger a reload by dispatching a custom event
-                const reloadEvent = new CustomEvent('reloadSubscriptions', { 
-                    detail: { 
-                        page: subState.currentPage, 
-                        pageSize: subState.pageSize, 
-                        statusFilter: subState.statusFilter 
-                    } 
-                });
-                document.dispatchEvent(reloadEvent);
-            }
-            
             // Reload financial metrics to reflect refund in total revenue
             if (typeof loadFinancialMetrics === 'function') {
                 loadFinancialMetrics();
-            }
-            
-            // Reload subscription analytics to reflect updated revenue
-            if (typeof window.SubscriptionsModule !== 'undefined' && 
-                typeof window.SubscriptionsModule.loadSubscriptionAnalytics === 'function') {
-                window.SubscriptionsModule.loadSubscriptionAnalytics();
             }
             
             // Clear context
@@ -4727,36 +5232,6 @@ function bindSendNotificationModal(email){
             if (submitSpinner) submitSpinner.style.display = 'none';
             if (submitBtn) submitBtn.disabled = false;
         });
-    }
-
-    /**
-     * Render refund status badge for a subscription
-     * @param {Object} subscription - Subscription object
-     * @param {Object} refundSummary - Refund summary object
-     * @returns {string} HTML string for refund status
-     */
-    function renderRefundStatus(subscription, refundSummary) {
-        if (!refundSummary || !refundSummary.totalRefunded || refundSummary.totalRefunded === 0) {
-            return '';
-        }
-
-        const isFullyRefunded = refundSummary.isFullyRefunded;
-        const badgeClass = 'badge';
-        const badgeStyle = isFullyRefunded ? 'background: #8b5cf6;' : 'background: #f59e0b;';
-        const badgeText = isFullyRefunded ? 'Fully Refunded' : 'Partially Refunded';
-        const refundedAmount = (refundSummary.totalRefunded / 100).toFixed(2);
-
-        return `
-            <div style="display: inline-flex; align-items: center; gap: 0.5rem; margin-left: 0.5rem;">
-                <span class="${badgeClass}" style="${badgeStyle}">${badgeText}</span>
-                <span style="color: var(--text-secondary); font-size: 0.85rem;">₹${refundedAmount} refunded</span>
-                <button class="btn btn-link" 
-                        style="font-size: 0.85rem; padding: 0.2rem 0.5rem; text-decoration: underline;"
-                        onclick="window.RefundModule.viewRefundHistory('${subscription.paymentId}')">
-                    View History
-                </button>
-            </div>
-        `;
     }
 
     /**
@@ -4776,9 +5251,12 @@ function bindSendNotificationModal(email){
         }
 
         // Show loading modal
-        showModal('Refund History', '<div style="text-align: center; padding: 2rem;">Loading refund history...</div>');
+        const loadingContent = typeof getFinancePanelLoadingContent === 'function'
+            ? getFinancePanelLoadingContent('Loading refund history...')
+            : '<div class="modal-loading"><div class="loading-spinner"></div><div class="loading-text">Loading refund history...</div></div>';
+        showFinancePanel('Refund History', loadingContent);
 
-        fetch(`/admin/refunds/payment/${encodeURIComponent(paymentId)}`, {
+        fetch(`/refunds/payment/${encodeURIComponent(paymentId)}`, {
             method: 'GET',
             credentials: 'include',
             headers
@@ -4869,11 +5347,11 @@ function bindSendNotificationModal(email){
 
             historyHtml += '</div>';
 
-            showModal('Refund History', historyHtml);
+            showFinancePanel('Refund History', historyHtml);
         })
         .catch(error => {
             console.error('Error loading refund history:', error);
-            showModal('Refund History', `<div style="text-align: center; padding: 2rem; color: #ef4444;">Error: ${escapeHtml(error.message || 'Failed to load refund history')}</div>`);
+            showFinancePanel('Refund History', `<div class="modal-status modal-status-error">Error: ${escapeHtml(error.message || 'Failed to load refund history')}</div>`);
         });
     }
 
@@ -4912,7 +5390,7 @@ function bindSendNotificationModal(email){
         const headers = { 'Accept': 'application/json' };
         if (token) { headers['Authorization'] = 'Bearer ' + token; }
 
-        fetch('/admin/finance/metrics', {
+        fetch('/finance/metrics', {
             method: 'GET',
             credentials: 'include',
             headers
@@ -4936,7 +5414,6 @@ function bindSendNotificationModal(email){
             // Update metric cards with formatted currency
             const totalRevenue = q('total-revenue');
             const monthlyRevenue = q('monthly-revenue');
-            const activeSubRevenue = q('active-sub-revenue');
             const totalPayments = q('total-payments');
 
             if (totalRevenue) {
@@ -4944,9 +5421,6 @@ function bindSendNotificationModal(email){
             }
             if (monthlyRevenue) {
                 monthlyRevenue.textContent = formatCurrency(metrics.monthlyRevenue || 0);
-            }
-            if (activeSubRevenue) {
-                activeSubRevenue.textContent = formatCurrency(metrics.activeSubscriptionsRevenue || 0);
             }
             if (totalPayments) {
                 totalPayments.textContent = (metrics.totalPaymentsCount || 0).toLocaleString();
@@ -4966,7 +5440,7 @@ function bindSendNotificationModal(email){
             // If error is due to authentication, redirect to login
             if (error.message.includes('permission') || error.message.includes('authentication')) {
                 setTimeout(() => {
-                    window.location.href = '/admin/login?error=auth_required';
+                    window.location.href = '/login?error=auth_required';
                 }, 2000);
             }
         });
@@ -5115,7 +5589,7 @@ function bindSendNotificationModal(email){
         if (loader) loader.style.display = 'block';
 
         // Build URL with query parameters
-        let url = `/admin/finance/payments?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+        let url = `/finance/payments?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
         if (statusFilter) {
             url += `&status=${encodeURIComponent(statusFilter)}`;
         }
@@ -5180,7 +5654,7 @@ function bindSendNotificationModal(email){
             // If error is due to authentication, redirect to login
             if (error.message.includes('permission') || error.message.includes('authentication')) {
                 setTimeout(() => {
-                    window.location.href = '/admin/login?error=auth_required';
+                    window.location.href = '/login?error=auth_required';
                 }, 2000);
             }
         });
@@ -5193,6 +5667,9 @@ function bindSendNotificationModal(email){
     function renderPaymentsTable(payments) {
         const tableBody = q('payments-table-body');
         if (!tableBody) return;
+        if (typeof applyFinanceTableStyles === 'function') {
+            applyFinanceTableStyles(tableBody);
+        }
 
         const fragment = document.createDocumentFragment();
 
@@ -5401,13 +5878,6 @@ function bindSendNotificationModal(email){
             dateTo.dataset.bound = 'true';
         }
 
-        // Bind Generate Bill button
-        const generateBillBtn = q('generate-bill-btn');
-        if (generateBillBtn && !generateBillBtn.dataset.bound) {
-            generateBillBtn.addEventListener('click', showBillGeneratorModal);
-            generateBillBtn.dataset.bound = 'true';
-        }
-
         // Initialize refund analytics when finance tab loads
         console.log('[Finance Module] Checking for RefundAnalyticsModule...', typeof window.RefundAnalyticsModule);
         if (typeof window.RefundAnalyticsModule !== 'undefined' && 
@@ -5424,538 +5894,6 @@ function bindSendNotificationModal(email){
 
         state.initialized = true;
         console.log('[Finance Module] Finance tab initialized');
-    }
-
-    /**
-     * Show the bill generator modal
-     */
-    function showBillGeneratorModal() {
-        const content = `
-            <div class="bill-generator-form" style="display:grid; gap:20px; max-width:700px; margin:0 auto;">
-                <div class="message info-message" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:12px;">
-                    <div style="display:flex;align-items:start;gap:10px;">
-                        <div>
-                            <strong style="display:block;margin-bottom:4px;">Generate Invoice</strong>
-                            <span style="font-size:0.9rem;color:var(--text-secondary);">Search for a user by email to view their transactions and generate a bill.</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="display:grid; gap:10px;">
-                    <label for="bill-user-email" style="color:var(--card-title);font-weight:600;font-size:0.95rem;">
-                        User Email <span style="color:#ef4444;">*</span>
-                    </label>
-                    <div style="display:flex; gap:10px;">
-                        <input type="email" id="bill-user-email" class="form-control"
-                               placeholder="user@example.com"
-                               style="flex:1;padding:10px 14px;border:1px solid var(--card-border);border-radius:8px;background:var(--card-bg);color:var(--text-color);font-size:0.95rem;transition:border-color 0.2s;"
-                               required
-                               pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-                               title="Please enter a valid email address" />
-                        <button id="search-user-btn" class="btn btn-primary" style="padding:10px 24px;white-space:nowrap;">
-                            <span style="display:flex;align-items:center;gap:6px;">
-                                <span>🔍</span>
-                                <span>Search</span>
-                            </span>
-                        </button>
-                    </div>
-                </div>
-
-                <div id="bill-search-spinner" class="loading-spinner" style="display:none;margin:20px auto;"></div>
-                <div id="bill-search-error" class="message error-message" style="display:none;"></div>
-
-                <div id="user-transactions" style="display:none;">
-                    <div style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:10px;padding:16px;margin-bottom:16px;">
-                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-                            <span style="font-size:24px;">👤</span>
-                            <div>
-                                <h3 style="color:var(--card-title);margin:0;font-size:1.1rem;">User Transactions</h3>
-                                <p id="user-email-display" style="color:var(--text-secondary);margin:4px 0 0 0;font-size:0.9rem;"></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="transaction-section" style="margin-bottom:20px;">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                            <h4 style="color:var(--card-title);font-size:1rem;margin:0;display:flex;align-items:center;gap:8px;">
-                                <span>💳</span>
-                                <span>Payments</span>
-                            </h4>
-                            <button id="select-all-payments" class="btn btn-secondary" style="padding:4px 12px;font-size:0.85rem;">Select All</button>
-                        </div>
-                        <div id="payment-checkboxes" style="display:grid;gap:10px;max-height:250px;overflow-y:auto;padding:12px;border:1px solid var(--card-border);border-radius:8px;background:var(--card-bg);"></div>
-                    </div>
-
-                    <div class="transaction-section" style="margin-bottom:20px;">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                            <h4 style="color:var(--card-title);font-size:1rem;margin:0;display:flex;align-items:center;gap:8px;">
-                                <span>📅</span>
-                                <span>Subscriptions</span>
-                            </h4>
-                            <button id="select-all-subscriptions" class="btn btn-secondary" style="padding:4px 12px;font-size:0.85rem;">Select All</button>
-                        </div>
-                        <div id="subscription-checkboxes" style="display:grid;gap:10px;max-height:250px;overflow-y:auto;padding:12px;border:1px solid var(--card-border);border-radius:8px;background:var(--card-bg);"></div>
-                    </div>
-
-                    <div style="display:grid;gap:16px;background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:10px;padding:16px;">
-                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border:1px solid var(--card-border);border-radius:8px;transition:background 0.2s;" onmouseover="this.style.background='var(--hover-bg,rgba(99,102,241,0.05))'" onmouseout="this.style.background='transparent'">
-                            <input type="checkbox" id="send-via-email" style="width:20px;height:20px;cursor:pointer;" />
-                            <div>
-                                <div style="color:var(--text-color);font-weight:600;">Send via Email</div>
-                                <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:2px;">Email the generated bill directly to the user</div>
-                            </div>
-                        </label>
-
-                        <div style="display:flex;gap:10px;">
-                            <button id="generate-bill-submit" class="btn btn-primary" style="flex:1;padding:12px;font-weight:600;">
-                                <span style="display:flex;align-items:center;justify-content:center;gap:8px;">
-                                    <span>📄</span>
-                                    <span>Generate Bill</span>
-                                </span>
-                            </button>
-                            <button id="cancel-bill-btn" class="btn btn-secondary" style="padding:12px 20px;">
-                                Cancel
-                            </button>
-                        </div>
-                        <div id="bill-generate-spinner" class="loading-spinner" style="display:none;margin:10px auto;"></div>
-                        <div id="bill-generate-error" class="message error-message" style="display:none;"></div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        showModal('Generate Bill', content);
-        bindBillGeneratorEvents();
-    }
-
-    /**
-     * Search for user transactions
-     * @param {string} email - User email to search for
-     */
-    function searchUserTransactions(email) {
-        const errorEl = q('bill-search-error');
-        const spinner = q('bill-search-spinner');
-        const searchBtn = q('search-user-btn');
-        const transactionsDiv = q('user-transactions');
-        const userEmailDisplay = q('user-email-display');
-
-        // Validate email is provided
-        const emailValidation = ValidationUtils.validateRequired(email, 'User email');
-        if (!emailValidation.valid) {
-            if (errorEl) {
-                errorEl.textContent = emailValidation.message;
-                errorEl.style.display = 'block';
-            }
-            return;
-        }
-
-        // Validate email format
-        if (!ValidationUtils.isValidEmail(email.trim())) {
-            if (errorEl) {
-                errorEl.textContent = 'Please enter a valid email address';
-                errorEl.style.display = 'block';
-            }
-            return;
-        }
-
-        // Hide previous errors and transactions
-        if (errorEl) errorEl.style.display = 'none';
-        if (transactionsDiv) transactionsDiv.style.display = 'none';
-
-        // Show spinner
-        if (spinner) spinner.style.display = 'block';
-        if (searchBtn) searchBtn.disabled = true;
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'application/json' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        // Fetch user's transactions using the new endpoint
-        const url = `/admin/finance/user-transactions?userEmail=${encodeURIComponent(email)}`;
-
-        fetch(url, { method: 'GET', credentials: 'include', headers })
-            .then(r => {
-                if (!r.ok) {
-                    if (r.status === 404) {
-                        throw new Error('User not found or has no transactions');
-                    }
-                    throw new Error('Failed to fetch user transactions');
-                }
-                return r.json();
-            })
-            .then(payload => {
-                if (!payload || payload.status !== true || !payload.data) {
-                    throw new Error(payload?.message || 'Invalid response from server');
-                }
-
-                const data = payload.data;
-                const payments = data.payments || [];
-                const subscriptions = data.subscriptions || [];
-
-                if (payments.length === 0 && subscriptions.length === 0) {
-                    throw new Error('No transactions found for this user');
-                }
-
-                // Display user email
-                if (userEmailDisplay) {
-                    userEmailDisplay.textContent = email;
-                }
-
-                // Display transactions as checkboxes
-                displayTransactionCheckboxes(payments, subscriptions);
-
-                // Show transactions section
-                if (transactionsDiv) transactionsDiv.style.display = 'block';
-            })
-            .catch(error => {
-                console.error('Error searching user transactions:', error);
-
-                // Provide user-friendly error messages
-                let errorMessage = error.message || 'Failed to search user transactions';
-
-                if (errorMessage.includes('No transactions found')) {
-                    errorMessage = 'No transactions found for this user. The user may not have any successful payments or subscriptions.';
-                } else if (errorMessage.includes('permission')) {
-                    errorMessage = 'You do not have permission to view user transactions.';
-                } else if (errorMessage.includes('authentication') || errorMessage.includes('auth')) {
-                    errorMessage = 'Your session has expired. Please log in again.';
-                } else if (errorMessage.includes('not found') || errorMessage.includes('User not found')) {
-                    errorMessage = 'User not found or has no transactions. Please check the email address.';
-                }
-
-                if (errorEl) {
-                    errorEl.textContent = errorMessage;
-                    errorEl.style.display = 'block';
-                }
-            })
-            .finally(() => {
-                if (spinner) spinner.style.display = 'none';
-                if (searchBtn) searchBtn.disabled = false;
-            });
-    }
-
-    /**
-     * Display transaction checkboxes
-     * @param {Array} payments - Array of payment objects
-     * @param {Array} subscriptions - Array of subscription objects
-     */
-    function displayTransactionCheckboxes(payments, subscriptions) {
-        const paymentCheckboxesDiv = q('payment-checkboxes');
-        const subscriptionCheckboxesDiv = q('subscription-checkboxes');
-
-        // Clear previous checkboxes
-        if (paymentCheckboxesDiv) paymentCheckboxesDiv.innerHTML = '';
-        if (subscriptionCheckboxesDiv) subscriptionCheckboxesDiv.innerHTML = '';
-
-        // Display payments
-        if (payments.length === 0) {
-            if (paymentCheckboxesDiv) {
-                paymentCheckboxesDiv.innerHTML = '<div style="color:var(--text-secondary);padding:12px;text-align:center;font-style:italic;">No successful payments found</div>';
-            }
-        } else {
-            payments.forEach(payment => {
-                const label = document.createElement('label');
-                label.style.cssText = 'display:flex;align-items:start;gap:10px;padding:12px;border:1px solid var(--card-border);border-radius:8px;cursor:pointer;transition:all 0.2s;background:var(--endpoint-bg);';
-                label.addEventListener('mouseenter', function() {
-                    this.style.background = 'var(--hover-bg, rgba(99,102,241,0.08))';
-                    this.style.borderColor = 'var(--card-hover-border)';
-                });
-                label.addEventListener('mouseleave', function() {
-                    this.style.background = 'var(--endpoint-bg)';
-                    this.style.borderColor = 'var(--card-border)';
-                });
-
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'payment-checkbox';
-                checkbox.value = payment.id;
-                checkbox.style.cssText = 'margin-top:2px;';
-
-                const content = document.createElement('div');
-                content.style.cssText = 'flex:1;';
-
-                const mainText = document.createElement('div');
-                mainText.style.cssText = 'color:var(--text-color);font-weight:600;margin-bottom:4px;';
-                mainText.textContent = formatCurrency(payment.amount);
-
-                const subText = document.createElement('div');
-                subText.style.cssText = 'color:var(--text-secondary);font-size:0.85rem;';
-                subText.textContent = `${payment.paymentMethod || 'N/A'} • ${formatDate(payment.createdAt)}`;
-
-                content.appendChild(mainText);
-                content.appendChild(subText);
-
-                label.appendChild(checkbox);
-                label.appendChild(content);
-                if (paymentCheckboxesDiv) paymentCheckboxesDiv.appendChild(label);
-            });
-        }
-
-        // Display subscriptions
-        if (subscriptions.length === 0) {
-            if (subscriptionCheckboxesDiv) {
-                subscriptionCheckboxesDiv.innerHTML = '<div style="color:var(--text-secondary);padding:12px;text-align:center;font-style:italic;">No subscriptions found</div>';
-            }
-        } else {
-            subscriptions.forEach(subscription => {
-                const label = document.createElement('label');
-                label.style.cssText = 'display:flex;align-items:start;gap:10px;padding:12px;border:1px solid var(--card-border);border-radius:8px;cursor:pointer;transition:all 0.2s;background:var(--endpoint-bg);';
-                label.addEventListener('mouseenter', function() {
-                    this.style.background = 'var(--hover-bg, rgba(99,102,241,0.08))';
-                    this.style.borderColor = 'var(--card-hover-border)';
-                });
-                label.addEventListener('mouseleave', function() {
-                    this.style.background = 'var(--endpoint-bg)';
-                    this.style.borderColor = 'var(--card-border)';
-                });
-
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'subscription-checkbox';
-                checkbox.value = subscription.id;
-                checkbox.style.cssText = 'margin-top:2px;';
-
-                const content = document.createElement('div');
-                content.style.cssText = 'flex:1;';
-
-                const mainText = document.createElement('div');
-                mainText.style.cssText = 'color:var(--text-color);font-weight:600;margin-bottom:4px;';
-                const amount = subscription.amount ? formatCurrency(subscription.amount) : 'N/A';
-                const statusText = subscription.status ? ` (${subscription.status})` : '';
-                mainText.textContent = `${subscription.service || 'Subscription'} - ${amount}${statusText}`;
-
-                const subText = document.createElement('div');
-                subText.style.cssText = 'color:var(--text-secondary);font-size:0.85rem;';
-                subText.textContent = `${formatDate(subscription.startDate)} → ${formatDate(subscription.endDate)}`;
-
-                content.appendChild(mainText);
-                content.appendChild(subText);
-
-                label.appendChild(checkbox);
-                label.appendChild(content);
-                if (subscriptionCheckboxesDiv) subscriptionCheckboxesDiv.appendChild(label);
-            });
-        }
-    }
-
-    /**
-     * Generate bill with selected transactions
-     */
-    function generateBill() {
-        const emailInput = q('bill-user-email');
-        const sendViaEmailCheckbox = q('send-via-email');
-        const spinner = q('bill-generate-spinner');
-        const errorEl = q('bill-generate-error');
-        const submitBtn = q('generate-bill-submit');
-
-        const userEmail = emailInput ? emailInput.value.trim() : '';
-
-        // Hide previous errors
-        if (errorEl) errorEl.style.display = 'none';
-
-        // Validate email is provided
-        const emailValidation = ValidationUtils.validateRequired(userEmail, 'User email');
-        if (!emailValidation.valid) {
-            if (errorEl) {
-                errorEl.textContent = emailValidation.message;
-                errorEl.style.display = 'block';
-            }
-            return;
-        }
-
-        // Validate email format
-        if (!ValidationUtils.isValidEmail(userEmail)) {
-            if (errorEl) {
-                errorEl.textContent = 'Please enter a valid email address';
-                errorEl.style.display = 'block';
-            }
-            return;
-        }
-
-        // Collect selected payment IDs
-        const paymentCheckboxes = document.querySelectorAll('.payment-checkbox:checked');
-        const paymentIds = Array.from(paymentCheckboxes).map(cb => cb.value);
-
-        // Collect selected subscription IDs
-        const subscriptionCheckboxes = document.querySelectorAll('.subscription-checkbox:checked');
-        const subscriptionIds = Array.from(subscriptionCheckboxes).map(cb => cb.value);
-
-        // Validate at least one transaction is selected
-        if (paymentIds.length === 0 && subscriptionIds.length === 0) {
-            if (errorEl) {
-                errorEl.textContent = 'Please select at least one transaction to include in the bill';
-                errorEl.style.display = 'block';
-            }
-            return;
-        }
-
-        const sendViaEmail = sendViaEmailCheckbox ? sendViaEmailCheckbox.checked : false;
-
-        // Hide previous errors
-        if (errorEl) errorEl.style.display = 'none';
-
-        // Show spinner
-        if (spinner) spinner.style.display = 'block';
-        if (submitBtn) submitBtn.disabled = true;
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        const requestBody = {
-            userEmail: userEmail,
-            paymentIds: paymentIds,
-            subscriptionIds: subscriptionIds,
-            sendViaEmail: sendViaEmail
-        };
-
-        fetch('/admin/finance/generate-bill', {
-            method: 'POST',
-            credentials: 'include',
-            headers: headers,
-            body: JSON.stringify(requestBody)
-        })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to generate bills');
-                }
-                // Try to parse error message
-                return response.json().then(data => {
-                    throw new Error(data.message || 'Failed to generate bill');
-                }).catch(() => {
-                    throw new Error('Failed to generate bill');
-                });
-            }
-
-            // Check if response is PDF or JSON
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('application/pdf')) {
-                // Download PDF
-                return response.blob().then(blob => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `invoice-${userEmail}-${Date.now()}.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-
-                    showMessage('success', 'Bill generated and downloaded successfully');
-                    closeModal();
-                });
-            } else {
-                // JSON response (email sent)
-                return response.json().then(data => {
-                    if (data.status === true) {
-                        if (data.data && data.data.emailSent === false) {
-                            showMessage('warning', 'Bill generated but email failed to send. Please try downloading instead.', 6000);
-                        } else {
-                            showMessage('success', 'Bill generated and sent via email successfully');
-                        }
-                        closeModal();
-                    } else {
-                        throw new Error(data.message || 'Failed to generate bill');
-                    }
-                });
-            }
-        })
-        .catch(error => {
-            console.error('Error generating bill:', error);
-
-            // Provide user-friendly error messages
-            let errorMessage = error.message || 'Failed to generate bill';
-
-            if (errorMessage.includes('permission')) {
-                errorMessage = 'You do not have permission to generate bills. Please contact an administrator.';
-            } else if (errorMessage.includes('authentication') || errorMessage.includes('auth')) {
-                errorMessage = 'Your session has expired. Please log in again.';
-                setTimeout(() => {
-                    window.location.href = '/admin/login?error=session_expired';
-                }, 2000);
-            } else if (errorMessage.includes('not found') || errorMessage.includes('No user')) {
-                errorMessage = 'User not found. Please check the email address and try again.';
-            } else if (errorMessage.includes('email')) {
-                errorMessage = 'Invalid email address. Please enter a valid email.';
-            } else if (errorMessage.includes('transaction')) {
-                errorMessage = 'No valid transactions found. Please select at least one transaction.';
-            }
-
-            if (errorEl) {
-                errorEl.textContent = errorMessage;
-                errorEl.style.display = 'block';
-            }
-            showMessage('error', errorMessage);
-        })
-        .finally(() => {
-            if (spinner) spinner.style.display = 'none';
-            if (submitBtn) submitBtn.disabled = false;
-        });
-    }
-
-    /**
-     * Bind bill generator modal events
-     */
-    function bindBillGeneratorEvents() {
-        const searchBtn = q('search-user-btn');
-        const emailInput = q('bill-user-email');
-        const submitBtn = q('generate-bill-submit');
-        const cancelBtn = q('cancel-bill-btn');
-        const selectAllPaymentsBtn = q('select-all-payments');
-        const selectAllSubscriptionsBtn = q('select-all-subscriptions');
-
-        // Bind search button
-        if (searchBtn) {
-            searchBtn.addEventListener('click', function() {
-                const email = emailInput ? emailInput.value.trim() : '';
-                searchUserTransactions(email);
-            });
-        }
-
-        // Bind enter key on email input
-        if (emailInput) {
-            emailInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const email = emailInput.value.trim();
-                    searchUserTransactions(email);
-                }
-            });
-        }
-
-        // Bind select all payments button
-        if (selectAllPaymentsBtn) {
-            selectAllPaymentsBtn.addEventListener('click', function() {
-                const checkboxes = document.querySelectorAll('.payment-checkbox');
-                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-                checkboxes.forEach(cb => cb.checked = !allChecked);
-                this.textContent = allChecked ? 'Select All' : 'Deselect All';
-            });
-        }
-
-        // Bind select all subscriptions button
-        if (selectAllSubscriptionsBtn) {
-            selectAllSubscriptionsBtn.addEventListener('click', function() {
-                const checkboxes = document.querySelectorAll('.subscription-checkbox');
-                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-                checkboxes.forEach(cb => cb.checked = !allChecked);
-                this.textContent = allChecked ? 'Select All' : 'Deselect All';
-            });
-        }
-
-        // Bind generate bill button
-        if (submitBtn) {
-            submitBtn.addEventListener('click', generateBill);
-        }
-
-        // Bind cancel button
-        if (cancelBtn) {
-            cancelBtn.addEventListener('click', closeModal);
-        }
     }
 
     // Hook into admin init: click on Finance tab should trigger initialization
@@ -5980,10 +5918,7 @@ function bindSendNotificationModal(email){
         loadFinanceMetrics,
         loadPaymentHistory,
         filterPayments,
-        renderRevenueChart,
-        showBillGeneratorModal,
-        searchUserTransactions,
-        generateBill
+        renderRevenueChart
     };
 })();
 
@@ -6012,8 +5947,8 @@ function bindSendNotificationModal(email){
         const headers = { 'Accept': 'application/json' };
         if (token) { headers['Authorization'] = 'Bearer ' + token; }
 
-        console.log('[Refund Analytics] Fetching /admin/refunds/metrics...');
-        fetch('/admin/refunds/metrics', {
+        console.log('[Refund Analytics] Fetching /refunds/metrics...');
+        fetch('/refunds/metrics', {
             method: 'GET',
             credentials: 'include',
             headers
@@ -6117,7 +6052,7 @@ function bindSendNotificationModal(email){
         if (loader) loader.style.display = 'block';
 
         // Build URL with query parameters
-        let url = `/admin/refunds/history?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+        let url = `/refunds/history?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
         if (statusFilter) {
             url += `&status=${encodeURIComponent(statusFilter)}`;
         }
@@ -6188,6 +6123,9 @@ function bindSendNotificationModal(email){
     function renderRefundHistoryTable(refunds) {
         const tableBody = q('refunds-table-body');
         if (!tableBody) return;
+        if (typeof applyFinanceTableStyles === 'function') {
+            applyFinanceTableStyles(tableBody);
+        }
 
         const fragment = document.createDocumentFragment();
 
@@ -6218,10 +6156,11 @@ function bindSendNotificationModal(email){
             emailCell.textContent = refund.userEmail || 'N/A';
             row.appendChild(emailCell);
 
-            // Amount
+            // Amount (API returns rupees, formatCurrency expects paise)
             const amountCell = document.createElement('td');
-            if (refund.amount != null) {
-                amountCell.textContent = formatCurrency(refund.amount);
+            const amountValue = Number(refund.amount);
+            if (Number.isFinite(amountValue)) {
+                amountCell.textContent = formatCurrency(Math.round(amountValue * 100));
             } else {
                 amountCell.textContent = '-';
             }
@@ -6386,7 +6325,7 @@ function bindSendNotificationModal(email){
         const headers = { 'Accept': 'text/csv' };
         if (token) { headers['Authorization'] = 'Bearer ' + token; }
 
-        const url = `/admin/refunds/export?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
+        const url = `/refunds/export?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
 
         fetch(url, {
             method: 'GET',
@@ -6441,9 +6380,10 @@ function bindSendNotificationModal(email){
         if (token) { headers['Authorization'] = 'Bearer ' + token; }
 
         // Show loading modal
-        showModal('Refund Details', '<div style="text-align: center; padding: 2rem;">Loading refund details...</div>');
+        const loadingContent = '<div class="modal-loading"><div class="loading-spinner"></div><div class="loading-text">Loading refund details...</div></div>';
+        showFinancePanel('Refund Details', loadingContent);
 
-        fetch(`/admin/refunds/${encodeURIComponent(refundId)}`, {
+        fetch(`/refunds/${encodeURIComponent(refundId)}`, {
             method: 'GET',
             credentials: 'include',
             headers
@@ -6461,52 +6401,129 @@ function bindSendNotificationModal(email){
 
             const refund = payload.data;
 
-            // Build refund details HTML
+            const statusKey = String(refund.status || '').toUpperCase();
+            const statusValue = escapeHtml(refund.status || 'UNKNOWN');
+            const statusClass = statusKey === 'PROCESSED' ? 'refund-status--success' :
+                statusKey === 'FAILED' ? 'refund-status--error' :
+                statusKey === 'PENDING' ? 'refund-status--warning' : 'refund-status--neutral';
+            const amountValue = Number(refund.amount);
+            const amountFormatted = Number.isFinite(amountValue)
+                ? formatCurrency(Math.round(amountValue * 100))
+                : '₹0.00';
+            const speedRequested = refund.speedRequested ? String(refund.speedRequested).toLowerCase() : '';
+            const speedProcessed = refund.speedProcessed ? String(refund.speedProcessed).toLowerCase() : '';
+            const formatSpeed = (speed) =>
+                speed ? speed.charAt(0).toUpperCase() + speed.slice(1) : 'N/A';
+            const speedLabel = speedProcessed ? formatSpeed(speedProcessed) : formatSpeed(speedRequested);
+            const userEmail = refund.userEmail ? escapeHtml(refund.userEmail) : 'N/A';
+            const processedBy = refund.processedBy ? escapeHtml(refund.processedBy) : 'N/A';
+            const paymentId = refund.paymentId ? escapeHtml(refund.paymentId) : 'N/A';
+            const refundId = refund.refundId ? escapeHtml(refund.refundId) : 'N/A';
+
             const detailsHtml = `
-                <div class="refund-details-content">
-                    <div class="refund-detail-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                        <h3 style="margin: 0 0 0.75rem 0; color: var(--card-title); font-size: 1rem;">Refund Information</h3>
-                        <div style="display: grid; gap: 0.5rem; font-size: 0.9rem;">
-                            <div><strong>Refund ID:</strong> <code style="background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px;">${escapeHtml(refund.refundId)}</code></div>
-                            <div><strong>Payment ID:</strong> <code style="background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px;">${escapeHtml(refund.paymentId)}</code></div>
-                            <div><strong>Amount:</strong> ${formatCurrency(refund.amount)}</div>
-                            <div><strong>Currency:</strong> ${escapeHtml(refund.currency || 'INR')}</div>
-                            <div><strong>Status:</strong> <span class="badge" style="background: ${refund.status === 'PROCESSED' ? '#10b981' : refund.status === 'FAILED' ? '#ef4444' : '#f59e0b'}">${escapeHtml(refund.status)}</span></div>
-                            <div><strong>Speed Requested:</strong> ${escapeHtml((refund.speedRequested || 'N/A').charAt(0).toUpperCase() + (refund.speedRequested || 'N/A').slice(1).toLowerCase())}</div>
-                            <div><strong>Speed Processed:</strong> ${escapeHtml((refund.speedProcessed || 'N/A').charAt(0).toUpperCase() + (refund.speedProcessed || 'N/A').slice(1).toLowerCase())}</div>
+                <div class="refund-details-shell">
+                    <div class="refund-details-header">
+                        <div>
+                            <p class="refund-eyebrow">Refund analytics</p>
+                            <h3 class="refund-details-title">Refund details</h3>
+                            <p class="refund-details-subtitle">${refundId} · ${paymentId}</p>
+                        </div>
+                        <span class="refund-status-pill ${statusClass}">${statusValue}</span>
+                    </div>
+
+                    <div class="refund-metric-grid">
+                        <div class="refund-metric-card refund-metric-card--neutral">
+                            <div class="refund-metric-label">Amount</div>
+                            <div class="refund-metric-value">${amountFormatted}</div>
+                        </div>
+                        <div class="refund-metric-card refund-metric-card--positive">
+                            <div class="refund-metric-label">Speed</div>
+                            <div class="refund-metric-value">${escapeHtml(speedLabel)}</div>
+                        </div>
+                        <div class="refund-metric-card refund-metric-card--neutral">
+                            <div class="refund-metric-label">Currency</div>
+                            <div class="refund-metric-value">${escapeHtml(refund.currency || 'INR')}</div>
                         </div>
                     </div>
 
-                    <div class="refund-detail-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                        <h3 style="margin: 0 0 0.75rem 0; color: var(--card-title); font-size: 1rem;">User Information</h3>
-                        <div style="display: grid; gap: 0.5rem; font-size: 0.9rem;">
-                            <div><strong>User Email:</strong> ${escapeHtml(refund.userEmail)}</div>
-                            <div><strong>Processed By:</strong> ${escapeHtml(refund.processedBy)}</div>
+                    <div class="refund-details-grid">
+                        <div class="refund-details-section">
+                            <div class="refund-section-title">Transaction</div>
+                            <div class="refund-kv">
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Refund ID</span>
+                                    <span class="refund-kv-value"><span class="refund-code">${refundId}</span></span>
+                                </div>
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Payment ID</span>
+                                    <span class="refund-kv-value"><span class="refund-code">${paymentId}</span></span>
+                                </div>
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Status</span>
+                                    <span class="refund-kv-value">${statusValue}</span>
+                                </div>
+                                ${refund.reason ? `
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Reason</span>
+                                    <span class="refund-kv-value">${escapeHtml(refund.reason)}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div class="refund-details-section">
+                            <div class="refund-section-title">Customer</div>
+                            <div class="refund-kv">
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">User email</span>
+                                    <span class="refund-kv-value">${userEmail}</span>
+                                </div>
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Processed by</span>
+                                    <span class="refund-kv-value">${processedBy}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="refund-details-section">
+                            <div class="refund-section-title">Processing</div>
+                            <div class="refund-kv">
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Speed requested</span>
+                                    <span class="refund-kv-value">${escapeHtml(formatSpeed(speedRequested))}</span>
+                                </div>
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Speed processed</span>
+                                    <span class="refund-kv-value">${escapeHtml(formatSpeed(speedProcessed))}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="refund-details-section">
+                            <div class="refund-section-title">Timeline</div>
+                            <div class="refund-kv">
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Created at</span>
+                                    <span class="refund-kv-value">${formatDate(refund.createdAt)}</span>
+                                </div>
+                                ${refund.processedAt ? `
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Processed at</span>
+                                    <span class="refund-kv-value">${formatDate(refund.processedAt)}</span>
+                                </div>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
-
-                    <div class="refund-detail-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                        <h3 style="margin: 0 0 0.75rem 0; color: var(--card-title); font-size: 1rem;">Timestamps</h3>
-                        <div style="display: grid; gap: 0.5rem; font-size: 0.9rem;">
-                            <div><strong>Created At:</strong> ${formatDate(refund.createdAt)}</div>
-                            ${refund.processedAt ? `<div><strong>Processed At:</strong> ${formatDate(refund.processedAt)}</div>` : ''}
-                        </div>
-                    </div>
-
-                    ${refund.reason ? `
-                    <div class="refund-detail-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem;">
-                        <h3 style="margin: 0 0 0.75rem 0; color: var(--card-title); font-size: 1rem;">Reason</h3>
-                        <div style="font-size: 0.9rem; color: var(--text-color);">${escapeHtml(refund.reason)}</div>
-                    </div>
-                    ` : ''}
                 </div>
             `;
 
-            showModal('Refund Details', detailsHtml);
+            showFinancePanel('Refund Details', detailsHtml);
         })
         .catch(error => {
             console.error('Error loading refund details:', error);
-            showModal('Error', `<div style="color: #ef4444; text-align: center; padding: 2rem;">${escapeHtml(error.message || 'Failed to load refund details')}</div>`);
+            const errorContent = `<div class="modal-status modal-status-error">${escapeHtml(error.message || 'Failed to load refund details')}</div>`;
+            showModal('Error', errorContent);
         });
     }
 
@@ -6610,28 +6627,7 @@ function bindSendNotificationModal(email){
         const content = `
             <div class="export-form" style="display:grid; gap:16px;">
                 <div class="message info-message">
-                    Export payment and subscription records to CSV format for financial reconciliation and reporting.
-                </div>
-
-                <div style="display:grid; gap:8px;">
-                    <label style="color:var(--text-secondary);font-weight:600;">Export Type</label>
-                    <div class="radio-group" style="display:grid;gap:8px;">
-                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px;border:1px solid var(--card-border);border-radius:6px;transition:background 0.2s;">
-                            <input type="radio" name="export-type" value="payments" checked
-                                   style="width:18px;height:18px;cursor:pointer;" />
-                            <span style="color:var(--text-color);">Payments</span>
-                        </label>
-                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px;border:1px solid var(--card-border);border-radius:6px;transition:background 0.2s;">
-                            <input type="radio" name="export-type" value="subscriptions"
-                                   style="width:18px;height:18px;cursor:pointer;" />
-                            <span style="color:var(--text-color);">Subscriptions</span>
-                        </label>
-                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px;border:1px solid var(--card-border);border-radius:6px;transition:background 0.2s;">
-                            <input type="radio" name="export-type" value="both"
-                                   style="width:18px;height:18px;cursor:pointer;" />
-                            <span style="color:var(--text-color);">Both</span>
-                        </label>
-                    </div>
+                    Export payment records to CSV format for financial reconciliation and reporting.
                 </div>
 
                 <div style="display:grid; gap:8px;">
@@ -6666,7 +6662,7 @@ function bindSendNotificationModal(email){
             </div>
         `;
 
-        showModal('Export Financial Data', content);
+        showFinancePanel('Export Financial Data', content);
         bindExportModalEvents();
 
         // Add hover effects to radio labels
@@ -6694,8 +6690,7 @@ function bindSendNotificationModal(email){
         const spinner = q('export-spinner');
 
         // Get selected export type
-        const exportTypeRadio = document.querySelector('input[name="export-type"]:checked');
-        const exportType = exportTypeRadio ? exportTypeRadio.value : 'payments';
+        const exportType = 'payments';
 
         // Get date range
         const startDate = startDateInput ? startDateInput.value.trim() : '';
@@ -6731,7 +6726,7 @@ function bindSendNotificationModal(email){
             endDate: endDate
         };
 
-        fetch('/admin/tools/export-financial-data', {
+        fetch('/tools/export-financial-data', {
             method: 'POST',
             credentials: 'include',
             headers: headers,
@@ -6788,7 +6783,7 @@ function bindSendNotificationModal(email){
             } else if (errorMessage.includes('authentication') || errorMessage.includes('auth')) {
                 errorMessage = 'Your session has expired. Please log in again.';
                 setTimeout(() => {
-                    window.location.href = '/admin/login?error=session_expired';
+                    window.location.href = '/login?error=session_expired';
                 }, 2000);
             } else if (errorMessage.includes('date range')) {
                 errorMessage = 'The selected date range is invalid or too large. Please select a smaller range.';
@@ -6872,7 +6867,7 @@ async function fetchRefundSummary(paymentId) {
             throw new Error('Authentication required');
         }
 
-        const response = await fetch(`/admin/refunds/payment/${encodeURIComponent(paymentId)}`, {
+        const response = await fetch(`/refunds/payment/${encodeURIComponent(paymentId)}`, {
             method: 'GET',
             headers: {
                 'Authorization': 'Bearer ' + token,
@@ -7169,7 +7164,7 @@ async function submitRefund(paymentId, maxRefundable) {
             throw new Error('Authentication required');
         }
         
-        const response = await fetch('/admin/refunds/initiate', {
+        const response = await fetch('/refunds/initiate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -7185,10 +7180,6 @@ async function submitRefund(paymentId, maxRefundable) {
         if (data.status === true && data.data && data.data.success) {
             showMessage('success', data.data.message || 'Refund processed successfully');
             closeModal();
-            // Refresh the subscription view if the function exists
-            if (typeof loadSubscriptions === 'function') {
-                loadSubscriptions();
-            }
         } else {
             showMessage('error', (data.data && data.data.message) || data.message || 'Refund failed');
         }
@@ -7263,7 +7254,7 @@ async function viewRefundHistory(paymentId) {
 
     try {
         // Show loading modal
-        showModal('Refund History', '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">Loading refund history...</div>');
+        showFinancePanel('Refund History', '<div class="modal-loading"><div class="loading-spinner"></div><div class="loading-text">Loading refund history...</div></div>');
         
         // Fetch refund summary for payment
         const summary = await fetchRefundSummary(paymentId);
@@ -7357,137 +7348,18 @@ async function viewRefundHistory(paymentId) {
             </div>
         `;
         
-        showModal('Refund History', modalContent);
+        showFinancePanel('Refund History', modalContent);
     } catch (error) {
         console.error('Failed to load refund history:', error);
         showModal('Error', `
-            <div style="text-align: center; padding: 2rem;">
-                <div style="color: #ef4444; font-size: 1.25rem; margin-bottom: 1rem;">⚠️</div>
-                <div style="color: var(--text-color); font-weight: 600; margin-bottom: 0.5rem;">Failed to Load Refund History</div>
-                <div style="color: var(--text-secondary); font-size: 0.875rem;">${escapeHtml(error.message || 'An error occurred while loading refund history')}</div>
+            <div class="modal-status modal-status-error" style="text-align: center;">
+                <div style="font-size: 1.25rem; margin-bottom: 0.5rem;">⚠️</div>
+                <div style="font-weight: 600; margin-bottom: 0.5rem;">Failed to Load Refund History</div>
+                <div style="font-size: 0.875rem; opacity: 0.9;">${escapeHtml(error.message || 'An error occurred while loading refund history')}</div>
             </div>
         `);
     }
 }
-
-/**
- * Integrate refund button into subscription payment rendering
- * This function should be called when rendering subscription details that include payment information
- * 
- * @param {Object} subscription - Subscription object containing payment details
- * @param {HTMLElement} container - Container element where subscription is being rendered
- * 
- * Usage example:
- * When rendering a subscription with payment, call this function to add refund controls:
- * 
- * const subscriptionCard = document.createElement('div');
- * subscriptionCard.className = 'subscription-card';
- * // ... render subscription details ...
- * 
- * // Add refund button if payment exists
- * if (subscription.paymentId) {
- *     const refundContainer = document.createElement('div');
- *     refundContainer.className = 'refund-button-container';
- *     subscriptionCard.appendChild(refundContainer);
- *     integrateRefundButton(subscription, refundContainer);
- * }
- */
-function integrateRefundButton(subscription, container) {
-    if (!subscription || !container) {
-        console.warn('integrateRefundButton: Missing subscription or container');
-        return;
-    }
-
-    // Check if subscription has a payment ID
-    const paymentId = subscription.paymentId || subscription.payment_id || subscription.razorpayPaymentId;
-    
-    if (!paymentId) {
-        console.log('No payment ID found for subscription, skipping refund button');
-        return;
-    }
-
-    // Create a wrapper for the refund button
-    const refundWrapper = document.createElement('div');
-    refundWrapper.className = 'refund-button-wrapper';
-    refundWrapper.style.marginTop = '12px';
-    
-    // Render the refund button asynchronously
-    renderRefundButton(paymentId, refundWrapper);
-    
-    // Append to container
-    container.appendChild(refundWrapper);
-}
-
-/**
- * Helper function to add refund button to an existing payment display element
- * This can be used to retrofit refund buttons into existing subscription/payment UI
- * 
- * @param {string} paymentId - The payment ID
- * @param {string} containerSelector - CSS selector for the container element
- * 
- * Usage example:
- * addRefundButtonToPayment('pay_abc123', '#payment-details-container');
- */
-function addRefundButtonToPayment(paymentId, containerSelector) {
-    const container = document.querySelector(containerSelector);
-    if (!container) {
-        console.warn(`Container not found: ${containerSelector}`);
-        return;
-    }
-    
-    // Check if refund button already exists
-    if (container.querySelector('.refund-button-wrapper')) {
-        console.log('Refund button already exists in container');
-        return;
-    }
-    
-    const refundWrapper = document.createElement('div');
-    refundWrapper.className = 'refund-button-wrapper';
-    refundWrapper.style.marginTop = '12px';
-    
-    renderRefundButton(paymentId, refundWrapper);
-    container.appendChild(refundWrapper);
-}
-
-/**
- * Batch add refund buttons to multiple subscription elements
- * Useful for adding refund buttons to a list of subscriptions after they're rendered
- * 
- * @param {Array} subscriptions - Array of subscription objects with paymentId
- * @param {string} subscriptionCardSelector - CSS selector pattern for subscription cards
- * 
- * Usage example:
- * After rendering subscriptions:
- * batchAddRefundButtons(subscriptions, '.subscription-card');
- */
-function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
-    if (!Array.isArray(subscriptions)) {
-        console.warn('batchAddRefundButtons: subscriptions must be an array');
-        return;
-    }
-    
-    const subscriptionCards = document.querySelectorAll(subscriptionCardSelector);
-    
-    subscriptions.forEach((subscription, index) => {
-        const paymentId = subscription.paymentId || subscription.payment_id || subscription.razorpayPaymentId;
-        
-        if (paymentId && subscriptionCards[index]) {
-            // Find or create refund container within the subscription card
-            let refundContainer = subscriptionCards[index].querySelector('.refund-button-container');
-            
-            if (!refundContainer) {
-                refundContainer = document.createElement('div');
-                refundContainer.className = 'refund-button-container';
-                subscriptionCards[index].appendChild(refundContainer);
-            }
-            
-            integrateRefundButton(subscription, refundContainer);
-        }
-    });
-}
-
-// ================= End Refund Button Integration =================
-
 
 // ================= Refund Metrics Module =================
 (function(){
@@ -7514,7 +7386,7 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
         const headers = { 'Accept': 'application/json' };
         if (token) { headers['Authorization'] = 'Bearer ' + token; }
 
-        fetch('/admin/refunds/metrics', {
+        fetch('/refunds/metrics', {
             method: 'GET',
             credentials: 'include',
             headers
@@ -7550,7 +7422,7 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
             // If error is due to authentication, redirect to login
             if (error.message.includes('permission') || error.message.includes('authentication')) {
                 setTimeout(() => {
-                    window.location.href = '/admin/login?error=auth_required';
+                    window.location.href = '/login?error=auth_required';
                 }, 2000);
             }
         });
@@ -7672,7 +7544,7 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
         if (token) { headers['Authorization'] = 'Bearer ' + token; }
 
         // Build URL with pagination parameters
-        let url = `/admin/refunds/history?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+        let url = `/refunds/history?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
 
         // Add filters if set
         if (state.statusFilter) {
@@ -7730,7 +7602,7 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
             // If error is due to authentication, redirect to login
             if (error.message.includes('permission') || error.message.includes('authentication')) {
                 setTimeout(() => {
-                    window.location.href = '/admin/login?error=auth_required';
+                    window.location.href = '/login?error=auth_required';
                 }, 2000);
             }
         });
@@ -7746,6 +7618,9 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
         if (!tbody) {
             console.warn('Refunds table body not found');
             return;
+        }
+        if (typeof applyFinanceTableStyles === 'function') {
+            applyFinanceTableStyles(tbody);
         }
 
         // Handle empty state
@@ -7872,11 +7747,19 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
      * @param {string} refundId - The refund ID to view
      */
     function viewRefundDetails(refundId) {
+        if (!refundId) {
+            showErrorMessage('Refund ID is required');
+            return;
+        }
+
         const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
         const headers = { 'Accept': 'application/json' };
         if (token) { headers['Authorization'] = 'Bearer ' + token; }
 
-        fetch(`/admin/refunds/${encodeURIComponent(refundId)}`, {
+        const loadingContent = '<div class="modal-loading"><div class="loading-spinner"></div><div class="loading-text">Loading refund details...</div></div>';
+        showFinancePanel('Refund Details', loadingContent);
+
+        fetch(`/refunds/${encodeURIComponent(refundId)}`, {
             method: 'GET',
             credentials: 'include',
             headers
@@ -7894,59 +7777,124 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
 
             const refund = payload.data;
             
-            // Build modal content
+            const statusKey = String(refund.status || '').toUpperCase();
+            const statusValue = escapeHtml(refund.status || 'UNKNOWN');
+            const statusClass = statusKey === 'PROCESSED' ? 'refund-status--success' :
+                statusKey === 'FAILED' ? 'refund-status--error' :
+                statusKey === 'PENDING' ? 'refund-status--warning' : 'refund-status--neutral';
+            const amountValue = Number(refund.amount);
+            const amountFormatted = Number.isFinite(amountValue)
+                ? formatCurrency(Math.round(amountValue * 100))
+                : '₹0.00';
+            const speedRequested = refund.speedRequested ? String(refund.speedRequested).toLowerCase() : '';
+            const speedProcessed = refund.speedProcessed ? String(refund.speedProcessed).toLowerCase() : '';
+            const formatSpeed = (speed) =>
+                speed ? speed.charAt(0).toUpperCase() + speed.slice(1) : 'N/A';
+            const speedLabel = speedProcessed ? formatSpeed(speedProcessed) : formatSpeed(speedRequested);
+            const userEmail = refund.userEmail ? escapeHtml(refund.userEmail) : 'N/A';
+            const processedBy = refund.processedBy ? escapeHtml(refund.processedBy) : 'N/A';
+            const paymentId = refund.paymentId ? escapeHtml(refund.paymentId) : 'N/A';
+            const safeRefundId = refund.refundId ? escapeHtml(refund.refundId) : 'N/A';
+
             const content = `
-                <div style="display: grid; gap: 1rem;">
-                    <div class="refund-details" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem;">
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Refund ID:</span>
-                            <span><code>${escapeHtml(refund.refundId)}</code></span>
+                <div class="refund-details-shell">
+                    <div class="refund-details-header">
+                        <div>
+                            <p class="refund-eyebrow">Refund analytics</p>
+                            <h3 class="refund-details-title">Refund details</h3>
+                            <p class="refund-details-subtitle">${safeRefundId} · ${paymentId}</p>
                         </div>
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Payment ID:</span>
-                            <span><code>${escapeHtml(refund.paymentId)}</code></span>
+                        <span class="refund-status-pill ${statusClass}">${statusValue}</span>
+                    </div>
+
+                    <div class="refund-metric-grid">
+                        <div class="refund-metric-card refund-metric-card--neutral">
+                            <div class="refund-metric-label">Amount</div>
+                            <div class="refund-metric-value">${amountFormatted}</div>
                         </div>
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">User Email:</span>
-                            <span>${escapeHtml(refund.userEmail)}</span>
+                        <div class="refund-metric-card refund-metric-card--positive">
+                            <div class="refund-metric-label">Speed</div>
+                            <div class="refund-metric-value">${escapeHtml(speedLabel)}</div>
                         </div>
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Amount:</span>
-                            <span style="font-weight: 700; color: #10b981;">${formatCurrency(refund.amount * 100)}</span>
+                        <div class="refund-metric-card refund-metric-card--neutral">
+                            <div class="refund-metric-label">Currency</div>
+                            <div class="refund-metric-value">${escapeHtml(refund.currency || 'INR')}</div>
                         </div>
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Status:</span>
-                            <span class="badge badge-${refund.status.toLowerCase()}">${escapeHtml(refund.status)}</span>
+                    </div>
+
+                    <div class="refund-details-grid">
+                        <div class="refund-details-section">
+                            <div class="refund-section-title">Transaction</div>
+                            <div class="refund-kv">
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Refund ID</span>
+                                    <span class="refund-kv-value"><span class="refund-code">${safeRefundId}</span></span>
+                                </div>
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Payment ID</span>
+                                    <span class="refund-kv-value"><span class="refund-code">${paymentId}</span></span>
+                                </div>
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Status</span>
+                                    <span class="refund-kv-value">${statusValue}</span>
+                                </div>
+                                ${refund.reason ? `
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Reason</span>
+                                    <span class="refund-kv-value">${escapeHtml(refund.reason)}</span>
+                                </div>
+                                ` : ''}
+                            </div>
                         </div>
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Type:</span>
-                            <span>${escapeHtml(refund.speedProcessed || refund.speedRequested || 'N/A')}</span>
+
+                        <div class="refund-details-section">
+                            <div class="refund-section-title">Customer</div>
+                            <div class="refund-kv">
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">User email</span>
+                                    <span class="refund-kv-value">${userEmail}</span>
+                                </div>
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Processed by</span>
+                                    <span class="refund-kv-value">${processedBy}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Processed By:</span>
-                            <span>${escapeHtml(refund.processedBy)}</span>
+
+                        <div class="refund-details-section">
+                            <div class="refund-section-title">Processing</div>
+                            <div class="refund-kv">
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Speed requested</span>
+                                    <span class="refund-kv-value">${escapeHtml(formatSpeed(speedRequested))}</span>
+                                </div>
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Speed processed</span>
+                                    <span class="refund-kv-value">${escapeHtml(formatSpeed(speedProcessed))}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Created:</span>
-                            <span>${formatDate(refund.createdAt)}</span>
+
+                        <div class="refund-details-section">
+                            <div class="refund-section-title">Timeline</div>
+                            <div class="refund-kv">
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Created at</span>
+                                    <span class="refund-kv-value">${formatDate(refund.createdAt)}</span>
+                                </div>
+                                ${refund.processedAt ? `
+                                <div class="refund-kv-row">
+                                    <span class="refund-kv-label">Processed at</span>
+                                    <span class="refund-kv-value">${formatDate(refund.processedAt)}</span>
+                                </div>
+                                ` : ''}
+                            </div>
                         </div>
-                        ${refund.processedAt ? `
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--card-border);">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Processed:</span>
-                            <span>${formatDate(refund.processedAt)}</span>
-                        </div>
-                        ` : ''}
-                        ${refund.reason ? `
-                        <div class="detail-row" style="display: flex; justify-content: space-between; padding: 0.5rem 0;">
-                            <span style="font-weight: 600; color: var(--text-secondary);">Reason:</span>
-                            <span>${escapeHtml(refund.reason)}</span>
-                        </div>
-                        ` : ''}
                     </div>
                 </div>
             `;
 
-            showModal('Refund Details', content);
+            showFinancePanel('Refund Details', content);
         })
         .catch(error => {
             console.error('Error loading refund details:', error);
@@ -8029,7 +7977,7 @@ function batchAddRefundButtons(subscriptions, subscriptionCardSelector) {
         const dateFrom = q('refund-date-from');
         const dateTo = q('refund-date-to');
 
-        let url = '/admin/refunds/export?';
+        let url = '/refunds/export?';
         
         if (dateFrom && dateFrom.value) {
             url += `startDate=${encodeURIComponent(dateFrom.value)}&`;
@@ -8169,7 +8117,7 @@ async function exportRefunds() {
             endDate: endDate
         });
         
-        const url = `/admin/refunds/export?${params.toString()}`;
+        const url = `/refunds/export?${params.toString()}`;
         
         // Call export API
         const response = await fetch(url, {

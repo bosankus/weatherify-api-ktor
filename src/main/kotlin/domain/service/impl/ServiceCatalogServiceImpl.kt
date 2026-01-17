@@ -4,7 +4,6 @@ import bose.ankush.data.model.*
 import domain.model.Result
 import domain.repository.ServiceCatalogRepository
 import domain.repository.PaymentRepository
-import domain.repository.UserRepository
 import domain.service.ServiceCatalogService
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -16,8 +15,7 @@ import java.time.format.DateTimeFormatter
  */
 class ServiceCatalogServiceImpl(
     private val serviceCatalogRepository: ServiceCatalogRepository,
-    private val paymentRepository: PaymentRepository,
-    private val userRepository: UserRepository
+    private val paymentRepository: PaymentRepository
 ) : ServiceCatalogService {
     private val logger = LoggerFactory.getLogger(ServiceCatalogServiceImpl::class.java)
 
@@ -152,12 +150,9 @@ class ServiceCatalogServiceImpl(
             } else {
                 // Return empty analytics if fetch fails
                 ServiceAnalytics(
-                    activeSubscriptions = 0,
-                    totalSubscriptions = 0,
+                    totalPurchases = 0,
                     totalRevenue = 0.0,
-                    monthlyTrend = emptyList(),
-                    popularPricingTier = null,
-                    averageDuration = 0.0
+                    monthlyTrend = emptyList()
                 )
             }
 
@@ -184,7 +179,7 @@ class ServiceCatalogServiceImpl(
 
     /**
      * List all services with pagination and filtering.
-     * Computes service summaries with active subscription counts.
+     * Computes service summaries with purchase counts.
      */
     override suspend fun listServices(
         page: Int,
@@ -192,7 +187,13 @@ class ServiceCatalogServiceImpl(
         status: ServiceStatus?,
         searchQuery: String?
     ): Result<ServiceListResponse> {
-        logger.debug("Listing services: page=$page, pageSize=$pageSize, status=$status, search=$searchQuery")
+        logger.debug(
+            "Listing services: page={}, pageSize={}, status={}, search={}",
+            page,
+            pageSize,
+            status,
+            searchQuery
+        )
 
         return try {
             // 1. Get services from repository
@@ -203,14 +204,22 @@ class ServiceCatalogServiceImpl(
 
             val (services, totalCount) = (servicesResult as Result.Success).data
 
-            // 2. Compute service summaries with active subscription counts
+            // 2. Compute service summaries with purchase counts
+            val paymentsResult = paymentRepository.getAllPayments(1, Int.MAX_VALUE)
+            val paymentCountsByService = if (paymentsResult is Result.Success) {
+                val successfulStatuses = setOf("verified", "captured")
+                paymentsResult.data.first
+                    .filter { payment ->
+                        payment.serviceType != null && payment.status?.lowercase() in successfulStatuses
+                    }
+                    .groupingBy { it.serviceType?.name }
+                    .eachCount()
+            } else {
+                emptyMap()
+            }
+
             val summaries = services.map { service ->
-                val activeSubsResult = serviceCatalogRepository.getActiveSubscriptionCount(service.serviceCode)
-                val activeSubscriptions = if (activeSubsResult is Result.Success) {
-                    activeSubsResult.data
-                } else {
-                    0L
-                }
+                val totalPurchases = paymentCountsByService[service.serviceCode]?.toLong() ?: 0L
 
                 // Find lowest price from pricing tiers
                 val lowestPrice = service.pricingTiers.minOfOrNull { it.amount } ?: 0
@@ -221,7 +230,7 @@ class ServiceCatalogServiceImpl(
                     serviceCode = service.serviceCode,
                     displayName = service.displayName,
                     status = service.status,
-                    activeSubscriptions = activeSubscriptions,
+                    totalPurchases = totalPurchases,
                     lowestPrice = lowestPrice,
                     currency = currency,
                     createdAt = service.createdAt
@@ -384,7 +393,7 @@ class ServiceCatalogServiceImpl(
 
     /**
      * Change the status of a service.
-     * Validates status transitions and checks for active subscriptions.
+     * Validates status transitions.
      */
     override suspend fun changeServiceStatus(
         id: String,
@@ -410,21 +419,7 @@ class ServiceCatalogServiceImpl(
                 return Result.error("Service is already in $newStatus status")
             }
 
-            // 3. Check for active subscriptions before deactivating/archiving
-            if (newStatus == ServiceStatus.INACTIVE || newStatus == ServiceStatus.ARCHIVED) {
-                val activeSubsResult = serviceCatalogRepository.getActiveSubscriptionCount(existingService.serviceCode)
-                val activeSubscriptions = if (activeSubsResult is Result.Success) {
-                    activeSubsResult.data
-                } else {
-                    0L
-                }
-
-                if (activeSubscriptions > 0 && newStatus == ServiceStatus.ARCHIVED) {
-                    return Result.error("Cannot archive service with $activeSubscriptions active subscriptions")
-                }
-            }
-
-            // 4. Update service status
+            // 3. Update service status
             val now = Instant.now().toString()
             val updatedService = existingService.copy(
                 status = newStatus,
@@ -437,7 +432,7 @@ class ServiceCatalogServiceImpl(
                 return updateResult
             }
 
-            // 5. Create history entry for status change
+            // 4. Create history entry for status change
             val changeType = when (newStatus) {
                 ServiceStatus.ARCHIVED -> ChangeType.ARCHIVED
                 ServiceStatus.ACTIVE -> if (existingService.status == ServiceStatus.ARCHIVED) ChangeType.RESTORED else ChangeType.STATUS_CHANGED
@@ -525,122 +520,59 @@ class ServiceCatalogServiceImpl(
 
     /**
      * Get analytics for a specific service.
-     * Computes subscription metrics, revenue, trends, and popular pricing tiers.
+     * Computes purchase metrics, revenue, and trends.
      */
     override suspend fun getServiceAnalytics(serviceCode: String): Result<ServiceAnalytics> {
         logger.debug("Getting analytics for service: $serviceCode")
 
         return try {
-            // 1. Query subscriptions for service code
-            val usersResult = userRepository.getAllUsers(page = 1, pageSize = Int.MAX_VALUE)
-            if (usersResult is Result.Error) {
-                return Result.error("Failed to get users: ${usersResult.message}")
-            }
-
-            val (users, _) = (usersResult as Result.Success).data
-
-            // 2. Aggregate active vs total subscriptions
-            var activeSubscriptions = 0L
-            var totalSubscriptions = 0L
-            val pricingTierCounts = mutableMapOf<String, Long>()
-            var totalDurationDays = 0L
-            val monthlyData = mutableMapOf<String, MonthlyData>()
-
-            for (user in users) {
-                for (subscription in user.subscriptions) {
-                    if (subscription.service.name == serviceCode) {
-                        totalSubscriptions++
-
-                        if (subscription.status == SubscriptionStatus.ACTIVE) {
-                            activeSubscriptions++
-                        }
-
-                        // Track pricing tier popularity (using service name as identifier)
-                        val tierKey = subscription.service.name
-                        pricingTierCounts[tierKey] = pricingTierCounts.getOrDefault(tierKey, 0) + 1
-
-                        // Calculate duration
-                        try {
-                            val start = Instant.parse(subscription.startDate)
-                            val end = Instant.parse(subscription.endDate)
-                            val durationDays = java.time.Duration.between(start, end).toDays()
-                            totalDurationDays += durationDays
-                        } catch (e: Exception) {
-                            logger.warn("Failed to parse subscription dates", e)
-                        }
-
-                        // Track monthly trends
-                        try {
-                            val startDate = Instant.parse(subscription.startDate)
-                            val month = YearMonth.from(startDate.atZone(java.time.ZoneId.systemDefault()))
-                                .format(DateTimeFormatter.ofPattern("yyyy-MM"))
-
-                            val monthData = monthlyData.getOrPut(month) { MonthlyData() }
-                            monthData.count += 1
-                        } catch (e: Exception) {
-                            logger.warn("Failed to parse subscription start date", e)
-                        }
-                    }
-                }
-            }
-
-            // 3. Calculate total revenue from payments
-            var totalRevenue = 0.0
             val paymentsResult = paymentRepository.getAllPayments(1, Int.MAX_VALUE)
+            if (paymentsResult is Result.Error) {
+                return Result.error("Failed to get payments: ${paymentsResult.message}")
+            }
 
-            if (paymentsResult is Result.Success) {
-                val (payments, _) = paymentsResult.data
-                for (payment in payments) {
-                    if (payment.serviceType?.name == serviceCode && payment.status == "captured") {
-                        val amount = payment.amount ?: 0
-                        totalRevenue += amount / 100.0 // Convert paise to rupees
+            val (payments, _) = (paymentsResult as Result.Success).data
+            val successfulStatuses = setOf("verified", "captured")
+            val servicePayments = payments.filter { payment ->
+                payment.serviceType?.name == serviceCode &&
+                    payment.status?.lowercase() in successfulStatuses
+            }
 
-                        // Add revenue to monthly data
-                        try {
-                            val paymentDate = Instant.parse(payment.createdAt)
-                            val month = YearMonth.from(paymentDate.atZone(java.time.ZoneId.systemDefault()))
-                                .format(DateTimeFormatter.ofPattern("yyyy-MM"))
+            val totalPurchases = servicePayments.size.toLong()
+            val totalRevenue = servicePayments.mapNotNull { it.amount }.sum().toDouble() / 100.0
 
-                            val monthData = monthlyData.getOrPut(month) { MonthlyData() }
-                            monthData.revenue += amount / 100.0
-                        } catch (e: Exception) {
-                            logger.warn("Failed to parse payment date", e)
-                        }
-                    }
+            val monthlyData = mutableMapOf<String, MonthlyData>()
+            for (payment in servicePayments) {
+                try {
+                    val paymentDate = Instant.parse(payment.createdAt)
+                    val month = YearMonth.from(paymentDate.atZone(java.time.ZoneId.systemDefault()))
+                        .format(DateTimeFormatter.ofPattern("yyyy-MM"))
+
+                    val monthData = monthlyData.getOrPut(month) { MonthlyData() }
+                    monthData.count += 1
+                    monthData.revenue += (payment.amount ?: 0).toDouble() / 100.0
+                } catch (e: Exception) {
+                    logger.warn("Failed to parse payment date", e)
                 }
             }
 
-            // 4. Generate monthly trend data (last 12 months)
             val now = YearMonth.now()
             val monthlyTrend = (0..11).map { i ->
                 val month = now.minusMonths(i.toLong())
                 val monthKey = month.format(DateTimeFormatter.ofPattern("yyyy-MM"))
                 val data = monthlyData[monthKey]
 
-                MonthlySubscriptionData(
+                MonthlyPurchaseData(
                     month = monthKey,
                     count = data?.count ?: 0L,
                     revenue = data?.revenue ?: 0.0
                 )
             }.reversed()
 
-            // 5. Identify most popular pricing tier
-            val popularPricingTier = pricingTierCounts.maxByOrNull { it.value }?.key
-
-            // 6. Calculate average subscription duration
-            val averageDuration = if (totalSubscriptions > 0) {
-                totalDurationDays.toDouble() / totalSubscriptions
-            } else {
-                0.0
-            }
-
             val analytics = ServiceAnalytics(
-                activeSubscriptions = activeSubscriptions,
-                totalSubscriptions = totalSubscriptions,
+                totalPurchases = totalPurchases,
                 totalRevenue = totalRevenue,
-                monthlyTrend = monthlyTrend,
-                popularPricingTier = popularPricingTier,
-                averageDuration = averageDuration
+                monthlyTrend = monthlyTrend
             )
 
             Result.success(analytics)

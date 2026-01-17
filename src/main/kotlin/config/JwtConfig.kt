@@ -18,7 +18,7 @@ import java.util.Date
  */
 object JwtConfig {
     private val logger = LoggerFactory.getLogger(JwtConfig::class.java)
-    
+
     // Get JWT secret from Secret Manager
     private val jwtSecret = getSecretValue(Constants.Auth.JWT_SECRET_NAME)
     private val algorithm = Algorithm.HMAC256(jwtSecret)
@@ -28,14 +28,6 @@ object JwtConfig {
         .require(algorithm)
         .withAudience(Environment.getJwtAudience())
         .withIssuer(Environment.getJwtIssuer())
-        .build()
-
-    // JWT verifier that ignores expiration for token refresh
-    private val verifierIgnoringExpiration: JWTVerifier = JWT
-        .require(algorithm)
-        .withAudience(Environment.getJwtAudience())
-        .withIssuer(Environment.getJwtIssuer())
-        .acceptExpiresAt(Long.MAX_VALUE) // Accept any expiration time
         .build()
 
     /**
@@ -98,18 +90,50 @@ object JwtConfig {
                 return null
             } catch (_: TokenExpiredException) {
                 // Token is expired, which is what we want for refresh
-                // Now verify everything else about the token
-                logger.debug("Token is expired, verifying other claims")
-                val jwt = verifierIgnoringExpiration.verify(token)
-                jwt.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+                // The fact that we got TokenExpiredException (not another JWTVerificationException)
+                // means the token's signature, algorithm, audience, and issuer were all valid
+                // We just need to decode it to extract the email
+                logger.debug("Token is expired, extracting email from decoded token")
+                try {
+                    val decodedJWT = JWT.decode(token)
+
+                    // Double-check audience and issuer for extra security
+                    val audience = decodedJWT.audience
+                    val issuer = decodedJWT.issuer
+                    val expectedAudience = Environment.getJwtAudience()
+                    val expectedIssuer = Environment.getJwtIssuer()
+
+                    if (audience == null || !audience.contains(expectedAudience)) {
+                        logger.warn("Token audience mismatch: expected $expectedAudience, got $audience")
+                        return null
+                    }
+
+                    if (issuer != expectedIssuer) {
+                        logger.warn("Token issuer mismatch: expected $expectedIssuer, got $issuer")
+                        return null
+                    }
+
+                    // Extract email from the decoded token
+                    val email = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+                    if (email.isNullOrBlank()) {
+                        logger.warn("Token does not contain email claim")
+                        return null
+                    }
+
+                    return email
+                } catch (e: Exception) {
+                    // Token decoding failed
+                    logger.warn("Token decoding failed: ${e.message}")
+                    null
+                }
             } catch (e: JWTVerificationException) {
-                // Token is invalid for some other reason
+                // Token is invalid for some other reason (wrong signature, audience, issuer, etc.)
                 logger.warn("Token verification failed: ${e.message}")
                 null
             }
         } catch (e: Exception) {
             // Any other exception means the token is invalid
-            logger.error("Token validation error: ${e.message}")
+            logger.error("Token validation error: ${e.message}", e)
             null
         }
     }

@@ -15,6 +15,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -33,7 +34,6 @@ class RefundServiceImpl(
     private val paymentRepository: PaymentRepository,
     private val userRepository: UserRepository,
     private val emailService: EmailService,
-    private val subscriptionService: domain.service.SubscriptionService,
     private val notificationService: domain.service.NotificationService
 ) : RefundService {
 
@@ -72,10 +72,10 @@ class RefundServiceImpl(
         var processed = json
 
         // Replace all occurrences of empty array for notes field
-        processed = processed.replace(""""notes":\s*\[\]""".toRegex(), """"notes":null""")
+        processed = processed.replace(""""notes":\s*\[]""".toRegex(), """"notes":null""")
 
         // Replace all occurrences of empty array for acquirer_data field
-        processed = processed.replace(""""acquirer_data":\s*\[\]""".toRegex(), """"acquirer_data":null""")
+        processed = processed.replace(""""acquirer_data":\s*\[]""".toRegex(), """"acquirer_data":null""")
 
         return processed
     }
@@ -221,64 +221,8 @@ class RefundServiceImpl(
                 logger.warn("Failed to send refund notifications", e)
             }
 
-            // 7. Automatically cancel subscription after successful refund with retry logic
-            var subscriptionCancelled = false
-            var subscriptionCancellationMessage = ""
-            var attemptCount = 0
-            val maxAttempts = 2
-
-            while (attemptCount < maxAttempts && !subscriptionCancelled) {
-                attemptCount++
-                try {
-                    logger.info("Attempting to cancel subscription for user ${payment.userEmail} after refund (attempt $attemptCount/$maxAttempts)")
-                    val cancelResult = subscriptionService.cancelUserSubscription(
-                        adminEmail = adminEmail,
-                        targetUserEmail = payment.userEmail
-                    )
-
-                    when (cancelResult) {
-                        is Result.Success -> {
-                            subscriptionCancelled = true
-                            subscriptionCancellationMessage = "Subscription cancelled successfully"
-                            logger.info("Subscription cancelled successfully for ${payment.userEmail} after refund ${refund.refundId} on attempt $attemptCount")
-                        }
-
-                        is Result.Error -> {
-                            subscriptionCancellationMessage = "Failed to cancel subscription: ${cancelResult.message}"
-                            logger.warn("Failed to cancel subscription after refund on attempt $attemptCount: ${cancelResult.message}")
-
-                            // If this is not the last attempt, wait briefly before retrying
-                            if (attemptCount < maxAttempts) {
-                                logger.info("Retrying subscription cancellation...")
-                                kotlinx.coroutines.delay(500) // Wait 500ms before retry
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    subscriptionCancellationMessage = "Exception during subscription cancellation: ${e.message}"
-                    logger.warn("Exception while cancelling subscription after refund on attempt $attemptCount", e)
-
-                    // If this is not the last attempt, wait briefly before retrying
-                    if (attemptCount < maxAttempts) {
-                        logger.info("Retrying subscription cancellation after exception...")
-                        kotlinx.coroutines.delay(500) // Wait 500ms before retry
-                    }
-                }
-            }
-
-            // Build response message based on subscription cancellation result
-            val responseMessage = if (subscriptionCancelled) {
-                "Refund initiated successfully and subscription cancelled"
-            } else {
-                "Refund initiated successfully but subscription cancellation failed after $maxAttempts attempts. Please cancel subscription manually. Reason: $subscriptionCancellationMessage"
-            }
-
-            // Log final status
-            if (!subscriptionCancelled) {
-                logger.error("Failed to cancel subscription for ${payment.userEmail} after $maxAttempts attempts. Refund ${refund.refundId} was successful but subscription remains active.")
-            }
-
-            logger.info("Refund initiated successfully: ${refund.refundId}. Subscription cancelled: $subscriptionCancelled")
+            val responseMessage = "Refund initiated successfully"
+            logger.info("Refund initiated successfully: ${refund.refundId}")
 
             Result.success(
                 RefundResponse(
@@ -313,7 +257,13 @@ class RefundServiceImpl(
         request: RazorpayRefundRequest
     ): RazorpayRefundResponse {
         logger.info("Calling Razorpay refund API for payment $paymentId")
-        logger.debug("Refund request details: amount=${request.amount}, speed=${request.speed}, notes=${request.notes}, receipt=${request.receipt}")
+        logger.debug(
+            "Refund request details: amount={}, speed={}, notes={}, receipt={}",
+            request.amount,
+            request.speed,
+            request.notes,
+            request.receipt
+        )
 
         try {
             val response =
@@ -343,7 +293,7 @@ class RefundServiceImpl(
 
                 // Parse Razorpay error and provide user-friendly message
                 val userFriendlyMessage = parseRazorpayError(errorBody)
-                throw RazorpayApiException(userFriendlyMessage, errorBody)
+                throw RazorpayApiException(userFriendlyMessage)
             }
         } catch (e: RazorpayApiException) {
             // Re-throw Razorpay-specific exceptions
@@ -386,7 +336,7 @@ class RefundServiceImpl(
     }
 
     /** Custom exception for Razorpay API errors */
-    private class RazorpayApiException(message: String, val rawError: String) : Exception(message)
+    private class RazorpayApiException(message: String) : Exception(message)
 
     /** Map Razorpay response to internal Refund model. */
     private fun mapRazorpayResponseToRefund(
@@ -590,34 +540,58 @@ class RefundServiceImpl(
     private suspend fun fetchRazorpayRefunds(paymentId: String): List<RazorpayRefundResponse> {
         logger.debug("Fetching refunds from Razorpay for payment $paymentId")
 
-        try {
-            val response = httpClient.get("$razorpayBaseUrl/payments/$paymentId/refunds") {
-                val credentials = "$razorpayKeyId:$razorpaySecret"
-                val encodedCredentials = Base64.getEncoder().encodeToString(credentials.toByteArray())
-                header(HttpHeaders.Authorization, "Basic $encodedCredentials")
-            }
+        val maxAttempts = 3
+        var attempt = 0
+        var lastError: Exception? = null
 
-            if (response.status.isSuccess()) {
-                // Get response as string first to preprocess it
-                val responseBody = response.body<String>()
-                logger.debug("Razorpay refunds response size: ${responseBody.length} bytes")
+        while (attempt < maxAttempts) {
+            attempt++
+            try {
+                val response = httpClient.get("$razorpayBaseUrl/payments/$paymentId/refunds") {
+                    val credentials = "$razorpayKeyId:$razorpaySecret"
+                    val encodedCredentials = Base64.getEncoder().encodeToString(credentials.toByteArray())
+                    header(HttpHeaders.Authorization, "Basic $encodedCredentials")
+                }
 
-                // Preprocess JSON to fix Razorpay's inconsistent format ([] instead of {} or null)
-                val preprocessedBody = preprocessRazorpayJson(responseBody)
+                if (response.status.isSuccess()) {
+                    // Get response as string first to preprocess it
+                    val responseBody = response.body<String>()
+                    logger.debug("Razorpay refunds response size: ${responseBody.length} bytes")
 
-                // Parse the preprocessed JSON
-                val refundsResponse = razorpayJson.decodeFromString<RazorpayRefundsListResponse>(preprocessedBody)
-                logger.info("Fetched ${refundsResponse.count} refunds from Razorpay for payment $paymentId")
-                return refundsResponse.items
-            } else {
+                    // Preprocess JSON to fix Razorpay's inconsistent format ([] instead of {} or null)
+                    val preprocessedBody = preprocessRazorpayJson(responseBody)
+
+                    // Parse the preprocessed JSON
+                    val refundsResponse = razorpayJson.decodeFromString<RazorpayRefundsListResponse>(preprocessedBody)
+                    logger.info("Fetched ${refundsResponse.count} refunds from Razorpay for payment $paymentId")
+                    return refundsResponse.items
+                }
+
                 val errorBody = response.body<String>()
+                if (response.status == HttpStatusCode.TooManyRequests) {
+                    val retryAfterSeconds = response.headers["Retry-After"]?.toLongOrNull()
+                    val backoffMs = retryAfterSeconds?.let { it * 1000L }
+                        ?: (500L * (1L shl (attempt - 1))).coerceAtMost(4000L)
+                    logger.warn(
+                        "Razorpay rate limited (429) for payment $paymentId. " +
+                            "Attempt $attempt/$maxAttempts, retrying in ${backoffMs}ms. Body: $errorBody"
+                    )
+                    delay(backoffMs)
+                    continue
+                }
+
                 logger.error("Razorpay API error: ${response.status} - $errorBody")
                 throw Exception("Razorpay API error: ${response.status}")
+            } catch (e: Exception) {
+                lastError = e
+                logger.error("Failed to fetch refunds from Razorpay for payment $paymentId (attempt $attempt)", e)
+                if (attempt >= maxAttempts) {
+                    break
+                }
             }
-        } catch (e: Exception) {
-            logger.error("Failed to fetch refunds from Razorpay for payment $paymentId", e)
-            throw e
         }
+
+        throw lastError ?: Exception("Razorpay API error: ${HttpStatusCode.TooManyRequests}")
     }
 
     /** Get refund history with pagination and filtering. */
@@ -628,7 +602,12 @@ class RefundServiceImpl(
         startDate: String?,
         endDate: String?
     ): Result<RefundHistoryResponse> {
-        logger.debug("Getting refund history: page=$page, pageSize=$pageSize, status=$status")
+        logger.debug(
+            "Getting refund history: page={}, pageSize={}, status={}",
+            page,
+            pageSize,
+            status
+        )
 
         return try {
             val refundsResult =
@@ -890,7 +869,11 @@ class RefundServiceImpl(
             val now = Instant.now().toString()
             val processedAt = if (newStatus == RefundStatus.PROCESSED) now else null
 
-            logger.debug("Updating refund status in database: $refundId -> $newStatus")
+        logger.debug(
+            "Updating refund status in database: {} -> {}",
+            refundId,
+            newStatus
+        )
             val updateResult =
                 refundRepository.updateRefundStatus(
                     refundId = refundId,

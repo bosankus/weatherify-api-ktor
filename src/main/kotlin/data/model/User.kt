@@ -6,50 +6,12 @@ import org.bson.types.ObjectId
 import java.time.Instant
 
 /**
- * Service types available for subscription. Currently only one service.
+ * Service types available for paid plans. Currently only one service.
  */
 @Serializable
 enum class ServiceType {
     PREMIUM_ONE
 }
-
-/** Subscription status values */
-@Serializable
-enum class SubscriptionStatus {
-    ACTIVE,
-    EXPIRED,
-    CANCELLED,
-    GRACE_PERIOD
-}
-
-/** Notification type for subscription expiry warnings */
-@Serializable
-enum class NotificationType {
-    EXPIRY_WARNING_3_DAYS,
-    EXPIRY_WARNING_1_DAY,
-    SUBSCRIPTION_EXPIRED
-}
-
-/** Record of a notification sent to a user */
-@Serializable
-data class NotificationRecord(
-    val type: NotificationType,
-    val sentAt: String,
-    val subscriptionId: String
-)
-
-/** Subscription record for a user */
-@Serializable
-data class Subscription(
-    val service: ServiceType,
-    val startDate: String,
-    val endDate: String,
-    val status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
-    val sourcePaymentId: String? = null,
-    val createdAt: String = Instant.now().toString(),
-    val cancelledAt: String? = null,
-    val gracePeriodEnd: String? = null
-)
 
 /** User model with authentication and status information */
 @Serializable
@@ -70,11 +32,7 @@ data class User(
     val ipAddress: String? = null,
     val registrationSource: String? = null,
     val isPremium: Boolean = false,
-    val fcmToken: String? = null,
-    // All subscriptions for this user; at most one should be ACTIVE at any time
-    val subscriptions: List<Subscription> = emptyList(),
-    // Track notifications sent to prevent duplicates
-    val notificationsSent: List<NotificationRecord> = emptyList()
+    val fcmToken: String? = null
 )
 
 /** User roles for access control */

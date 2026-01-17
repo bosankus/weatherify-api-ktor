@@ -3,15 +3,10 @@ package bose.ankush.base
 import bose.ankush.route.common.RouteRegistrar
 import bose.ankush.route.handleNotFound
 import bose.ankush.route.notFoundRoute
-import io.ktor.server.application.Application
-import io.ktor.server.request.path
-import io.ktor.server.response.respondRedirect
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.delete
-import io.ktor.server.routing.get
-import io.ktor.server.routing.post
-import io.ktor.server.routing.put
-import io.ktor.server.routing.routing
+import io.ktor.server.application.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 
@@ -20,43 +15,20 @@ fun Application.configureRouting() {
     val registrars by inject<List<RouteRegistrar>>()
 
     routing {
-        // Serve favicon
+        // Serve favicon at root and common admin paths
         get("/favicon.ico") {
+            call.respondText("Greetings! Favicon is currently dry or hidden 😉. Please hydrate elsewhere.")
+        }
+
+        // Handle favicon requests from admin dashboard paths
+        get("/admin/dashboard/favicon.ico") {
             call.respondText("Greetings! Favicon is currently dry or hidden 😉. Please hydrate elsewhere.")
         }
 
         // Register all application routes via registrars (order preserved by Koin list)
         registrars.forEach { it.register(this) }
 
-        // Handle login.html redirects to admin login
-        get("/login.html") {
-            // Get the error parameter if it exists
-            val errorParam = call.request.queryParameters["error"]
-
-            // Redirect to admin login with the error parameter if it exists
-            if (errorParam != null) {
-                logger.info("Redirecting /login.html?error=$errorParam to /admin/login?error=$errorParam")
-                call.respondRedirect("/admin/login?error=$errorParam")
-            } else {
-                logger.info("Redirecting /login.html to /admin/login")
-                call.respondRedirect("/admin/login")
-            }
-        }
-
-        // Handle /login redirects to admin login
-        get("/login") {
-            // Get the error parameter if it exists
-            val errorParam = call.request.queryParameters["error"]
-
-            // Redirect to admin login with the error parameter if it exists
-            if (errorParam != null) {
-                logger.info("Redirecting /login?error=$errorParam to /admin/login?error=$errorParam")
-                call.respondRedirect("/admin/login?error=$errorParam")
-            } else {
-                logger.info("Redirecting /login to /admin/login")
-                call.respondRedirect("/admin/login")
-            }
-        }
+        // /login is now handled by AdminAuthRoute.kt, no redirect needed
 
         // Register the 404 error page route
         notFoundRoute()
@@ -78,17 +50,17 @@ fun Application.configureRouting() {
                 "/refresh-token",
                 "/wfy/terms-and-conditions",
                 "/wfy/privacy-policy",
-                "/admin",
-                "/admin/login"
+                "/dashboard",
+                "/finance",
+                "/tools",
+                "/users",
+                "/services",
+                "/refunds",
+                "/cache"
             )
 
             // Check for exact matches first
             if (excludedPaths.contains(path)) {
-                return true
-            }
-
-            // Check for admin sub-paths
-            if (path.startsWith("/admin/")) {
                 return true
             }
 

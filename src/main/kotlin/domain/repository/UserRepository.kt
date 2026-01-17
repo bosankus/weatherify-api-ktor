@@ -38,6 +38,13 @@ interface UserRepository {
     suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): Result<Boolean>
 
     /**
+     * Clear user's FCM token by email.
+     * @param email The email of the user.
+     * @return Result indicating success or failure.
+     */
+    suspend fun clearFcmTokenByEmail(email: String): Result<Boolean>
+
+    /**
      * Get all users with optional filtering, sorting, and pagination.
      * @param filter Optional filter criteria (e.g., by email, role, isActive)
      * @param sortBy Optional field to sort by
@@ -53,4 +60,11 @@ interface UserRepository {
         page: Int? = null,
         pageSize: Int? = null
     ): Result<Pair<List<User>, Long>>
+
+    /**
+     * Delete a user by email.
+     * @param email The email of the user to delete.
+     * @return Result indicating success or failure.
+     */
+    suspend fun deleteUserByEmail(email: String): Result<Boolean>
 }

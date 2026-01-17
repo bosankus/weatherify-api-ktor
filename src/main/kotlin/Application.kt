@@ -5,7 +5,6 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import org.koin.ktor.ext.inject
-import util.SubscriptionExpirationJob
 
 fun main() {
     embeddedServer(factory = Netty, port = 8080, module = Application::module).start(wait = true)
@@ -18,7 +17,6 @@ fun Application.module() {
     configureAuthentication()
     configureRouting()
     configureFirebase()
-    configureBackgroundJobs()
     configureServiceCatalogSeeding()
     configureServiceTypeResolver()
 }
@@ -29,22 +27,6 @@ fun Application.module() {
  */
 fun configureFirebase() {
     config.FirebaseAdmin.initialize()
-}
-
-/**
- * Configure and start background jobs.
- * This function starts the subscription expiration job that runs scheduled tasks.
- */
-fun Application.configureBackgroundJobs() {
-    val subscriptionExpirationJob by inject<SubscriptionExpirationJob>()
-
-    // Start the job
-    subscriptionExpirationJob.start()
-
-    // Register a shutdown hook to stop the job gracefully
-    monitor.subscribe(ApplicationStopping) {
-        subscriptionExpirationJob.stop()
-    }
 }
 
 /**

@@ -155,6 +155,64 @@
 .tool-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tool-results { margin-top: 8px; }
 
+/* Minimal data grid (Subscriptions, Service Catalog) */
+.data-grid { display: grid; gap: 10px; }
+.data-header,
+.data-row {
+  display: grid;
+  grid-template-columns: var(--data-columns, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+.data-header {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  padding: 0 0.25rem;
+}
+.data-body { display: grid; gap: 10px; }
+.data-row {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+.data-row:hover {
+  border-color: var(--card-hover-border);
+  background: var(--card-hover-bg);
+  box-shadow: 0 4px 12px var(--card-shadow);
+}
+.data-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.data-cell--wrap { white-space: normal; }
+.data-cell--right { text-align: right; }
+.data-cell--center { text-align: center; }
+.data-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.data-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+  border: 1px dashed var(--card-border);
+  border-radius: 12px;
+  background: var(--endpoint-bg, var(--card-bg));
+}
+@media (max-width: 980px) {
+  .data-header { display: none; }
+  .data-row { grid-template-columns: 1fr; gap: 10px; }
+  .data-cell { white-space: normal; }
+  .data-cell::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    margin-bottom: 0.2rem;
+  }
+  .data-actions { justify-content: flex-start; }
+}
+
 
 /* Announcement banner refinements */
 .announcement-banner {
@@ -843,6 +901,63 @@
     border-radius: 4px;
 }
 
+/* Finance Tables - align with Users tab UI */
+.finance-table-shell {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.finance-table-wrapper {
+    overflow-x: auto;
+}
+
+.finance-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: transparent;
+}
+
+.finance-table thead th {
+    padding: 0.75rem 1.25rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: transparent;
+    border-bottom: 1px solid var(--card-border);
+    white-space: nowrap;
+}
+
+.finance-table tbody td {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--card-border);
+    font-size: 0.875rem;
+    color: var(--text-color);
+    vertical-align: middle;
+}
+
+.finance-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.finance-table tbody tr:hover {
+    background: var(--card-hover-bg);
+}
+
+.finance-table code {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.85rem;
+    background: var(--card-hover-bg);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+
 /* Refund Pagination Styles */
 .refund-pagination {
     display: flex;
@@ -963,6 +1078,15 @@
         padding: 0.5rem;
     }
 
+    .finance-table {
+        font-size: 0.85rem;
+    }
+
+    .finance-table th,
+    .finance-table td {
+        padding: 0.5rem;
+    }
+
     .refund-pagination {
         flex-wrap: wrap;
         gap: 0.25rem;
@@ -1005,6 +1129,15 @@
     }
 
     .refund-history-table {
+        min-width: 600px;
+    }
+
+    .finance-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .finance-table {
         min-width: 600px;
     }
 }
@@ -1111,8 +1244,99 @@
 /* Payment Actions Cell */
 .payment-actions {
     text-align: center !important;
-    white-space: nowrap;
+    white-space: normal;
     vertical-align: middle;
+}
+
+.payment-actions-group {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 120px;
+}
+
+.payment-actions-group .btn-refund,
+.payment-actions-group .btn-details {
+    width: 100%;
+}
+
+.payment-bill {
+    text-align: center !important;
+    vertical-align: middle;
+}
+
+.bill-action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border, #e5e7eb);
+    background: var(--card-bg, #ffffff);
+    color: var(--text-color, #1f2937);
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.bill-action-button:hover {
+    background: var(--hover-bg, rgba(99, 102, 241, 0.08));
+    border-color: var(--primary-color, #6366f1);
+}
+
+.bill-action-button:active {
+    transform: scale(0.98);
+}
+
+.bill-action-button.is-loading {
+    cursor: progress;
+    opacity: 0.7;
+}
+
+.bill-action-button.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    background: var(--card-bg, #ffffff);
+    border-color: var(--card-border, #e5e7eb);
+}
+
+.bill-action-button .material-icons {
+    font-size: 18px;
+}
+
+.bill-type-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.bill-type-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.bill-type-option {
+    text-align: left;
+    justify-content: flex-start;
+    gap: 0.5rem;
+}
+
+.payment-actions-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--card-hover-bg, #f3f4f6);
+    color: var(--text-secondary, #6b7280);
+}
+
+.payment-actions-badge--partial {
+    background: #fef3c7;
+    color: #92400e;
 }
 
 /* Payment Details Modal */
@@ -1391,6 +1615,19 @@
 }
 
 /* Refunds Table Styles */
+.refunds-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.refunds-table tbody td {
+    border-bottom: 1px solid var(--card-border);
+}
+
+.refunds-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
 .refunds-table th:nth-child(4),
 .refunds-table td:nth-child(4) {
     text-align: center;
@@ -1474,12 +1711,38 @@
 }
 
 /* Service Catalog Styles */
+.service-catalog-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.service-catalog-heading {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--heading-color);
+}
+
+.service-catalog-subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
 .service-catalog-controls {
     display: flex;
     gap: 1rem;
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
     align-items: center;
+}
+
+.service-catalog-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
 }
 
 .form-control {

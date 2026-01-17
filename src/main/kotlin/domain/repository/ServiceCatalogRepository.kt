@@ -62,13 +62,6 @@ interface ServiceCatalogRepository {
     suspend fun deleteService(id: String): Result<Boolean>
 
     /**
-     * Get the count of active subscriptions for a service.
-     * @param serviceCode The service code
-     * @return Result containing the count of active subscriptions
-     */
-    suspend fun getActiveSubscriptionCount(serviceCode: String): Result<Long>
-
-    /**
      * Add a history entry for a service change.
      * @param history The history record to add
      * @return Result containing the created history record

@@ -43,7 +43,7 @@ class ServiceCatalogSeedingService(
             val premiumOneService = ServiceConfig(
                 serviceCode = PREMIUM_ONE_CODE,
                 displayName = "Premium One",
-                description = "Premium subscription with full access to all features",
+                description = "Premium plan with full access to all features",
                 pricingTiers = listOf(
                     PricingTier(
                         amount = 99900, // ₹999 in paise

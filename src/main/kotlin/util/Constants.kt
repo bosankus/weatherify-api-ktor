@@ -90,27 +90,6 @@ object Constants {
     }
 
     /**
-     * Subscription related constants
-     */
-    object Subscription {
-        // Subscription configuration
-        const val DEFAULT_GRACE_PERIOD_HOURS = 72L
-        const val DEFAULT_SUBSCRIPTION_DAYS = 30L
-        const val DEFAULT_EXPIRY_CHECK_INTERVAL_MINUTES = 720L // 12 hours
-
-        // User-facing subscription endpoints
-        const val SUBSCRIPTIONS_BASE = "/subscriptions"
-        const val SUBSCRIPTIONS_STATUS = "$SUBSCRIPTIONS_BASE/status"
-        const val SUBSCRIPTIONS_HISTORY = "$SUBSCRIPTIONS_BASE/history"
-        const val SUBSCRIPTIONS_CANCEL = "$SUBSCRIPTIONS_BASE/cancel"
-
-        // Admin subscription endpoints
-        const val ADMIN_SUBSCRIPTIONS = "/admin/subscriptions"
-        const val ADMIN_SUBSCRIPTIONS_ANALYTICS = "$ADMIN_SUBSCRIPTIONS/analytics"
-        const val ADMIN_SUBSCRIPTIONS_CANCEL = "$ADMIN_SUBSCRIPTIONS/cancel"
-    }
-
-    /**
      * Response message constants
      */
     object Messages {
@@ -172,10 +151,6 @@ object Constants {
         const val WEATHER_URL = "WEATHER_URL"
         const val AIR_POLLUTION_URL = "AIR_POLLUTION_URL"
 
-        // Subscription environment variables
-        const val GRACE_PERIOD_HOURS = "GRACE_PERIOD_HOURS"
-        const val SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_MINUTES = "SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_MINUTES"
-
         // Notifications / FCM
         const val FCM_FUNCTION_URL = "FCM_FUNCTION_URL" // Optional: HTTPS Cloud Function endpoint
         // const val FCM_SERVER_KEY = "FCM_SERVER_KEY"     // Optional: Legacy FCM server key
@@ -186,6 +161,7 @@ object Constants {
         const val GA_ENABLED = "GA_ENABLED" // "true" to enable server-side analytics
 
         // Email configuration (SendGrid API)
+        @Suppress("unused")
         const val SENDGRID_API_KEY = "SENDGRID_API_KEY"
         const val FROM_EMAIL = "FROM_EMAIL"
         const val FROM_NAME = "FROM_NAME"

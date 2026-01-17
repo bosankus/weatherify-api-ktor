@@ -25,14 +25,6 @@ request parameters, response formats, and authentication requirements.
     - [Get Feedback](#get-feedback)
     - [Submit Feedback](#submit-feedback)
     - [Delete Feedback](#delete-feedback)
-- [Subscription Endpoints](#subscription-endpoints)
-    - [Get Subscription Status](#get-subscription-status)
-    - [Get Subscription History](#get-subscription-history)
-    - [Cancel Subscription](#cancel-subscription)
-- [Admin Subscription Endpoints](#admin-subscription-endpoints)
-    - [Get All Subscriptions](#get-all-subscriptions)
-    - [Get Subscription Analytics](#get-subscription-analytics)
-    - [Admin Cancel Subscription](#admin-cancel-subscription)
 - [Admin Financial Endpoints](#admin-financial-endpoints)
     - [Get Financial Metrics](#get-financial-metrics)
     - [Get Payment History](#get-payment-history)
@@ -395,323 +387,13 @@ Deletes feedback by ID.
     - **Error (401 Unauthorized)**: Missing or invalid JWT token
     - **Error (404 Not Found)**: Feedback not found or removal failed
 
-## Subscription Endpoints
-
-### Get Subscription Status
-
-Gets the current subscription status for the authenticated user.
-
-- **URL**: `/subscriptions/status`
-- **Method**: `GET`
-- **Authentication**: Required (JWT)
-- **Query Parameters**: None
-
-- **Response**:
-    - **Success (200 OK)**:
-      ```json
-      {
-        "status": true,
-        "message": "Subscription status retrieved successfully",
-        "data": {
-          "service": "PREMIUM_ONE",
-          "startDate": "2024-01-15T10:30:00Z",
-          "endDate": "2024-02-15T10:30:00Z",
-          "status": "ACTIVE",
-          "daysRemaining": 15,
-          "isInGracePeriod": false,
-          "sourcePaymentId": "pay_123456789"
-        }
-      }
-      ```
-    - **Error (401 Unauthorized)**: Missing or invalid JWT token
-    - **Error (404 Not Found)**: No active subscription found
-      ```json
-      {
-        "status": false,
-        "message": "No active subscription found",
-        "data": null
-      }
-      ```
-
-- **Notes**:
-    - Returns the most recent ACTIVE or GRACE_PERIOD subscription
-    - `daysRemaining` is calculated from the current date to the subscription end date
-    - `isInGracePeriod` indicates if the subscription is in the 72-hour grace period after expiration
-    - Subscription statuses: `ACTIVE`, `EXPIRED`, `CANCELLED`, `GRACE_PERIOD`
-
-### Get Subscription History
-
-Gets the complete subscription history for the authenticated user.
-
-- **URL**: `/subscriptions/history`
-- **Method**: `GET`
-- **Authentication**: Required (JWT)
-- **Query Parameters**: None
-
-- **Response**:
-    - **Success (200 OK)**:
-      ```json
-      {
-        "status": true,
-        "message": "Subscription history retrieved successfully",
-        "data": {
-          "subscriptions": [
-            {
-              "service": "PREMIUM_ONE",
-              "startDate": "2024-01-15T10:30:00Z",
-              "endDate": "2024-02-15T10:30:00Z",
-              "status": "ACTIVE",
-              "daysRemaining": 15,
-              "isInGracePeriod": false,
-              "sourcePaymentId": "pay_123456789"
-            },
-            {
-              "service": "PREMIUM_ONE",
-              "startDate": "2023-12-15T10:30:00Z",
-              "endDate": "2024-01-15T10:30:00Z",
-              "status": "EXPIRED",
-              "daysRemaining": null,
-              "isInGracePeriod": false,
-              "sourcePaymentId": "pay_987654321"
-            }
-          ],
-          "totalCount": 2
-        }
-      }
-      ```
-    - **Error (401 Unauthorized)**: Missing or invalid JWT token
-
-- **Notes**:
-    - Returns all subscriptions ordered by creation date (most recent first)
-    - Includes subscriptions with all statuses: ACTIVE, EXPIRED, CANCELLED, GRACE_PERIOD
-    - `daysRemaining` is null for expired or cancelled subscriptions
-
-### Cancel Subscription
-
-Cancels the active subscription for the authenticated user.
-
-- **URL**: `/subscriptions/cancel`
-- **Method**: `POST`
-- **Authentication**: Required (JWT)
-- **Request Body**: None
-
-- **Response**:
-    - **Success (200 OK)**:
-      ```json
-      {
-        "status": true,
-        "message": "Subscription cancelled successfully",
-        "data": {
-          "service": "PREMIUM_ONE",
-          "startDate": "2024-01-15T10:30:00Z",
-          "endDate": "2024-02-15T10:30:00Z",
-          "status": "CANCELLED",
-          "daysRemaining": 15,
-          "isInGracePeriod": false,
-          "sourcePaymentId": "pay_123456789"
-        }
-      }
-      ```
-    - **Error (400 Bad Request)**: Subscription already cancelled or expired
-      ```json
-      {
-        "status": false,
-        "message": "Subscription is already cancelled",
-        "data": null
-      }
-      ```
-    - **Error (401 Unauthorized)**: Missing or invalid JWT token
-    - **Error (404 Not Found)**: No active subscription found
-      ```json
-      {
-        "status": false,
-        "message": "No active subscription found",
-        "data": null
-      }
-      ```
-
-- **Notes**:
-    - Subscriptions with ACTIVE or GRACE_PERIOD status can be cancelled
-    - Cancellation maintains the original end date (user retains access until expiration)
-    - Auto-renewal is disabled upon cancellation
-    - Premium features remain accessible until the subscription end date
-    - A confirmation email is automatically sent to the user (if email is configured)
-    - The cancellation succeeds even if the email fails to send
-
-## Admin Subscription Endpoints
-
-### Get All Subscriptions
-
-Gets a paginated list of all user subscriptions with optional status filtering. Requires admin authentication.
-
-- **URL**: `/admin/subscriptions`
-- **Method**: `GET`
-- **Authentication**: Required (Admin JWT)
-- **Query Parameters**:
-    - `page`: Page number (default: 1)
-    - `pageSize`: Number of items per page (default: 10, max: 100)
-    - `status`: Filter by subscription status (optional): `ACTIVE`, `EXPIRED`, `CANCELLED`, `GRACE_PERIOD`
-
-- **Response**:
-    - **Success (200 OK)**:
-      ```json
-      {
-        "status": true,
-        "message": "Subscriptions retrieved successfully",
-        "data": {
-          "subscriptions": [
-            {
-              "userEmail": "user@example.com",
-              "userId": "b2d5f3b2-5f9a-4b0f-9f77-123456789abc",
-              "service": "PREMIUM_ONE",
-              "startDate": "2024-01-15T10:30:00Z",
-              "endDate": "2024-02-15T10:30:00Z",
-              "status": "ACTIVE",
-              "daysRemaining": 15,
-              "paymentId": "pay_123456789",
-              "amount": 299,
-              "currency": "INR",
-              "createdAt": "2024-01-15T10:30:00Z"
-            }
-          ],
-          "totalCount": 150,
-          "page": 1,
-          "pageSize": 10
-        }
-      }
-      ```
-    - **Error (400 Bad Request)**: Invalid pagination parameters or status filter
-      ```json
-      {
-        "status": false,
-        "message": "Invalid page or pageSize parameter",
-        "data": null
-      }
-      ```
-    - **Error (401 Unauthorized)**: Missing or invalid JWT token
-    - **Error (403 Forbidden)**: Admin privileges required
-      ```json
-      {
-        "status": false,
-        "message": "Admin privileges required",
-        "data": null
-      }
-      ```
-
-- **Notes**:
-    - Only accessible by users with ADMIN role
-    - Results are paginated for performance
-    - Status filter allows viewing specific subscription states
-    - Payment information is enriched from the Payments collection
-
-### Get Subscription Analytics
-
-Gets aggregated subscription metrics and analytics. Requires admin authentication.
-
-- **URL**: `/admin/subscriptions/analytics`
-- **Method**: `GET`
-- **Authentication**: Required (Admin JWT)
-- **Query Parameters**: None
-
-- **Response**:
-    - **Success (200 OK)**:
-      ```json
-      {
-        "status": true,
-        "message": "Subscription analytics retrieved successfully",
-        "data": {
-          "totalActive": 125,
-          "totalExpired": 45,
-          "totalCancelled": 18,
-          "totalRevenue": 52750.00,
-          "averageSubscriptionDays": 28.5,
-          "recentSubscriptions": [
-            {
-              "userEmail": "user@example.com",
-              "service": "PREMIUM_ONE",
-              "startDate": "2024-01-20T14:30:00Z",
-              "amount": 299,
-              "status": "ACTIVE"
-            }
-          ]
-        }
-      }
-      ```
-    - **Error (401 Unauthorized)**: Missing or invalid JWT token
-    - **Error (403 Forbidden)**: Admin privileges required
-    - **Error (500 Internal Server Error)**: Failed to calculate analytics
-
-- **Notes**:
-    - Only accessible by users with ADMIN role
-    - `totalRevenue` is calculated from all verified payments
-    - `averageSubscriptionDays` is the mean duration across all subscriptions
-    - `recentSubscriptions` shows the 10 most recent subscription activations
-    - Analytics are calculated in real-time (consider caching for production)
-
-### Admin Cancel Subscription
-
-Allows an admin to cancel a user's active subscription. Requires admin authentication.
-
-- **URL**: `/admin/subscriptions/cancel`
-- **Method**: `POST`
-- **Authentication**: Required (Admin JWT)
-- **Request Body**:
-
-```json
-{
-  "userEmail": "user@example.com"
-}
-```
-
-- **Response**:
-    - **Success (200 OK)**:
-      ```json
-      {
-        "status": true,
-        "message": "User subscription cancelled successfully",
-        "data": {
-          "service": "PREMIUM_ONE",
-          "startDate": "2024-01-15T10:30:00Z",
-          "endDate": "2024-02-15T10:30:00Z",
-          "status": "CANCELLED",
-          "daysRemaining": 15,
-          "isInGracePeriod": false,
-          "sourcePaymentId": "pay_123456789"
-        }
-      }
-      ```
-    - **Error (400 Bad Request)**: Missing userEmail or subscription already cancelled
-      ```json
-      {
-        "status": false,
-        "message": "Subscription is already cancelled",
-        "data": null
-      }
-      ```
-    - **Error (401 Unauthorized)**: Missing or invalid JWT token
-    - **Error (403 Forbidden)**: Admin privileges required
-    - **Error (404 Not Found)**: User not found or no active subscription
-      ```json
-      {
-        "status": false,
-        "message": "User not found",
-        "data": null
-      }
-      ```
-
-- **Notes**:
-    - Only accessible by users with ADMIN role
-    - Cancellation maintains the original end date (user retains access until expiration)
-    - Admin cancellations are logged for audit purposes
-    - The affected user's premium features remain accessible until the subscription end date
-
 ## Admin Financial Endpoints
 
 ### Get Financial Metrics
 
 Gets aggregated financial metrics including revenue and payment statistics. Requires admin authentication.
 
-- **URL**: `/admin/finance/metrics`
+- **URL**: `/finance/metrics`
 - **Method**: `GET`
 - **Authentication**: Required (Admin JWT)
 - **Query Parameters**: None
@@ -725,7 +407,6 @@ Gets aggregated financial metrics including revenue and payment statistics. Requ
         "data": {
           "totalRevenue": 125750.50,
           "monthlyRevenue": 15250.00,
-          "activeSubscriptionsRevenue": 8970.00,
           "totalPaymentsCount": 542,
           "monthlyRevenueChart": [
             {
@@ -748,7 +429,6 @@ Gets aggregated financial metrics including revenue and payment statistics. Requ
     - Only accessible by users with ADMIN role
     - `totalRevenue` includes all successful payments
     - `monthlyRevenue` is calculated for the current calendar month
-    - `activeSubscriptionsRevenue` is the total value of all active subscriptions
     - `monthlyRevenueChart` provides the last 12 months of revenue data
     - Metrics are cached for 5 minutes to improve performance
 
@@ -756,7 +436,7 @@ Gets aggregated financial metrics including revenue and payment statistics. Requ
 
 Gets a paginated list of all payment transactions with optional filtering. Requires admin authentication.
 
-- **URL**: `/admin/finance/payments`
+- **URL**: `/finance/payments`
 - **Method**: `GET`
 - **Authentication**: Required (Admin JWT)
 - **Query Parameters**:
@@ -814,9 +494,9 @@ Gets a paginated list of all payment transactions with optional filtering. Requi
 
 ### Generate Bill
 
-Generates a PDF invoice for a user's selected payments and subscriptions. Requires admin authentication.
+Generates a PDF invoice for a user's selected payments. Requires admin authentication.
 
-- **URL**: `/admin/finance/generate-bill`
+- **URL**: `/finance/generate-bill`
 - **Method**: `POST`
 - **Authentication**: Required (Admin JWT)
 - **Request Body**:
@@ -825,7 +505,6 @@ Generates a PDF invoice for a user's selected payments and subscriptions. Requir
 {
   "userEmail": "user@example.com",
   "paymentIds": ["pay_123456789", "pay_987654321"],
-  "subscriptionIds": ["sub_abc123", "sub_xyz789"],
   "sendViaEmail": true
 }
 ```
@@ -865,7 +544,7 @@ Generates a PDF invoice for a user's selected payments and subscriptions. Requir
       ```json
       {
         "status": false,
-        "message": "At least one payment or subscription ID is required",
+        "message": "At least one payment ID is required",
         "data": null
       }
       ```
@@ -876,7 +555,7 @@ Generates a PDF invoice for a user's selected payments and subscriptions. Requir
 
 - **Notes**:
     - Only accessible by users with ADMIN role
-    - At least one payment or subscription ID must be provided
+    - At least one payment ID must be provided
     - If `sendViaEmail` is true, the PDF is sent to the user's email address
     - If `sendViaEmail` is false, the PDF is returned as a downloadable file
     - Invoice includes company information, itemized charges, and payment instructions
@@ -885,9 +564,9 @@ Generates a PDF invoice for a user's selected payments and subscriptions. Requir
 
 ### Export Financial Data
 
-Exports payment and subscription data in CSV format for a specified date range. Requires admin authentication.
+Exports payment data in CSV format for a specified date range. Requires admin authentication.
 
-- **URL**: `/admin/tools/export-financial-data`
+- **URL**: `/tools/export-financial-data`
 - **Method**: `POST`
 - **Authentication**: Required (Admin JWT)
 - **Request Body**:
@@ -899,11 +578,6 @@ Exports payment and subscription data in CSV format for a specified date range. 
   "endDate": "2024-02-29"
 }
 ```
-
-- **Export Types**:
-    - `PAYMENTS`: Export payment records only
-    - `SUBSCRIPTIONS`: Export subscription records only
-    - `BOTH`: Export both payments and subscriptions in separate sections
 
 - **Response**:
     - **Success (200 OK)**:

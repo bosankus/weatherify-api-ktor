@@ -1,6 +1,7 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.SubscriptionStatus
+import bose.ankush.data.model.BillType
+import bose.ankush.data.model.PaymentBillRequest
 import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.WebResources
 import bose.ankush.route.common.respondError
@@ -25,13 +26,11 @@ import util.AuthHelper.getAuthenticatedAdminOrRespond
 import util.AuthHelper.isAdminToken
 import util.AuthHelper.isTokenValid
 import util.Constants
+import java.time.LocalDate
 import java.time.Year
 
 @Serializable
 data class AdminLoginRequest(val email: String, val password: String)
-
-@Serializable
-data class AdminCancelSubscriptionRequest(val userEmail: String)
 
 /**
  * Helper function to set up common HTML head elements
@@ -145,6 +144,7 @@ fun createFooter(container: DIV) {
 /**
  * Helper function to serve the admin login page
  */
+@Suppress("UNUSED_PARAMETER")
 private suspend fun serveLoginPage(
     call: ApplicationCall,
     errorMessage: String? = null
@@ -164,7 +164,7 @@ private suspend fun serveLoginPage(
                             // Initialize shared header component
                             if (typeof initializeHeader === 'function') {
                                 initializeHeader({
-                                    homeUrl: '/admin',
+                                    homeUrl: '/',
                                     subtitle: 'ADMIN PORTAL',
                                     actions: [ { type: 'theme-toggle' } ]
                                 });
@@ -429,12 +429,12 @@ private suspend fun serveLoginPage(
                             // Check if already logged in with admin role
                             const token = localStorage.getItem('jwt_token');
                             if (token) {
-                                fetch('/admin/dashboard', {
+                                fetch('/dashboard', {
                                     headers: { 'Authorization': 'Bearer ' + token }
                                 })
                                 .then(response => {
                                     if (response.ok) {
-                                        window.location.href = '/admin/dashboard';
+                                        window.location.href = '/dashboard';
                                     }
                                 })
                                 .catch(error => {
@@ -458,7 +458,7 @@ private suspend fun serveLoginPage(
                                 loginButton.classList.add('loading');
                                 loginButton.disabled = true;
 
-                                fetch('/admin/login', {
+                                fetch('/login', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ email: email, password: password })
@@ -489,14 +489,14 @@ private suspend fun serveLoginPage(
                                         setTimeout(() => {
                                             const intendedDestination = sessionStorage.getItem('intendedDestination');
                                             if (typeof navigateToAdminPage === 'function') {
-                                                if (intendedDestination && intendedDestination.startsWith('/admin')) {
+                                                if (intendedDestination && intendedDestination.startsWith('/')) {
                                                     sessionStorage.removeItem('intendedDestination');
                                                     navigateToAdminPage(intendedDestination);
                                                 } else {
-                                                    navigateToAdminPage('/admin/dashboard');
+                                                    navigateToAdminPage('/dashboard');
                                                 }
                                             } else {
-                                                window.location.href = '/admin/login?error=auth_required';
+                                                window.location.href = '/login?error=auth_required';
                                             }
                                         }, 1000);
                                     } else {
@@ -610,7 +610,7 @@ fun Route.adminAuthRoute() {
     val pageName = "Admin Authentication - Androidplay Weather API"
 
     // Public route for login page - no authentication required
-    route("/admin/login") {
+    route("/login") {
         get {
             // Check if user is already authenticated as admin using unified helper
             val authHeader = call.request.headers["Authorization"]
@@ -647,7 +647,7 @@ fun Route.adminAuthRoute() {
                     }
                 }
 
-                call.respondRedirect("/admin/dashboard", permanent = false)
+                call.respondRedirect("/dashboard", permanent = false)
                 return@get
             }
 
@@ -683,7 +683,7 @@ fun Route.adminAuthRoute() {
                             logger.error("Failed to verify JWT token: ${e.message}")
                             call.respondError(
                                 "Authentication failed: Invalid token",
-                                null,
+                                Unit,
                                 HttpStatusCode.Unauthorized
                             )
                             return@post
@@ -701,7 +701,7 @@ fun Route.adminAuthRoute() {
                                 logger.warn("Inactive account attempted login: $email")
                                 call.respondError(
                                     "Account inactive",
-                                    null,
+                                    Unit,
                                     HttpStatusCode.Forbidden
                                 )
                                 return@post
@@ -782,14 +782,14 @@ fun Route.adminAuthRoute() {
 
                         call.respondError(
                             "Access denied: You are not an admin",
-                            null,
+                            Unit,
                             HttpStatusCode.Forbidden
                         )
                     }
 
                     is Result.Error -> {
                         logger.warn("Admin login failed for email: ${loginRequest.email}, reason: ${result.message}")
-                        call.respondError(result.message, null, HttpStatusCode.Unauthorized)
+                        call.respondError(result.message, Unit, HttpStatusCode.Unauthorized)
                     }
                 }
             } catch (e: Exception) {
@@ -799,12 +799,12 @@ fun Route.adminAuthRoute() {
                 logger.error("Stack trace: ${e.stackTraceToString()}")
 
                 // Respond with a more specific error message
-                call.respondError("Login failed: ${e.message}", null, HttpStatusCode.BadRequest)
+                call.respondError("Login failed: ${e.message}", Unit, HttpStatusCode.BadRequest)
             }
         }
     }
 
-    route("/admin") {
+    route("/") {
         // Root admin route - redirect to dashboard if authenticated admin, or to login page if not
         get {
             // Only redirect to dashboard if a valid admin JWT is present
@@ -845,202 +845,18 @@ fun Route.adminAuthRoute() {
             if (isAdmin) {
                 // User is authenticated and has ADMIN role, redirect to dashboard
                 logger.info("Admin user authenticated: $userEmail, redirecting to dashboard")
-                call.respondRedirect("/admin/dashboard", permanent = false)
+                call.respondRedirect("/dashboard", permanent = false)
                 return@get
             } else if (jwtToken != null) {
                 // Token exists but not admin, force login with error
                 logger.warn("Non-admin or invalid JWT tried to access /admin: $userEmail")
-                call.respondRedirect("/admin/login?error=admin_required", permanent = false)
+                call.respondRedirect("/login?error=admin_required", permanent = false)
                 return@get
             }
 
             // User is not authenticated, redirect to login page
             logger.info("Unauthenticated user, redirecting to login page")
-            call.respondRedirect("/admin/login", permanent = false)
-        }
-
-        // Admin subscription management endpoints
-        route("/subscriptions") {
-            // GET /admin/subscriptions - Get all subscriptions with pagination and filtering
-            get {
-                val admin = call.getAuthenticatedAdminOrRespond()
-                if (admin == null) {
-                    return@get
-                }
-
-                try {
-                    // Parse and validate query parameters
-                    val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
-                    val pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 10
-                    val statusFilter = call.request.queryParameters["status"]?.let { statusStr ->
-                        try {
-                            SubscriptionStatus.valueOf(statusStr.uppercase())
-                        } catch (e: IllegalArgumentException) {
-                            call.respondError(
-                                "Invalid status filter. Valid values: ACTIVE, EXPIRED, CANCELLED, GRACE_PERIOD",
-                                null,
-                                HttpStatusCode.BadRequest
-                            )
-                            return@get
-                        }
-                    }
-
-                    // Validate pagination parameters
-                    if (page < 1) {
-                        call.respondError(
-                            "Invalid page parameter. Must be >= 1",
-                            null,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@get
-                    }
-
-                    if (pageSize < 1 || pageSize > 100) {
-                        call.respondError(
-                            "Invalid pageSize parameter. Must be between 1 and 100",
-                            null,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@get
-                    }
-
-                    logger.info("Admin ${admin.email} requesting subscriptions: page=$page, pageSize=$pageSize, status=$statusFilter")
-
-                    val subscriptionService: domain.service.SubscriptionService by application.inject()
-                    when (val result = subscriptionService.getAllSubscriptions(page, pageSize, statusFilter)) {
-                        is Result.Success -> {
-                            call.respondSuccess(
-                                "Subscriptions retrieved successfully",
-                                result.data,
-                                HttpStatusCode.OK
-                            )
-                        }
-
-                        is Result.Error -> {
-                            logger.error("Failed to get subscriptions: ${result.message}")
-                            call.respondError(
-                                result.message,
-                                null,
-                                HttpStatusCode.InternalServerError
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    logger.error("Error processing admin subscriptions request", e)
-                    call.respondError(
-                        "Failed to retrieve subscriptions: ${e.message}",
-                        null,
-                        HttpStatusCode.InternalServerError
-                    )
-                }
-            }
-
-            // GET /admin/subscriptions/analytics - Get subscription analytics
-            get("/analytics") {
-                val admin = call.getAuthenticatedAdminOrRespond()
-                if (admin == null) {
-                    return@get
-                }
-
-                try {
-                    logger.info("Admin ${admin.email} requesting subscription analytics")
-
-                    val subscriptionService: domain.service.SubscriptionService by application.inject()
-                    when (val result = subscriptionService.getSubscriptionAnalytics()) {
-                        is Result.Success -> {
-                            call.respondSuccess(
-                                "Analytics retrieved successfully",
-                                result.data,
-                                HttpStatusCode.OK
-                            )
-                        }
-
-                        is Result.Error -> {
-                            logger.error("Failed to get subscription analytics: ${result.message}")
-                            call.respondError(
-                                result.message,
-                                null,
-                                HttpStatusCode.InternalServerError
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    logger.error("Error processing subscription analytics request", e)
-                    call.respondError(
-                        "Failed to retrieve analytics: ${e.message}",
-                        null,
-                        HttpStatusCode.InternalServerError
-                    )
-                }
-            }
-
-            // POST /admin/subscriptions/cancel - Admin cancels a user's subscription
-            post("/cancel") {
-                val admin = call.getAuthenticatedAdminOrRespond()
-                if (admin == null) {
-                    logger.warn("Unauthorized cancel subscription attempt")
-                    return@post
-                }
-
-                try {
-                    logger.info("Received cancel subscription request from admin: ${admin.email}")
-                    val requestBody = call.receiveText()
-                    logger.info("Request body: $requestBody")
-
-                    val request = try {
-                        kotlinx.serialization.json.Json.decodeFromString<AdminCancelSubscriptionRequest>(requestBody)
-                    } catch (e: Exception) {
-                        logger.error("Failed to parse request body: $requestBody", e)
-                        call.respondError(
-                            "Invalid request format: ${e.message}",
-                            null,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@post
-                    }
-
-                    // Validate request
-                    if (request.userEmail.isBlank()) {
-                        logger.warn("Empty user email in cancel request")
-                        call.respondError(
-                            "User email is required",
-                            null,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@post
-                    }
-
-                    logger.info("Admin ${admin.email} cancelling subscription for user: ${request.userEmail}")
-
-                    val subscriptionService: domain.service.SubscriptionService by application.inject()
-                    when (val result = subscriptionService.cancelUserSubscription(admin.email, request.userEmail)) {
-                        is Result.Success -> {
-                            logger.info("Successfully cancelled subscription for ${request.userEmail}")
-                            call.respondSuccess(
-                                "Subscription cancelled successfully",
-                                result.data,
-                                HttpStatusCode.OK
-                            )
-                        }
-
-                        is Result.Error -> {
-                            logger.error("Failed to cancel subscription for ${request.userEmail}: ${result.message}")
-                            call.respondError(
-                                result.message,
-                                null,
-                                HttpStatusCode.BadRequest
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    logger.error("Error processing admin subscription cancellation", e)
-                    call.respondError(
-                        "Failed to cancel subscription: ${e.message}",
-                        null,
-                        HttpStatusCode.InternalServerError
-                    )
-                }
-            }
+            call.respondRedirect("/login", permanent = false)
         }
 
         // Admin finance management endpoints
@@ -1072,7 +888,7 @@ fun Route.adminAuthRoute() {
                             logger.error("[AUDIT] [$timestamp] Financial Metrics Request - Admin: ${admin.email}, Status: FAILED, Error: ${result.message}")
                             call.respondError(
                                 result.message,
-                                null,
+                                Unit,
                                 HttpStatusCode.InternalServerError
                             )
                         }
@@ -1085,7 +901,7 @@ fun Route.adminAuthRoute() {
                     )
                     call.respondError(
                         "Failed to retrieve financial metrics: ${e.message}",
-                        null,
+                        Unit,
                         HttpStatusCode.InternalServerError
                     )
                 }
@@ -1110,7 +926,7 @@ fun Route.adminAuthRoute() {
                     if (page < 1) {
                         call.respondError(
                             "Invalid page parameter. Must be >= 1",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@get
@@ -1119,7 +935,7 @@ fun Route.adminAuthRoute() {
                     if (pageSize < 1 || pageSize > 100) {
                         call.respondError(
                             "Invalid pageSize parameter. Must be between 1 and 100",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@get
@@ -1128,11 +944,11 @@ fun Route.adminAuthRoute() {
                     // Validate date parameters if provided
                     if (startDate != null && startDate.isNotBlank()) {
                         try {
-                            java.time.LocalDate.parse(startDate)
-                        } catch (e: Exception) {
+                            LocalDate.parse(startDate)
+                        } catch (_: Exception) {
                             call.respondError(
                                 "Invalid start date format. Please use ISO format (YYYY-MM-DD)",
-                                null,
+                                Unit,
                                 HttpStatusCode.BadRequest
                             )
                             return@get
@@ -1141,11 +957,11 @@ fun Route.adminAuthRoute() {
 
                     if (endDate != null && endDate.isNotBlank()) {
                         try {
-                            java.time.LocalDate.parse(endDate)
-                        } catch (e: Exception) {
+                            LocalDate.parse(endDate)
+                        } catch (_: Exception) {
                             call.respondError(
                                 "Invalid end date format. Please use ISO format (YYYY-MM-DD)",
-                                null,
+                                Unit,
                                 HttpStatusCode.BadRequest
                             )
                             return@get
@@ -1155,17 +971,17 @@ fun Route.adminAuthRoute() {
                     // Validate date range if both dates are provided
                     if (startDate != null && endDate != null && startDate.isNotBlank() && endDate.isNotBlank()) {
                         try {
-                            val start = java.time.LocalDate.parse(startDate)
-                            val end = java.time.LocalDate.parse(endDate)
+                            val start = LocalDate.parse(startDate)
+                            val end = LocalDate.parse(endDate)
                             if (start.isAfter(end)) {
                                 call.respondError(
                                     "Start date must be before or equal to end date",
-                                    null,
+                                    Unit,
                                     HttpStatusCode.BadRequest
                                 )
                                 return@get
                             }
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             // Already handled above
                         }
                     }
@@ -1189,7 +1005,7 @@ fun Route.adminAuthRoute() {
                             logger.error("[AUDIT] [$timestamp] Payment History Request - Admin: ${admin.email}, Status: FAILED, Error: ${result.message}")
                             call.respondError(
                                 result.message,
-                                null,
+                                Unit,
                                 HttpStatusCode.InternalServerError
                             )
                         }
@@ -1202,7 +1018,7 @@ fun Route.adminAuthRoute() {
                     )
                     call.respondError(
                         "Failed to retrieve payment history: ${e.message}",
-                        null,
+                        Unit,
                         HttpStatusCode.InternalServerError
                     )
                 }
@@ -1222,7 +1038,7 @@ fun Route.adminAuthRoute() {
                     if (userEmail.isNullOrBlank()) {
                         call.respondError(
                             "User email is required",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@get
@@ -1232,7 +1048,7 @@ fun Route.adminAuthRoute() {
                     if (!util.ValidationUtils.isValidEmail(userEmail)) {
                         call.respondError(
                             "Invalid email format",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@get
@@ -1254,7 +1070,7 @@ fun Route.adminAuthRoute() {
                             logger.error("Failed to get user transactions: ${result.message}")
                             call.respondError(
                                 result.message,
-                                null,
+                                Unit,
                                 HttpStatusCode.InternalServerError
                             )
                         }
@@ -1263,7 +1079,7 @@ fun Route.adminAuthRoute() {
                     logger.error("Error processing user transactions request", e)
                     call.respondError(
                         "Failed to retrieve user transactions: ${e.message}",
-                        null,
+                        Unit,
                         HttpStatusCode.InternalServerError
                     )
                 }
@@ -1285,7 +1101,7 @@ fun Route.adminAuthRoute() {
                     if (request.userEmail.isBlank()) {
                         call.respondError(
                             "User email is required",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@post
@@ -1295,16 +1111,16 @@ fun Route.adminAuthRoute() {
                     if (!util.ValidationUtils.isValidEmail(request.userEmail)) {
                         call.respondError(
                             "Invalid email format. Please provide a valid email address",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@post
                     }
 
-                    if (request.paymentIds.isEmpty() && request.subscriptionIds.isEmpty()) {
+                    if (request.paymentIds.isEmpty()) {
                         call.respondError(
-                            "At least one payment or subscription ID is required",
-                            null,
+                            "At least one payment ID is required",
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@post
@@ -1317,7 +1133,7 @@ fun Route.adminAuthRoute() {
                             request.paymentIds.joinToString(
                                 ","
                             )
-                        }, SubscriptionIDs: ${request.subscriptionIds.joinToString(",")}, SendViaEmail: ${request.sendViaEmail}"
+                        }, SendViaEmail: ${request.sendViaEmail}"
                     )
 
                     val billService: domain.service.BillService by application.inject()
@@ -1327,8 +1143,7 @@ fun Route.adminAuthRoute() {
                         when (val result = billService.generateAndSendBill(
                             admin.email,
                             request.userEmail,
-                            request.paymentIds,
-                            request.subscriptionIds
+                            request.paymentIds
                         )) {
                             is Result.Success -> {
                                 logger.info("[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Status: SUCCESS, TargetUser: ${request.userEmail}, DeliveryMethod: EMAIL")
@@ -1343,7 +1158,7 @@ fun Route.adminAuthRoute() {
                                 logger.error("[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Status: FAILED, TargetUser: ${request.userEmail}, Error: ${result.message}")
                                 call.respondError(
                                     result.message,
-                                    null,
+                                    Unit,
                                     HttpStatusCode.InternalServerError
                                 )
                             }
@@ -1352,8 +1167,7 @@ fun Route.adminAuthRoute() {
                         // Generate bill and return PDF for download
                         when (val result = billService.generateBill(
                             request.userEmail,
-                            request.paymentIds,
-                            request.subscriptionIds
+                            request.paymentIds
                         )) {
                             is Result.Success -> {
                                 val pdfBytes = result.data
@@ -1377,7 +1191,7 @@ fun Route.adminAuthRoute() {
                                 logger.error("[AUDIT] [$timestamp] Bill Generation Request - Admin: ${admin.email}, Status: FAILED, TargetUser: ${request.userEmail}, Error: ${result.message}")
                                 call.respondError(
                                     result.message,
-                                    null,
+                                    Unit,
                                     HttpStatusCode.InternalServerError
                                 )
                             }
@@ -1391,7 +1205,75 @@ fun Route.adminAuthRoute() {
                     )
                     call.respondError(
                         "Failed to generate bill: ${e.message}",
-                        null,
+                        Unit,
+                        HttpStatusCode.InternalServerError
+                    )
+                }
+            }
+
+            // POST /admin/finance/payments/{paymentId}/bill - Generate payment bill by type
+            post("/payments/{paymentId}/bill") {
+                val admin = call.getAuthenticatedAdminOrRespond()
+                if (admin == null) {
+                    return@post
+                }
+
+                val paymentId = call.parameters["paymentId"]?.trim()
+                if (paymentId.isNullOrBlank()) {
+                    call.respondError(
+                        "Payment ID is required",
+                        Unit,
+                        HttpStatusCode.BadRequest
+                    )
+                    return@post
+                }
+
+                try {
+                    val request = call.receive<PaymentBillRequest>()
+                    val billType = request.billType
+
+                    val billService: domain.service.BillService by application.inject()
+                    val result = when (billType) {
+                        BillType.ORIGINAL_BILL -> billService.generateOriginalBill(paymentId)
+                        BillType.REFUND_ADJUSTMENT_BILL -> billService.generateRefundAdjustmentBill(paymentId)
+                        BillType.NET_AMOUNT_BILL -> billService.generateNetAmountBill(paymentId)
+                        BillType.REFUND_RECEIPT -> billService.generateRefundReceipt(paymentId)
+                    }
+
+                    when (result) {
+                        is Result.Success -> {
+                            val typeLabel = when (billType) {
+                                BillType.ORIGINAL_BILL -> "Original"
+                                BillType.REFUND_ADJUSTMENT_BILL -> "Refund_Adjustment"
+                                BillType.NET_AMOUNT_BILL -> "Net_Amount"
+                                BillType.REFUND_RECEIPT -> "Refund_Receipt"
+                            }
+                            val safePaymentId = paymentId.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+                            val filename = "Bill_${typeLabel}_${safePaymentId}_${LocalDate.now()}.pdf"
+
+                            call.response.header(
+                                HttpHeaders.ContentDisposition,
+                                "attachment; filename=\"$filename\""
+                            )
+                            call.respondBytes(
+                                result.data,
+                                ContentType.Application.Pdf,
+                                HttpStatusCode.OK
+                            )
+                        }
+
+                        is Result.Error -> {
+                            call.respondError(
+                                result.message,
+                                Unit,
+                                HttpStatusCode.InternalServerError
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    call.respondError(
+                        "Failed to generate bill: ${e.message}",
+                        Unit,
                         HttpStatusCode.InternalServerError
                     )
                 }
@@ -1416,30 +1298,30 @@ fun Route.adminAuthRoute() {
                     if (request.startDate.isBlank() || request.endDate.isBlank()) {
                         call.respondError(
                             "Start date and end date are required",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@post
                     }
 
                     // Parse dates to validate format and order
-                    val start: java.time.LocalDate
-                    val end: java.time.LocalDate
+                    val start: LocalDate
+                    val end: LocalDate
 
                     try {
-                        start = java.time.LocalDate.parse(request.startDate)
-                        end = java.time.LocalDate.parse(request.endDate)
-                    } catch (e: java.time.format.DateTimeParseException) {
+                        start = LocalDate.parse(request.startDate)
+                        end = LocalDate.parse(request.endDate)
+                    } catch (_: java.time.format.DateTimeParseException) {
                         call.respondError(
                             "Invalid date format. Please use ISO format (YYYY-MM-DD)",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@post
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         call.respondError(
                             "Invalid date format. Please use ISO format (YYYY-MM-DD)",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@post
@@ -1449,7 +1331,7 @@ fun Route.adminAuthRoute() {
                     if (start.isAfter(end)) {
                         call.respondError(
                             "Start date must be before or equal to end date",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@post
@@ -1460,7 +1342,7 @@ fun Route.adminAuthRoute() {
                     if (daysBetween > 730) {
                         call.respondError(
                             "Date range is too large. Maximum allowed range is 2 years (730 days)",
-                            null,
+                            Unit,
                             HttpStatusCode.BadRequest
                         )
                         return@post
@@ -1473,16 +1355,7 @@ fun Route.adminAuthRoute() {
                     val financialService: domain.service.FinancialService by application.inject()
 
                     // Generate CSV based on export type
-                    val csvResult = when (request.exportType) {
-                        bose.ankush.data.model.ExportType.PAYMENTS ->
-                            financialService.exportPayments(request.startDate, request.endDate)
-
-                        bose.ankush.data.model.ExportType.SUBSCRIPTIONS ->
-                            financialService.exportSubscriptions(request.startDate, request.endDate)
-
-                        bose.ankush.data.model.ExportType.BOTH ->
-                            financialService.exportBoth(request.startDate, request.endDate)
-                    }
+                    val csvResult = financialService.exportPayments(request.startDate, request.endDate)
 
                     when (csvResult) {
                         is Result.Success -> {
@@ -1508,7 +1381,7 @@ fun Route.adminAuthRoute() {
                             logger.error("[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Status: FAILED, ExportType: ${request.exportType}, Error: ${csvResult.message}")
                             call.respondError(
                                 csvResult.message,
-                                null,
+                                Unit,
                                 HttpStatusCode.InternalServerError
                             )
                         }
@@ -1521,7 +1394,7 @@ fun Route.adminAuthRoute() {
                     )
                     call.respondError(
                         "Failed to export financial data: ${e.message}",
-                        null,
+                        Unit,
                         HttpStatusCode.InternalServerError
                     )
                 }
@@ -1536,7 +1409,7 @@ fun Route.adminAuthRoute() {
                 is AuthHelper.AuthResult.Failure -> {
                     // Authentication failed, redirect to login with appropriate error
                     logger.info("Unauthenticated access to dashboard, redirecting to login")
-                    call.respondRedirect("/admin/login?error=auth_required", permanent = false)
+                    call.respondRedirect("/login?error=auth_required", permanent = false)
                     return@get
                 }
 
@@ -1545,17 +1418,17 @@ fun Route.adminAuthRoute() {
                     val userEmail = admin.email
                     logger.info("Serving admin dashboard to admin user: $userEmail")
 
-            // Respond with the admin dashboard HTML
-            call.respondHtml(HttpStatusCode.OK) {
-                attributes["lang"] = "en"
-                head {
-                    setupHead(pageName, includeAdminJs = true)
+                    // Respond with the admin dashboard HTML
+                    call.respondHtml(HttpStatusCode.OK) {
+                        attributes["lang"] = "en"
+                        head {
+                            setupHead(pageName, includeAdminJs = true)
 
-                    // Include page-specific CSS if needed
-                    style {
-                        unsafe {
-                            raw(
-                                """
+                            // Include page-specific CSS if needed
+                            style {
+                                unsafe {
+                                    raw(
+                                        """
                                 /* Admin dashboard specific styles */
                                 .admin-container {
     /* Full width with padding on sides */
@@ -1671,65 +1544,36 @@ fun Route.adminAuthRoute() {
                                     line-height: 1.6;
                                 }
 
-                                /* Users table breathing space and styling */
+                                /* Users table shell */
                                 .dashboard-card-content {
                                     overflow-x: auto;
                                 }
-                                .dashboard-card-content table {
+                                /* Minimal users table layout */
+                                .dashboard-card-content table.users-table-minimal {
                                     width: 100%;
                                     table-layout: auto;
-                                    border-collapse: separate !important;
-                                    border-spacing: 0 10px;
-                                    min-width: 800px;
+                                    min-width: 760px;
                                 }
-                                .dashboard-card-content table.users-table th,
-                                .dashboard-card-content table.users-table td {
+                                /* Users table specific - allow overflow for badges and menus */
+                                .users-table-minimal th,
+                                .users-table-minimal td {
                                     overflow: visible;
                                     text-overflow: clip;
                                     white-space: normal;
                                     word-break: break-word;
                                 }
-                                .dashboard-card-content table.users-table th:nth-child(1),
-                                .dashboard-card-content table.users-table td:nth-child(1) { min-width: 200px; }
-                                .dashboard-card-content table.users-table th:nth-child(2),
-                                .dashboard-card-content table.users-table td:nth-child(2) { min-width: 140px; }
-                                .dashboard-card-content table.users-table th:nth-child(3),
-                                .dashboard-card-content table.users-table td:nth-child(3) { min-width: 120px; }
-                                .dashboard-card-content table.users-table th:nth-child(4),
-                                .dashboard-card-content table.users-table td:nth-child(4) { min-width: 100px; }
-                                .dashboard-card-content table.users-table th:nth-child(5),
-                                .dashboard-card-content table.users-table td:nth-child(5) { min-width: 100px; }
-                                .dashboard-card-content thead th {
-                                    text-align: left;
-                                    padding: 12px 14px;
-                                    border-bottom: 1px solid var(--card-border);
-                                    color: var(--text-secondary);
-                                    font-weight: 600;
-                                    background: transparent;
-                                    vertical-align: middle;
-                                }
-                                .dashboard-card-content tbody tr {
-                                    background: var(--card-bg);
-                                    border: 1px solid var(--card-border);
-                                    transition: background 0.2s ease, border-color 0.2s ease;
-                                }
-                                .dashboard-card-content tbody tr:hover {
-                                    background: var(--card-hover-bg);
-                                    border-color: var(--card-hover-border);
-                                }
-                                .dashboard-card-content tbody td {
-                                    padding: 12px 14px;
-                                    border: none;
-                                    vertical-align: middle;
-                                }
-                                .dashboard-card-content tbody tr td:first-child {
-                                    border-top-left-radius: 8px;
-                                    border-bottom-left-radius: 8px;
-                                }
-                                .dashboard-card-content tbody tr td:last-child {
-                                    border-top-right-radius: 8px;
-                                    border-bottom-right-radius: 8px;
-                                }
+
+                                /* Users table column widths */
+                                .users-table-minimal th:nth-child(1),
+                                .users-table-minimal td:nth-child(1) { min-width: 220px; }
+                                .users-table-minimal th:nth-child(2),
+                                .users-table-minimal td:nth-child(2) { min-width: 140px; }
+                                .users-table-minimal th:nth-child(3),
+                                .users-table-minimal td:nth-child(3) { min-width: 120px; }
+                                .users-table-minimal th:nth-child(4),
+                                .users-table-minimal td:nth-child(4) { min-width: 100px; }
+                                .users-table-minimal th:nth-child(5),
+                                .users-table-minimal td:nth-child(5) { min-width: 100px; }
 
                                 /* Role dropdown styling */
                                 .role-select {
@@ -1757,14 +1601,14 @@ fun Route.adminAuthRoute() {
                                 }
 
                                 /* Actions cell overflow + menu + ripple */
-                                .dashboard-card-content table.users-table td.actions-cell, .dashboard-card-content table.users-table th.actions-col { overflow: visible; }
+                                .dashboard-card-content table.users-table-minimal td.actions-cell, .dashboard-card-content table.users-table-minimal th.actions-col { overflow: visible; }
                                 .actions-wrapper { overflow: visible; }
                                 .icon-button { position: relative; overflow: hidden; }
                                 .icon-button .ripple { position: absolute; border-radius: 50%; transform: scale(0); animation: ripple 600ms linear; background-color: var(--icon-color); opacity: 0.25; pointer-events: none; }
                                 @keyframes ripple { to { transform: scale(4); opacity: 0; } }
 
                                 /* Defensively hide any accidental icon button inside Role column */
-                                .dashboard-card-content table.users-table td:nth-child(3) .icon-button { display: none !important; }
+                                .dashboard-card-content table.users-table-minimal td:nth-child(3) .icon-button { display: none !important; }
 
                                 /* Ensure menus are not clipped by table rows */
                                 .dashboard-card-content tbody, .dashboard-card-content tbody tr { overflow: visible; }
@@ -1778,7 +1622,7 @@ fun Route.adminAuthRoute() {
                                 .status-toggle input:checked + .status-slider:before { transform: translateX(20px); }
 
                                 /* Pagination buttons */
-                                #pagination { gap: 0.5rem; }
+                                .users-pagination { gap: 0.5rem; display: flex; margin-top: 1rem; }
                                 .pagination-button { padding: 6px 10px; border: 1px solid var(--endpoint-border); background: var(--endpoint-bg); color: var(--text-color); border-radius: 6px; cursor: pointer; transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
                                 .pagination-button.active { background: var(--card-hover-bg); border-color: var(--card-hover-border); }
                                 .pagination-button.disabled { opacity: 0.5; cursor: default; }
@@ -2009,18 +1853,22 @@ fun Route.adminAuthRoute() {
                                     box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
                                 }
 
-                                .payments-table {
+                                /* Common table styles - used by Finance and Users */
+                                .payments-table,
+                                .users-table {
                                     width: 100%;
                                     border-collapse: collapse;
                                     background: var(--card-bg);
                                 }
 
-                                .payments-table thead {
+                                .payments-table thead,
+                                .users-table thead {
                                     background: var(--endpoint-bg);
                                     border-bottom: 2px solid var(--endpoint-border);
                                 }
 
-                                .payments-table th {
+                                .payments-table th,
+                                .users-table th {
                                     padding: 0.75rem 1rem;
                                     text-align: left;
                                     font-weight: 600;
@@ -2030,12 +1878,27 @@ fun Route.adminAuthRoute() {
                                     vertical-align: middle;
                                 }
 
-                                .payments-table td {
+                                .payments-table td,
+                                .users-table td {
                                     padding: 0.75rem 1rem;
                                     border-bottom: 1px solid var(--endpoint-border);
                                     color: var(--text-color);
                                     font-size: 0.875rem;
                                     vertical-align: middle;
+                                }
+
+                                .payments-table tbody tr:not(:last-child) td {
+                                    border-bottom-color: var(--card-border);
+                                }
+
+                                .payments-table tbody tr,
+                                .users-table tbody tr {
+                                    transition: background 0.2s ease;
+                                }
+
+                                .payments-table tbody tr:hover,
+                                .users-table tbody tr:hover {
+                                    background: var(--endpoint-bg);
                                 }
 
                                 .payments-table th:nth-child(5),
@@ -2103,13 +1966,6 @@ fun Route.adminAuthRoute() {
                                     color: #fca5a5;
                                 }
 
-                                .payments-table tbody tr {
-                                    transition: background 0.2s ease;
-                                }
-
-                                .payments-table tbody tr:hover {
-                                    background: var(--endpoint-bg);
-                                }
 
                                 .payment-status {
                                     display: inline-block;
@@ -2205,15 +2061,15 @@ fun Route.adminAuthRoute() {
                                     }
                                 }
                                 """
-                            )
-                        }
-                    }
+                                    )
+                                }
+                            }
 
-                    // Tabs initialization script
-                    script {
-                        unsafe {
-                            raw(
-                                """
+                            // Tabs initialization script
+                            script {
+                                unsafe {
+                                    raw(
+                                        """
                                 (function(){
                                     function initDashboardTabs(){
                                         try {
@@ -2221,7 +2077,6 @@ fun Route.adminAuthRoute() {
                                             const panels = document.querySelectorAll('.tab-panel');
                                             let iamLoaded = false;
                                             let financeLoaded = false;
-                                            let serviceCatalogLoaded = false;
                                             function activateTab(name){
                                                 tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
                                                 panels.forEach(p => p.classList.toggle('active', p.id === name));
@@ -2237,12 +2092,6 @@ fun Route.adminAuthRoute() {
                                                         initializeFinanceTab();
                                                     }
                                                 }
-                                                if(name === 'service-catalog' && !serviceCatalogLoaded){
-                                                    serviceCatalogLoaded = true;
-                                                    if (typeof initializeServiceCatalog === 'function') {
-                                                        initializeServiceCatalog();
-                                                    }
-                                                }
                                             }
                                             tabs.forEach(tab => tab.addEventListener('click', function(){
                                                 activateTab(this.dataset.tab);
@@ -2254,111 +2103,104 @@ fun Route.adminAuthRoute() {
                                     document.addEventListener('DOMContentLoaded', initDashboardTabs);
                                 })();
                                 """
-                            )
-                        }
-                    }
-                }
-                body {
-                    // Use a single, consistent container for all dashboard content
-                    div {
-                        classes = setOf("container", "main-container")
-                        style =
-                            "max-width: 100%; width: 100%; margin: 0; padding: 1rem 2rem; box-sizing: border-box;" // <-- Full width with padding
-
-                        createHeader(this)
-
-                        // Admin dashboard content
-                        div {
-                            classes = setOf("admin-container")
-                            style =
-                                "max-width: 100%; width: 100%; box-sizing: border-box;" // <-- Ensure admin-container fills parent
-
-                            div {
-                                classes = setOf("admin-header")
-                                h2 {
-                                    classes = setOf("admin-title")
-                                    +"Dashboard"
+                                    )
                                 }
                             }
-
-                            // Dashboard content
+                        }
+                        body {
+                            // Use a single, consistent container for all dashboard content
                             div {
-                                classes = setOf("dashboard-content")
+                                classes = setOf("container", "main-container")
                                 style =
-                                    "display: grid; gap: 2rem; width: 100%; box-sizing: border-box;" // <-- Always full width
+                                    "max-width: 100%; width: 100%; margin: 0; padding: 1rem 2rem; box-sizing: border-box;" // <-- Full width with padding
 
-                                // Tabs section
+                                createHeader(this)
+
+                                // Admin dashboard content
                                 div {
-                                    classes = setOf("dashboard-section")
+                                    classes = setOf("admin-container")
                                     style =
-                                        "position: relative; min-width: 0; width: 100%; box-sizing: border-box;" // <-- Always full width
+                                        "max-width: 100%; width: 100%; box-sizing: border-box;" // <-- Ensure admin-container fills parent
 
-                                    // Tabs navigation
                                     div {
-                                        classes = setOf("tabs")
-                                        span {
-                                            classes = setOf("tab", "active")
-                                            attributes["data-tab"] = "iam"
-                                            unsafe {
-                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>group</span> Users")
-                                            }
-                                        }
-                                        span {
-                                            classes = setOf("tab")
-                                            attributes["data-tab"] = "finance"
-                                            unsafe {
-                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>payments</span> Finance")
-                                            }
-                                        }
-                                        span {
-                                            classes = setOf("tab")
-                                            attributes["data-tab"] = "reports"
-                                            unsafe {
-                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>analytics</span> Reports")
-                                            }
-                                        }
-                                        span {
-                                            classes = setOf("tab")
-                                            attributes["data-tab"] = "tools"
-                                            unsafe {
-                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>build_circle</span> Tools")
-                                            }
-                                        }
-                                        span {
-                                            classes = setOf("tab")
-                                            attributes["data-tab"] = "subscriptions"
-                                            unsafe {
-                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>card_membership</span> Subscriptions")
-                                            }
-                                        }
-                                        span {
-                                            classes = setOf("tab")
-                                            attributes["data-tab"] = "service-catalog"
-                                            unsafe {
-                                                raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>inventory_2</span> Service Catalog")
-                                            }
+                                        classes = setOf("admin-header")
+                                        h2 {
+                                            classes = setOf("admin-title")
+                                            +"Dashboard"
                                         }
                                     }
 
-                                    // Tabs content panels
+                                    // Dashboard content
                                     div {
-                                        classes = setOf("tab-content")
+                                        classes = setOf("dashboard-content")
                                         style =
-                                            "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                            "display: grid; gap: 2rem; width: 100%; box-sizing: border-box;" // <-- Always full width
 
-                                        // IAM Panel
+                                        // Tabs section
                                         div {
-                                            classes = setOf("tab-panel", "active")
-                                            id = "iam"
+                                            classes = setOf("dashboard-section")
                                             style =
-                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                                "position: relative; min-width: 0; width: 100%; box-sizing: border-box;" // <-- Always full width
+
+                                            // Tabs navigation
                                             div {
-                                                classes = setOf("dashboard-card")
-                                                div {
-                                                    classes = setOf("dashboard-card-content")
+                                                classes = setOf("tabs")
+                                                span {
+                                                    classes = setOf("tab", "active")
+                                                    attributes["data-tab"] = "iam"
                                                     unsafe {
-                                                        raw(
-                                                            """
+                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>group</span> Users")
+                                                    }
+                                                }
+                                                span {
+                                                    classes = setOf("tab")
+                                                    attributes["data-tab"] = "finance"
+                                                    unsafe {
+                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>payments</span> Finance")
+                                                    }
+                                                }
+                                                span {
+                                                    classes = setOf("tab")
+                                                    attributes["data-tab"] = "reports"
+                                                    unsafe {
+                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>analytics</span> Reports")
+                                                    }
+                                                }
+                                                span {
+                                                    classes = setOf("tab")
+                                                    attributes["data-tab"] = "tools"
+                                                    unsafe {
+                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>build_circle</span> Tools")
+                                                    }
+                                                }
+                                                span {
+                                                    classes = setOf("tab")
+                                                    attributes["data-tab"] = "service-catalog"
+                                                    unsafe {
+                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>inventory_2</span> Service Catalog")
+                                                    }
+                                                }
+                                            }
+
+                                            // Tabs content panels
+                                            div {
+                                                classes = setOf("tab-content")
+                                                style =
+                                                    "width: 100%; box-sizing: border-box;" // <-- Always full width
+
+                                                // IAM Panel
+                                                div {
+                                                    classes = setOf("tab-panel", "active")
+                                                    id = "iam"
+                                                    style =
+                                                        "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                                    div {
+                                                        classes = setOf("dashboard-card")
+                                                        div {
+                                                            classes = setOf("dashboard-card-content")
+                                                            unsafe {
+                                                                raw(
+                                                                    """
                                                             <div id="success-message" class="message success-message hidden"></div>
                                                             <div id="error-message" class="message error-message hidden"></div>
                                                             <div id="info-message" class="message info-message hidden"></div>
@@ -2368,424 +2210,404 @@ fun Route.adminAuthRoute() {
 
                                                             <div id="iam-loader" class="skeleton" style="height:8px;width:100%;display:none;"></div>
 
-                                                            <table class="users-table">
-                                                                <colgroup>
-                                                                    <col style="width:40px">
-                                                                    <col style="min-width:250px">
-                                                                    <col style="min-width:180px">
-                                                                    <col style="min-width:120px">
-                                                                    <col style="min-width:120px">
-                                                                    <col style="min-width:100px">
-                                                                    <col style="min-width:80px">
-                                                                </colgroup>
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th><input type="checkbox" id="select-all-header" style="width:18px;height:18px;cursor:pointer;"></th>
-                                                                        <th>Email</th>
-                                                                        <th>Created At</th>
-                                                                        <th>Role</th>
-                                                                        <th>Status</th>
-                                                                        <th>Premium</th>
-                                                                        <th class="actions-col" aria-label="Actions"></th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody id="users-table-body"></tbody>
-                                                            </table>
+                                                            <div class="users-table-shell">
+                                                                <div class="users-table-header">
+                                                                    <div class="users-table-title">Users</div>
+                                                                    <div id="users-table-meta" class="users-table-meta"></div>
+                                                                </div>
+                                                                <div class="users-table-wrapper">
+                                                                    <table class="users-table-minimal">
+                                                                        <thead>
+                                                                            <tr>
+                                                                                <th>User</th>
+                                                                                <th>Created</th>
+                                                                                <th>Role</th>
+                                                                                <th>Status</th>
+                                                                                <th>Premium</th>
+                                                                                <th class="actions-col" aria-label="Actions"></th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody id="users-table-body"></tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </div>
 
-                                                            <div id="pagination" style="display:flex;gap:0.5rem;margin-top:1rem;"></div>
+                                                            <div id="pagination" class="users-pagination"></div>
                                                             """
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Finance Panel
-                                        div {
-                                            classes = setOf("tab-panel")
-                                            id = "finance"
-                                            style =
-                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
-
-                                            // Financial Summary Cards
-                                            div {
-                                                classes = setOf("finance-summary")
-
-                                                // Total Revenue Card
-                                                div {
-                                                    classes = setOf("metric-card")
-                                                    div {
-                                                        classes = setOf("metric-label")
-                                                        +"Total Revenue"
-                                                    }
-                                                    div {
-                                                        classes = setOf("metric-value")
-                                                        id = "total-revenue"
-                                                        +"$0.00"
-                                                    }
-                                                }
-
-                                                // Monthly Revenue Card
-                                                div {
-                                                    classes = setOf("metric-card")
-                                                    div {
-                                                        classes = setOf("metric-label")
-                                                        +"Monthly Revenue"
-                                                    }
-                                                    div {
-                                                        classes = setOf("metric-value")
-                                                        id = "monthly-revenue"
-                                                        +"$0.00"
-                                                    }
-                                                }
-
-                                                // Active Subscriptions Revenue Card
-                                                div {
-                                                    classes = setOf("metric-card")
-                                                    div {
-                                                        classes = setOf("metric-label")
-                                                        +"Active Subscriptions Revenue"
-                                                    }
-                                                    div {
-                                                        classes = setOf("metric-value")
-                                                        id = "active-sub-revenue"
-                                                        +"$0.00"
-                                                    }
-                                                }
-
-                                                // Total Payments Card
-                                                div {
-                                                    classes = setOf("metric-card")
-                                                    div {
-                                                        classes = setOf("metric-label")
-                                                        +"Total Payments"
-                                                    }
-                                                    div {
-                                                        classes = setOf("metric-value")
-                                                        id = "total-payments"
-                                                        +"0"
-                                                    }
-                                                }
-                                            }
-
-                                            // Payment History Section
-                                            div {
-                                                classes = setOf("finance-actions")
-
-                                                button {
-                                                    id = "generate-bill-btn"
-                                                    classes = setOf("btn", "btn-primary")
-                                                    unsafe {
-                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>receipt</span> Generate Bill")
-                                                    }
-                                                }
-
-                                                select {
-                                                    id = "payment-status-filter"
-                                                    classes = setOf("role-select")
-                                                    option {
-                                                        value = ""
-                                                        +"All Statuses"
-                                                    }
-                                                    option {
-                                                        value = "SUCCESS"
-                                                        +"Success"
-                                                    }
-                                                    option {
-                                                        value = "FAILED"
-                                                        +"Failed"
-                                                    }
-                                                    option {
-                                                        value = "PENDING"
-                                                        +"Pending"
-                                                    }
-                                                    option {
-                                                        value = "REFUNDED"
-                                                        +"Refunded"
-                                                    }
-                                                }
-
-                                                input {
-                                                    type = InputType.date
-                                                    id = "payment-date-from"
-                                                    classes = setOf("date-input")
-                                                    placeholder = "Start Date"
-                                                }
-
-                                                input {
-                                                    type = InputType.date
-                                                    id = "payment-date-to"
-                                                    classes = setOf("date-input")
-                                                    placeholder = "End Date"
-                                                }
-                                            }
-
-                                            // Payment History Table
-                                            div {
-                                                classes = setOf("dashboard-card-content")
-                                                style = "overflow-x: auto;"
-
-                                                table {
-                                                    classes = setOf("payments-table")
-                                                    thead {
-                                                        tr {
-                                                            th { +"User Email" }
-                                                            th { +"Amount" }
-                                                            th { +"Currency" }
-                                                            th { +"Payment Method" }
-                                                            th {
-                                                                style = "text-align: center;"
-                                                                +"Status"
-                                                            }
-                                                            th { +"Transaction ID" }
-                                                            th { +"Date" }
-                                                            th {
-                                                                style = "text-align: center;"
-                                                                +"Actions"
-                                                            }
-                                                        }
-                                                    }
-                                                    tbody {
-                                                        id = "payments-table-body"
-                                                        tr {
-                                                            td {
-                                                                colSpan = "8"
-                                                                style =
-                                                                    "text-align: center; padding: 2rem; color: var(--text-secondary);"
-                                                                +"Loading payment history..."
+                                                                )
                                                             }
                                                         }
                                                     }
                                                 }
-                                            }
 
-                                            // Pagination Controls
-                                            div {
-                                                id = "payments-pagination"
-                                                style =
-                                                    "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
-                                            }
-
-                                            // Refund Analytics Section
-                                            div {
-                                                style =
-                                                    "margin-top: 3rem; padding-top: 2rem; border-top: 2px solid var(--card-border);"
-
-                                                // Section Header
-                                                h2 {
+                                                // Finance Panel
+                                                div {
+                                                    classes = setOf("tab-panel")
+                                                    id = "finance"
                                                     style =
-                                                        "color: var(--card-title); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;"
-                                                    unsafe {
-                                                        raw("<span class='material-icons' style='font-size:24px;'>money_off</span> Refund Analytics")
-                                                    }
-                                                }
+                                                        "width: 100%; box-sizing: border-box;" // <-- Always full width
 
-                                                // Refund Metrics Cards
-                                                div {
-                                                    classes = setOf("finance-summary")
-                                                    style = "margin-bottom: 1.5rem;"
-
-                                                    // Total Refunds Card
+                                                    // Financial Summary Cards
                                                     div {
-                                                        classes = setOf("metric-card")
+                                                        classes = setOf("finance-summary")
+
+                                                        // Total Revenue Card
                                                         div {
-                                                            classes = setOf("metric-label")
-                                                            +"Total Refunds"
-                                                        }
-                                                        div {
-                                                            classes = setOf("metric-value")
-                                                            id = "total-refunds"
-                                                            +"$0.00"
-                                                        }
-                                                    }
-
-                                                    // Monthly Refunds Card
-                                                    div {
-                                                        classes = setOf("metric-card")
-                                                        div {
-                                                            classes = setOf("metric-label")
-                                                            +"Monthly Refunds"
-                                                        }
-                                                        div {
-                                                            classes = setOf("metric-value")
-                                                            id = "monthly-refunds"
-                                                            +"$0.00"
-                                                        }
-                                                    }
-
-                                                    // Refund Rate Card
-                                                    div {
-                                                        classes = setOf("metric-card")
-                                                        div {
-                                                            classes = setOf("metric-label")
-                                                            +"Refund Rate"
-                                                        }
-                                                        div {
-                                                            classes = setOf("metric-value")
-                                                            id = "refund-rate"
-                                                            +"0.00%"
-                                                        }
-                                                    }
-
-                                                    // Instant Refunds Card
-                                                    div {
-                                                        classes = setOf("metric-card")
-                                                        div {
-                                                            classes = setOf("metric-label")
-                                                            +"Instant Refunds"
-                                                        }
-                                                        div {
-                                                            classes = setOf("metric-value")
-                                                            id = "instant-refunds"
-                                                            +"0"
-                                                        }
-                                                    }
-
-                                                    // Normal Refunds Card
-                                                    div {
-                                                        classes = setOf("metric-card")
-                                                        div {
-                                                            classes = setOf("metric-label")
-                                                            +"Normal Refunds"
-                                                        }
-                                                        div {
-                                                            classes = setOf("metric-value")
-                                                            id = "normal-refunds"
-                                                            +"0"
-                                                        }
-                                                    }
-
-                                                    // Average Processing Time Card
-                                                    div {
-                                                        classes = setOf("metric-card")
-                                                        div {
-                                                            classes = setOf("metric-label")
-                                                            +"Avg Processing Time"
-                                                        }
-                                                        div {
-                                                            classes = setOf("metric-value")
-                                                            id = "avg-processing-time"
-                                                            +"0.0h"
-                                                        }
-                                                    }
-                                                }
-
-                                                // Refund History Section
-                                                div {
-                                                    classes = setOf("finance-actions")
-
-                                                    button {
-                                                        id = "export-refunds-btn"
-                                                        classes = setOf("btn", "btn-secondary")
-                                                        unsafe {
-                                                            raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>download</span> Export Refunds")
-                                                        }
-                                                    }
-
-                                                    select {
-                                                        id = "refund-status-filter"
-                                                        classes = setOf("role-select")
-                                                        option {
-                                                            value = ""
-                                                            +"All Statuses"
-                                                        }
-                                                        option {
-                                                            value = "PENDING"
-                                                            +"Pending"
-                                                        }
-                                                        option {
-                                                            value = "PROCESSED"
-                                                            +"Processed"
-                                                        }
-                                                        option {
-                                                            value = "FAILED"
-                                                            +"Failed"
-                                                        }
-                                                    }
-
-                                                    input {
-                                                        type = InputType.date
-                                                        id = "refund-date-from"
-                                                        classes = setOf("date-input")
-                                                        placeholder = "Start Date"
-                                                    }
-
-                                                    input {
-                                                        type = InputType.date
-                                                        id = "refund-date-to"
-                                                        classes = setOf("date-input")
-                                                        placeholder = "End Date"
-                                                    }
-                                                }
-
-                                                // Refund History Table
-                                                div {
-                                                    classes = setOf("dashboard-card-content")
-                                                    style = "overflow-x: auto;"
-
-                                                    // Loader
-                                                    div {
-                                                        id = "refunds-loader"
-                                                        classes = setOf("loading-spinner")
-                                                        style = "display: none; margin: 2rem auto;"
-                                                    }
-
-                                                    table {
-                                                        classes = setOf("payments-table", "refunds-table")
-                                                        thead {
-                                                            tr {
-                                                                th { +"Refund ID" }
-                                                                th { +"User Email" }
-                                                                th { +"Amount" }
-                                                                th {
-                                                                    style = "text-align: center;"
-                                                                    +"Status"
-                                                                }
-                                                                th { +"Type" }
-                                                                th { +"Processed By" }
-                                                                th { +"Date" }
-                                                                th {
-                                                                    style = "text-align: center;"
-                                                                    +"Actions"
-                                                                }
+                                                            classes = setOf("metric-card")
+                                                            div {
+                                                                classes = setOf("metric-label")
+                                                                +"Total Revenue"
+                                                            }
+                                                            div {
+                                                                classes = setOf("metric-value")
+                                                                id = "total-revenue"
+                                                                +"$0.00"
                                                             }
                                                         }
-                                                        tbody {
-                                                            id = "refunds-table-body"
-                                                            tr {
-                                                                td {
-                                                                    colSpan = "8"
-                                                                    style =
-                                                                        "text-align: center; padding: 2rem; color: var(--text-secondary);"
-                                                                    +"Loading refund history..."
+
+                                                        // Monthly Revenue Card
+                                                        div {
+                                                            classes = setOf("metric-card")
+                                                            div {
+                                                                classes = setOf("metric-label")
+                                                                +"Monthly Revenue"
+                                                            }
+                                                            div {
+                                                                classes = setOf("metric-value")
+                                                                id = "monthly-revenue"
+                                                                +"$0.00"
+                                                            }
+                                                        }
+
+                                                        // Total Payments Card
+                                                        div {
+                                                            classes = setOf("metric-card")
+                                                            div {
+                                                                classes = setOf("metric-label")
+                                                                +"Total Payments"
+                                                            }
+                                                            div {
+                                                                classes = setOf("metric-value")
+                                                                id = "total-payments"
+                                                                +"0"
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Payment History Section
+                                                    div {
+                                                        classes = setOf("finance-actions")
+
+                                                        select {
+                                                            id = "payment-status-filter"
+                                                            classes = setOf("role-select")
+                                                            option {
+                                                                value = ""
+                                                                +"All Statuses"
+                                                            }
+                                                            option {
+                                                                value = "verified"
+                                                                +"Success"
+                                                            }
+                                                            option {
+                                                                value = "failed"
+                                                                +"Failed"
+                                                            }
+                                                            option {
+                                                                value = "pending"
+                                                                +"Pending"
+                                                            }
+                                                            option {
+                                                                value = "refunded"
+                                                                +"Refunded"
+                                                            }
+                                                        }
+
+                                                        input {
+                                                            type = InputType.date
+                                                            id = "payment-date-from"
+                                                            classes = setOf("date-input")
+                                                            placeholder = "Start Date"
+                                                        }
+
+                                                        input {
+                                                            type = InputType.date
+                                                            id = "payment-date-to"
+                                                            classes = setOf("date-input")
+                                                            placeholder = "End Date"
+                                                        }
+                                                    }
+
+                                                    // Payment History Table
+                                                    div {
+                                                        classes = setOf("dashboard-card-content")
+                                                        style = "overflow-x: auto;"
+
+                                                        table {
+                                                            classes = setOf("payments-table")
+                                                            thead {
+                                                                tr {
+                                                                    th { +"User Email" }
+                                                                    th { +"Amount" }
+                                                                    th { +"Currency" }
+                                                                    th { +"Payment Method" }
+                                                                    th {
+                                                                        style = "text-align: center;"
+                                                                        +"Status"
+                                                                    }
+                                                                    th { +"Transaction ID" }
+                                                                    th { +"Date" }
+                                                                    th {
+                                                                        style = "text-align: center;"
+                                                                        +"Actions"
+                                                                    }
+                                                                    th {
+                                                                        style = "text-align: center;"
+                                                                        +"Bill"
+                                                                    }
+                                                                }
+                                                            }
+                                                            tbody {
+                                                                id = "payments-table-body"
+                                                                tr {
+                                                                    td {
+                                                                        colSpan = "9"
+                                                                        style =
+                                                                            "text-align: center; padding: 2rem; color: var(--text-secondary);"
+                                                                        +"Loading payment history..."
+                                                                    }
                                                                 }
                                                             }
                                                         }
                                                     }
+
+                                                    // Pagination Controls
+                                                    div {
+                                                        id = "payments-pagination"
+                                                        style =
+                                                            "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
+                                                    }
+
+                                                    // Refund Analytics Section
+                                                    div {
+                                                        style =
+                                                            "margin-top: 3rem; padding-top: 2rem; border-top: 2px solid var(--card-border);"
+
+                                                        // Section Header
+                                                        h2 {
+                                                            style =
+                                                                "color: var(--card-title); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;"
+                                                            unsafe {
+                                                                raw("<span class='material-icons' style='font-size:24px;'>money_off</span> Refund Analytics")
+                                                            }
+                                                        }
+
+                                                        // Refund Metrics Cards
+                                                        div {
+                                                            classes = setOf("finance-summary")
+                                                            style = "margin-bottom: 1.5rem;"
+
+                                                            // Total Refunds Card
+                                                            div {
+                                                                classes = setOf("metric-card")
+                                                                div {
+                                                                    classes = setOf("metric-label")
+                                                                    +"Total Refunds"
+                                                                }
+                                                                div {
+                                                                    classes = setOf("metric-value")
+                                                                    id = "total-refunds"
+                                                                    +"$0.00"
+                                                                }
+                                                            }
+
+                                                            // Monthly Refunds Card
+                                                            div {
+                                                                classes = setOf("metric-card")
+                                                                div {
+                                                                    classes = setOf("metric-label")
+                                                                    +"Monthly Refunds"
+                                                                }
+                                                                div {
+                                                                    classes = setOf("metric-value")
+                                                                    id = "monthly-refunds"
+                                                                    +"$0.00"
+                                                                }
+                                                            }
+
+                                                            // Refund Rate Card
+                                                            div {
+                                                                classes = setOf("metric-card")
+                                                                div {
+                                                                    classes = setOf("metric-label")
+                                                                    +"Refund Rate"
+                                                                }
+                                                                div {
+                                                                    classes = setOf("metric-value")
+                                                                    id = "refund-rate"
+                                                                    +"0.00%"
+                                                                }
+                                                            }
+
+                                                            // Instant Refunds Card
+                                                            div {
+                                                                classes = setOf("metric-card")
+                                                                div {
+                                                                    classes = setOf("metric-label")
+                                                                    +"Instant Refunds"
+                                                                }
+                                                                div {
+                                                                    classes = setOf("metric-value")
+                                                                    id = "instant-refunds"
+                                                                    +"0"
+                                                                }
+                                                            }
+
+                                                            // Normal Refunds Card
+                                                            div {
+                                                                classes = setOf("metric-card")
+                                                                div {
+                                                                    classes = setOf("metric-label")
+                                                                    +"Normal Refunds"
+                                                                }
+                                                                div {
+                                                                    classes = setOf("metric-value")
+                                                                    id = "normal-refunds"
+                                                                    +"0"
+                                                                }
+                                                            }
+
+                                                            // Average Processing Time Card
+                                                            div {
+                                                                classes = setOf("metric-card")
+                                                                div {
+                                                                    classes = setOf("metric-label")
+                                                                    +"Avg Processing Time"
+                                                                }
+                                                                div {
+                                                                    classes = setOf("metric-value")
+                                                                    id = "avg-processing-time"
+                                                                    +"0.0h"
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Refund History Section
+                                                        div {
+                                                            classes = setOf("finance-actions")
+
+                                                            button {
+                                                                id = "export-refunds-btn"
+                                                                classes = setOf("btn", "btn-secondary")
+                                                                unsafe {
+                                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>download</span> Export Refunds")
+                                                                }
+                                                            }
+
+                                                            select {
+                                                                id = "refund-status-filter"
+                                                                classes = setOf("role-select")
+                                                                option {
+                                                                    value = ""
+                                                                    +"All Statuses"
+                                                                }
+                                                                option {
+                                                                    value = "PENDING"
+                                                                    +"Pending"
+                                                                }
+                                                                option {
+                                                                    value = "PROCESSED"
+                                                                    +"Processed"
+                                                                }
+                                                                option {
+                                                                    value = "FAILED"
+                                                                    +"Failed"
+                                                                }
+                                                            }
+
+                                                            input {
+                                                                type = InputType.date
+                                                                id = "refund-date-from"
+                                                                classes = setOf("date-input")
+                                                                placeholder = "Start Date"
+                                                            }
+
+                                                            input {
+                                                                type = InputType.date
+                                                                id = "refund-date-to"
+                                                                classes = setOf("date-input")
+                                                                placeholder = "End Date"
+                                                            }
+                                                        }
+
+                                                        // Refund History Table
+                                                        div {
+                                                            classes = setOf("dashboard-card-content")
+                                                            style = "overflow-x: auto;"
+
+                                                            // Loader
+                                                            div {
+                                                                id = "refunds-loader"
+                                                                classes = setOf("loading-spinner")
+                                                                style = "display: none; margin: 2rem auto;"
+                                                            }
+
+                                                            table {
+                                                                classes = setOf("payments-table", "refunds-table")
+                                                                thead {
+                                                                    tr {
+                                                                        th { +"Refund ID" }
+                                                                        th { +"User Email" }
+                                                                        th { +"Amount" }
+                                                                        th {
+                                                                            style = "text-align: center;"
+                                                                            +"Status"
+                                                                        }
+                                                                        th { +"Type" }
+                                                                        th { +"Processed By" }
+                                                                        th { +"Date" }
+                                                                        th {
+                                                                            style = "text-align: center;"
+                                                                            +"Actions"
+                                                                        }
+                                                                    }
+                                                                }
+                                                                tbody {
+                                                                    id = "refunds-table-body"
+                                                                    tr {
+                                                                        td {
+                                                                            colSpan = "8"
+                                                                            style =
+                                                                                "text-align: center; padding: 2rem; color: var(--text-secondary);"
+                                                                            +"Loading refund history..."
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Refund Pagination Controls
+                                                        div {
+                                                            id = "refunds-pagination"
+                                                            style =
+                                                                "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
+                                                        }
+                                                    }
                                                 }
 
-                                                // Refund Pagination Controls
+                                                // Reports Panel
                                                 div {
-                                                    id = "refunds-pagination"
+                                                    classes = setOf("tab-panel")
+                                                    id = "reports"
                                                     style =
-                                                        "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
-                                                }
-                                            }
-                                        }
-
-                                        // Reports Panel
-                                        div {
-                                            classes = setOf("tab-panel")
-                                            id = "reports"
-                                            style =
-                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
-                                            div {
-                                                classes = setOf("dashboard-card")
-                                                div {
-                                                    classes = setOf("dashboard-card-content")
-                                                    unsafe {
-                                                        raw(
-                                                            """
+                                                        "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                                    div {
+                                                        classes = setOf("dashboard-card")
+                                                        div {
+                                                            classes = setOf("dashboard-card-content")
+                                                            unsafe {
+                                                                raw(
+                                                                    """
                                                         <!-- Enhanced Header Section -->
                                                         <div id="reports-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
                                                             <div style="display:flex;align-items:center;gap:0.75rem;">
@@ -2840,8 +2662,17 @@ fun Route.adminAuthRoute() {
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                        <!-- Error Banner Container -->
+                                                        <div id="reports-error-banner" style="display: none; margin-bottom: 1rem;"></div>
+
+                                                        <!-- Empty State Container -->
+                                                        <div id="reports-empty" class="message info-message hidden" style="margin-bottom: 1.5rem; text-align: center;">
+                                                            Not enough data to render chart
+                                                        </div>
+
                                                         <!-- Enhanced KPI Cards Grid -->
-                                                        <div id="reports-kpis" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:1rem;margin-bottom:2rem;">
+                                                        <div id="reports-kpis-container" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:1rem;margin-bottom:2rem;">
+                                                        <div id="reports-kpis" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:1rem;width:100%;">
                                                             <!-- Total Users Card -->
                                                             <div class="kpi-card" style="background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:12px;padding:1.5rem;transition:all 0.3s ease;position:relative;overflow:hidden;">
                                                                 <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg, #6366f1, #8b5cf6);"></div>
@@ -2915,7 +2746,10 @@ fun Route.adminAuthRoute() {
                                                                 <div id="kpi-retention-rate" style="font-size:2rem;font-weight:700;color:var(--card-title);line-height:1;">—</div>
                                                             </div>
                                                         </div>
-                                                        
+                                                        </div>
+
+                                                        <!-- Charts Container -->
+                                                        <div id="reports-charts-container" style="display: block;">
                                                         <!-- Charts Grid -->
                                                         <div class="reports-charts-grid" style="display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 2rem;">
                                                             <!-- User Registrations Chart -->
@@ -2926,31 +2760,16 @@ fun Route.adminAuthRoute() {
                                                                 </h3>
                                                                 <div style="position:relative;min-height:300px">
                                                                     <canvas id="reports-chart" height="300" aria-label="User registrations chart" role="img"></canvas>
-                                                                    <div id="reports-empty" class="message info-message hidden" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);">Not enough data to render chart</div>
                                                                 </div>
                                                             </div>
-                                                            
+
                                                             <!-- Combined Revenue & Refund Chart -->
                                                             <div class="chart-container" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem;">
-                                                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                                                                <div style="display: flex; align-items: center; margin-bottom: 1rem;">
                                                                     <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--heading-color); display: flex; align-items: center; gap: 0.5rem;">
                                                                         <span class="material-icons" style="font-size: 20px; color: #6366f1;">show_chart</span>
                                                                         Revenue & Refund Trends
                                                                     </h3>
-                                                                    <div style="display: flex; gap: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
-                                                                        <div style="display: flex; align-items: center; gap: 0.35rem;">
-                                                                            <span style="width: 12px; height: 12px; background: #10b981; border-radius: 50%;"></span>
-                                                                            <span>Revenue</span>
-                                                                        </div>
-                                                                        <div style="display: flex; align-items: center; gap: 0.35rem;">
-                                                                            <span style="width: 12px; height: 12px; background: #ef4444; border-radius: 50%;"></span>
-                                                                            <span>Refunds</span>
-                                                                        </div>
-                                                                        <div style="display: flex; align-items: center; gap: 0.35rem;">
-                                                                            <span style="width: 12px; height: 12px; background: #6366f1; border-radius: 50%;"></span>
-                                                                            <span>Net</span>
-                                                                        </div>
-                                                                    </div>
                                                                 </div>
                                                                 <div style="position:relative;min-height:400px">
                                                                     <canvas id="financial-trends-chart" height="400" aria-label="Revenue and refund trends chart showing monthly revenue, refunds, and net revenue" role="img"></canvas>
@@ -2959,275 +2778,179 @@ fun Route.adminAuthRoute() {
                                                             </div>
                                                         </div>
                                                         """
-                                                        )
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        }
 
-                                        // Tools Panel
-                                        div {
-                                            classes = setOf("tab-panel")
-                                            id = "tools"
-                                            style =
-                                                "width: 100%; box-sizing: border-box;"
-                                            div {
-                                                classes = setOf("dashboard-card")
+                                                // Tools Panel
                                                 div {
-                                                    classes =
-                                                        setOf("dashboard-card-title"); +"Tools"
-                                                }
-                                                div {
-                                                    classes = setOf("dashboard-card-content")
-                                                    unsafe {
-                                                        raw(
-                                                            """
-                                                            <div class="tool-list" role="list">
-                                                                <div class="tool-item" role="listitem">
-                                                                    <span class="material-icons tool-icon" aria-hidden="true">cached</span>
-                                                                    <div class="tool-content">
-                                                                        <div class="tool-title">Clear Weather Cache</div>
-                                                                        <div class="tool-desc">Purge cached weather and air quality responses from memory to fetch fresh data on next requests.</div>
-                                                                        <div class="tool-actions">
-                                                                            <button id="clear-cache-btn" class="btn btn-secondary" aria-label="Clear weather cache">Clear Cache</button>
-                                                                            <span id="clear-cache-spinner" class="loading-spinner" style="display:none;"></span>
-                                                                        </div>
+                                                    classes = setOf("tab-panel")
+                                                    id = "tools"
+                                                    style =
+                                                        "width: 100%; box-sizing: border-box;"
+                                                    div {
+                                                        classes = setOf("dashboard-card")
+                                                        div {
+                                                            classes =
+                                                                setOf("dashboard-card-title"); +"Tools"
+                                                        }
+                                                        div {
+                                                            classes = setOf("dashboard-card-content")
+                                                            unsafe {
+                                                                raw(
+                                                                    """
+                                                            <div class="data-grid" style="--data-columns: 1.4fr 2.6fr 1fr;">
+                                                                <div class="data-header">
+                                                                    <div>Tool</div>
+                                                                    <div>Description</div>
+                                                                    <div style="text-align: right;">Action</div>
+                                                                </div>
+                                                                <div class="data-row">
+                                                                    <div class="data-cell" data-label="Tool">Clear Weather Cache</div>
+                                                                    <div class="data-cell data-cell--wrap" data-label="Description">Purge cached weather and air quality responses so next requests fetch fresh data.</div>
+                                                                    <div class="data-cell data-actions" data-label="Action">
+                                                                        <button id="clear-cache-btn" class="btn btn-secondary" aria-label="Clear weather cache">Clear Cache</button>
+                                                                        <span id="clear-cache-spinner" class="loading-spinner" style="display:none;"></span>
                                                                     </div>
                                                                 </div>
-                                                                <div class="tool-item" role="listitem">
-                                                                    <span class="material-icons tool-icon" aria-hidden="true">monitor_heart</span>
-                                                                    <div class="tool-content">
-                                                                        <div class="tool-title">Run Health Check</div>
-                                                                        <div class="tool-desc">Validate upstream APIs and response latency across endpoints. Results will be shown in a popup.</div>
-                                                                        <div class="tool-actions">
-                                                                            <button id="run-health-btn" class="btn btn-secondary" aria-label="Run health check">Run</button>
-                                                                            <span id="run-health-spinner" class="loading-spinner" style="display:none;"></span>
-                                                                        </div>
+                                                                <div class="data-row">
+                                                                    <div class="data-cell" data-label="Tool">Run Health Check</div>
+                                                                    <div class="data-cell data-cell--wrap" data-label="Description">Validate upstream APIs and response latency across endpoints.</div>
+                                                                    <div class="data-cell data-actions" data-label="Action">
+                                                                        <button id="run-health-btn" class="btn btn-secondary" aria-label="Run health check">Run</button>
+                                                                        <span id="run-health-spinner" class="loading-spinner" style="display:none;"></span>
                                                                     </div>
                                                                 </div>
-                                                                <div class="tool-item" role="listitem">
-                                                                    <span class="material-icons tool-icon" aria-hidden="true">bolt</span>
-                                                                    <div class="tool-content">
-                                                                        <div class="tool-title">Warmup Endpoints</div>
-                                                                        <div class="tool-desc">Preload critical endpoints to prime caches and reduce cold-start latency. Results will be shown in a popup.</div>
-                                                                        <div class="tool-actions">
-                                                                            <button id="warmup-btn" class="btn btn-secondary" aria-label="Warm up endpoints">Warm up</button>
-                                                                            <span id="warmup-spinner" class="loading-spinner" style="display:none;"></span>
-                                                                        </div>
+                                                                <div class="data-row">
+                                                                    <div class="data-cell" data-label="Tool">Warmup Endpoints</div>
+                                                                    <div class="data-cell data-cell--wrap" data-label="Description">Prime caches and reduce cold-start latency for critical endpoints.</div>
+                                                                    <div class="data-cell data-actions" data-label="Action">
+                                                                        <button id="warmup-btn" class="btn btn-secondary" aria-label="Warm up endpoints">Warm up</button>
+                                                                        <span id="warmup-spinner" class="loading-spinner" style="display:none;"></span>
                                                                     </div>
                                                                 </div>
-                                                                <div class="tool-item" role="listitem">
-                                                                    <span class="material-icons tool-icon" aria-hidden="true">vpn_key</span>
-                                                                    <div class="tool-content">
-                                                                        <div class="tool-title">JWT Token Inspector</div>
-                                                                        <div class="tool-desc">Paste a JWT to decode its header and payload, view claims and expiration, and check time validity.</div>
-                                                                        <div class="tool-actions">
-                                                                            <button id="jwt-inspector-btn" class="btn btn-secondary" aria-label="Open JWT Token Inspector">Open</button>
-                                                                        </div>
+                                                                <div class="data-row">
+                                                                    <div class="data-cell" data-label="Tool">JWT Token Inspector</div>
+                                                                    <div class="data-cell data-cell--wrap" data-label="Description">Decode a JWT to inspect header, payload, and expiration.</div>
+                                                                    <div class="data-cell data-actions" data-label="Action">
+                                                                        <button id="jwt-inspector-btn" class="btn btn-secondary" aria-label="Open JWT Token Inspector">Open</button>
                                                                     </div>
                                                                 </div>
-                                                                <div class="tool-item" role="listitem">
-                                                                    <span class="material-icons tool-icon" aria-hidden="true">file_download</span>
-                                                                    <div class="tool-content">
-                                                                        <div class="tool-title">Export Financial Data</div>
-                                                                        <div class="tool-desc">Export payment and subscription records to CSV format for financial reconciliation and reporting.</div>
-                                                                        <div class="tool-actions">
-                                                                            <button id="export-financial-btn" class="btn btn-secondary" aria-label="Export financial data">Export</button>
-                                                                            <span id="export-financial-spinner" class="loading-spinner" style="display:none;"></span>
-                                                                        </div>
+                                                                <div class="data-row">
+                                                                    <div class="data-cell" data-label="Tool">Export Financial Data</div>
+                                                                <div class="data-cell data-cell--wrap" data-label="Description">Export payment records to CSV for reporting.</div>
+                                                                    <div class="data-cell data-actions" data-label="Action">
+                                                                        <button id="export-financial-btn" class="btn btn-secondary" aria-label="Export financial data">Export</button>
+                                                                        <span id="export-financial-spinner" class="loading-spinner" style="display:none;"></span>
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                             """
-                                                        )
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        }
 
-                                        // Subscriptions Panel
-                                        div {
-                                            classes = setOf("tab-panel")
-                                            id = "subscriptions"
-                                            style = "width: 100%; box-sizing: border-box;"
-                                            div {
-                                                classes = setOf("dashboard-card")
+                                                // Service Catalog Panel
                                                 div {
-                                                    classes = setOf("dashboard-card-content")
-                                                    unsafe {
-                                                        raw(
-                                                            """
-                                                            <div id="subscriptions-success-message" class="message success-message hidden"></div>
-                                                            <div id="subscriptions-error-message" class="message error-message hidden"></div>
+                                                    classes = setOf("tab-panel")
+                                                    id = "service-catalog"
+                                                    style = "width: 100%; box-sizing: border-box;"
+                                                    div {
+                                                        classes = setOf("dashboard-card")
+                                                        div {
+                                                            classes = setOf("dashboard-card-content")
+                                                            unsafe {
+                                                                raw(
+                                                                    """
+                                                            <div class="service-catalog-page">
+                                                                <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+                                                                    <div>
+                                                                        <div class="service-catalog-heading">Service Catalog</div>
+                                                                        <div class="service-catalog-subtitle">Browse and verify available services.</div>
+                                                                    </div>
+                                                                    <button id="service-catalog-refresh" class="btn btn-secondary btn-sm">
+                                                                        <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:6px;">refresh</span>
+                                                                        Refresh
+                                                                    </button>
+                                                                </div>
 
-                                                            <!-- Analytics Summary Cards -->
-                                                            <div class="subscription-stats" style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr));gap:.75rem;margin-bottom:1.5rem">
-                                                                <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
-                                                                    <div style="font-size:.8rem;color:var(--text-secondary)">Active Subscriptions</div>
-                                                                    <div id="stat-active" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+                                                                <div class="service-catalog-controls">
+                                                                    <input
+                                                                        type="text"
+                                                                        id="service-catalog-search"
+                                                                        placeholder="Search by name or code"
+                                                                        class="form-control"
+                                                                    />
+                                                                    <select id="service-catalog-status" class="form-control">
+                                                                        <option value="ALL">All Statuses</option>
+                                                                        <option value="ACTIVE">Active</option>
+                                                                        <option value="INACTIVE">Inactive</option>
+                                                                        <option value="ARCHIVED">Archived</option>
+                                                                    </select>
+                                                                    <select id="service-catalog-page-size" class="form-control">
+                                                                        <option value="10">10 per page</option>
+                                                                        <option value="20">20 per page</option>
+                                                                        <option value="50">50 per page</option>
+                                                                    </select>
+                                                                    <div style="margin-left:auto; color: var(--text-secondary); font-size: 0.875rem;" id="service-catalog-meta">
+                                                                        Showing 0 services
+                                                                    </div>
                                                                 </div>
-                                                                <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
-                                                                    <div style="font-size:.8rem;color:var(--text-secondary)">Total Revenue</div>
-                                                                    <div id="stat-revenue" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
+
+                                                                <div id="service-catalog-loader" class="skeleton" style="height:6px;width:100%;display:none;"></div>
+
+                                                                <div class="data-grid" style="--data-columns: 2fr 1fr 1fr 1fr 1.2fr;">
+                                                                    <div class="data-header">
+                                                                        <div>Service</div>
+                                                                        <div>Status</div>
+                                                                        <div class="data-cell--right">Purchases</div>
+                                                                        <div class="data-cell--right">Price</div>
+                                                                        <div class="data-cell--right">Created</div>
+                                                                    </div>
+                                                                    <div id="service-catalog-list" class="data-body"></div>
                                                                 </div>
-                                                                <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
-                                                                    <div style="font-size:.8rem;color:var(--text-secondary)">Expired</div>
-                                                                    <div id="stat-expired" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
-                                                                </div>
-                                                                <div class="dashboard-card" style="margin:0;padding:.75rem;min-height:auto">
-                                                                    <div style="font-size:.8rem;color:var(--text-secondary)">Cancelled</div>
-                                                                    <div id="stat-cancelled" style="font-size:1.4rem;font-weight:700;color:var(--card-title)">—</div>
-                                                                </div>
+
+                                                                <div id="service-catalog-empty" class="data-empty hidden">No services available.</div>
+
+                                                                <div id="service-catalog-pagination" class="service-catalog-pagination"></div>
                                                             </div>
-
-                                                            <!-- Status Filter -->
-                                                            <div class="subscription-filters" style="margin-bottom:1rem">
-                                                                <select id="status-filter" class="role-select">
-                                                                    <option value="">All Statuses</option>
-                                                                    <option value="ACTIVE">Active</option>
-                                                                    <option value="EXPIRED">Expired</option>
-                                                                    <option value="CANCELLED">Cancelled</option>
-                                                                    <option value="GRACE_PERIOD">Grace Period</option>
-                                                                </select>
-                                                            </div>
-
-                                                            <div id="subscriptions-loader" class="skeleton" style="height:8px;width:100%;display:none;"></div>
-
-                                                            <!-- Subscriptions Table -->
-                                                            <table class="users-table subscriptions-table">
-                                                                <colgroup>
-                                                                    <col style="min-width:180px">
-                                                                    <col style="min-width:100px">
-                                                                    <col style="min-width:120px">
-                                                                    <col style="min-width:120px">
-                                                                    <col style="min-width:100px">
-                                                                    <col style="min-width:90px">
-                                                                    <col style="min-width:90px">
-                                                                    <col style="min-width:80px">
-                                                                </colgroup>
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th>User Email</th>
-                                                                        <th>Service</th>
-                                                                        <th>Start Date</th>
-                                                                        <th>End Date</th>
-                                                                        <th>Status</th>
-                                                                        <th>Days Left</th>
-                                                                        <th>Amount</th>
-                                                                        <th class="actions-col" aria-label="Actions"></th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody id="subscriptions-table-body"></tbody>
-                                                            </table>
-
-                                                            <!-- Pagination -->
-                                                            <div id="subscriptions-pagination" style="display:flex;gap:0.5rem;margin-top:1rem;"></div>
                                                             """
-                                                        )
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        }
 
-                                        // Service Catalog Panel
-                                        div {
-                                            classes = setOf("tab-panel")
-                                            id = "service-catalog"
-                                            style = "width: 100%; box-sizing: border-box;"
-                                            div {
-                                                classes = setOf("dashboard-card")
+                                                // Announcements Panel
                                                 div {
-                                                    classes = setOf("dashboard-card-content")
-                                                    unsafe {
-                                                        raw(
-                                                            """
-                                                            <!-- Service Catalog Controls -->
-                                                            <div class="service-catalog-controls" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center;">
-                                                                <input
-                                                                    type="text"
-                                                                    id="service-search-input"
-                                                                    placeholder="Search services..."
-                                                                    class="form-control"
-                                                                    style="flex: 1; min-width: 200px; padding: 0.5rem 0.75rem; border: 1px solid var(--endpoint-border); border-radius: 6px; background: var(--card-bg); color: var(--text-color);"
-                                                                />
-                                                                <select id="service-status-filter" class="role-select" style="min-width: 150px;">
-                                                                    <option value="ALL">All Statuses</option>
-                                                                    <option value="ACTIVE">Active</option>
-                                                                    <option value="INACTIVE">Inactive</option>
-                                                                    <option value="ARCHIVED">Archived</option>
-                                                                </select>
-                                                                <button id="create-service-btn" class="btn btn-primary">
-                                                                    <span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>add</span>
-                                                                    Create Service
-                                                                </button>
-                                                            </div>
-
-                                                            <div id="service-catalog-loader" class="skeleton" style="height:8px;width:100%;display:none;"></div>
-
-                                                            <!-- Services Table -->
-                                                            <table class="users-table services-table">
-                                                                <colgroup>
-                                                                    <col style="min-width:200px">
-                                                                    <col style="min-width:100px">
-                                                                    <col style="min-width:120px">
-                                                                    <col style="min-width:120px">
-                                                                    <col style="min-width:140px">
-                                                                    <col style="min-width:200px">
-                                                                </colgroup>
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th>Service Code / Name</th>
-                                                                        <th style="text-align: center;">Status</th>
-                                                                        <th style="text-align: center;">Active Subs</th>
-                                                                        <th style="text-align: right;">Starting Price</th>
-                                                                        <th>Created At</th>
-                                                                        <th style="text-align: center;">Actions</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody id="services-table-body">
-                                                                    <tr>
-                                                                        <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                                                                            Loading services...
-                                                                        </td>
-                                                                    </tr>
-                                                                </tbody>
-                                                            </table>
-
-                                                            <!-- Pagination -->
-                                                            <div id="service-pagination" style="display:flex;gap:0.5rem;margin-top:1rem;justify-content:center;"></div>
-                                                            """
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Announcements Panel
-                                        div {
-                                            classes = setOf("tab-panel")
-                                            id = "announcements"
-                                            style =
-                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
-                                            div {
-                                                classes = setOf("dashboard-card")
-                                                div {
-                                                    classes = setOf("dashboard-card-title")
-                                                    unsafe {
-                                                        raw(
-                                                            """
+                                                    classes = setOf("tab-panel")
+                                                    id = "announcements"
+                                                    style =
+                                                        "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                                    div {
+                                                        classes = setOf("dashboard-card")
+                                                        div {
+                                                            classes = setOf("dashboard-card-title")
+                                                            unsafe {
+                                                                raw(
+                                                                    """
                                                             <span style="display:inline-flex; align-items:center; gap:6px; position:relative;">
                                                                 <span>Service Announcements</span>
                                                                 <span id=\"ann-help-trigger\" class=\"material-icons\" tabindex=\"0\" aria-label=\"How to use and why to use Service Announcements\" aria-controls=\"ann-help-popover\" aria-expanded=\"false\" style=\"font-size:18px; color: var(--text-secondary); cursor: help;\">info</span>
                                                             </span>
                                                             <div id=\"ann-help-popover\" role=\"dialog\" aria-hidden=\"true\" aria-labelledby=\"ann-help-title\" style=\"position: fixed; display:none; z-index: 9999; max-width: 380px; padding: 12px 14px; border-radius: 10px; background: var(--endpoint-bg, var(--card-bg)); color: var(--text-color); border: 1px solid var(--endpoint-border, var(--card-border)); box-shadow: 0 8px 24px var(--card-shadow);\">\n                                                              <div id=\"ann-help-title\" style=\"font-weight:700; margin-bottom:6px; color: var(--card-title); display:flex; align-items:center; gap:6px;\">\n                                                                <span class=\"material-icons\" style=\"font-size:18px; color:#6366f1;\">campaign</span>\n                                                                <span>Service announcements guide</span>\n                                                              </div>\n                                                              <div style=\"font-size: 0.92rem; line-height: 1.5;\">\n                                                                <div style=\"margin-bottom:8px;\">\n                                                                  <strong>How to use</strong>\n                                                                  <ul style=\"margin:6px 0 0 18px;\">\n                                                                    <li>Write a clear message for all users.</li>\n                                                                    <li>Select severity: Info, Warning, or Critical.</li>\n                                                                    <li>Optionally set Duration (minutes) or an Until date-time.</li>\n                                                                    <li>If both time fields are empty, the announcement remains until you clear it.</li>\n                                                                  </ul>\n                                                                </div>\n                                                                <div>\n                                                                  <strong>When to use (examples)</strong>\n                                                                  <ul style=\"margin:6px 0 0 18px;\">\n                                                                    <li>Planned maintenance: warning with an until time.</li>\n                                                                    <li>Service outage: critical with short duration.</li>\n                                                                    <li>New feature rollout: info without time.</li>\n                                                                  </ul>\n                                                                </div>\n                                                              </div>\n                                                            </div>\n                                                            <script>\n                                                            (function(){\n                                                              if (window.__annHelpBound) return;\n                                                              window.__annHelpBound = true;\n                                                              function initAnnPopover(){\n                                                                try {\n                                                                  var trigger = document.getElementById('ann-help-trigger');\n                                                                  var pop = document.getElementById('ann-help-popover');\n                                                                  if (!trigger || !pop) return;\n                                                                  var hoverTimeout;\n                                                                  function show(){\n                                                                    if (!pop) return;\n                                                                    if (hoverTimeout) { clearTimeout(hoverTimeout); }\n                                                                    // Position near the icon (viewport coords)\n                                                                    var rect = trigger.getBoundingClientRect();\n                                                                    pop.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - 400)) + 'px';\n                                                                    pop.style.top = (rect.bottom + 8) + 'px';\n                                                                    pop.style.display = 'block';\n                                                                    pop.setAttribute('aria-hidden','false');\n                                                                    trigger.setAttribute('aria-expanded','true');\n                                                                  }\n                                                                  function hide(){\n                                                                    hoverTimeout = setTimeout(function(){\n                                                                      if (!pop) return;\n                                                                      pop.style.display = 'none';\n                                                                      pop.setAttribute('aria-hidden','true');\n                                                                      trigger.setAttribute('aria-expanded','false');\n                                                                    }, 120);\n                                                                  }\n                                                                  trigger.addEventListener('mouseenter', show);\n                                                                  trigger.addEventListener('mouseleave', hide);\n                                                                  pop.addEventListener('mouseenter', function(){ if (hoverTimeout) clearTimeout(hoverTimeout); });\n                                                                  pop.addEventListener('mouseleave', hide);\n                                                                  trigger.addEventListener('click', function(e){ e.stopPropagation(); if (pop.style.display === 'block') { pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); } else { show(); } });\n                                                                  document.addEventListener('click', function(e){ if (!pop || pop.style.display !== 'block') return; if (!pop.contains(e.target) && e.target !== trigger) { pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); }});\n                                                                  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') { if (!pop) return; pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); }});\n                                                                  window.addEventListener('resize', function(){ if (pop && pop.style.display === 'block') { var r = trigger.getBoundingClientRect(); pop.style.left = Math.max(12, Math.min(r.left, window.innerWidth - 400)) + 'px'; pop.style.top = (r.bottom + 8) + 'px'; }});\n                                                                  window.addEventListener('scroll', function(){ if (pop && pop.style.display === 'block') { var r2 = trigger.getBoundingClientRect(); pop.style.left = Math.max(12, Math.min(r2.left, window.innerWidth - 400)) + 'px'; pop.style.top = (r2.bottom + 8) + 'px'; }}, true);\n                                                                } catch (err) { console.error('Failed to init announcement help popover', err); }\n                                                              }\n                                                              if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', initAnnPopover); } else { initAnnPopover(); }\n                                                            })();\n                                                            </script>\n                                                            """
-                                                        )
-                                                    }
-                                                }
-                                                div {
-                                                    classes = setOf("dashboard-card-content")
-                                                    unsafe {
-                                                        raw(
-                                                            """
+                                                                )
+                                                            }
+                                                        }
+                                                        div {
+                                                            classes = setOf("dashboard-card-content")
+                                                            unsafe {
+                                                                raw(
+                                                                    """
                                                             <div id="ann-preview" class="announcement-preview" aria-live="polite"></div>
                                                             <form id="ann-form" class="form form-compact" onsubmit="return false;">
                                                                 <div class="form-group">
@@ -3249,22 +2972,22 @@ fun Route.adminAuthRoute() {
                                                                 </div>
                                                             </form>
                                                             """
-                                                        )
+                                                                )
+                                                            }
+                                                        }
+
                                                     }
                                                 }
-
                                             }
                                         }
                                     }
-                                }
-                            }
 
+                                }
+                                // Footer
+                                createFooter(this)
+                            }
                         }
-                        // Footer
-                        createFooter(this)
                     }
-                }
-            }
                 }
             }
         }

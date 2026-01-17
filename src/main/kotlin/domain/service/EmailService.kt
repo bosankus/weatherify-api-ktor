@@ -7,17 +7,6 @@ import domain.model.Result
  */
 interface EmailService {
     /**
-     * Send a subscription cancellation email to the user
-     * @param userEmail The user's email address
-     * @param subscriptionEndDate The end date of the cancelled subscription
-     * @return Result indicating success or failure
-     */
-    suspend fun sendCancellationEmail(
-        userEmail: String,
-        subscriptionEndDate: String
-    ): Result<Boolean>
-
-    /**
      * Send a refund notification email to the user
      * @param userEmail The user's email address
      * @param refundId The refund ID

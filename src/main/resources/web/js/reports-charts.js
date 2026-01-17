@@ -357,7 +357,7 @@
         const token = localStorage.getItem('jwt_token');
         
         // Fetch both revenue and refund data in parallel
-        const revenuePromise = fetch('/admin/finance/metrics', {
+        const revenuePromise = fetch('/finance/metrics', {
             method: 'GET',
             credentials: 'include',
             headers: {
@@ -380,7 +380,7 @@
             return null;
         });
 
-        const refundPromise = fetch('/admin/refunds/metrics', {
+        const refundPromise = fetch('/refunds/metrics', {
             method: 'GET',
             credentials: 'include',
             headers: {

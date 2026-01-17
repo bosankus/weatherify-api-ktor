@@ -7,12 +7,6 @@ import io.ktor.server.routing.*
  * Registrar implementations that simply delegate to existing route extension functions.
  * This keeps behavior unchanged while enabling modular registration.
  */
-object HomeRoutesRegistrar : RouteRegistrar {
-    override fun register(root: Route) {
-        with(root) { homeRoute() }
-    }
-}
-
 object WeatherRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         with(root) { weatherRoute() }
@@ -76,12 +70,6 @@ object DecodeRoutesRegistrar : RouteRegistrar {
 object PollingEngineRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         with(root) { pollingEngineRoute() }
-    }
-}
-
-object SubscriptionRoutesRegistrar : RouteRegistrar {
-    override fun register(root: Route) {
-        with(root) { subscriptionRoute() }
     }
 }
 

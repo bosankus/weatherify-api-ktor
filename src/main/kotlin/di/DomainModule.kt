@@ -7,7 +7,6 @@ import domain.service.impl.FeedbackServiceImpl
 import domain.service.impl.RefundServiceImpl
 import domain.service.impl.WeatherServiceImpl
 import org.koin.dsl.module
-import util.SubscriptionExpirationJob
 
 /**
  * Koin module for domain layer dependencies.
@@ -18,19 +17,15 @@ val domainModule = module {
     single<AuthService> { AuthServiceImpl(get()) }
     single<FeedbackService> { FeedbackServiceImpl(get()) }
     single<WeatherService> { WeatherServiceImpl(get()) }
-    single<SubscriptionService> { SubscriptionServiceImpl(get(), get(), get()) }
-    single<SubscriptionNotificationService> { SubscriptionNotificationServiceImpl(get()) }
     single<EmailService> { EmailServiceImpl(get()) }
-    single<RefundService> { RefundServiceImpl(get(), get(), get(), get(), get(), get()) }
+    single<RefundService> { RefundServiceImpl(get(), get(), get(), get(), get()) }
     single<FinancialService> { FinancialServiceImpl(get(), get(), get()) }
-    single<BillService> { BillServiceImpl(get(), get(), get()) }
+    single<BillService> { BillServiceImpl(get(), get(), get(), get()) }
     single<NotificationService> { NotificationServiceImpl() }
-    single<ServiceCatalogService> { domain.service.impl.ServiceCatalogServiceImpl(get(), get(), get()) }
+    single<ServiceCatalogService> { domain.service.impl.ServiceCatalogServiceImpl(get(), get()) }
 
     // Data Services
     single { ServiceCatalogSeedingService(get()) }
     single { ServiceCatalogCache(get(), cacheDurationMinutes = 15) }
 
-    // Background Jobs
-    single { SubscriptionExpirationJob(get(), get()) }
 }

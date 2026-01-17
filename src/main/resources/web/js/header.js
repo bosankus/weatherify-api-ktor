@@ -67,14 +67,14 @@
  * 4. Admin Panel (custom actions)
  * --------------------------------
  * initializeHeader({
- *     homeUrl: '/admin',
+ *     homeUrl: '/',
  *     subtitle: 'Admin Panel',
  *     actions: [
  *         { type: 'theme-toggle' },
  *         {
  *             type: 'custom',
  *             html: '<button class="admin-btn">Settings</button>',
- *             onClick: () => window.location.href = '/admin/settings'
+ *             onClick: () => window.location.href = '/settings'
  *         },
  *         { type: 'user-info' },
  *         { type: 'logout' }

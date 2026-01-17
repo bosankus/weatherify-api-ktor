@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.ktor.server.resources)
+    implementation(libs.ktor.server.status.pages)
     implementation(libs.bcrypt)
     implementation(libs.ktor.server.html)
     implementation(libs.gcp.secret.manager)
@@ -78,7 +79,7 @@ dependencies {
     implementation(libs.firebase.admin)
 
     // PDF Generation
-    implementation("com.itextpdf:itext7-core:7.2.5")
+    implementation("com.itextpdf:itext7-core:8.0.4")
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)

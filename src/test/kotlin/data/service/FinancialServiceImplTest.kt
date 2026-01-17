@@ -8,8 +8,6 @@ import domain.service.RefundService
 import kotlinx.coroutines.runBlocking
 import org.bson.types.ObjectId
 import java.time.Instant
-import java.time.YearMonth
-import java.time.ZoneId
 import kotlin.test.*
 
 class FinancialServiceImplTest {
@@ -407,7 +405,7 @@ class FinancialServiceImplTest {
     }
 
     @Test
-    fun `test financial metrics with active subscriptions`() {
+    fun `test financial metrics with payments`() {
         runBlocking {
             val payment = Payment(
                 id = "pay_1",
@@ -426,16 +424,7 @@ class FinancialServiceImplTest {
                 id = ObjectId(),
                 email = "user1@example.com",
                 passwordHash = "hash",
-                isPremium = true,
-                subscriptions = listOf(
-                    Subscription(
-                        service = ServiceType.PREMIUM_ONE,
-                        startDate = Instant.now().minusSeconds(5L * 24 * 60 * 60).toString(),
-                        endDate = Instant.now().plusSeconds(25L * 24 * 60 * 60).toString(),
-                        status = SubscriptionStatus.ACTIVE,
-                        sourcePaymentId = "pay_sub_1"
-                    )
-                )
+                isPremium = true
             )
             mockUserRepository.users["user1@example.com"] = user
 
@@ -444,7 +433,6 @@ class FinancialServiceImplTest {
             assertTrue(result.isSuccess)
             val metrics = (result as Result.Success).data
             assertEquals(150.0, metrics.totalRevenue)
-            assertEquals(150.0, metrics.activeSubscriptionsRevenue)
         }
     }
 
@@ -665,90 +653,6 @@ class FinancialServiceImplTest {
         }
     }
 
-    @Test
-    fun `test export subscriptions generates valid CSV`() {
-        runBlocking {
-            val now = Instant.now()
-            val user = User(
-                id = ObjectId(),
-                email = "user1@example.com",
-                passwordHash = "hash",
-                isPremium = true,
-                subscriptions = listOf(
-                    Subscription(
-                        service = ServiceType.PREMIUM_ONE,
-                        startDate = now.minusSeconds(5L * 24 * 60 * 60).toString(),
-                        endDate = now.plusSeconds(25L * 24 * 60 * 60).toString(),
-                        status = SubscriptionStatus.ACTIVE,
-                        sourcePaymentId = "pay_sub_1",
-                        createdAt = now.toString()
-                    )
-                )
-            )
-            mockUserRepository.users["user1@example.com"] = user
-
-            val result = financialService.exportSubscriptions(
-                startDate = now.minusSeconds(3600).toString(),
-                endDate = now.plusSeconds(3600).toString()
-            )
-
-            assertTrue(result.isSuccess)
-            val csv = (result as Result.Success).data
-            assertTrue(csv.contains("Subscription ID,User Email,Service Name"))
-            assertTrue(csv.contains("user1@example.com"))
-            assertTrue(csv.contains("PREMIUM_ONE"))
-        }
-    }
-
-    @Test
-    fun `test export both payments and subscriptions`() {
-        runBlocking {
-            val now = Instant.now()
-            mockPaymentRepository.payments.add(
-                Payment(
-                    id = "pay_1",
-                    userEmail = "user1@example.com",
-                    orderId = "order_1",
-                    paymentId = "pay_1",
-                    signature = "sig_1",
-                    amount = 10000,
-                    currency = "INR",
-                    status = "verified",
-                    createdAt = now.toString()
-                )
-            )
-
-            val user = User(
-                id = ObjectId(),
-                email = "user1@example.com",
-                passwordHash = "hash",
-                isPremium = true,
-                subscriptions = listOf(
-                    Subscription(
-                        service = ServiceType.PREMIUM_ONE,
-                        startDate = now.minusSeconds(5L * 24 * 60 * 60).toString(),
-                        endDate = now.plusSeconds(25L * 24 * 60 * 60).toString(),
-                        status = SubscriptionStatus.ACTIVE,
-                        sourcePaymentId = "pay_sub_1",
-                        createdAt = now.toString()
-                    )
-                )
-            )
-            mockUserRepository.users["user1@example.com"] = user
-
-            val result = financialService.exportBoth(
-                startDate = now.minusSeconds(3600).toString(),
-                endDate = now.plusSeconds(3600).toString()
-            )
-
-            assertTrue(result.isSuccess)
-            val csv = (result as Result.Success).data
-            assertTrue(csv.contains("PAYMENTS"))
-            assertTrue(csv.contains("SUBSCRIPTIONS"))
-            assertTrue(csv.contains("user1@example.com"))
-        }
-    }
-
     // Test: Date range filtering logic
     @Test
     fun `test date range filtering excludes payments outside range`() {
@@ -797,7 +701,7 @@ class FinancialServiceImplTest {
     }
 
     @Test
-    fun `test get user transactions returns payments and subscriptions`() {
+    fun `test get user transactions returns payments`() {
         runBlocking {
             val now = Instant.now()
             mockPaymentRepository.payments.add(
@@ -818,17 +722,7 @@ class FinancialServiceImplTest {
                 id = ObjectId(),
                 email = "user1@example.com",
                 passwordHash = "hash",
-                isPremium = true,
-                subscriptions = listOf(
-                    Subscription(
-                        service = ServiceType.PREMIUM_ONE,
-                        startDate = now.minusSeconds(5L * 24 * 60 * 60).toString(),
-                        endDate = now.plusSeconds(25L * 24 * 60 * 60).toString(),
-                        status = SubscriptionStatus.ACTIVE,
-                        sourcePaymentId = "pay_sub_1",
-                        createdAt = now.toString()
-                    )
-                )
+                isPremium = true
             )
             mockUserRepository.users["user1@example.com"] = user
 
@@ -838,7 +732,6 @@ class FinancialServiceImplTest {
             val response = (result as Result.Success).data
             assertEquals("user1@example.com", response.userEmail)
             assertEquals(1, response.payments.size)
-            assertEquals(1, response.subscriptions.size)
             assertEquals(150.0, response.payments[0].amount)
         }
     }

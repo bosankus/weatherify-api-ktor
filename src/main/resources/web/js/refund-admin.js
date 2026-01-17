@@ -15,7 +15,7 @@ window.RefundAPI = window.RefundAPI || {
      */
     initiateRefund(paymentId, amount, reason, notes) {
         const token = localStorage.getItem('jwt_token');
-        return fetch('/admin/refunds/initiate', {
+        return fetch('/refunds/initiate', {
             method: 'POST',
             credentials: 'include',
             headers: {
@@ -47,7 +47,7 @@ window.RefundAPI = window.RefundAPI || {
      */
     getRefund(refundId) {
         const token = localStorage.getItem('jwt_token');
-        return fetch(`/admin/refunds/${encodeURIComponent(refundId)}`, {
+        return fetch(`/refunds/${encodeURIComponent(refundId)}`, {
             method: 'GET',
             credentials: 'include',
             headers: {
@@ -67,7 +67,7 @@ window.RefundAPI = window.RefundAPI || {
      */
     getRefundsForPayment(paymentId) {
         const token = localStorage.getItem('jwt_token');
-        return fetch(`/admin/refunds/payment/${encodeURIComponent(paymentId)}`, {
+        return fetch(`/refunds/payment/${encodeURIComponent(paymentId)}`, {
             method: 'GET',
             credentials: 'include',
             headers: {
@@ -99,7 +99,7 @@ window.RefundAPI = window.RefundAPI || {
         if (startDate) params.append('startDate', startDate);
         if (endDate) params.append('endDate', endDate);
 
-        return fetch(`/admin/refunds/history?${params.toString()}`, {
+        return fetch(`/refunds/history?${params.toString()}`, {
             method: 'GET',
             credentials: 'include',
             headers: {
@@ -118,7 +118,7 @@ window.RefundAPI = window.RefundAPI || {
      */
     getRefundMetrics() {
         const token = localStorage.getItem('jwt_token');
-        return fetch('/admin/refunds/metrics', {
+        return fetch('/refunds/metrics', {
             method: 'GET',
             credentials: 'include',
             headers: {
@@ -138,7 +138,7 @@ window.RefundAPI = window.RefundAPI || {
      */
     checkRefundStatus(paymentId) {
         const token = localStorage.getItem('jwt_token');
-        return fetch(`/admin/refunds/payment/${encodeURIComponent(paymentId)}/check`, {
+        return fetch(`/refunds/payment/${encodeURIComponent(paymentId)}/check`, {
             method: 'GET',
             credentials: 'include',
             headers: {
@@ -151,6 +151,19 @@ window.RefundAPI = window.RefundAPI || {
         });
     }
 };
+
+function getRefundPanelLoadingContent(message) {
+    if (typeof getFinancePanelLoadingContent === 'function') {
+        return getFinancePanelLoadingContent(message);
+    }
+    const safeMessage = escapeHtml(message || 'Loading...');
+    return `
+        <div class="modal-loading">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">${safeMessage}</div>
+        </div>
+    `;
+}
 
 /**
  * Show refund initiation modal
@@ -169,13 +182,8 @@ function showRefundModal(payment) {
     }
 
     // Show loading modal while fetching fresh refund data
-    const loadingContent = `
-        <div style="text-align: center; padding: 2rem;">
-            <div class="loading-spinner" style="display: inline-block; margin-bottom: 1rem;"></div>
-            <div>Loading refund information...</div>
-        </div>
-    `;
-    showModal('Initiate Refund', loadingContent);
+    const loadingContent = getRefundPanelLoadingContent('Loading refund information...');
+    showFinancePanel('Initiate Refund', loadingContent);
 
     // Fetch fresh refund data from API to get accurate refundable amount
     window.RefundAPI.getRefundsForPayment(payment.razorpayPaymentId)
@@ -188,7 +196,7 @@ function showRefundModal(payment) {
                 const currency = payment.currency || 'INR';
 
                 if (refundableAmount <= 0) {
-                    closeModal();
+                    if (typeof closeFinancePanel === 'function') closeFinancePanel();
                     showMessage('info', 'No refundable amount remaining for this payment');
                     return;
                 }
@@ -201,7 +209,7 @@ function showRefundModal(payment) {
         })
         .catch(error => {
             console.error('Error fetching refund data:', error);
-            closeModal();
+            if (typeof closeFinancePanel === 'function') closeFinancePanel();
             showMessage('error', 'Failed to load refund information. Please try again.');
         });
 }
@@ -221,97 +229,101 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
     const refundableInRupees = (refundableAmount / 100).toFixed(2);
 
     const modalContent = `
-        <div class="refund-modal-content">
-            <div style="
-                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-                border-radius: 8px;
-                padding: 1.25rem;
-                margin-bottom: 1.25rem;
-                color: #ffffff;
-            ">
-                <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Refundable Amount</div>
-                <div style="font-size: 2rem; font-weight: 700; margin-bottom: 0.75rem;">₹${refundableInRupees}</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.875rem;">
-                    <div>
-                        <div style="opacity: 0.85; margin-bottom: 0.25rem;">Original</div>
-                        <div style="font-weight: 600;">₹${amountInRupees}</div>
-                    </div>
-                    <div>
-                        <div style="opacity: 0.85; margin-bottom: 0.25rem;">Refunded</div>
-                        <div style="font-weight: 600;">₹${refundedInRupees}</div>
-                    </div>
+        <div class="payment-details-modal refund-initiate-modal">
+            <div class="finance-hero">
+                <div class="finance-kv__label">Refundable balance</div>
+                <div class="finance-hero-value">₹${refundableInRupees}</div>
+                <div class="finance-kv__label">Initiate refund for this payment</div>
+            </div>
+
+            <div class="finance-card">
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Original amount</span>
+                    <span class="finance-kv__value">₹${amountInRupees}</span>
+                </div>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Already refunded</span>
+                    <span class="finance-kv__value">₹${refundedInRupees}</span>
+                </div>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Remaining refundable</span>
+                    <span class="finance-kv__value">₹${refundableInRupees}</span>
+                </div>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Currency</span>
+                    <span class="finance-kv__value">${escapeHtml(currency || 'INR')}</span>
+                </div>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Payment ID</span>
+                    <span class="finance-kv__value"><span class="finance-code">${escapeHtml(payment.razorpayPaymentId)}</span></span>
+                </div>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">User</span>
+                    <span class="finance-kv__value">${escapeHtml(payment.userEmail || 'N/A')}</span>
                 </div>
             </div>
 
-            <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                <div class="detail-row">
-                    <span class="label">User</span>
-                    <span class="value">${escapeHtml(payment.userEmail || 'N/A')}</span>
-                </div>
-                <div class="detail-row" style="border-bottom: none;">
-                    <span class="label">Payment ID</span>
-                    <span class="value"><code style="font-size: 0.8125rem;">${escapeHtml(payment.razorpayPaymentId)}</code></span>
-                </div>
+            <div class="finance-card">
+                <form id="refund-form" class="modal-form">
+                    <div class="modal-form-group">
+                        <label for="refund-type" class="modal-form-label required">Refund Type</label>
+                        <select id="refund-type" name="refundType" class="modal-form-select" required>
+                            <option value="full">Full refund (₹${refundableInRupees})</option>
+                            <option value="partial">Partial refund</option>
+                        </select>
+                        <span class="modal-form-helper">Full refunds apply the remaining refundable amount.</span>
+                    </div>
+
+                    <div class="modal-form-group" id="partial-amount-group" style="display: none;">
+                        <label for="refund-amount" class="modal-form-label required">Amount (₹)</label>
+                        <input 
+                            type="number" 
+                            id="refund-amount" 
+                            name="amount" 
+                            class="modal-form-input"
+                            min="0.01" 
+                            max="${refundableInRupees}"
+                            step="0.01"
+                            placeholder="Enter amount"
+                        />
+                        <span class="modal-form-helper">Max refundable: ₹${refundableInRupees}</span>
+                    </div>
+
+                    <div class="modal-form-group">
+                        <label for="refund-reason" class="modal-form-label required">Reason</label>
+                        <select id="refund-reason" name="reason" class="modal-form-select" required>
+                            <option value="CUSTOMER_REQUEST">Customer Request</option>
+                            <option value="DUPLICATE_PAYMENT">Duplicate Payment</option>
+                            <option value="FRAUDULENT">Fraudulent</option>
+                            <option value="SERVICE_NOT_PROVIDED">Service Not Provided</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="modal-form-group">
+                        <label for="refund-notes" class="modal-form-label">Notes (Optional)</label>
+                        <textarea 
+                            id="refund-notes" 
+                            name="notes" 
+                            class="modal-form-textarea"
+                            rows="3"
+                            placeholder="Add internal notes for this refund..."
+                        ></textarea>
+                    </div>
+                </form>
             </div>
-
-            <form id="refund-form" class="refund-form">
-                <div class="form-group">
-                    <label for="refund-type">Refund Type</label>
-                    <select id="refund-type" name="refundType" required>
-                        <option value="full">Full Refund (₹${refundableInRupees})</option>
-                        <option value="partial">Partial Refund</option>
-                    </select>
-                </div>
-
-                <div class="form-group" id="partial-amount-group" style="display: none;">
-                    <label for="refund-amount">Amount (₹)</label>
-                    <input 
-                        type="number" 
-                        id="refund-amount" 
-                        name="amount" 
-                        min="0.01" 
-                        max="${refundableInRupees}"
-                        step="0.01"
-                        placeholder="Enter amount"
-                    />
-                    <small style="display: block; color: var(--text-secondary); margin-top: 0.25rem;">
-                        Max: ₹${refundableInRupees}
-                    </small>
-                </div>
-
-                <div class="form-group">
-                    <label for="refund-reason">Reason</label>
-                    <select id="refund-reason" name="reason" required>
-                        <option value="CUSTOMER_REQUEST">Customer Request</option>
-                        <option value="DUPLICATE_PAYMENT">Duplicate Payment</option>
-                        <option value="FRAUDULENT">Fraudulent</option>
-                        <option value="SERVICE_NOT_PROVIDED">Service Not Provided</option>
-                        <option value="OTHER">Other</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="refund-notes">Notes (Optional)</label>
-                    <textarea 
-                        id="refund-notes" 
-                        name="notes" 
-                        rows="2"
-                        placeholder="Additional notes..."
-                    ></textarea>
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="refund-submit-btn">
-                        <span id="refund-submit-text">Initiate Refund</span>
-                        <span id="refund-submit-spinner" class="loading-spinner" style="display: none;"></span>
-                    </button>
-                </div>
-            </form>
         </div>
     `;
 
-    showModal('Initiate Refund', modalContent);
+    const modalFooter = `
+        <button type="button" class="modal-btn modal-btn-secondary" onclick="closeFinancePanel()">Cancel</button>
+        <button type="submit" form="refund-form" class="modal-btn modal-btn-primary" id="refund-submit-btn">
+            <span id="refund-submit-text">Initiate Refund</span>
+            <span id="refund-submit-spinner" class="loading-spinner" style="display: none; width: 1rem; height: 1rem; margin-left: 0.5rem;"></span>
+        </button>
+    `;
+
+    showFinancePanel('Initiate Refund', modalContent, { footer: modalFooter });
 
     // Bind form events
     setTimeout(() => {
@@ -379,7 +391,7 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                     .then(response => {
                         if (response.status === true) {
                             showMessage('success', response.message || 'Refund initiated successfully');
-                            closeModal();
+            if (typeof closeFinancePanel === 'function') closeFinancePanel();
                             
                             // Update only the specific payment row instead of reloading entire list
                             updatePaymentRowAfterRefund(payment.razorpayPaymentId);
@@ -387,11 +399,6 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                             // Reload financial metrics to reflect refund in total revenue
                             if (typeof loadFinancialMetrics === 'function') {
                                 loadFinancialMetrics();
-                            }
-                            // Reload subscription analytics to reflect updated revenue
-                            if (typeof window.SubscriptionsModule !== 'undefined' && 
-                                typeof window.SubscriptionsModule.loadSubscriptionAnalytics === 'function') {
-                                window.SubscriptionsModule.loadSubscriptionAnalytics();
                             }
                         } else {
                             throw new Error(response.message || 'Failed to initiate refund');
@@ -513,14 +520,8 @@ function showRefundHistoryModal(paymentId) {
         return;
     }
 
-    const loadingContent = `
-        <div style="text-align: center; padding: 2rem;">
-            <div class="loading-spinner" style="display: inline-block; margin-bottom: 1rem;"></div>
-            <div>Loading refund history...</div>
-        </div>
-    `;
-
-    showModal('Refund History', loadingContent);
+    const loadingContent = getRefundPanelLoadingContent('Loading refund history...');
+    showFinancePanel('Refund History', loadingContent);
 
     window.RefundAPI.getRefundsForPayment(paymentId)
         .then(response => {
@@ -528,41 +529,52 @@ function showRefundHistoryModal(paymentId) {
                 const data = response.data;
                 const refunds = data.refunds || [];
                 const summary = data.summary || {};
+                const totalAmount = (summary.totalAmount || summary.originalAmount || 0) / 100;
+                const totalRefunded = (summary.totalRefunded || 0) / 100;
+                const refundableAmount = (summary.refundableAmount || summary.remainingRefundable || 0) / 100;
 
                 let refundsHtml = '';
                 if (refunds.length === 0) {
-                    refundsHtml = '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">No refunds found for this payment</div>';
+                    refundsHtml = '<div class="refund-details-empty">No refunds found for this payment</div>';
                 } else {
                     refundsHtml = refunds.map(refund => {
-                        const statusClass = refund.status === 'PROCESSED' ? 'badge-processed' :
-                            refund.status === 'FAILED' ? 'badge-failed' : 'badge-pending';
+                        const statusClass = refund.status === 'PROCESSED' ? 'refund-status--success' :
+                            refund.status === 'FAILED' ? 'refund-status--error' : 'refund-status--warning';
+                        const refundAmount = ((refund.amount || 0) / 100).toFixed(2);
                         return `
-                            <div class="refund-history-item">
-                                <div class="refund-header">
-                                    <span class="refund-id">${escapeHtml(refund.refundId || 'N/A')}</span>
-                                    <span class="badge ${statusClass}">${escapeHtml(refund.status || 'UNKNOWN')}</span>
+                            <div class="refund-history-card refund-card">
+                                <div class="refund-history-header">
+                                    <div class="refund-history-meta">
+                                        <div class="refund-eyebrow">Refund</div>
+                                        <div class="refund-history-id">${escapeHtml(refund.refundId || 'N/A')}</div>
+                                    </div>
+                                    <span class="refund-status-pill ${statusClass}">${escapeHtml(refund.status || 'UNKNOWN')}</span>
                                 </div>
-                                <div class="detail-row">
-                                    <span class="label">Amount:</span>
-                                    <span class="value">${refund.currency || 'INR'} ${((refund.amount || 0) / 100).toFixed(2)}</span>
+                                <div class="refund-history-grid">
+                                    <div>
+                                        <div class="refund-kv-label">Amount</div>
+                                        <div class="refund-kv-value refund-amount">₹${refundAmount}</div>
+                                    </div>
+                                    <div>
+                                        <div class="refund-kv-label">Initiated By</div>
+                                        <div class="refund-kv-value">${escapeHtml(refund.initiatedBy || 'N/A')}</div>
+                                    </div>
+                                    <div>
+                                        <div class="refund-kv-label">Created</div>
+                                        <div class="refund-kv-value">${formatDate(refund.createdAt)}</div>
+                                    </div>
                                 </div>
-                                <div class="detail-row">
-                                    <span class="label">Reason:</span>
-                                    <span class="value">${escapeHtml(refund.reason || 'N/A')}</span>
-                                </div>
-                                ${refund.notes ? `
-                                <div class="detail-row">
-                                    <span class="label">Notes:</span>
-                                    <span class="value">${escapeHtml(refund.notes)}</span>
-                                </div>
-                                ` : ''}
-                                <div class="detail-row">
-                                    <span class="label">Initiated By:</span>
-                                    <span class="value">${escapeHtml(refund.initiatedBy || 'N/A')}</span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="label">Created At:</span>
-                                    <span class="value">${formatDate(refund.createdAt)}</span>
+                                <div class="refund-kv">
+                                    <div class="refund-kv-row">
+                                        <span class="refund-kv-label">Reason</span>
+                                        <span class="refund-kv-value">${escapeHtml(refund.reason || 'N/A')}</span>
+                                    </div>
+                                    ${refund.notes ? `
+                                    <div class="refund-kv-row">
+                                        <span class="refund-kv-label">Notes</span>
+                                        <span class="refund-kv-value">${escapeHtml(refund.notes)}</span>
+                                    </div>
+                                    ` : ''}
                                 </div>
                             </div>
                         `;
@@ -571,34 +583,64 @@ function showRefundHistoryModal(paymentId) {
 
                 const modalContent = `
                     <div class="refund-history-modal">
-                        <div class="summary-section">
-                            <h3>Payment Summary</h3>
-                            <div class="detail-row">
-                                <span class="label">Payment ID:</span>
-                                <span class="value"><code>${escapeHtml(paymentId)}</code></span>
+                        <div class="refund-details-shell">
+                            <div class="refund-details-header">
+                                <div>
+                                    <p class="refund-eyebrow">Refund history</p>
+                                    <h3 class="refund-details-title">Payment refunds</h3>
+                                    <p class="refund-details-subtitle">${escapeHtml(paymentId)} · ${refunds.length} refund${refunds.length === 1 ? '' : 's'}</p>
+                                </div>
+                                <span class="refund-status-pill ${totalRefunded > 0 ? 'refund-status--success' : 'refund-status--neutral'}">
+                                    ${totalRefunded > 0 ? 'Refunded' : 'No refunds'}
+                                </span>
                             </div>
-                            <div class="detail-row">
-                                <span class="label">Total Amount:</span>
-                                <span class="value">${summary.currency || 'INR'} ${((summary.totalAmount || 0) / 100).toFixed(2)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="label">Total Refunded:</span>
-                                <span class="value">${summary.currency || 'INR'} ${((summary.totalRefunded || 0) / 100).toFixed(2)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="label">Refundable Amount:</span>
-                                <span class="value refundable">${summary.currency || 'INR'} ${((summary.refundableAmount || 0) / 100).toFixed(2)}</span>
-                            </div>
-                        </div>
 
-                        <div class="refunds-section">
-                            <h3>Refund History (${refunds.length})</h3>
-                            ${refundsHtml}
+                            <div class="refund-details-grid">
+                                <div class="refund-details-section">
+                                    <div class="refund-section-title">Summary</div>
+                                    <div class="refund-kv">
+                                        <div class="refund-kv-row">
+                                            <span class="refund-kv-label">Payment ID</span>
+                                            <span class="refund-kv-value"><span class="refund-code">${escapeHtml(paymentId)}</span></span>
+                                        </div>
+                                        <div class="refund-kv-row">
+                                            <span class="refund-kv-label">Refunds</span>
+                                            <span class="refund-kv-value">${refunds.length}</span>
+                                        </div>
+                                        <div class="refund-kv-row">
+                                            <span class="refund-kv-label">Currency</span>
+                                            <span class="refund-kv-value">${escapeHtml(summary.currency || 'INR')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="refund-details-section refund-amount-card">
+                                    <div class="refund-amount-label">Total refunded</div>
+                                    <div class="refund-amount-value">₹${totalRefunded.toFixed(2)}</div>
+                                    <div class="refund-details-inline-grid">
+                                        <div class="refund-detail-item">
+                                            <div class="refund-kv-label">Total amount</div>
+                                            <div class="refund-detail-value">₹${totalAmount.toFixed(2)}</div>
+                                        </div>
+                                        <div class="refund-detail-item">
+                                            <div class="refund-kv-label">Refundable</div>
+                                            <div class="refund-detail-value">₹${refundableAmount.toFixed(2)}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="refund-details-section refund-details-section--full">
+                                    <div class="refund-section-title">Refund History</div>
+                                    <div class="refund-details-list">
+                                        ${refundsHtml}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
 
-                showModal('Refund History', modalContent);
+                showFinancePanel('Refund History', modalContent);
             } else {
                 throw new Error(response.message || 'Failed to load refund history');
             }
@@ -609,10 +651,10 @@ function showRefundHistoryModal(paymentId) {
                 <div style="text-align: center; padding: 2rem;">
                     <div style="color: var(--error-color, #ef4444); margin-bottom: 1rem;">⚠️</div>
                     <div>${escapeHtml(error.message || 'Failed to load refund history')}</div>
-                    <button class="btn btn-secondary" onclick="closeModal()" style="margin-top: 1rem;">Close</button>
+                    <button class="btn btn-secondary" onclick="closeFinancePanel()" style="margin-top: 1rem;">Close</button>
                 </div>
             `;
-            showModal('Refund History', errorContent);
+            showFinancePanel('Refund History', errorContent);
         });
 }
 
@@ -635,8 +677,12 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
 
     // Clear existing content
     actionsCell.innerHTML = '';
-    actionsCell.style.whiteSpace = 'nowrap';
+    actionsCell.style.whiteSpace = 'normal';
     actionsCell.style.textAlign = 'center';
+
+    const actionsGroup = document.createElement('div');
+    actionsGroup.className = 'payment-actions-group';
+    actionsCell.appendChild(actionsGroup);
 
     const totalAmount = payment.amount || 0;
     
@@ -661,7 +707,7 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
         detailsBtn.className = 'btn-details btn-sm';
         detailsBtn.textContent = 'Details';
         detailsBtn.addEventListener('click', () => showPaymentDetailsModal(payment));
-        actionsCell.appendChild(detailsBtn);
+        actionsGroup.appendChild(detailsBtn);
         return;
     }
 
@@ -688,15 +734,23 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
                 showMessage('error', 'Payment ID not found');
             }
         });
-        actionsCell.appendChild(badge);
+        const refundedTag = document.createElement('span');
+        refundedTag.className = 'payment-actions-badge';
+        refundedTag.textContent = 'Refunded';
+        actionsGroup.appendChild(refundedTag);
+        actionsGroup.appendChild(badge);
     } else if (hasPartialRefund) {
-        // Show partial refund badge styled like Details button and refund button
-        const badge = document.createElement('button');
-        badge.className = 'btn-details btn-sm';
-        badge.textContent = `Partial (₹${(refundedAmount / 100).toFixed(2)})`;
-        badge.style.marginRight = '8px';
-        badge.title = 'Click to view refund history';
-        badge.addEventListener('click', () => {
+        // Show partial refund tag + view history + refund more
+        const badge = document.createElement('span');
+        badge.className = 'payment-actions-badge payment-actions-badge--partial';
+        badge.textContent = `₹${(refundedAmount / 100).toFixed(2)} refunded`;
+        actionsGroup.appendChild(badge);
+
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'btn-details btn-sm';
+        viewBtn.textContent = 'View refund';
+        viewBtn.title = 'Click to view refund history';
+        viewBtn.addEventListener('click', () => {
             const paymentId = payment.razorpayPaymentId || payment.transactionId;
             if (paymentId) {
                 loadAndShowRefundDetails(paymentId);
@@ -704,7 +758,7 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
                 showMessage('error', 'Payment ID not found');
             }
         });
-        actionsCell.appendChild(badge);
+        actionsGroup.appendChild(viewBtn);
 
         const refundBtn = document.createElement('button');
         refundBtn.className = 'btn-refund btn-sm';
@@ -717,7 +771,7 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
             }
             showRefundModal(payment);
         });
-        actionsCell.appendChild(refundBtn);
+        actionsGroup.appendChild(refundBtn);
     } else if (payment.status === 'verified' || payment.status === 'SUCCESS') {
         // Show refund button for successful payments with amount > 0
         const refundBtn = document.createElement('button');
@@ -728,14 +782,14 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
             payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
             showRefundModal(payment);
         });
-        actionsCell.appendChild(refundBtn);
+        actionsGroup.appendChild(refundBtn);
     } else {
         // For other statuses, show details button
         const detailsBtn = document.createElement('button');
         detailsBtn.className = 'btn-details btn-sm';
         detailsBtn.textContent = 'Details';
         detailsBtn.addEventListener('click', () => showPaymentDetailsModal(payment));
-        actionsCell.appendChild(detailsBtn);
+        actionsGroup.appendChild(detailsBtn);
     }
 }
 
@@ -750,13 +804,8 @@ function loadAndShowRefundDetails(paymentId) {
     }
 
     // Show loading modal
-    const loadingContent = `
-        <div style="text-align: center; padding: 2rem;">
-            <div class="loading-spinner" style="display: inline-block; margin-bottom: 1rem;"></div>
-            <div>Loading refund details...</div>
-        </div>
-    `;
-    showModal('Refund Details', loadingContent);
+    const loadingContent = getRefundPanelLoadingContent('Loading refund details...');
+    showFinancePanel('Refund Details', loadingContent);
 
     // Fetch refund data from API
     window.RefundAPI.getRefundsForPayment(paymentId)
@@ -769,7 +818,7 @@ function loadAndShowRefundDetails(paymentId) {
         })
         .catch(error => {
             console.error('Error loading refund details:', error);
-            closeModal();
+            if (typeof closeFinancePanel === 'function') closeFinancePanel();
             showMessage('error', error.message || 'Failed to load refund details');
         });
 }
@@ -785,13 +834,18 @@ function showRefundDetailsModal(refundSummary) {
     }
 
     const refunds = refundSummary.refunds || [];
-    const paymentId = refundSummary.paymentId;
+    const paymentId = refundSummary.paymentId || 'N/A';
+    const originalAmount = (refundSummary.originalAmount || 0) / 100;
+    const totalRefunded = (refundSummary.totalRefunded || 0) / 100;
+    const remainingRefundable = (refundSummary.remainingRefundable || 0) / 100;
     
     // Generate status banner based on refund statuses
     let statusBanner = '';
     const hasProcessed = refunds.some(r => r.status === 'PROCESSED');
     const hasPending = refunds.some(r => r.status === 'PENDING');
     const hasFailed = refunds.some(r => r.status === 'FAILED');
+    const overallStatusClass = hasFailed ? 'refund-status--error' : hasPending ? 'refund-status--warning' : hasProcessed ? 'refund-status--success' : 'refund-status--neutral';
+    const overallStatusLabel = hasFailed ? 'Refund Failed' : hasPending ? 'Processing' : hasProcessed ? 'Refund Completed' : 'No Refunds';
     
     if (hasFailed) {
         statusBanner = `
@@ -826,11 +880,12 @@ function showRefundDetailsModal(refundSummary) {
     }
 
     const refundsHtml = refunds.map((refund, index) => {
-        const statusClass = refund.status === 'PROCESSED' ? 'badge-processed' :
-            refund.status === 'FAILED' ? 'badge-failed' : 'badge-pending';
+        const statusClass = refund.status === 'PROCESSED' ? 'refund-status--success' :
+            refund.status === 'FAILED' ? 'refund-status--error' : 'refund-status--warning';
         
         const statusIcon = refund.status === 'PROCESSED' ? '✓' :
             refund.status === 'FAILED' ? '✗' : '⟳';
+        const refundAmount = ((refund.amount || 0) / 100).toFixed(2);
         
         // Calculate processing time
         let processingTime = 'N/A';
@@ -851,73 +906,49 @@ function showRefundDetailsModal(refundSummary) {
         }
         
         return `
-            <div class="refund-card" style="
-                background: var(--card-bg);
-                border: 1px solid var(--card-border);
-                border-radius: 8px;
-                padding: 1.25rem;
-                margin-bottom: 1rem;
-                box-shadow: 0 2px 4px var(--card-shadow);
-            ">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
-                    <div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
-                            Refund #${index + 1}
-                        </div>
-                        <div style="font-family: monospace; font-size: 0.875rem; color: var(--text-color);">
-                            ${escapeHtml(refund.refundId || 'N/A')}
-                        </div>
+            <div class="refund-history-card refund-card">
+                <div class="refund-history-header">
+                    <div class="refund-history-meta">
+                        <div class="refund-eyebrow">Refund #${index + 1}</div>
+                        <div class="refund-history-id">${escapeHtml(refund.refundId || 'N/A')}</div>
                     </div>
-                    <span class="badge ${statusClass}" style="display: inline-flex; align-items: center; gap: 0.25rem;">
-                        <span>${statusIcon}</span>
-                        <span>${escapeHtml(refund.status || 'UNKNOWN')}</span>
+                    <span class="refund-status-pill ${statusClass}">
+                        ${statusIcon} ${escapeHtml(refund.status || 'UNKNOWN')}
                     </span>
                 </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem;">
+                <div class="refund-history-grid">
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Amount</div>
-                        <div style="font-size: 1.125rem; font-weight: 600; color: var(--text-color);">
-                            ₹${(refund.amount || 0).toFixed(2)}
-                        </div>
+                        <div class="refund-kv-label">Amount</div>
+                        <div class="refund-kv-value refund-amount">₹${refundAmount}</div>
                     </div>
-                    
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Processing Time</div>
-                        <div style="font-size: 0.875rem; font-weight: 500; color: var(--text-color);">
-                            ${processingTime}
-                        </div>
+                        <div class="refund-kv-label">Processing Time</div>
+                        <div class="refund-kv-value">${processingTime}</div>
                     </div>
-                    
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Speed</div>
-                        <div style="font-size: 0.875rem; color: var(--text-color);">
-                            ${escapeHtml(refund.speedRequested || 'N/A')}${refund.speedProcessed ? ` → ${refund.speedProcessed}` : ''}
-                        </div>
+                        <div class="refund-kv-label">Speed</div>
+                        <div class="refund-kv-value">${escapeHtml(refund.speedRequested || 'N/A')}${refund.speedProcessed ? ` → ${refund.speedProcessed}` : ''}</div>
                     </div>
                 </div>
-                
-                <div style="border-top: 1px solid var(--card-border); padding-top: 0.75rem; margin-top: 0.75rem;">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; font-size: 0.875rem;">
-                        <div>
-                            <span style="color: var(--text-secondary);">Reason:</span>
-                            <span style="color: var(--text-color); margin-left: 0.5rem;">${escapeHtml(refund.reason || 'N/A')}</span>
-                        </div>
-                        <div>
-                            <span style="color: var(--text-secondary);">Processed By:</span>
-                            <span style="color: var(--text-color); margin-left: 0.5rem;">${escapeHtml(refund.processedBy || 'N/A')}</span>
-                        </div>
-                        <div>
-                            <span style="color: var(--text-secondary);">Created:</span>
-                            <span style="color: var(--text-color); margin-left: 0.5rem;">${formatDate(refund.createdAt)}</span>
-                        </div>
-                        ${refund.processedAt ? `
-                        <div>
-                            <span style="color: var(--text-secondary);">Processed:</span>
-                            <span style="color: var(--text-color); margin-left: 0.5rem;">${formatDate(refund.processedAt)}</span>
-                        </div>
-                        ` : ''}
+                <div class="refund-kv">
+                    <div class="refund-kv-row">
+                        <span class="refund-kv-label">Reason</span>
+                        <span class="refund-kv-value">${escapeHtml(refund.reason || 'N/A')}</span>
                     </div>
+                    <div class="refund-kv-row">
+                        <span class="refund-kv-label">Processed By</span>
+                        <span class="refund-kv-value">${escapeHtml(refund.processedBy || 'N/A')}</span>
+                    </div>
+                    <div class="refund-kv-row">
+                        <span class="refund-kv-label">Created</span>
+                        <span class="refund-kv-value">${formatDate(refund.createdAt)}</span>
+                    </div>
+                    ${refund.processedAt ? `
+                    <div class="refund-kv-row">
+                        <span class="refund-kv-label">Processed</span>
+                        <span class="refund-kv-value">${formatDate(refund.processedAt)}</span>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -925,60 +956,86 @@ function showRefundDetailsModal(refundSummary) {
 
     const modalContent = `
         <div class="refund-details-modal">
-            ${statusBanner}
-            
-            <div style="
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 12px;
-                padding: 1.5rem;
-                margin-bottom: 1.5rem;
-                color: #ffffff;
-                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-            ">
-                <div style="font-size: 0.875rem; opacity: 0.95; margin-bottom: 0.5rem; font-weight: 500;">Payment ID</div>
-                <div style="font-family: monospace; font-size: 0.875rem; margin-bottom: 1.5rem; opacity: 1; background: rgba(255,255,255,0.15); padding: 0.5rem; border-radius: 6px;">
-                    ${escapeHtml(paymentId)}
-                </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
-                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                        <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.5rem; font-weight: 500;">Original</div>
-                        <div style="font-size: 1.5rem; font-weight: 700; color: #ffffff;">
-                            ₹${((refundSummary.originalAmount || 0) / 100).toFixed(2)}
-                        </div>
-                    </div>
-                    
-                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                        <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.5rem; font-weight: 500;">Refunded</div>
-                        <div style="font-size: 1.5rem; font-weight: 700; color: #ffffff;">
-                            ₹${((refundSummary.totalRefunded || 0) / 100).toFixed(2)}
-                        </div>
-                    </div>
-                    
-                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                        <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.5rem; font-weight: 500;">Remaining</div>
-                        <div style="font-size: 1.5rem; font-weight: 700; color: #ffffff;">
-                            ₹${((refundSummary.remainingRefundable || 0) / 100).toFixed(2)}
-                        </div>
-                    </div>
-                </div>
-            </div>
+            ${statusBanner ? `<div class="finance-banner">${statusBanner}</div>` : ''}
 
-            <div class="refunds-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <h3 style="margin: 0; font-size: 1.125rem; color: var(--heading-color); font-weight: 600;">
-                        Refund History (${refunds.length})
-                    </h3>
-                    <button class="btn btn-secondary btn-sm" id="refresh-status-btn" onclick="refreshRefundStatus('${escapeHtml(paymentId)}')">
-                        <span id="refresh-icon" style="font-size: 1rem;">↻</span> Refresh
-                    </button>
+            <div class="refund-details-shell">
+                <div class="refund-details-header">
+                    <div>
+                        <h3 class="refund-details-title">Refund details</h3>
+                        <p class="refund-details-subtitle">${escapeHtml(paymentId)} · ${refunds.length} refund${refunds.length === 1 ? '' : 's'}</p>
+                    </div>
+                    <div class="refund-details-actions">
+                        <span class="refund-status-pill ${overallStatusClass}">${overallStatusLabel}</span>
+                        <button class="btn btn-secondary btn-sm" id="refresh-status-btn" onclick="refreshRefundStatus('${escapeHtml(paymentId)}')">
+                            <span id="refresh-icon" class="refund-refresh-icon">↻</span> Refresh
+                        </button>
+                    </div>
                 </div>
-                ${refundsHtml || '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">No refunds found</div>'}
+
+                <div class="refund-metric-grid">
+                    <div class="refund-metric-card refund-metric-card--neutral">
+                        <div class="refund-metric-label">Original amount</div>
+                        <div class="refund-metric-value">₹${originalAmount.toFixed(2)}</div>
+                    </div>
+                    <div class="refund-metric-card refund-metric-card--negative">
+                        <div class="refund-metric-label">Total refunded</div>
+                        <div class="refund-metric-value">₹${totalRefunded.toFixed(2)}</div>
+                    </div>
+                    <div class="refund-metric-card refund-metric-card--positive">
+                        <div class="refund-metric-label">Remaining refundable</div>
+                        <div class="refund-metric-value">₹${remainingRefundable.toFixed(2)}</div>
+                    </div>
+                </div>
+
+                <div class="refund-details-grid">
+                    <div class="refund-details-section">
+                        <div class="refund-section-title">Summary</div>
+                        <div class="refund-kv">
+                            <div class="refund-kv-row">
+                                <span class="refund-kv-label">Payment ID</span>
+                                <span class="refund-kv-value"><span class="refund-code">${escapeHtml(paymentId)}</span></span>
+                            </div>
+                            <div class="refund-kv-row">
+                                <span class="refund-kv-label">Refund Status</span>
+                                <span class="refund-kv-value">${refundSummary.isFullyRefunded ? 'Fully refunded' : refunds.length ? 'Partially refunded' : 'Not refunded'}</span>
+                            </div>
+                            <div class="refund-kv-row">
+                                <span class="refund-kv-label">Refund Count</span>
+                                <span class="refund-kv-value">${refunds.length}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="refund-details-section">
+                        <div class="refund-section-title">Balance</div>
+                        <div class="refund-kv">
+                            <div class="refund-kv-row">
+                                <span class="refund-kv-label">Original</span>
+                                <span class="refund-kv-value">₹${originalAmount.toFixed(2)}</span>
+                            </div>
+                            <div class="refund-kv-row">
+                                <span class="refund-kv-label">Refunded</span>
+                                <span class="refund-kv-value">₹${totalRefunded.toFixed(2)}</span>
+                            </div>
+                            <div class="refund-kv-row">
+                                <span class="refund-kv-label">Remaining</span>
+                                <span class="refund-kv-value">₹${remainingRefundable.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="refund-details-section refund-details-section--full">
+                        <div class="refund-section-title">Refund history</div>
+                        <div class="refund-details-list">
+                            ${refundsHtml || '<div class="refund-details-empty">No refunds found</div>'}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     `;
 
-    showModal('Refund Details', modalContent);
+    showFinancePanel('Refund Details', modalContent);
 }
 
 /**
@@ -1034,48 +1091,44 @@ function showPaymentDetailsModal(payment) {
 
     const modalContent = `
         <div class="payment-details-modal">
-            <div style="
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 8px;
-                padding: 1.25rem;
-                margin-bottom: 1.25rem;
-                color: #ffffff;
-            ">
-                <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Amount</div>
-                <div style="font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem;">₹${amount}</div>
-                <div style="font-size: 0.875rem; opacity: 0.85;">${payment.currency || 'INR'}</div>
+            <div class="finance-hero">
+                <div class="finance-kv__label">Amount</div>
+                <div class="finance-hero-value">₹${amount}</div>
+                <div class="finance-kv__label">${payment.currency || 'INR'}</div>
             </div>
 
-            <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                <div class="detail-row">
-                    <span class="label">Status</span>
-                    <span class="status-badge ${statusClass}">${escapeHtml(status)}</span>
+            <div class="finance-card">
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Status</span>
+                    <span class="finance-kv__value">
+                        <span class="finance-pill ${statusClass}">${escapeHtml(status)}</span>
+                    </span>
                 </div>
-                <div class="detail-row">
-                    <span class="label">User Email</span>
-                    <span class="value">${escapeHtml(payment.userEmail || 'N/A')}</span>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">User Email</span>
+                    <span class="finance-kv__value">${escapeHtml(payment.userEmail || 'N/A')}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="label">Payment Method</span>
-                    <span class="value">${escapeHtml(payment.paymentMethod || 'N/A')}</span>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Payment Method</span>
+                    <span class="finance-kv__value">${escapeHtml(payment.paymentMethod || 'N/A')}</span>
                 </div>
-                <div class="detail-row">
-                    <span class="label">Transaction ID</span>
-                    <span class="value"><code style="font-size: 0.8125rem;">${escapeHtml(payment.transactionId || 'N/A')}</code></span>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Transaction ID</span>
+                    <span class="finance-kv__value"><span class="finance-code">${escapeHtml(payment.transactionId || 'N/A')}</span></span>
                 </div>
-                <div class="detail-row" style="border-bottom: none;">
-                    <span class="label">Created</span>
-                    <span class="value">${formatDate(payment.createdAt)}</span>
+                <div class="finance-kv">
+                    <span class="finance-kv__label">Created</span>
+                    <span class="finance-kv__value">${formatDate(payment.createdAt)}</span>
                 </div>
             </div>
 
             <div style="text-align: right;">
-                <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+                <button class="btn btn-secondary" onclick="closeFinancePanel()">Close</button>
             </div>
         </div>
     `;
 
-    showModal('Payment Details', modalContent);
+    showFinancePanel('Payment Details', modalContent);
 }
 
 // Helper function to format date

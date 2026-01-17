@@ -16,8 +16,7 @@ graph TD
     Routing --> WeatherRoute[Weather Route]
     Routing --> FeedbackRoute[Feedback Route]
     Routing --> AuthRoute[Auth Route]
-    Routing --> SubscriptionRoute[Subscription Route]
-    Routing --> AdminSubscriptionRoute[Admin Subscription Route]
+    
     
     %% Weather Components
     WeatherRoute --> WeatherCache[Weather Cache]
@@ -32,21 +31,13 @@ graph TD
     %% Feedback Components
     FeedbackRoute --> |CRUD Operations| Database
     
-    %% Subscription Components
-    SubscriptionRoute --> SubscriptionService[Subscription Service]
-    AdminSubscriptionRoute --> SubscriptionService
-    SubscriptionService --> UserRepository[User Repository]
-    SubscriptionService --> PaymentRepository[Payment Repository]
+    %% Data Access
     UserRepository --> Database
     PaymentRepository --> Database
-    
-    %% Background Jobs
-    ExpirationJob[Subscription Expiration Job] --> SubscriptionService
     
     %% Environment & Configuration
     Environment[Environment Config] --> WeatherCache
     Environment --> JWTConfig
-    Environment --> ExpirationJob
     SecretManager[Secret Manager] --> WeatherCache
     SecretManager --> JWTConfig
     
@@ -59,11 +50,10 @@ graph TD
     classDef job fill:#fbf,stroke:#333,stroke-width:1px;
     
     class Server,Routing,Authentication,HTTP,Monitoring core;
-    class HomeRoute,WeatherRoute,FeedbackRoute,AuthRoute,SubscriptionRoute,AdminSubscriptionRoute route;
+    class HomeRoute,WeatherRoute,FeedbackRoute,AuthRoute route;
     class ExternalAPI external;
     class Database,Environment,SecretManager,JWTConfig,WeatherCache data;
-    class SubscriptionService,UserRepository,PaymentRepository service;
-    class ExpirationJob job;
+    class UserRepository,PaymentRepository service;
 ```
 
 This architecture diagram illustrates the main components of the Weatherify API and their
@@ -83,25 +73,18 @@ relationships:
 - **Weather Route**: Provides weather and air pollution data
 - **Feedback Route**: Manages user feedback
 - **Auth Route**: Handles user registration and login
-- **Subscription Route**: Manages user subscription status, history, and cancellation
-- **Admin Subscription Route**: Provides admin access to subscription management and analytics
 
 ## Data Sources
 
-- **MongoDB**: Stores user data, weather data, feedback, subscriptions, and payment records
+- **MongoDB**: Stores user data, weather data, feedback, and payment records
 - **External Weather API**: Provides weather and air pollution data
 - **Secret Manager**: Securely stores API keys and secrets
 - **Environment Config**: Provides configuration values from environment variables
 
 ## Services and Repositories
 
-- **Subscription Service**: Manages subscription lifecycle, status calculation, grace periods, and analytics
-- **User Repository**: Handles user data operations including subscription management
+- **User Repository**: Handles user data operations
 - **Payment Repository**: Provides read-only access to payment transaction records
-
-## Background Jobs
-
-- **Subscription Expiration Job**: Automatically processes expired subscriptions and grace period transitions
 
 ## Key Interactions
 
@@ -110,11 +93,7 @@ relationships:
 3. Authentication verifies JWT tokens for protected routes
 4. Weather Route fetches data from External API via Weather Cache
 5. Auth Route generates JWT tokens for authenticated users
-6. Subscription Route uses Subscription Service to manage user subscriptions
-7. Admin Subscription Route provides administrative oversight of all subscriptions
-8. Subscription Service coordinates between User Repository and Payment Repository
-9. Subscription Expiration Job runs scheduled tasks to process expired subscriptions
-10. Data is stored in and retrieved from MongoDB
+6. Data is stored in and retrieved from MongoDB
 
 ---
 

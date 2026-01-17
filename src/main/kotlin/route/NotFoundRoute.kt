@@ -9,21 +9,22 @@ import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.route
-import kotlinx.html.InputType
+import kotlinx.html.a
 import kotlinx.html.body
 import kotlinx.html.button
 import kotlinx.html.classes
 import kotlinx.html.div
-import kotlinx.html.footer
 import kotlinx.html.h1
 import kotlinx.html.h2
 import kotlinx.html.head
 import kotlinx.html.id
-import kotlinx.html.input
-import kotlinx.html.label
 import kotlinx.html.link
+import kotlinx.html.main
 import kotlinx.html.meta
 import kotlinx.html.p
 import kotlinx.html.script
@@ -138,88 +139,148 @@ fun Route.notFoundRoute() {
                         unsafe {
                             raw(
                                 """
-                                /* 404 page specific styles */
-                                .error-content {
-                                    max-width: 1400px;
-                                    margin: 2rem auto;
-                                    padding: 2rem;
-                                    text-align: center;
+                                .notfound-page {
+                                    min-height: 100vh;
+                                    display: flex;
+                                    flex-direction: column;
+                                    background: var(--content-bg);
                                 }
 
-                                .error-code {
-                                    font-size: 8rem;
+                                .notfound-main {
+                                    flex: 1;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    padding: 2.5rem 1.5rem 3rem;
+                                }
+
+                                .notfound-shell {
+                                    width: min(1040px, 100%);
+                                    display: grid;
+                                    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                                    gap: 2rem;
+                                    align-items: center;
+                                }
+
+                                .notfound-card {
+                                    background: var(--card-bg);
+                                    border: 1px solid var(--card-border);
+                                    border-radius: 18px;
+                                    padding: 2rem;
+                                    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+                                }
+
+                                .notfound-hero {
+                                    display: flex;
+                                    flex-direction: column;
+                                    gap: 1rem;
+                                }
+
+                                .notfound-code {
+                                    font-size: clamp(2.8rem, 7vw, 4.5rem);
                                     font-weight: 700;
                                     margin: 0;
                                     line-height: 1;
-                                    background: linear-gradient(135deg, #3b4f7d, #2d3748);
+                                    letter-spacing: -0.04em;
+                                    background: linear-gradient(135deg, #6366f1, #4f46e5);
                                     -webkit-background-clip: text;
                                     -webkit-text-fill-color: transparent;
-                                    margin-bottom: 1rem;
+                                    background-clip: text;
                                 }
 
-                                .error-title {
-                                    font-size: 2rem;
-                                    margin-bottom: 1.5rem;
-                                    color: var(--text-primary);
+                                .notfound-title {
+                                    font-size: clamp(1.6rem, 4vw, 2.3rem);
+                                    font-weight: 700;
+                                    margin: 0;
+                                    color: var(--heading-color);
                                 }
 
-                                .error-message {
-                                    font-size: 1.2rem;
-                                    margin-bottom: 2rem;
+                                .notfound-message {
+                                    font-size: 1rem;
                                     color: var(--text-secondary);
                                     line-height: 1.6;
+                                    margin: 0;
                                 }
 
-                                .error-icon {
-                                    font-size: 5rem;
-                                    color: var(--text-secondary);
-                                    margin-bottom: 1rem;
-                                    opacity: 0.7;
-                                }
-
-                                .action-buttons {
+                                .notfound-actions {
                                     display: flex;
-                                    justify-content: center;
-                                    gap: 1rem;
-                                    margin-top: 2rem;
+                                    flex-wrap: wrap;
+                                    gap: 0.75rem;
+                                    margin-top: 1rem;
                                 }
 
-                                .action-button {
-                                    padding: 0.75rem 1.5rem;
-                                    border-radius: 8px;
-                                    font-weight: 600;
-                                    font-size: 1rem;
-                                    cursor: pointer;
-                                    transition: transform 0.1s, box-shadow 0.2s;
-                                    text-decoration: none;
+                                .notfound-btn {
                                     display: inline-flex;
                                     align-items: center;
                                     gap: 0.5rem;
+                                    padding: 0.65rem 1.1rem;
+                                    border-radius: 10px;
+                                    font-weight: 600;
+                                    font-size: 0.95rem;
+                                    cursor: pointer;
+                                    border: 1px solid transparent;
+                                    text-decoration: none;
+                                    transition: transform 0.2s ease, box-shadow 0.2s ease;
                                 }
 
-                                .primary-button {
-                                    background: linear-gradient(135deg, #3b4f7d, #2d3748);
-                                    color: white;
-                                    border: none;
+                                .notfound-btn-primary {
+                                    background: linear-gradient(135deg, #6366f1, #4f46e5);
+                                    color: #ffffff;
                                 }
 
-                                .secondary-button {
-                                    background: transparent;
-                                    color: var(--text-primary);
-                                    border: 1px solid var(--border-color);
+                                .notfound-btn-secondary {
+                                    background: var(--card-bg);
+                                    color: var(--text-color);
+                                    border-color: var(--card-border);
                                 }
 
-                                .action-button:hover {
-                                    transform: translateY(-2px);
-                                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                                .notfound-btn:hover {
+                                    transform: translateY(-1px);
+                                    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
                                 }
 
-                                .action-button:active {
-                                    transform: translateY(0);
+                                .notfound-info {
+                                    display: grid;
+                                    gap: 1rem;
                                 }
 
-                                .material-icons {
-                                    font-size: 1.2rem;
+                                .notfound-tip {
+                                    padding: 1rem 1.2rem;
+                                    border-radius: 14px;
+                                    background: var(--card-bg);
+                                    border: 1px solid var(--card-border);
+                                }
+
+                                .notfound-tip-title {
+                                    margin: 0 0 0.35rem;
+                                    font-weight: 600;
+                                    color: var(--heading-color);
+                                }
+
+                                .notfound-tip-text {
+                                    margin: 0;
+                                    color: var(--text-secondary);
+                                    font-size: 0.92rem;
+                                    line-height: 1.5;
+                                }
+
+                                @media (max-width: 720px) {
+                                    .notfound-main {
+                                        padding: 2rem 1rem 2.5rem;
+                                    }
+
+                                    .notfound-card {
+                                        padding: 1.6rem;
+                                    }
+
+                                    .notfound-actions {
+                                        flex-direction: column;
+                                    }
+
+                                    .notfound-btn {
+                                        width: 100%;
+                                        justify-content: center;
+                                    }
                                 }
                                 """
                             )
@@ -228,6 +289,7 @@ fun Route.notFoundRoute() {
 
                     // Include minimal JavaScript for error page (without auth.js)
                     WebResources.includeErrorPageJs(this)
+                    WebResources.includeHeaderJs(this)
 
                     // Include page-specific JavaScript
                     script {
@@ -236,6 +298,13 @@ fun Route.notFoundRoute() {
                                 """
                                 // 404 page specific JavaScript
                                 document.addEventListener('DOMContentLoaded', function() {
+                                    if (typeof initializeHeader === 'function') {
+                                        initializeHeader({
+                                            homeUrl: '/',
+                                            subtitle: 'NOT FOUND',
+                                            actions: [ { type: 'theme-toggle' } ]
+                                        });
+                                    }
                                     // Add click handler for the "Go Back" button
                                     document.getElementById('go-back-button').addEventListener('click', function() {
                                         window.history.back();
@@ -248,92 +317,121 @@ fun Route.notFoundRoute() {
                 }
                 body {
                     div {
-                        classes = setOf("container")
+                        classes = setOf("notfound-page")
                         div {
-                            classes = setOf("header")
+                            createHeader(this)
+                        }
+                        main {
+                            classes = setOf("notfound-main")
                             div {
-                                classes = setOf("brand-text")
-                                h1 {
-                                    classes = setOf("logo")
-                                    +"Androidplay"
-                                }
-                                span {
-                                    classes = setOf("subtitle")
-                                    +"Error"
-                                }
-                            }
-                            div {
-                                style = "flex-grow: 1;"
-                            }
-                            div {
-                                style = "display: flex; align-items: center; gap: 1rem;"
-
-                                // Theme toggle
-                                label {
-                                    classes = setOf("toggle")
-                                    style =
-                                        "position: relative; cursor: pointer; margin-right: 0.5rem;"
-
-                                    input {
-                                        type = InputType.checkBox
-                                        id = "theme-toggle"
+                                classes = setOf("notfound-shell")
+                                div {
+                                    classes = setOf("notfound-card", "notfound-hero")
+                                    h1 {
+                                        classes = setOf("notfound-code")
+                                        +"404"
                                     }
-
+                                    h2 {
+                                        classes = setOf("notfound-title")
+                                        +"We can’t find that page"
+                                    }
+                                    p {
+                                        classes = setOf("notfound-message")
+                                        +"The page you’re looking for doesn’t exist or was moved. Try one of the options below."
+                                    }
                                     div {
-                                        // This div becomes the toggle button
+                                        classes = setOf("notfound-actions")
+                                        a {
+                                            href = "/"
+                                            classes = setOf("notfound-btn", "notfound-btn-primary")
+                                            span {
+                                                classes = setOf("material-icons")
+                                                +"home"
+                                            }
+                                            +"Go to Home"
+                                        }
+                                        button {
+                                            id = "go-back-button"
+                                            classes = setOf("notfound-btn", "notfound-btn-secondary")
+                                            span {
+                                                classes = setOf("material-icons")
+                                                +"arrow_back"
+                                            }
+                                            +"Go Back"
+                                        }
+                                    }
+                                }
+                                div {
+                                    classes = setOf("notfound-info")
+                                    div {
+                                        classes = setOf("notfound-tip")
+                                        h2 {
+                                            classes = setOf("notfound-tip-title")
+                                            +"Check the URL"
+                                        }
+                                        p {
+                                            classes = setOf("notfound-tip-text")
+                                            +"Look for any typos or missing sections in the address."
+                                        }
+                                    }
+                                    div {
+                                        classes = setOf("notfound-tip")
+                                        h2 {
+                                            classes = setOf("notfound-tip-title")
+                                            +"Need help?"
+                                        }
+                                        p {
+                                            classes = setOf("notfound-tip-text")
+                                            +"Return to the main dashboard or contact support if the issue persists."
+                                        }
                                     }
                                 }
                             }
                         }
-
-
-                        // 404 Error content
                         div {
-                            classes = setOf("error-content")
-
-                            // Error code
-                            h1 {
-                                classes = setOf("error-code")
-                                +"404"
-                            }
-
-                            // Error title
-                            h2 {
-                                classes = setOf("error-title")
-                                +"Page Not Found"
-                            }
-
-                            // Action buttons
-                            div {
-                                classes = setOf("action-buttons")
-
-
-                                // Go back button
-                                button {
-                                    id = "go-back-button"
-                                    classes = setOf("action-button", "secondary-button")
-                                    span {
-                                        classes = setOf("material-icons")
-                                        +"arrow_back"
-                                    }
-                                    +"Go Back"
-                                }
-                            }
-                        }
-
-                        // Footer
-                        footer {
-                            classes = setOf("footer")
-                            div {
-                                classes = setOf("footer-content")
-                                p {
-                                    +"© ${java.time.Year.now().value} Androidplay. All rights reserved."
-                                }
-                            }
+                            createFooter(this)
                         }
                     }
                 }
             }
+        }
+        
+        // Handle other HTTP methods for /not-found (POST, PUT, DELETE)
+        // Return JSON error response for API clients
+        post {
+            call.respondError(
+                Constants.Messages.ENDPOINT_NOT_FOUND,
+                mapOf(
+                    "path" to "/not-found",
+                    "method" to "POST",
+                    "errorType" to "NOT_FOUND"
+                ),
+                HttpStatusCode.NotFound
+            )
+        }
+        
+        put {
+            call.respondError(
+                Constants.Messages.ENDPOINT_NOT_FOUND,
+                mapOf(
+                    "path" to "/not-found",
+                    "method" to "PUT",
+                    "errorType" to "NOT_FOUND"
+                ),
+                HttpStatusCode.NotFound
+            )
+        }
+        
+        delete {
+            call.respondError(
+                Constants.Messages.ENDPOINT_NOT_FOUND,
+                mapOf(
+                    "path" to "/not-found",
+                    "method" to "DELETE",
+                    "errorType" to "NOT_FOUND"
+                ),
+                HttpStatusCode.NotFound
+            )
         }
     }
 }

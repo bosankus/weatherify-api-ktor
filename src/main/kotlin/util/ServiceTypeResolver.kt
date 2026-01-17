@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
  * This utility caches resolved service configurations to minimize database queries
  * and provides methods to resolve service types to their full configurations.
  */
+@Suppress("unused")
 object ServiceTypeResolver {
     private val logger = LoggerFactory.getLogger(ServiceTypeResolver::class.java)
     private val cache = ConcurrentHashMap<String, ServiceConfig>()
@@ -102,7 +103,7 @@ object ServiceTypeResolver {
                     try {
                         // Try to convert service code to ServiceType enum
                         ServiceType.valueOf(service.serviceCode)
-                    } catch (e: IllegalArgumentException) {
+                    } catch (_: IllegalArgumentException) {
                         // Service code doesn't match any enum value
                         logger.warn("Service code ${service.serviceCode} does not match any ServiceType enum value")
                         null
@@ -149,7 +150,7 @@ object ServiceTypeResolver {
 
     /**
      * Helper method to get the default pricing tier for a service type.
-     * This is useful for payment and subscription creation.
+     * This is useful for payment creation.
      *
      * @param serviceType The ServiceType to get pricing for
      * @return The default pricing tier amount in smallest currency unit, or null if not found
@@ -168,32 +169,4 @@ object ServiceTypeResolver {
         }
     }
 
-    /**
-     * Helper method to calculate subscription duration for a service type.
-     * This is useful for determining subscription end dates.
-     *
-     * @param serviceType The ServiceType to get duration for
-     * @return The duration in seconds, or null if not found
-     */
-    suspend fun getDefaultDurationInSeconds(serviceType: ServiceType): Long? {
-        return when (val result = resolveServiceType(serviceType)) {
-            is Result.Success -> {
-                val tier = result.data.pricingTiers.firstOrNull { it.isDefault }
-                    ?: result.data.pricingTiers.firstOrNull()
-
-                tier?.let {
-                    when (it.durationType) {
-                        bose.ankush.data.model.DurationType.DAYS -> it.duration.toLong() * 24 * 60 * 60
-                        bose.ankush.data.model.DurationType.MONTHS -> it.duration.toLong() * 30 * 24 * 60 * 60
-                        bose.ankush.data.model.DurationType.YEARS -> it.duration.toLong() * 365 * 24 * 60 * 60
-                    }
-                }
-            }
-
-            is Result.Error -> {
-                logger.error("Failed to get default duration for $serviceType", result.exception)
-                null
-            }
-        }
-    }
 }

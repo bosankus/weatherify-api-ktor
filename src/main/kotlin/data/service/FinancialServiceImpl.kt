@@ -52,28 +52,11 @@ class FinancialServiceImpl(
                     val paymentDate = Instant.parse(it.createdAt)
                     val paymentMonth = YearMonth.from(paymentDate.atZone(ZoneId.systemDefault()))
                     paymentMonth == currentMonth
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Skip payments with invalid date formats
                     false
                 }
             }.mapNotNull { it.amount }.sum().toDouble() / 100.0
-
-            // Calculate revenue from currently active subscriptions
-            // This represents recurring revenue that can be expected
-            val usersResult = userRepository.getAllUsers(page = 1, pageSize = 100000)
-            if (usersResult is Result.Error) {
-                return Result.error("Failed to fetch users: ${usersResult.message}")
-            }
-            val allUsers = (usersResult as Result.Success).data.first
-
-            // Flatten all subscriptions and filter for active ones
-            val activeSubscriptionsRevenue = allUsers.flatMap { user ->
-                user.subscriptions.filter { it.status == SubscriptionStatus.ACTIVE }
-            }.mapNotNull { subscription ->
-                // Find the original payment that created this subscription
-                // This gives us the subscription value
-                verifiedPayments.find { it.paymentId == subscription.sourcePaymentId }?.amount
-            }.sum().toDouble() / 100.0
 
             // Count total number of verified payments for dashboard display
             val totalPaymentsCount = verifiedPayments.size
@@ -108,7 +91,6 @@ class FinancialServiceImpl(
             val metrics = FinancialMetrics(
                 totalRevenue = totalRevenue,
                 monthlyRevenue = monthlyRevenue,
-                activeSubscriptionsRevenue = activeSubscriptionsRevenue,
                 totalPaymentsCount = totalPaymentsCount,
                 monthlyRevenueChart = monthlyRevenueChart,
                 totalRefunds = totalRefunds,
@@ -147,7 +129,7 @@ class FinancialServiceImpl(
                     val paymentDate = Instant.parse(it.createdAt)
                     val paymentMonth = YearMonth.from(paymentDate.atZone(ZoneId.systemDefault()))
                     paymentMonth == month
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Skip payments with invalid timestamps
                     false
                 }
@@ -179,18 +161,33 @@ class FinancialServiceImpl(
 
             // Apply status filter
             if (!status.isNullOrBlank()) {
-                payments = payments.filter { it.status.equals(status, ignoreCase = true) }
+                val normalized = status.trim().lowercase()
+                val allowedStatuses = when (normalized) {
+                    "success" -> setOf("verified", "success", "captured")
+                    "verified" -> setOf("verified")
+                    "captured" -> setOf("captured")
+                    "failed" -> setOf("failed")
+                    "pending" -> setOf("pending")
+                    "refunded" -> setOf("refunded")
+                    else -> setOf(normalized)
+                }
+
+                payments = payments.filter { payment ->
+                    payment.status?.lowercase() in allowedStatuses
+                }
             }
 
             // Apply date range filter
             if (!startDate.isNullOrBlank() && !endDate.isNullOrBlank()) {
-                val start = Instant.parse(startDate)
-                val end = Instant.parse(endDate)
+                val start = LocalDate.parse(startDate)
+                val end = LocalDate.parse(endDate)
                 payments = payments.filter {
                     try {
                         val paymentDate = Instant.parse(it.createdAt)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
                         !paymentDate.isBefore(start) && !paymentDate.isAfter(end)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         false
                     }
                 }
@@ -254,7 +251,7 @@ class FinancialServiceImpl(
                 try {
                     val paymentDate = Instant.parse(it.createdAt)
                     !paymentDate.isBefore(start) && !paymentDate.isAfter(end)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     false
                 }
             }
@@ -273,77 +270,6 @@ class FinancialServiceImpl(
         }
     }
 
-    override suspend fun exportSubscriptions(startDate: String, endDate: String): Result<String> {
-        logger.debug("Exporting subscriptions from $startDate to $endDate")
-        return try {
-            val usersResult = userRepository.getAllUsers(page = 1, pageSize = 100000)
-            if (usersResult is Result.Error) {
-                return Result.error("Failed to fetch users: ${usersResult.message}")
-            }
-
-            val allUsers = (usersResult as Result.Success).data.first
-
-            // Flatten subscriptions with user email
-            val subscriptionsWithEmail = allUsers.flatMap { user ->
-                user.subscriptions.map { subscription -> user.email to subscription }
-            }
-
-            // Apply date range filter
-            val start = Instant.parse(startDate)
-            val end = Instant.parse(endDate)
-            val filteredSubscriptions = subscriptionsWithEmail.filter { (_, subscription) ->
-                try {
-                    val subDate = Instant.parse(subscription.createdAt)
-                    !subDate.isBefore(start) && !subDate.isAfter(end)
-                } catch (e: Exception) {
-                    false
-                }
-            }
-
-            // Limit to 10,000 records
-            if (filteredSubscriptions.size > 10000) {
-                return Result.error("Export exceeds 10,000 records limit. Please narrow your date range.")
-            }
-
-            val csv = generateSubscriptionsCsv(filteredSubscriptions)
-            logger.debug("Exported ${filteredSubscriptions.size} subscriptions")
-            Result.success(csv)
-        } catch (e: Exception) {
-            logger.error("Failed to export subscriptions", e)
-            Result.error("Failed to export subscriptions: ${e.message}", e)
-        }
-    }
-
-    override suspend fun exportBoth(startDate: String, endDate: String): Result<String> {
-        logger.debug("Exporting both payments and subscriptions from $startDate to $endDate")
-        return try {
-            val paymentsResult = exportPayments(startDate, endDate)
-            val subscriptionsResult = exportSubscriptions(startDate, endDate)
-
-            if (paymentsResult is Result.Error) {
-                return paymentsResult
-            }
-            if (subscriptionsResult is Result.Error) {
-                return subscriptionsResult
-            }
-
-            val paymentsCsv = (paymentsResult as Result.Success).data
-            val subscriptionsCsv = (subscriptionsResult as Result.Success).data
-
-            val combinedCsv = """
-                PAYMENTS
-                $paymentsCsv
-
-                SUBSCRIPTIONS
-                $subscriptionsCsv
-            """.trimIndent()
-
-            Result.success(combinedCsv)
-        } catch (e: Exception) {
-            logger.error("Failed to export both", e)
-            Result.error("Failed to export data: ${e.message}", e)
-        }
-    }
 
     override suspend fun getUserTransactions(userEmail: String): Result<UserTransactionsResponse> {
         logger.debug("Getting transactions for user: $userEmail")
@@ -353,8 +279,9 @@ class FinancialServiceImpl(
             if (userResult is Result.Error) {
                 return Result.error("User not found: ${userResult.message}")
             }
-            val user = (userResult as Result.Success<User?>).data
-                ?: return Result.error("User not found")
+            if ((userResult as Result.Success<User?>).data == null) {
+                return Result.error("User not found")
+            }
 
             // Get payments
             val paymentsResult = paymentRepository.getPaymentsByUserEmail(userEmail)
@@ -377,27 +304,10 @@ class FinancialServiceImpl(
                 )
             }
 
-            // Convert subscriptions to DTOs
-            val subscriptionDtos = user.subscriptions.map { sub ->
-                // Find associated payment
-                val associatedPayment = payments.find { it.paymentId == sub.sourcePaymentId }
-
-                SubscriptionDto(
-                    id = sub.sourcePaymentId ?: "unknown",
-                    service = sub.service.name,
-                    startDate = sub.startDate,
-                    endDate = sub.endDate,
-                    status = sub.status.name,
-                    amount = associatedPayment?.amount?.toDouble()?.div(100.0),
-                    currency = associatedPayment?.currency
-                )
-            }
-
             val response = UserTransactionsResponse(
                 userEmail = userEmail,
                 userName = null, // We don't have user names in the model
-                payments = paymentDtos,
-                subscriptions = subscriptionDtos
+                payments = paymentDtos
             )
 
             Result.success(response)
@@ -437,32 +347,4 @@ class FinancialServiceImpl(
         return header + rows
     }
 
-    /**
-     * Generates CSV export for subscription records.
-     * Properly escapes special characters to prevent CSV injection and parsing errors.
-     *
-     * @param subscriptions List of (userEmail, subscription) pairs to export
-     * @return CSV string with header and data rows
-     */
-    private fun generateSubscriptionsCsv(subscriptions: List<Pair<String, Subscription>>): String {
-        val header = "Subscription ID,User Email,Service Name,Start Date,End Date,Status,Created At\n"
-
-        val rows = subscriptions.joinToString("\n") { (email, subscription) ->
-            listOf(
-                subscription.sourcePaymentId ?: "unknown",
-                email,
-                subscription.service.name,
-                subscription.startDate,
-                subscription.endDate,
-                subscription.status.name,
-                subscription.createdAt
-            ).joinToString(",") { field ->
-                // Wrap each field in quotes and escape existing quotes by doubling them
-                // This prevents CSV injection and handles fields containing commas or quotes
-                "\"${field.replace("\"", "\"\"")}\""
-            }
-        }
-
-        return header + rows
-    }
 }

@@ -271,37 +271,6 @@ class ServiceCatalogRepositoryImpl(private val databaseModule: DatabaseModule) :
         }
     }
 
-    override suspend fun getActiveSubscriptionCount(serviceCode: String): Result<Long> {
-        logger.debug("Getting active subscription count for service: $serviceCode")
-        return try {
-            // Query subscriptions collection for active subscriptions with this service code
-            // Assuming subscriptions are stored in users collection or a separate subscriptions collection
-            // For now, we'll query the users collection and count subscriptions
-
-            val usersCollection = databaseModule.getUsersCollection()
-
-            // Use aggregation to count active subscriptions for this service
-            val pipeline = listOf(
-                Document("\$unwind", "\$subscriptions"),
-                Document(
-                    "\$match", Document()
-                        .append("subscriptions.service", serviceCode)
-                        .append("subscriptions.status", "ACTIVE")
-                ),
-                Document("\$count", "count")
-            )
-
-            val result = usersCollection.aggregate<Document>(pipeline).firstOrNull()
-            val count = result?.getInteger("count")?.toLong() ?: 0L
-
-            logger.debug("Active subscription count for $serviceCode: $count")
-            Result.success(count)
-        } catch (e: Exception) {
-            logger.error("Failed to get active subscription count for service: $serviceCode", e)
-            Result.error("Failed to get subscription count: ${e.message}", e)
-        }
-    }
-
     override suspend fun addHistory(history: ServiceHistory): Result<ServiceHistory> {
         logger.debug("Adding history entry for service: ${history.serviceId}")
         return try {

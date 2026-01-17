@@ -82,24 +82,6 @@ object Environment {
     }
 
     /**
-     * Get the grace period duration in hours
-     * Falls back to 72 hours (3 days)
-     */
-    fun getGracePeriodHours(): Long {
-        return System.getenv(Constants.Env.GRACE_PERIOD_HOURS)?.toLongOrNull()
-            ?: Constants.Subscription.DEFAULT_GRACE_PERIOD_HOURS
-    }
-
-    /**
-     * Get the subscription expiry check interval in minutes
-     * Falls back to 720 minutes (12 hours)
-     */
-    fun getSubscriptionExpiryCheckIntervalMinutes(): Long {
-        return System.getenv(Constants.Env.SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_MINUTES)?.toLongOrNull()
-            ?: Constants.Subscription.DEFAULT_EXPIRY_CHECK_INTERVAL_MINUTES
-    }
-
-    /**
      * Check if refund feature is enabled
      * Falls back to true (enabled by default)
      */

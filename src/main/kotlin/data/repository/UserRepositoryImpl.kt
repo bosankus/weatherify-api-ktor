@@ -59,61 +59,6 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
                 else -> null
             }
 
-            // Parse subscriptions from the document
-            val subscriptions = try {
-                val subsArray = doc.get("subscriptions") as? List<*>
-                subsArray?.mapNotNull { subDoc ->
-                    if (subDoc is Document) {
-                        try {
-                            bose.ankush.data.model.Subscription(
-                                service = bose.ankush.data.model.ServiceType.valueOf(
-                                    subDoc.getString("service") ?: "PREMIUM_ONE"
-                                ),
-                                startDate = subDoc.getString("startDate") ?: "",
-                                endDate = subDoc.getString("endDate") ?: "",
-                                status = bose.ankush.data.model.SubscriptionStatus.valueOf(
-                                    subDoc.getString("status") ?: "ACTIVE"
-                                ),
-                                sourcePaymentId = subDoc.getString("sourcePaymentId"),
-                                createdAt = subDoc.getString("createdAt") ?: java.time.Instant.now().toString(),
-                                cancelledAt = subDoc.getString("cancelledAt"),
-                                gracePeriodEnd = subDoc.getString("gracePeriodEnd")
-                            )
-                        } catch (e: Exception) {
-                            logger.warn("Failed to parse subscription: ${e.message}")
-                            null
-                        }
-                    } else null
-                } ?: emptyList()
-            } catch (e: Exception) {
-                logger.warn("Failed to parse subscriptions array: ${e.message}")
-                emptyList()
-            }
-
-            // Parse notification records from the document
-            val notificationsSent = try {
-                val notifArray = doc.get("notificationsSent") as? List<*>
-                notifArray?.mapNotNull { notifDoc ->
-                    if (notifDoc is Document) {
-                        try {
-                            bose.ankush.data.model.NotificationRecord(
-                                type = bose.ankush.data.model.NotificationType.valueOf(
-                                    notifDoc.getString("type") ?: "SUBSCRIPTION_EXPIRED"
-                                ),
-                                sentAt = notifDoc.getString("sentAt") ?: "",
-                                subscriptionId = notifDoc.getString("subscriptionId") ?: ""
-                            )
-                        } catch (e: Exception) {
-                            logger.warn("Failed to parse notification record: ${e.message}")
-                            null
-                        }
-                    } else null
-                } ?: emptyList()
-            } catch (e: Exception) {
-                logger.warn("Failed to parse notificationsSent array: ${e.message}")
-                emptyList()
-            }
-
             val user = User(
                 id = ObjectId(idStr),
                 email = doc.getString("email"),
@@ -129,9 +74,7 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
                 ipAddress = doc.getString("ipAddress"),
                 registrationSource = doc.getString("registrationSource"),
                 isPremium = (doc.get("isPremium") as? Boolean) ?: false,
-                fcmToken = doc.getString("fcmToken"),
-                subscriptions = subscriptions,
-                notificationsSent = notificationsSent
+                fcmToken = doc.getString("fcmToken")
             )
 
             logger.debug("User found: $email")
@@ -230,14 +173,6 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
             if (user.fcmToken != null && user.fcmToken != existingUser.fcmToken) updates["fcmToken"] =
                 user.fcmToken
 
-            // Always update subscriptions and notifications if they differ
-            if (user.subscriptions != existingUser.subscriptions) {
-                updates["subscriptions"] = user.subscriptions
-            }
-            if (user.notificationsSent != existingUser.notificationsSent) {
-                updates["notificationsSent"] = user.notificationsSent
-            }
-
             if (updates.isEmpty()) {
                 logger.info("No changes detected for user: ${user.email}")
                 return Result.success(true)
@@ -263,6 +198,29 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
         } catch (e: Exception) {
             logger.error("Failed to update user: ${user.email}", e)
             Result.error("Failed to update user: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Delete a user by email.
+     * @param email The email of the user to delete.
+     * @return Result indicating success or failure.
+     */
+    override suspend fun deleteUserByEmail(email: String): Result<Boolean> {
+        logger.debug("Deleting user by email: $email")
+        return try {
+            val filter = databaseModule.createFilter(Constants.Database.EMAIL_FIELD, email)
+            val result = databaseModule.getUsersCollection().deleteOne(filter)
+            if (result.deletedCount > 0) {
+                logger.info("User deleted successfully: $email")
+                Result.success(true)
+            } else {
+                logger.warn("User not found for deletion: $email")
+                Result.error("User not found: $email")
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to delete user: $email", e)
+            Result.error("Failed to delete user: ${e.message}", e)
         }
     }
 
@@ -461,6 +419,40 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
         } catch (e: Exception) {
             logger.error("Failed to update FCM token for user email: $email", e)
             Result.error("Failed to update FCM token: ${e.message}", e)
+        }
+    }
+
+    override suspend fun clearFcmTokenByEmail(email: String): Result<Boolean> {
+        logger.debug("Clearing FCM token for user email: $email")
+        if (email.isBlank()) {
+            val msg = "Invalid input: email is required"
+            logger.warn(msg)
+            return Result.error(msg)
+        }
+        return try {
+            val collection = databaseModule.getUsersCollection()
+            val filter = databaseModule.createFilter(Constants.Database.EMAIL_FIELD, email)
+            val update = databaseModule.createUnsetUpdate("fcmToken")
+            val result = collection.updateOne(filter, update)
+            when {
+                result.matchedCount == 0L -> {
+                    val msg = "User not found for email: $email"
+                    logger.warn(msg)
+                    Result.error(msg)
+                }
+
+                else -> {
+                    if (result.modifiedCount > 0) {
+                        logger.info("FCM token cleared for user email: $email")
+                    } else {
+                        logger.info("FCM token already empty for user email: $email")
+                    }
+                    Result.success(true)
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to clear FCM token for user email: $email", e)
+            Result.error("Failed to clear FCM token: ${e.message}", e)
         }
     }
 }

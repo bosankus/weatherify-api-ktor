@@ -1,9 +1,6 @@
 package domain.service
 
-import com.google.firebase.FirebaseApp
-import com.google.firebase.messaging.FirebaseMessaging
-import com.google.firebase.messaging.Message
-import com.google.firebase.messaging.Notification
+import com.google.firebase.messaging.*
 import config.FirebaseAdmin
 import org.slf4j.LoggerFactory
 
@@ -21,6 +18,8 @@ interface NotificationService {
      */
     suspend fun sendNotification(token: String, title: String, body: String): Result<String>
 }
+
+class UnregisteredFcmTokenException(message: String) : Exception(message)
 
 class NotificationServiceImpl : NotificationService {
     private val logger = LoggerFactory.getLogger(NotificationServiceImpl::class.java)
@@ -49,6 +48,18 @@ class NotificationServiceImpl : NotificationService {
 
             logger.info("Successfully sent notification. Message ID: $messageId")
             Result.success(messageId)
+        } catch (e: FirebaseMessagingException) {
+            val errorCode = e.messagingErrorCode
+            if (errorCode == MessagingErrorCode.UNREGISTERED) {
+                logger.warn("FCM token is unregistered. Token: $token")
+                Result.failure(UnregisteredFcmTokenException("FCM token is unregistered"))
+            } else {
+                logger.error(
+                    "Failed to send notification. FCM error code: $errorCode, token: $token",
+                    e
+                )
+                Result.failure(e)
+            }
         } catch (e: Exception) {
             logger.error("Failed to send notification to token: $token", e)
             Result.failure(e)

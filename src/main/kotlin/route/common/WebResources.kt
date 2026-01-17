@@ -94,9 +94,9 @@ object WebResources {
     private val refundAdminJs = readResourceFile("/web/js/refund-admin.js")
     private val serviceCatalogAdminJs = readResourceFile("/web/js/service-catalog-admin.js")
     private val reportsChartsJs = readResourceFile("/web/js/reports-charts.js")
-    private val adminHeaderJs = readResourceFile("/web/js/admin-header.js")
     private val headerJs = readResourceFile("/web/js/header.js")
     private val decodeJs = readResourceFile("/web/js/decode.js")
+    private val tableUtilsJs = readResourceFile("/web/js/table-utils.js")
 
     /**
      * Read a file from the resources directory
@@ -205,6 +205,17 @@ object WebResources {
     }
 
     /**
+     * Include header JavaScript for pages without auth
+     */
+    fun includeHeaderJs(head: HEAD) {
+        head.script {
+            unsafe {
+                raw(headerJs)
+            }
+        }
+    }
+
+    /**
      * Include admin JavaScript in the HTML head
      * @param head The HEAD element to add the JavaScript to
      */
@@ -214,7 +225,13 @@ object WebResources {
             attributes["src"] = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
             attributes["crossorigin"] = "anonymous"
         }
-        // Include performance optimization scripts FIRST (before other admin scripts)
+        // Include table utilities FIRST (before other admin scripts)
+        head.script {
+            unsafe {
+                raw(tableUtilsJs)
+            }
+        }
+        // Include performance optimization scripts
         head.script {
             unsafe {
                 raw(adminDataCacheJs)

@@ -1,15 +1,16 @@
 package data.service
 
-import bose.ankush.data.model.BillGenerationResponse
-import bose.ankush.data.model.Payment
-import bose.ankush.data.model.Subscription
+import bose.ankush.data.model.*
+import com.itextpdf.barcodes.BarcodeQRCode
 import com.itextpdf.kernel.colors.ColorConstants
 import com.itextpdf.kernel.pdf.PdfDocument
 import com.itextpdf.kernel.pdf.PdfWriter
 import com.itextpdf.layout.Document
 import com.itextpdf.layout.element.Cell
+import com.itextpdf.layout.element.Image
 import com.itextpdf.layout.element.Paragraph
 import com.itextpdf.layout.element.Table
+import com.itextpdf.layout.properties.HorizontalAlignment
 import com.itextpdf.layout.properties.TextAlignment
 import com.itextpdf.layout.properties.UnitValue
 import domain.model.Result
@@ -17,6 +18,7 @@ import domain.repository.PaymentRepository
 import domain.repository.UserRepository
 import domain.service.BillService
 import domain.service.EmailService
+import domain.service.RefundService
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayOutputStream
 import java.time.Instant
@@ -30,14 +32,14 @@ import java.util.*
 class BillServiceImpl(
     private val paymentRepository: PaymentRepository,
     private val userRepository: UserRepository,
-    private val emailService: EmailService
+    private val emailService: EmailService,
+    private val refundService: RefundService
 ) : BillService {
     private val logger = LoggerFactory.getLogger(BillServiceImpl::class.java)
 
     override suspend fun generateBill(
         userEmail: String,
-        paymentIds: List<String>,
-        subscriptionIds: List<String>
+        paymentIds: List<String>
     ): Result<ByteArray> {
         logger.debug("Generating bill for user: $userEmail")
         return try {
@@ -46,8 +48,6 @@ class BillServiceImpl(
             if (userResult is Result.Error) {
                 return Result.error("User not found: ${userResult.message}")
             }
-            val user = (userResult as Result.Success<bose.ankush.data.model.User?>).data
-                ?: return Result.error("User not found")
 
             // Fetch payments
             val paymentsResult = paymentRepository.getPaymentsByUserEmail(userEmail)
@@ -57,11 +57,6 @@ class BillServiceImpl(
             val allPayments = (paymentsResult as Result.Success).data
             val selectedPayments = allPayments.filter { paymentIds.contains(it.id) }
 
-            // Get selected subscriptions
-            val selectedSubscriptions = user.subscriptions.filter { sub ->
-                subscriptionIds.contains(sub.sourcePaymentId)
-            }
-
             // Generate invoice number
             val invoiceNumber = generateInvoiceNumber()
 
@@ -69,8 +64,7 @@ class BillServiceImpl(
             val pdfBytes = createPdfInvoice(
                 invoiceNumber = invoiceNumber,
                 userEmail = userEmail,
-                payments = selectedPayments,
-                subscriptions = selectedSubscriptions
+                payments = selectedPayments
             )
 
             logger.debug("Bill generated successfully: $invoiceNumber")
@@ -84,13 +78,12 @@ class BillServiceImpl(
     override suspend fun generateAndSendBill(
         adminEmail: String,
         userEmail: String,
-        paymentIds: List<String>,
-        subscriptionIds: List<String>
+        paymentIds: List<String>
     ): Result<BillGenerationResponse> {
         logger.debug("Generating and sending bill for user: $userEmail by admin: $adminEmail")
         return try {
             // Generate PDF
-            val billResult = generateBill(userEmail, paymentIds, subscriptionIds)
+            val billResult = generateBill(userEmail, paymentIds)
             if (billResult is Result.Error) {
                 return Result.error(billResult.message)
             }
@@ -103,7 +96,7 @@ class BillServiceImpl(
 
             try {
                 val emailSubject = "Your Invoice - $invoiceNumber"
-                val emailHtmlContent = buildBillEmailHtml(invoiceNumber, userEmail)
+                val emailHtmlContent = buildBillEmailHtml(invoiceNumber)
                 val filename = "$invoiceNumber.pdf"
 
                 val emailResult = emailService.sendEmailWithAttachment(
@@ -141,6 +134,58 @@ class BillServiceImpl(
         }
     }
 
+    override suspend fun generateOriginalBill(paymentId: String): Result<ByteArray> {
+        return generatePaymentBill(paymentId, BillType.ORIGINAL_BILL)
+    }
+
+    override suspend fun generateRefundAdjustmentBill(paymentId: String): Result<ByteArray> {
+        return generatePaymentBill(paymentId, BillType.REFUND_ADJUSTMENT_BILL)
+    }
+
+    override suspend fun generateNetAmountBill(paymentId: String): Result<ByteArray> {
+        return generatePaymentBill(paymentId, BillType.NET_AMOUNT_BILL)
+    }
+
+    override suspend fun generateRefundReceipt(paymentId: String): Result<ByteArray> {
+        return generatePaymentBill(paymentId, BillType.REFUND_RECEIPT)
+    }
+
+    override suspend fun sendPaymentBillEmail(
+        userEmail: String,
+        paymentId: String
+    ): Result<Boolean> {
+        logger.debug("Sending payment bill email to $userEmail for payment $paymentId")
+
+        val paymentResult = paymentRepository.getPaymentByTransactionId(paymentId)
+        if (paymentResult is Result.Error) {
+            return Result.error("Failed to fetch payment: ${paymentResult.message}")
+        }
+        val payment = (paymentResult as Result.Success).data
+            ?: return Result.error("Payment not found: $paymentId")
+
+        if (!payment.userEmail.equals(userEmail, ignoreCase = true)) {
+            return Result.error("Payment does not belong to the specified user")
+        }
+
+        val pdfResult = generateOriginalBill(paymentId)
+        if (pdfResult is Result.Error) {
+            return Result.error(pdfResult.message)
+        }
+        val pdfBytes = (pdfResult as Result.Success).data
+
+        val emailSubject = "Payment receipt and invoice - ${payment.paymentId}"
+        val emailHtmlContent = buildPaymentEmailHtml(payment)
+        val filename = "payment-${payment.paymentId}.pdf"
+
+        return emailService.sendEmailWithAttachment(
+            userEmail = userEmail,
+            subject = emailSubject,
+            htmlContent = emailHtmlContent,
+            attachmentData = pdfBytes,
+            attachmentFilename = filename
+        )
+    }
+
     /**
      * Generates a unique invoice number using timestamp and random suffix.
      * Format: INV-{timestamp}-{random}
@@ -162,21 +207,19 @@ class BillServiceImpl(
      * - Company header and branding
      * - Invoice metadata (number, dates)
      * - Customer information
-     * - Itemized list of charges (payments and subscriptions)
+     * - Itemized list of charges (payments)
      * - Subtotal, tax, and total calculations
      * - Payment instructions and footer
      *
      * @param invoiceNumber Unique invoice identifier
      * @param userEmail Customer email address
      * @param payments List of payment records to include
-     * @param subscriptions List of subscription records to include
      * @return PDF document as byte array
      */
     private fun createPdfInvoice(
         invoiceNumber: String,
         userEmail: String,
-        payments: List<Payment>,
-        subscriptions: List<Subscription>
+        payments: List<Payment>
     ): ByteArray {
         // Use ByteArrayOutputStream to generate PDF in memory
         val outputStream = ByteArrayOutputStream()
@@ -292,30 +335,6 @@ class BillServiceImpl(
                 )
             }
 
-            // Add each subscription as a line item
-            // Try to find the associated payment to get the amount
-            subscriptions.forEach { subscription ->
-                val associatedPayment = payments.find { it.paymentId == subscription.sourcePaymentId }
-                val amount = (associatedPayment?.amount ?: 0).toDouble() / 100.0
-
-                // Only add to subtotal if we found a valid amount
-                // This prevents double-counting if the payment was already included above
-                if (amount > 0) {
-                    subtotal += amount
-                }
-
-                itemsTable.addCell(
-                    Cell().add(Paragraph("${subscription.service.name} Subscription"))
-                )
-                itemsTable.addCell(
-                    Cell().add(Paragraph("${formatDate(subscription.startDate)} to ${formatDate(subscription.endDate)}"))
-                )
-                itemsTable.addCell(
-                    Cell().add(Paragraph("INR %.2f".format(amount)))
-                        .setTextAlignment(TextAlignment.RIGHT)
-                )
-            }
-
             document.add(itemsTable)
             document.add(Paragraph("\n"))
 
@@ -383,6 +402,269 @@ class BillServiceImpl(
         return outputStream.toByteArray()
     }
 
+    private suspend fun generatePaymentBill(paymentId: String, billType: BillType): Result<ByteArray> {
+        return try {
+            val paymentResult = paymentRepository.getPaymentByTransactionId(paymentId)
+            if (paymentResult is Result.Error) {
+                return Result.error("Failed to find payment: ${paymentResult.message}")
+            }
+            val payment = (paymentResult as Result.Success).data
+                ?: return Result.error("Payment not found: $paymentId")
+
+            val amountPaise = payment.amount ?: 0
+            if (amountPaise <= 0) {
+                return Result.error("Payment amount is zero; cannot generate bill")
+            }
+
+            val userResult = userRepository.findUserByEmail(payment.userEmail)
+            val user = if (userResult is Result.Success) userResult.data else null
+
+            val refundSummary = when (val refundResult = refundService.getRefundsForPayment(paymentId)) {
+                is Result.Success -> refundResult.data
+                is Result.Error -> null
+            }
+
+            val totalRefunded = refundSummary?.totalRefunded ?: 0
+            if (totalRefunded > amountPaise) {
+                return Result.error("Refund amount exceeds original payment amount")
+            }
+
+            val isFullyRefunded = totalRefunded == amountPaise
+            val isPartiallyRefunded = totalRefunded in 1 until amountPaise
+            val isNonRefunded = totalRefunded == 0 || payment.status.equals("PAID", ignoreCase = true)
+
+            val billTypeAllowed = when (billType) {
+                BillType.ORIGINAL_BILL -> isNonRefunded || isPartiallyRefunded
+                BillType.REFUND_ADJUSTMENT_BILL -> isPartiallyRefunded
+                BillType.NET_AMOUNT_BILL -> isPartiallyRefunded
+                BillType.REFUND_RECEIPT -> isFullyRefunded
+            }
+
+            if (!billTypeAllowed) {
+                return Result.error("Selected bill type is not available for this payment")
+            }
+
+            val pdfBytes = createPaymentBillPdf(
+                billType = billType,
+                payment = payment,
+                user = user,
+                refundSummary = refundSummary
+            )
+
+            Result.success(pdfBytes)
+        } catch (e: Exception) {
+            logger.error("Failed to generate payment bill for $paymentId", e)
+            Result.error("Failed to generate bill: ${e.message}", e)
+        }
+    }
+
+    private fun createPaymentBillPdf(
+        billType: BillType,
+        payment: Payment,
+        user: User?,
+        refundSummary: PaymentRefundSummary?
+    ): ByteArray {
+        val outputStream = ByteArrayOutputStream()
+        val writer = PdfWriter(outputStream)
+        val pdfDoc = PdfDocument(writer)
+        val document = Document(pdfDoc)
+
+        try {
+            val amountPaise = payment.amount ?: 0
+            val totalRefundedPaise = refundSummary?.totalRefunded ?: 0
+            val netPaise = (amountPaise - totalRefundedPaise).coerceAtLeast(0)
+
+            val headerTitle = when (billType) {
+                BillType.ORIGINAL_BILL -> "ORIGINAL BILL"
+                BillType.REFUND_ADJUSTMENT_BILL -> "REFUND ADJUSTMENT BILL"
+                BillType.NET_AMOUNT_BILL -> "NET AMOUNT BILL"
+                BillType.REFUND_RECEIPT -> "REFUND RECEIPT"
+            }
+
+            document.add(
+                Paragraph(headerTitle)
+                    .setFontSize(20f)
+                    .setBold()
+                    .setTextAlignment(TextAlignment.CENTER)
+            )
+            document.add(Paragraph("\n"))
+
+            // Customer details
+            val detailsTable = Table(UnitValue.createPercentArray(floatArrayOf(1f, 1f)))
+                .useAllAvailableWidth()
+            detailsTable.addCell(simpleCell("Customer Name:", true))
+            detailsTable.addCell(simpleCell(user?.email ?: "N/A", false, TextAlignment.RIGHT))
+            detailsTable.addCell(simpleCell("Customer Email:", true))
+            detailsTable.addCell(simpleCell(payment.userEmail, false, TextAlignment.RIGHT))
+            detailsTable.addCell(simpleCell("Customer Phone:", true))
+            detailsTable.addCell(simpleCell("N/A", false, TextAlignment.RIGHT))
+            document.add(detailsTable)
+            document.add(Paragraph("\n"))
+
+            // Payment metadata
+            val paymentDate = formatBillDateTime(payment.createdAt)
+            val refundDate = refundSummary?.refunds
+                ?.maxOfOrNull { it.processedAt ?: it.createdAt }
+                ?.let { formatBillDateTime(it) }
+                ?: paymentDate
+            val statusText = payment.status ?: "UNKNOWN"
+
+            val metaTable = Table(UnitValue.createPercentArray(floatArrayOf(1f, 1f)))
+                .useAllAvailableWidth()
+            metaTable.addCell(simpleCell("Payment Reference:", true))
+            metaTable.addCell(simpleCell(payment.paymentId, false, TextAlignment.RIGHT))
+            metaTable.addCell(simpleCell("Date:", true))
+            metaTable.addCell(
+                simpleCell(
+                    if (billType == BillType.REFUND_RECEIPT) refundDate else paymentDate,
+                    false,
+                    TextAlignment.RIGHT
+                )
+            )
+            metaTable.addCell(simpleCell("Payment Status:", true))
+            metaTable.addCell(
+                Cell()
+                    .add(Paragraph(statusText).setBold())
+                    .setBackgroundColor(statusColor(statusText))
+                    .setBorder(null)
+                    .setTextAlignment(TextAlignment.RIGHT)
+                    .setPadding(4f)
+            )
+            document.add(metaTable)
+            document.add(Paragraph("\n"))
+
+            // QR Code
+            val qrCode = BarcodeQRCode(payment.paymentId)
+            val qrImage = Image(qrCode.createFormXObject(ColorConstants.BLACK, pdfDoc))
+                .setWidth(80f)
+                .setHeight(80f)
+                .setHorizontalAlignment(HorizontalAlignment.RIGHT)
+            document.add(qrImage)
+            document.add(Paragraph("\n"))
+
+            // Itemized table
+            val itemTable = Table(UnitValue.createPercentArray(floatArrayOf(3f, 2f, 2f, 2f)))
+                .useAllAvailableWidth()
+            itemTable.addHeaderCell(simpleCell("Description", true))
+            itemTable.addHeaderCell(simpleCell("Amount", true, TextAlignment.RIGHT))
+            itemTable.addHeaderCell(simpleCell("Refund", true, TextAlignment.RIGHT))
+            itemTable.addHeaderCell(simpleCell("Net", true, TextAlignment.RIGHT))
+
+            when (billType) {
+                BillType.ORIGINAL_BILL -> {
+                    itemTable.addCell(simpleCell("Payment", false))
+                    itemTable.addCell(simpleCell(formatCurrency(amountPaise), false, TextAlignment.RIGHT))
+                    itemTable.addCell(simpleCell(formatCurrency(0), false, TextAlignment.RIGHT))
+                    itemTable.addCell(simpleCell(formatCurrency(amountPaise), false, TextAlignment.RIGHT))
+                }
+
+                BillType.REFUND_ADJUSTMENT_BILL -> {
+                    val refunds = refundSummary?.refunds ?: emptyList()
+                    if (refunds.isEmpty()) {
+                        itemTable.addCell(simpleCell("No refunds recorded", false))
+                        itemTable.addCell(simpleCell("-", false, TextAlignment.RIGHT))
+                        itemTable.addCell(simpleCell("-", false, TextAlignment.RIGHT))
+                        itemTable.addCell(simpleCell("-", false, TextAlignment.RIGHT))
+                    } else {
+                        refunds.forEach { refund ->
+                            val refundPaise = Math.round(refund.amount * 100).toInt()
+                            itemTable.addCell(simpleCell("Refund ${refund.refundId}", false))
+                            itemTable.addCell(simpleCell("-", false, TextAlignment.RIGHT))
+                            itemTable.addCell(simpleCell(formatCurrency(refundPaise), false, TextAlignment.RIGHT))
+                            itemTable.addCell(simpleCell("-", false, TextAlignment.RIGHT))
+                        }
+                    }
+                }
+
+                BillType.NET_AMOUNT_BILL -> {
+                    itemTable.addCell(simpleCell("Payment (net of refunds)", false))
+                    itemTable.addCell(simpleCell(formatCurrency(amountPaise), false, TextAlignment.RIGHT))
+                    itemTable.addCell(simpleCell(formatCurrency(totalRefundedPaise), false, TextAlignment.RIGHT))
+                    itemTable.addCell(simpleCell(formatCurrency(netPaise), false, TextAlignment.RIGHT))
+                }
+
+                BillType.REFUND_RECEIPT -> {
+                    itemTable.addCell(simpleCell("Refunded Payment", false))
+                    itemTable.addCell(simpleCell(formatCurrency(amountPaise), false, TextAlignment.RIGHT))
+                    itemTable.addCell(simpleCell(formatCurrency(totalRefundedPaise), false, TextAlignment.RIGHT))
+                    itemTable.addCell(simpleCell(formatCurrency(0), false, TextAlignment.RIGHT))
+                }
+            }
+
+            document.add(itemTable)
+            document.add(Paragraph("\n"))
+
+            // Totals section
+            val totalsTable = Table(UnitValue.createPercentArray(floatArrayOf(2f, 2f)))
+                .useAllAvailableWidth()
+            totalsTable.addCell(simpleCell("Original Amount", true))
+            totalsTable.addCell(simpleCell(formatCurrency(amountPaise), false, TextAlignment.RIGHT))
+            if (totalRefundedPaise > 0) {
+                totalsTable.addCell(simpleCell("Refund Amount", true))
+                totalsTable.addCell(simpleCell(formatCurrency(totalRefundedPaise), false, TextAlignment.RIGHT))
+            }
+            totalsTable.addCell(simpleCell("Net Amount", true))
+            totalsTable.addCell(simpleCell(formatCurrency(netPaise), false, TextAlignment.RIGHT))
+            document.add(totalsTable)
+
+            document.add(Paragraph("\n"))
+            document.add(
+                Paragraph("Terms: This document is system-generated. For questions, contact support@androidplay.com.")
+                    .setFontSize(9f)
+                    .setTextAlignment(TextAlignment.CENTER)
+            )
+        } finally {
+            document.close()
+        }
+
+        return outputStream.toByteArray()
+    }
+
+    private fun formatCurrency(amountPaise: Int): String {
+        val value = amountPaise.toDouble() / 100.0
+        return String.format(Locale.ENGLISH, "₹%.2f", value)
+    }
+
+    private fun formatBillDateTime(dateString: String?): String {
+        if (dateString.isNullOrBlank()) return "N/A"
+        return try {
+            val instant = Instant.parse(dateString)
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                .withZone(ZoneId.systemDefault())
+                .format(instant)
+        } catch (_: Exception) {
+            dateString
+        }
+    }
+
+    private fun simpleCell(
+        text: String,
+        isHeader: Boolean,
+        alignment: TextAlignment = TextAlignment.LEFT
+    ): Cell {
+        val paragraph = Paragraph(text)
+        if (isHeader) {
+            paragraph.setBold()
+        }
+        val cell = Cell()
+            .add(paragraph)
+            .setBorder(null)
+            .setTextAlignment(alignment)
+        if (isHeader) {
+            cell.setBackgroundColor(ColorConstants.LIGHT_GRAY)
+        }
+        return cell
+    }
+
+    private fun statusColor(status: String): com.itextpdf.kernel.colors.Color {
+        return when (status.uppercase()) {
+            "REFUNDED" -> ColorConstants.LIGHT_GRAY
+            "FAILED" -> ColorConstants.PINK
+            "PENDING" -> ColorConstants.YELLOW
+            else -> ColorConstants.GREEN
+        }
+    }
+
     /**
      * Formats an ISO 8601 date string to a human-readable format.
      *
@@ -395,7 +677,7 @@ class BillServiceImpl(
             val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy")
                 .withZone(ZoneId.systemDefault())
             formatter.format(instant)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Return original string if parsing fails
             dateString
         }
@@ -408,7 +690,7 @@ class BillServiceImpl(
      * @param userEmail The user's email address
      * @return HTML email content
      */
-    private fun buildBillEmailHtml(invoiceNumber: String, userEmail: String): String {
+    private fun buildBillEmailHtml(invoiceNumber: String): String {
         return """
             <!DOCTYPE html>
             <html>
@@ -500,6 +782,111 @@ class BillServiceImpl(
                         </div>
 
                         <p>We appreciate your business and look forward to continuing to serve you.</p>
+                    </div>
+                    <div class="footer">
+                        <p>Thank you for using Androidplay</p>
+                        <p style="font-size: 12px; color: #999;">This is an automated message. Please do not reply to this email.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
+    private fun buildPaymentEmailHtml(payment: Payment): String {
+        val amountText = payment.amount?.let {
+            String.format(Locale.ENGLISH, "INR %.2f", it.toDouble() / 100.0)
+        } ?: "N/A"
+        val statusText = payment.status ?: "N/A"
+        val serviceTypeText = payment.serviceType?.name ?: "N/A"
+        val receiptText = payment.receipt ?: "N/A"
+        val paymentDate = formatBillDateTime(payment.verifiedAt ?: payment.createdAt)
+
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                        line-height: 1.6;
+                        color: #333;
+                        max-width: 600px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }
+                    .container {
+                        background-color: #f9f9f9;
+                        border-radius: 8px;
+                        padding: 30px;
+                        border: 1px solid #e0e0e0;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 24px;
+                    }
+                    .header h1 {
+                        color: #2c3e50;
+                        margin: 0;
+                        font-size: 22px;
+                    }
+                    .content {
+                        background-color: white;
+                        padding: 20px;
+                        border-radius: 6px;
+                        margin-bottom: 20px;
+                    }
+                    .details {
+                        background-color: #f8f9fa;
+                        padding: 15px;
+                        border-radius: 4px;
+                        margin: 15px 0;
+                    }
+                    .details p {
+                        margin: 6px 0;
+                    }
+                    .attachment-note {
+                        background-color: #fff3cd;
+                        border-left: 4px solid #ffc107;
+                        padding: 12px;
+                        margin: 15px 0;
+                        border-radius: 4px;
+                        font-size: 14px;
+                    }
+                    .footer {
+                        text-align: center;
+                        color: #666;
+                        font-size: 14px;
+                        margin-top: 20px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>Payment receipt and invoice</h1>
+                    </div>
+                    <div class="content">
+                        <p>Hello,</p>
+                        <p>Thank you for your subscription purchase. Your payment has been verified and your bill is attached.</p>
+
+                        <div class="details">
+                            <p><strong>Payment ID:</strong> ${payment.paymentId}</p>
+                            <p><strong>Order ID:</strong> ${payment.orderId}</p>
+                            <p><strong>Receipt:</strong> $receiptText</p>
+                            <p><strong>Service:</strong> $serviceTypeText</p>
+                            <p><strong>Amount:</strong> $amountText</p>
+                            <p><strong>Status:</strong> $statusText</p>
+                            <p><strong>Verified At:</strong> $paymentDate</p>
+                        </div>
+
+                        <div class="attachment-note">
+                            <strong>Attachment:</strong> Your bill is attached as a PDF for your records.
+                        </div>
+
+                        <p>If you have any questions, please contact our support team.</p>
                     </div>
                     <div class="footer">
                         <p>Thank you for using Androidplay</p>

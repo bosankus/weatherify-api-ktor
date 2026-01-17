@@ -1,23 +1,16 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.LoginResponse
-import bose.ankush.data.model.TokenRefreshRequest
-import bose.ankush.data.model.User
-import bose.ankush.data.model.UserLoginRequest
-import bose.ankush.data.model.UserRegistrationRequest
+import bose.ankush.data.model.*
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
 import domain.model.Result
 import domain.repository.UserRepository
-import io.ktor.http.Cookie
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.receive
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.application
-import io.ktor.server.routing.post
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.request.*
+import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 import util.Constants
@@ -546,8 +539,50 @@ fun Route.authRoute() {
      */
     post(Constants.Api.REFRESH_TOKEN_ENDPOINT) {
         try {
+            // Check Content-Type before attempting to receive
+            val contentType = call.request.contentType()
+            if (!contentType.match(ContentType.Application.Json)) {
+                logger.warn("Refresh token request received without proper Content-Type: ${contentType.toString()}")
+                call.respondError(
+                    Constants.Messages.VALIDATION_ERROR + ": Content-Type must be application/json",
+                    mapOf("error" to "Invalid Content-Type", "received" to contentType.toString()),
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
             // Parse request body
-            val request = call.receive<TokenRefreshRequest>()
+            val request = try {
+                call.receive<TokenRefreshRequest>()
+            } catch (e: io.ktor.server.plugins.CannotTransformContentToTypeException) {
+                logger.error("Cannot transform request content to TokenRefreshRequest: ${e.message}", e)
+                call.respondError(
+                    Constants.Messages.VALIDATION_ERROR + ": Invalid request body. Expected JSON with 'token' field.",
+                    mapOf("error" to "Request body parsing failed", "details" to (e.message ?: "Unknown error")),
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            } catch (e: Exception) {
+                logger.error("Failed to parse refresh token request: ${e.message}", e)
+                call.respondError(
+                    Constants.Messages.VALIDATION_ERROR + ": Invalid request body. Expected JSON with 'token' field.",
+                    mapOf("error" to "Request body parsing failed", "details" to (e.message ?: "Unknown error")),
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
+            // Validate token is present
+            if (request.token.isBlank()) {
+                logger.warn("Refresh token request received with empty token")
+                call.respondError(
+                    Constants.Messages.VALIDATION_ERROR + ": Token field is required and cannot be empty.",
+                    Unit,
+                    HttpStatusCode.BadRequest
+                )
+                return@post
+            }
+
             logger.info("Token refresh request received")
 
             // Validate the expired token and extract email
@@ -778,22 +813,22 @@ fun Route.authRoute() {
             val errorMessage = when {
                 e is IllegalArgumentException -> Constants.Messages.VALIDATION_ERROR
                 e.message?.contains("auth", ignoreCase = true) == true ||
-                        e.message?.contains(
-                            "token",
-                            ignoreCase = true
-                        ) == true -> Constants.Messages.AUTHENTICATION_ERROR
+                    e.message?.contains(
+                        "token",
+                        ignoreCase = true
+                    ) == true -> Constants.Messages.AUTHENTICATION_ERROR
 
                 e.message?.contains("database", ignoreCase = true) == true ||
-                        e.message?.contains(
-                            "mongo",
-                            ignoreCase = true
-                        ) == true -> Constants.Messages.DATABASE_ERROR
+                    e.message?.contains(
+                        "mongo",
+                        ignoreCase = true
+                    ) == true -> Constants.Messages.DATABASE_ERROR
 
                 e.message?.contains("connection", ignoreCase = true) == true ||
-                        e.message?.contains(
-                            "network",
-                            ignoreCase = true
-                        ) == true -> Constants.Messages.NETWORK_ERROR
+                    e.message?.contains(
+                        "network",
+                        ignoreCase = true
+                    ) == true -> Constants.Messages.NETWORK_ERROR
 
                 else -> Constants.Messages.UNKNOWN_ERROR
             }

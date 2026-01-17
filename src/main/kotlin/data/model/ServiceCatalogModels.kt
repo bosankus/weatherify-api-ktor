@@ -167,7 +167,7 @@ data class ServiceSummary(
     val serviceCode: String,
     val displayName: String,
     val status: ServiceStatus,
-    val activeSubscriptions: Long,
+    val totalPurchases: Long,
     val lowestPrice: Int,
     val currency: String,
     val createdAt: String
@@ -185,10 +185,10 @@ data class ServiceListResponse(
 )
 
 /**
- * Monthly subscription data for analytics
+ * Monthly purchase data for analytics
  */
 @Serializable
-data class MonthlySubscriptionData(
+data class MonthlyPurchaseData(
     val month: String,
     val count: Long,
     val revenue: Double
@@ -199,12 +199,9 @@ data class MonthlySubscriptionData(
  */
 @Serializable
 data class ServiceAnalytics(
-    val activeSubscriptions: Long,
-    val totalSubscriptions: Long,
+    val totalPurchases: Long,
     val totalRevenue: Double,
-    val monthlyTrend: List<MonthlySubscriptionData>,
-    val popularPricingTier: String?,
-    val averageDuration: Double
+    val monthlyTrend: List<MonthlyPurchaseData>
 )
 
 /**

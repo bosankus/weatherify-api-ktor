@@ -300,6 +300,13 @@ class DatabaseModule(
     fun createSetUpdate(field: String, value: Any): Bson = Updates.set(field, value)
 
     /**
+     * Create an update operation to unset a field
+     * @param field The field name
+     * @return A Bson update operation
+     */
+    fun createUnsetUpdate(field: String): Bson = Updates.unset(field)
+
+    /**
      * Create an update operation with multiple set operations
      * @param updates A map of field names to values
      * @return A Bson update operation that sets all the fields to their values

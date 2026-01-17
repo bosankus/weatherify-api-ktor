@@ -25,6 +25,8 @@
         selectedUsers: new Set()
     };
 
+    const SELECTION_ENABLED = false;
+
     // ============= Performance Optimizations =============
     
     /**
@@ -63,7 +65,14 @@
 
         // Show skeleton loader during render
         if (UsersState.isLoading) {
-            tableBody.innerHTML = generateSkeletonRows(UsersState.pageSize);
+            const loadingRow = typeof createLoadingTableRow === 'function'
+                ? createLoadingTableRow(6, 'Loading users...')
+                : generateSkeletonRows(UsersState.pageSize);
+            if (loadingRow instanceof HTMLTableRowElement) {
+                tableBody.replaceChildren(loadingRow);
+            } else {
+                tableBody.innerHTML = loadingRow;
+            }
             return;
         }
 
@@ -83,33 +92,39 @@
         // Batch DOM update
         tableBody.replaceChildren(fragment);
         
-        // Update selection checkboxes
-        updateBulkSelectUI();
+        // Update selection checkboxes if enabled
+        if (SELECTION_ENABLED) {
+            updateBulkSelectUI();
+        }
     }
 
     /**
      * Create enhanced user row with better UX
+     * Uses consistent table row styling
      */
     function createUserRow(user) {
         const row = document.createElement('tr');
         row.className = 'user-row';
         row.dataset.email = user.email;
         
-        // Add hover effect class
-        row.addEventListener('mouseenter', () => row.classList.add('row-hover'));
-        row.addEventListener('mouseleave', () => row.classList.remove('row-hover'));
+        // Apply consistent row styling
+        if (typeof styleTableRow === 'function') {
+            styleTableRow(row);
+        }
 
-        // Selection checkbox
-        const selectCell = document.createElement('td');
-        selectCell.className = 'select-cell';
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'user-select-checkbox';
-        checkbox.dataset.email = user.email;
-        checkbox.checked = UsersState.selectedUsers.has(user.email);
-        checkbox.addEventListener('change', (e) => handleUserSelect(user.email, e.target.checked));
-        selectCell.appendChild(checkbox);
-        row.appendChild(selectCell);
+        if (SELECTION_ENABLED) {
+            // Selection checkbox
+            const selectCell = document.createElement('td');
+            selectCell.className = 'select-cell';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'user-select-checkbox';
+            checkbox.dataset.email = user.email;
+            checkbox.checked = UsersState.selectedUsers.has(user.email);
+            checkbox.addEventListener('change', (e) => handleUserSelect(user.email, e.target.checked));
+            selectCell.appendChild(checkbox);
+            row.appendChild(selectCell);
+        }
 
         // Email cell with avatar and badges
         const emailCell = createEmailCell(user);
@@ -131,8 +146,11 @@
         const premiumCell = createPremiumCell(user);
         row.appendChild(premiumCell);
 
-        // Actions menu
+        // Actions menu - ensure consistent styling
         const actionsCell = createActionsCell(user);
+        if (actionsCell && !actionsCell.style.textAlign) {
+            actionsCell.style.textAlign = 'center';
+        }
         row.appendChild(actionsCell);
 
         return row;
@@ -141,50 +159,56 @@
 
     /**
      * Create email cell with avatar and badges
+     * Uses consistent table cell styling
      */
     function createEmailCell(user) {
-        const cell = document.createElement('td');
+        const cell = typeof createTableCell === 'function' 
+            ? createTableCell('', { className: 'email-cell' })
+            : document.createElement('td');
         cell.className = 'email-cell';
         
         const container = document.createElement('div');
         container.className = 'email-container';
+        container.style.display = 'flex';
+        container.style.alignItems = 'center';
+        container.style.gap = '0.75rem';
         
         // Avatar with first letter
         const avatar = document.createElement('div');
         avatar.className = 'user-avatar';
         avatar.textContent = user.email.charAt(0).toUpperCase();
         avatar.style.background = generateAvatarColor(user.email);
+        avatar.style.width = '32px';
+        avatar.style.height = '32px';
+        avatar.style.borderRadius = '50%';
+        avatar.style.display = 'flex';
+        avatar.style.alignItems = 'center';
+        avatar.style.justifyContent = 'center';
+        avatar.style.color = 'white';
+        avatar.style.fontWeight = '600';
+        avatar.style.flexShrink = '0';
         container.appendChild(avatar);
         
         // Email and badges wrapper
         const textWrapper = document.createElement('div');
         textWrapper.className = 'email-text-wrapper';
+        textWrapper.style.display = 'flex';
+        textWrapper.style.flexDirection = 'column';
+        textWrapper.style.gap = '0.25rem';
+        textWrapper.style.minWidth = '0';
+        textWrapper.style.flex = '1';
         
         const emailText = document.createElement('span');
         emailText.className = 'email-text';
         emailText.textContent = user.email;
         emailText.title = user.email;
+        emailText.style.fontSize = '0.875rem';
+        emailText.style.color = 'var(--text-color)';
+        emailText.style.overflow = 'hidden';
+        emailText.style.textOverflow = 'ellipsis';
+        emailText.style.whiteSpace = 'nowrap';
         textWrapper.appendChild(emailText);
         
-        // Badges container
-        const badgesContainer = document.createElement('div');
-        badgesContainer.className = 'badges-container';
-        
-        if (user.role === 'ADMIN') {
-            const adminBadge = document.createElement('span');
-            adminBadge.className = 'badge badge-admin';
-            adminBadge.textContent = 'ADMIN';
-            badgesContainer.appendChild(adminBadge);
-        }
-        
-        if (user.isPremium === true) {
-            const premiumBadge = document.createElement('span');
-            premiumBadge.className = 'badge badge-premium';
-            premiumBadge.textContent = 'PREMIUM';
-            badgesContainer.appendChild(premiumBadge);
-        }
-        
-        textWrapper.appendChild(badgesContainer);
         container.appendChild(textWrapper);
         cell.appendChild(container);
         
@@ -193,22 +217,32 @@
 
     /**
      * Create created at cell with relative time
+     * Uses consistent table cell styling
      */
     function createCreatedAtCell(createdAt) {
-        const cell = document.createElement('td');
+        const cell = typeof createTableCell === 'function' 
+            ? createTableCell('', { className: 'created-cell' })
+            : document.createElement('td');
         cell.className = 'created-cell';
         
         const container = document.createElement('div');
         container.className = 'date-container';
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.gap = '0.25rem';
         
         const dateText = document.createElement('span');
         dateText.className = 'date-text';
         dateText.textContent = formatDate(createdAt);
+        dateText.style.fontSize = '0.875rem';
+        dateText.style.color = 'var(--text-color)';
         container.appendChild(dateText);
         
         const relativeText = document.createElement('span');
         relativeText.className = 'date-relative';
         relativeText.textContent = getRelativeTime(createdAt);
+        relativeText.style.fontSize = '0.75rem';
+        relativeText.style.color = 'var(--text-secondary)';
         container.appendChild(relativeText);
         
         cell.appendChild(container);
@@ -218,15 +252,19 @@
 
     /**
      * Create role cell with enhanced dropdown
+     * Uses consistent table cell styling
      */
     function createRoleCell(user) {
-        const cell = document.createElement('td');
+        const cell = typeof createTableCell === 'function' 
+            ? createTableCell('', { className: 'role-cell' })
+            : document.createElement('td');
         cell.className = 'role-cell';
         
         const select = document.createElement('select');
         select.className = 'role-select enhanced-select';
         select.dataset.email = user.email;
         select.dataset.prevValue = user.role || 'USER';
+        select.style.fontSize = '0.875rem'; // Match table font size
         
         ['USER', 'MODERATOR', 'ADMIN'].forEach(role => {
             const option = document.createElement('option');
@@ -246,9 +284,12 @@
 
     /**
      * Create status cell with enhanced toggle
+     * Uses consistent table cell styling
      */
     function createStatusCell(user) {
-        const cell = document.createElement('td');
+        const cell = typeof createTableCell === 'function' 
+            ? createTableCell('', { className: 'status-cell' })
+            : document.createElement('td');
         cell.className = 'status-cell';
         
         const toggle = document.createElement('label');
@@ -260,6 +301,7 @@
         input.dataset.email = user.email;
         input.dataset.prevChecked = String(!!user.isActive);
         
+        input.setAttribute('aria-label', 'Toggle user status');
         input.addEventListener('change', function() {
             handleStatusChange(user.email, this.checked, this);
         });
@@ -267,13 +309,8 @@
         const slider = document.createElement('span');
         slider.className = 'status-slider';
         
-        const statusLabel = document.createElement('span');
-        statusLabel.className = 'status-label';
-        statusLabel.textContent = user.isActive ? 'Active' : 'Inactive';
-        
         toggle.appendChild(input);
         toggle.appendChild(slider);
-        toggle.appendChild(statusLabel);
         cell.appendChild(toggle);
         
         return cell;
@@ -295,6 +332,7 @@
         input.dataset.email = user.email;
         input.dataset.prevChecked = String(!!user.isPremium);
         
+        input.setAttribute('aria-label', 'Toggle premium access');
         input.addEventListener('change', function() {
             handlePremiumChange(user.email, this.checked, this);
         });
@@ -314,8 +352,13 @@
      * Create actions cell with dropdown menu
      */
     function createActionsCell(user) {
-        const cell = document.createElement('td');
+        const cell = typeof createTableCell === 'function' 
+            ? createTableCell('', { align: 'center', className: 'actions-cell' })
+            : document.createElement('td');
         cell.className = 'actions-cell';
+        if (!cell.style.textAlign) {
+            cell.style.textAlign = 'center';
+        }
         
         const menuContainer = document.createElement('div');
         menuContainer.className = 'actions-menu-container';
@@ -327,21 +370,17 @@
         
         const menu = document.createElement('div');
         menu.className = 'actions-menu';
-        
-        // View details action
-        const viewAction = createMenuItem('👤', 'View Details', () => showUserDetails(user));
-        menu.appendChild(viewAction);
-        
+
         // Send notification action
-        const notifyAction = createMenuItem('🔔', 'Send Notification', () => showNotificationModal(user));
+        const notifyAction = createMenuItem('Send Notification', () => openNotificationPanel(user));
         menu.appendChild(notifyAction);
-        
+
         // Reset password action
-        const resetAction = createMenuItem('🔑', 'Reset Password', () => handlePasswordReset(user));
+        const resetAction = createMenuItem('Reset Password', () => showResetPasswordDialog(user));
         menu.appendChild(resetAction);
-        
+
         // Delete user action (danger)
-        const deleteAction = createMenuItem('🗑️', 'Delete User', () => handleDeleteUser(user), 'danger');
+        const deleteAction = createMenuItem('Delete User', () => showDeleteUserDialog(user), 'danger');
         menu.appendChild(deleteAction);
         
         menuButton.addEventListener('click', (e) => {
@@ -359,10 +398,10 @@
     /**
      * Create menu item
      */
-    function createMenuItem(icon, text, onClick, variant = 'default') {
+    function createMenuItem(text, onClick, variant = 'default') {
         const item = document.createElement('button');
         item.className = `menu-item menu-item-${variant}`;
-        item.innerHTML = `<span class="menu-icon">${icon}</span><span class="menu-text">${text}</span>`;
+        item.innerHTML = `<span class="menu-text">${text}</span>`;
         item.addEventListener('click', (e) => {
             e.stopPropagation();
             onClick();
@@ -438,9 +477,6 @@
                 </div>
                 
                 <button id="clear-filters" class="btn btn-secondary btn-sm">Clear Filters</button>
-                <button id="refresh-users" class="btn btn-primary btn-sm">
-                    <span class="refresh-icon">↻</span> Refresh
-                </button>
             </div>
             
             <div class="bulk-actions-bar" id="bulk-actions-bar" style="display: none;">
@@ -456,6 +492,11 @@
                 </div>
             </div>
         `;
+
+        if (!SELECTION_ENABLED) {
+            const bulkBar = document.getElementById('bulk-actions-bar');
+            if (bulkBar) bulkBar.remove();
+        }
         
         // Bind filter events
         bindFilterEvents();
@@ -470,7 +511,6 @@
         const statusFilter = document.getElementById('status-filter');
         const premiumFilter = document.getElementById('premium-filter');
         const clearBtn = document.getElementById('clear-filters');
-        const refreshBtn = document.getElementById('refresh-users');
         const selectAllCheckbox = document.getElementById('select-all-users');
         
         if (searchInput) {
@@ -505,13 +545,7 @@
             clearBtn.addEventListener('click', clearFilters);
         }
         
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => {
-                refreshUsers();
-            });
-        }
-        
-        if (selectAllCheckbox) {
+        if (selectAllCheckbox && SELECTION_ENABLED) {
             selectAllCheckbox.addEventListener('change', (e) => {
                 handleSelectAll(e.target.checked);
             });
@@ -636,6 +670,7 @@
      * Update bulk select UI
      */
     function updateBulkSelectUI() {
+        if (!SELECTION_ENABLED) return;
         const selectAllCheckbox = document.getElementById('select-all-users');
         if (!selectAllCheckbox) return;
         
@@ -650,6 +685,7 @@
      * Bind bulk action buttons
      */
     function bindBulkActions() {
+        if (!SELECTION_ENABLED) return;
         const bulkActivate = document.getElementById('bulk-activate');
         const bulkDeactivate = document.getElementById('bulk-deactivate');
         const bulkPremium = document.getElementById('bulk-premium');
@@ -800,11 +836,6 @@
                 showMessage('success', `User ${statusText} successfully`);
                 
                 // Update status label
-                const label = checkboxEl.parentElement.querySelector('.status-label');
-                if (label) {
-                    label.textContent = isActive ? 'Active' : 'Inactive';
-                }
-                
                 // Invalidate cache
                 if (window.CachedAPI) {
                     window.CachedAPI.invalidateUsers();
@@ -862,117 +893,239 @@
     // ============= User Actions =============
 
     /**
-     * Show user details modal
+     * Open notification sliding panel
      */
-    function showUserDetails(user) {
-        const content = `
-            <div class="user-details-modal">
-                <div class="detail-section">
-                    <h3>User Information</h3>
-                    <div class="detail-row">
-                        <span class="label">Email:</span>
-                        <span class="value">${escapeHtml(user.email)}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Role:</span>
-                        <span class="value">${escapeHtml(user.role)}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Status:</span>
-                        <span class="value">${user.isActive ? '✓ Active' : '✗ Inactive'}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Premium:</span>
-                        <span class="value">${user.isPremium ? '⭐ Yes' : 'No'}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Created:</span>
-                        <span class="value">${formatDate(user.createdAt)}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Member for:</span>
-                        <span class="value">${getRelativeTime(user.createdAt)}</span>
-                    </div>
+    function openNotificationPanel(user) {
+        if (typeof window.showNotificationPanel === 'function') {
+            window.showNotificationPanel(user.email);
+            return;
+        }
+        showMessage('error', 'Notification panel is unavailable');
+    }
+
+    /**
+     * Show reset password dialog
+     */
+    function showResetPasswordDialog(user) {
+        const dialog = createUserActionDialog({
+            title: 'Reset Password',
+            subtitle: `Set a new password for ${escapeHtml(user.email)}`,
+            confirmText: 'Update Password',
+            confirmVariant: 'primary',
+            bodyHtml: `
+                <div class="user-action-field">
+                    <label class="user-action-label" for="reset-password-input">New password</label>
+                    <input id="reset-password-input" type="password" class="user-action-input" placeholder="Enter a strong password" autocomplete="new-password">
                 </div>
-            </div>
-        `;
-        
-        if (typeof showModal === 'function') {
-            showModal('User Details', content);
-        }
-    }
+                <div class="user-action-field">
+                    <label class="user-action-label" for="reset-password-confirm">Confirm password</label>
+                    <input id="reset-password-confirm" type="password" class="user-action-input" placeholder="Re-enter password" autocomplete="new-password">
+                </div>
+                <div class="user-action-hint">Use at least 8 characters with upper, lower, number, and special.</div>
+                <div class="user-action-error" id="reset-password-error"></div>
+            `
+        });
 
-    /**
-     * Show notification modal
-     */
-    function showNotificationModal(user) {
-        const content = `
-            <div class="notification-modal">
-                <form id="notification-form">
-                    <div class="form-group">
-                        <label for="notif-title">Title</label>
-                        <input type="text" id="notif-title" class="form-control" 
-                               placeholder="Notification title" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="notif-body">Message</label>
-                        <textarea id="notif-body" class="form-control" rows="4" 
-                                  placeholder="Notification message" required></textarea>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Send Notification</button>
-                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    </div>
-                </form>
-            </div>
-        `;
-        
-        if (typeof showModal === 'function') {
-            showModal('Send Notification', content);
-            
-            // Bind form submit
-            setTimeout(() => {
-                const form = document.getElementById('notification-form');
-                if (form) {
-                    form.addEventListener('submit', async (e) => {
-                        e.preventDefault();
-                        const title = document.getElementById('notif-title').value;
-                        const body = document.getElementById('notif-body').value;
-                        
-                        try {
-                            const response = await window.UserRoute.notify(user.email, { title, body });
-                            const data = await response.json();
-                            
-                            if (data.status === true) {
-                                showMessage('success', 'Notification sent successfully');
-                                if (typeof closeModal === 'function') closeModal();
-                            } else {
-                                throw new Error(data.message || 'Failed to send notification');
-                            }
-                        } catch (error) {
-                            showMessage('error', error.message || 'Failed to send notification');
-                        }
-                    });
+        const passwordInput = dialog.container.querySelector('#reset-password-input');
+        const confirmInput = dialog.container.querySelector('#reset-password-confirm');
+        const errorEl = dialog.container.querySelector('#reset-password-error');
+
+        dialog.onConfirm(async () => {
+            const password = passwordInput?.value || '';
+            const confirm = confirmInput?.value || '';
+
+            if (!password || password.length < 8) {
+                showDialogError(errorEl, 'Password must be at least 8 characters.');
+                passwordInput?.focus();
+                return;
+            }
+            if (password !== confirm) {
+                showDialogError(errorEl, 'Passwords do not match.');
+                confirmInput?.focus();
+                return;
+            }
+
+            setDialogLoading(dialog, true, 'Updating...');
+            try {
+                if (!window.UserRoute || typeof window.UserRoute.resetPassword !== 'function') {
+                    throw new Error('Reset password API not available');
                 }
-            }, 100);
-        }
+                const response = await window.UserRoute.resetPassword(user.email, password);
+                const data = await response.json();
+                if (!response.ok || data.status !== true) {
+                    throw new Error(data.message || 'Failed to reset password');
+                }
+                showMessage('success', `Password updated for ${user.email}`);
+                dialog.close();
+            } catch (error) {
+                showDialogError(errorEl, error.message || 'Failed to reset password');
+            } finally {
+                setDialogLoading(dialog, false, 'Update Password');
+            }
+        });
     }
 
     /**
-     * Handle password reset
+     * Show delete confirmation dialog
      */
-    function handlePasswordReset(user) {
-        if (confirm(`Send password reset email to ${user.email}?`)) {
-            showMessage('info', 'Password reset feature coming soon');
-        }
+    function showDeleteUserDialog(user) {
+        const dialog = createUserActionDialog({
+            title: 'Delete User',
+            subtitle: `This will permanently delete ${escapeHtml(user.email)}`,
+            confirmText: 'Delete User',
+            confirmVariant: 'danger',
+            bodyHtml: `
+                <p class="user-action-warning">
+                    This action cannot be undone. Type the user's email to confirm.
+                </p>
+                <div class="user-action-field">
+                    <label class="user-action-label" for="delete-user-confirm">Confirm email</label>
+                    <input id="delete-user-confirm" type="text" class="user-action-input" placeholder="${escapeHtml(user.email)}" autocomplete="off">
+                </div>
+                <div class="user-action-error" id="delete-user-error"></div>
+            `
+        });
+
+        const confirmInput = dialog.container.querySelector('#delete-user-confirm');
+        const errorEl = dialog.container.querySelector('#delete-user-error');
+
+        dialog.onConfirm(async () => {
+            const typed = (confirmInput?.value || '').trim();
+            if (typed !== user.email) {
+                showDialogError(errorEl, 'Email does not match.');
+                confirmInput?.focus();
+                return;
+            }
+
+            setDialogLoading(dialog, true, 'Deleting...');
+            try {
+                if (!window.UserRoute || typeof window.UserRoute.deleteUser !== 'function') {
+                    throw new Error('Delete user API not available');
+                }
+                const response = await window.UserRoute.deleteUser(user.email);
+                const data = await response.json();
+                if (!response.ok || data.status !== true) {
+                    throw new Error(data.message || 'Failed to delete user');
+                }
+                showMessage('success', `User deleted: ${user.email}`);
+                dialog.close();
+                await refreshUsers();
+            } catch (error) {
+                showDialogError(errorEl, error.message || 'Failed to delete user');
+            } finally {
+                setDialogLoading(dialog, false, 'Delete User');
+            }
+        });
     }
 
     /**
-     * Handle delete user
+     * Create a reusable dialog for user actions
      */
-    function handleDeleteUser(user) {
-        if (confirm(`Are you sure you want to delete user ${user.email}? This action cannot be undone.`)) {
-            showMessage('warning', 'Delete user feature coming soon');
+    function createUserActionDialog(options) {
+        const existing = document.getElementById('user-action-dialog');
+        if (existing) existing.remove();
+        const existingBackdrop = document.getElementById('user-action-backdrop');
+        if (existingBackdrop) existingBackdrop.remove();
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'user-action-backdrop';
+        backdrop.className = 'user-action-backdrop';
+
+        const dialog = document.createElement('div');
+        dialog.id = 'user-action-dialog';
+        dialog.className = 'user-action-dialog';
+
+        dialog.innerHTML = `
+            <div class="user-action-header">
+                <div>
+                    <h3>${options.title}</h3>
+                    <p>${options.subtitle || ''}</p>
+                </div>
+                <button type="button" class="user-action-close" aria-label="Close dialog">×</button>
+            </div>
+            <div class="user-action-body">
+                ${options.bodyHtml || ''}
+            </div>
+            <div class="user-action-footer">
+                <button type="button" class="user-action-btn secondary" data-action="cancel">Cancel</button>
+                <button type="button" class="user-action-btn ${options.confirmVariant || 'primary'}" data-action="confirm">${options.confirmText || 'Confirm'}</button>
+            </div>
+        `;
+
+        document.body.appendChild(backdrop);
+        document.body.appendChild(dialog);
+
+        const close = () => {
+            dialog.classList.remove('open');
+            backdrop.classList.remove('open');
+            setTimeout(() => {
+                dialog.remove();
+                backdrop.remove();
+            }, 200);
+        };
+
+        const closeBtn = dialog.querySelector('.user-action-close');
+        const cancelBtn = dialog.querySelector('[data-action="cancel"]');
+        const confirmBtn = dialog.querySelector('[data-action="confirm"]');
+
+        const onConfirmHandlers = [];
+        const onConfirm = (handler) => {
+            if (typeof handler === 'function') {
+                onConfirmHandlers.push(handler);
+            }
+        };
+
+        const handleConfirm = () => {
+            onConfirmHandlers.forEach(handler => handler());
+        };
+
+        const escapeHandler = (event) => {
+            if (event.key === 'Escape') {
+                closeDialog();
+            }
+        };
+
+        const closeDialog = () => {
+            document.removeEventListener('keydown', escapeHandler);
+            close();
+        };
+
+        closeBtn?.addEventListener('click', closeDialog);
+        cancelBtn?.addEventListener('click', closeDialog);
+        backdrop.addEventListener('click', closeDialog);
+        confirmBtn?.addEventListener('click', handleConfirm);
+        document.addEventListener('keydown', escapeHandler);
+
+        requestAnimationFrame(() => {
+            dialog.classList.add('open');
+            backdrop.classList.add('open');
+        });
+
+        return {
+            container: dialog,
+            confirmButton: confirmBtn,
+            close: closeDialog,
+            onConfirm
+        };
+    }
+
+    function showDialogError(errorEl, message) {
+        if (!errorEl) return;
+        errorEl.textContent = message;
+        errorEl.classList.add('show');
+    }
+
+    function setDialogLoading(dialog, isLoading, text) {
+        if (!dialog || !dialog.confirmButton) return;
+        const btn = dialog.confirmButton;
+        if (!btn.dataset.originalText) {
+            btn.dataset.originalText = btn.textContent || '';
+        }
+        btn.disabled = isLoading;
+        if (isLoading) {
+            btn.textContent = text || 'Working...';
+        } else {
+            btn.textContent = btn.dataset.originalText;
         }
     }
 
@@ -1052,7 +1205,6 @@
         for (let i = 0; i < count; i++) {
             html += `
                 <tr class="skeleton-row">
-                    <td><div class="skeleton skeleton-checkbox"></div></td>
                     <td><div class="skeleton skeleton-text"></div></td>
                     <td><div class="skeleton skeleton-text"></div></td>
                     <td><div class="skeleton skeleton-select"></div></td>
@@ -1071,7 +1223,7 @@
     function createEmptyRow() {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
-        cell.colSpan = 7;
+        cell.colSpan = 6;
         cell.className = 'empty-cell';
         cell.innerHTML = `
             <div class="empty-state">
@@ -1143,25 +1295,12 @@
      * Refresh users list
      */
     async function refreshUsers() {
-        const refreshBtn = document.getElementById('refresh-users');
-        const refreshIcon = refreshBtn?.querySelector('.refresh-icon');
-        
-        if (refreshIcon) {
-            refreshIcon.classList.add('spinning');
-        }
-        
         // Invalidate cache
         if (window.CachedAPI) {
             window.CachedAPI.invalidateUsers();
         }
         
         await loadUsers(UsersState.currentPage, UsersState.pageSize);
-        
-        if (refreshIcon) {
-            setTimeout(() => {
-                refreshIcon.classList.remove('spinning');
-            }, 500);
-        }
     }
 
     /**
@@ -1255,7 +1394,6 @@
         refreshUsers,
         applyFilters,
         clearFilters,
-        showUserDetails,
         initializeUsersModule
     };
 

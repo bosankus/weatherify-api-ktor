@@ -104,7 +104,7 @@ function isAdmin() {
 function navigateToAdminPage(url) {
     const token = getToken();
     if (!token) {
-        window.location.href = '/admin/login?error=auth_required';
+        window.location.href = '/login?error=auth_required';
         return;
     }
     window.location.href = url;
@@ -125,8 +125,8 @@ function logout() {
         if (typeof sessionStorage !== "undefined") {
             sessionStorage.clear();
         }
-        const isAdminPortal = window.location && window.location.pathname && window.location.pathname.startsWith('/admin');
-        window.location.href = isAdminPortal ? '/admin/login' : '/login';
+        const isAdminPortal = window.location && window.location.pathname && (window.location.pathname === '/' || window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/finance') || window.location.pathname.startsWith('/tools') || window.location.pathname.startsWith('/users') || window.location.pathname.startsWith('/services') || window.location.pathname.startsWith('/refunds'));
+        window.location.href = '/login';
     })
     .catch(() => {
         // Even if request fails, clear local/session storage and redirect appropriately
@@ -134,8 +134,8 @@ function logout() {
         if (typeof sessionStorage !== "undefined") {
             sessionStorage.clear();
         }
-        const isAdminPortal = window.location && window.location.pathname && window.location.pathname.startsWith('/admin');
-        window.location.href = isAdminPortal ? '/admin/login' : '/login';
+        const isAdminPortal = window.location && window.location.pathname && (window.location.pathname === '/' || window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/finance') || window.location.pathname.startsWith('/tools') || window.location.pathname.startsWith('/users') || window.location.pathname.startsWith('/services') || window.location.pathname.startsWith('/refunds'));
+        window.location.href = '/login';
     });
 }
 
@@ -205,7 +205,7 @@ document.addEventListener('DOMContentLoaded', function() {
 (function() {
     const params = new URLSearchParams(window.location.search);
     if (
-        window.location.pathname === '/admin/login' &&
+        window.location.pathname === '/login' &&
         (params.get('error') === 'session_expired' || params.get('error') === 'auth_required')
     ) {
         removeToken();
@@ -218,13 +218,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // --- Added for admin dashboard authenticated fetch helpers ---
 /**
- * Get a valid token. Placeholder for future refresh logic.
+ * Get a valid token (checks expiry if present).
  * @returns {Promise<string|null>} token or null
  */
 function getValidToken() {
     try {
         const token = getToken();
-        return Promise.resolve(token || null);
+        if (!token) return Promise.resolve(null);
+        const payload = parseJwt(token);
+        if (payload && payload.exp) {
+            const nowSeconds = Math.floor(Date.now() / 1000);
+            if (payload.exp <= nowSeconds) {
+                // Token expired, clear it so cookie auth can take over.
+                removeToken();
+                return Promise.resolve(null);
+            }
+        }
+        return Promise.resolve(token);
     } catch (e) {
         return Promise.resolve(null);
     }
@@ -240,7 +250,13 @@ function authFetch(url, options) {
     const headers = new Headers(opts.headers || {});
     const token = getToken();
     if (token) {
-        headers.set('Authorization', 'Bearer ' + token);
+        const payload = parseJwt(token);
+        if (!payload || !payload.exp || payload.exp > Math.floor(Date.now() / 1000)) {
+            headers.set('Authorization', 'Bearer ' + token);
+        } else {
+            // Token expired, clear it and rely on cookie auth.
+            removeToken();
+        }
     }
     opts.headers = headers;
     // Include cookies for routes using cookie-based auth

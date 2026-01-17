@@ -191,25 +191,28 @@
                 const tab = window.AdminTabManager.getTab('reports');
                 if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('reports')) {
                     console.log('[Tab] Reports already loaded, skipping API call');
+                    // Still ensure UI is visible
+                    if (typeof window.ReportsModule !== 'undefined' && 
+                        typeof window.ReportsModule.initialize === 'function') {
+                        window.ReportsModule.initialize();
+                    }
                     return;
                 }
 
                 window.AdminTabManager.markLoading('reports');
                 
                 try {
-                    // Use cached API for reports data
-                    if (typeof window.CachedAPI !== 'undefined') {
-                        const users = await window.CachedAPI.getAllUsers(forceRefresh);
-                        window.AdminTabManager.markLoaded('reports', { users });
-                        
-                        // Initialize reports if function exists
-                        if (typeof window.initReports === 'function') {
-                            window.initReports(users);
-                        } else if (typeof window.ReportsStateManager !== 'undefined') {
-                            window.ReportsStateManager.setUsers(users);
-                            if (typeof window.render === 'function') {
-                                window.render();
-                            }
+                    // Initialize reports using ReportsModule - this will fetch and display data
+                    if (typeof window.ReportsModule !== 'undefined' && 
+                        typeof window.ReportsModule.initialize === 'function') {
+                        window.ReportsModule.initialize();
+                        // Wait a bit for data to load
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    } else {
+                        // Fallback: try to call ensureInitialized directly if available
+                        const reportsPanel = document.getElementById('reports');
+                        if (reportsPanel) {
+                            console.warn('[Tab] ReportsModule not available, reports may not load properly');
                         }
                     }
                     
@@ -219,8 +222,10 @@
                         // Small delay to ensure DOM is ready
                         setTimeout(() => {
                             window.ReportsChartsModule.initialize();
-                        }, 100);
+                        }, 200);
                     }
+                    
+                    window.AdminTabManager.markLoaded('reports');
                 } catch (error) {
                     console.error('[Tab] Error loading Reports:', error);
                     window.AdminTabManager.markError('reports', error.message);
@@ -228,6 +233,44 @@
                 }
             },
             refreshInterval: 5 * 60 * 1000 // 5 minutes
+        },
+
+        'finance': {
+            name: 'Finance',
+            loadFn: async function(forceRefresh = false) {
+                console.log('[Tab] Loading Finance tab', { forceRefresh });
+
+                const tab = window.AdminTabManager.getTab('finance');
+                if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('finance', 3 * 60 * 1000)) {
+                    console.log('[Tab] Finance already loaded, skipping API call');
+                    // Ensure UI is initialized even when cached
+                    if (window.FinanceModule && typeof window.FinanceModule.ensureInitialized === 'function') {
+                        window.FinanceModule.ensureInitialized();
+                    } else if (typeof window.initializeFinanceTab === 'function') {
+                        window.initializeFinanceTab();
+                    }
+                    return;
+                }
+
+                window.AdminTabManager.markLoading('finance');
+
+                try {
+                    if (window.FinanceModule && typeof window.FinanceModule.ensureInitialized === 'function') {
+                        window.FinanceModule.ensureInitialized();
+                    } else if (typeof window.initializeFinanceTab === 'function') {
+                        window.initializeFinanceTab();
+                    } else {
+                        console.warn('[Tab] Finance initialization functions not found');
+                    }
+
+                    window.AdminTabManager.markLoaded('finance');
+                } catch (error) {
+                    console.error('[Tab] Error loading Finance:', error);
+                    window.AdminTabManager.markError('finance', error.message);
+                    throw error;
+                }
+            },
+            refreshInterval: 3 * 60 * 1000 // 3 minutes
         },
 
         'payments': {
@@ -302,42 +345,74 @@
             refreshInterval: 3 * 60 * 1000 // 3 minutes
         },
 
-        'services': {
-            name: 'Services',
+        'service-catalog': {
+            name: 'Service Catalog',
             loadFn: async function(forceRefresh = false) {
-                console.log('[Tab] Loading Services tab', { forceRefresh });
-                
-                const tab = window.AdminTabManager.getTab('services');
-                if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('services', 10 * 60 * 1000)) {
-                    console.log('[Tab] Services already loaded, skipping API call');
+                console.log('[Tab] Loading Service Catalog tab', { forceRefresh });
+
+                const tab = window.AdminTabManager.getTab('service-catalog');
+                if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('service-catalog', 5 * 60 * 1000)) {
+                    console.log('[Tab] Service Catalog already loaded, skipping API call');
                     return;
                 }
 
-                window.AdminTabManager.markLoading('services');
-                
+                window.AdminTabManager.markLoading('service-catalog');
+
                 try {
-                    if (typeof window.CachedAPI !== 'undefined') {
-                        const data = await window.CachedAPI.getServices(1, 20, {}, forceRefresh);
-                        window.AdminTabManager.markLoaded('services', data);
-                        
-                        // Render services if function exists
-                        if (typeof window.loadServices === 'function') {
-                            window.loadServices(1, 20);
-                        }
+                    if (typeof window.initializeServiceCatalog === 'function') {
+                        await window.initializeServiceCatalog({ forceRefresh: true });
+                    } else if (window.ServiceCatalogTab && typeof window.ServiceCatalogTab.initialize === 'function') {
+                        await window.ServiceCatalogTab.initialize({ forceRefresh: true });
+                    } else {
+                        console.warn('[Tab] Service Catalog module not available');
                     }
+
+                    window.AdminTabManager.markLoaded('service-catalog');
                 } catch (error) {
-                    console.error('[Tab] Error loading Services:', error);
-                    window.AdminTabManager.markError('services', error.message);
+                    console.error('[Tab] Error loading Service Catalog:', error);
+                    window.AdminTabManager.markError('service-catalog', error.message);
                     throw error;
                 }
             },
-            refreshInterval: 10 * 60 * 1000 // 10 minutes
+            refreshInterval: 5 * 60 * 1000 // 5 minutes
         },
 
         'tools': {
             name: 'Tools',
             loadFn: async function() {
-                // Tools tab doesn't need data loading
+                console.log('[Tab] Loading Tools tab');
+                
+                // Tools tab doesn't need data loading, but ensure buttons are bound and UI is visible
+                // The buttons are already bound in initializeAdmin(), but we can verify
+                try {
+                    // Ensure admin is initialized (this binds tool buttons)
+                    if (typeof window.initializeAdmin === 'function') {
+                        // Only initialize if not already done
+                        if (!window.__adminInitialized) {
+                            window.initializeAdmin();
+                            window.__adminInitialized = true;
+                        }
+                    }
+                    
+                    // Ensure tools panel is visible and has proper styling
+                    const toolsPanel = document.getElementById('tools');
+                    if (toolsPanel) {
+                        toolsPanel.style.display = 'block';
+                        toolsPanel.classList.add('active');
+                        
+                    // Ensure tools grid is visible
+                    const toolsGrid = toolsPanel.querySelector('.data-grid');
+                    if (toolsGrid) {
+                        toolsGrid.style.display = 'grid';
+                        toolsGrid.style.visibility = 'visible';
+                    }
+                    } else {
+                        console.warn('[Tab] Tools panel not found in DOM');
+                    }
+                } catch (error) {
+                    console.warn('[Tab] Error ensuring tools initialization:', error);
+                }
+                
                 window.AdminTabManager.markLoaded('tools');
             },
             refreshInterval: null // No auto-refresh
@@ -383,7 +458,9 @@
             
             newButton.addEventListener('click', async function(e) {
                 e.preventDefault();
+                e.stopPropagation();
                 const tabId = this.getAttribute('data-tab');
+                console.log(`[Tab Manager] Tab clicked: ${tabId}`);
                 await activateTab(tabId);
             });
         });
@@ -402,8 +479,20 @@
             console.log(`[Tab Manager] Initial active tab: ${tabId}`);
             window.AdminTabManager.setActive(tabId);
             
+            // Update visibility first
+            updateTabVisibility(tabId);
+            
             // Load initial tab data
             activateTab(tabId, false);
+        } else {
+            // No active tab found, default to first tab or 'iam'
+            const firstTab = document.querySelector('[data-tab]');
+            if (firstTab) {
+                const tabId = firstTab.getAttribute('data-tab');
+                console.log(`[Tab Manager] No active tab found, defaulting to: ${tabId}`);
+                updateTabVisibility(tabId);
+                activateTab(tabId, false);
+            }
         }
     }
 
@@ -421,6 +510,9 @@
 
         // Update active tab
         window.AdminTabManager.setActive(tabId);
+
+        // Show/hide tab panels and update tab buttons
+        updateTabVisibility(tabId);
 
         // Show loading indicator
         showTabLoading(tabId);
@@ -441,6 +533,76 @@
             if (typeof window.showMessage === 'function') {
                 window.showMessage('error', `Failed to load ${config.name} data: ${error.message}`);
             }
+        }
+    }
+
+    /**
+     * Update tab visibility - show active tab panel and hide others
+     */
+    function updateTabVisibility(activeTabId) {
+        try {
+            // Update tab buttons
+            const tabs = document.querySelectorAll('.tab[data-tab]');
+            tabs.forEach(tab => {
+                const isActive = tab.getAttribute('data-tab') === activeTabId;
+                if (isActive) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+
+            // Update tab panels - use both class and ensure visibility
+            const panels = document.querySelectorAll('.tab-panel');
+            let activePanelFound = false;
+            
+            panels.forEach(panel => {
+                const panelId = panel.id;
+                const isActive = panelId === activeTabId;
+                
+                if (isActive) {
+                    panel.classList.add('active');
+                    panel.style.display = 'block';
+                    panel.style.visibility = 'visible';
+                    panel.style.opacity = '1';
+                    activePanelFound = true;
+                } else {
+                    panel.classList.remove('active');
+                    panel.style.display = 'none';
+                }
+            });
+
+            // Special handling for tools panel to ensure content is visible
+            if (activeTabId === 'tools') {
+                const toolsPanel = document.getElementById('tools');
+                if (toolsPanel) {
+                    toolsPanel.style.display = 'block';
+                    toolsPanel.classList.add('active');
+                    
+                    // Ensure all tool items are visible
+                    const toolList = toolsPanel.querySelector('.tool-list');
+                    if (toolList) {
+                        toolList.style.display = 'grid';
+                        toolList.style.visibility = 'visible';
+                    }
+                    
+                    const toolItems = toolsPanel.querySelectorAll('.tool-item');
+                    toolItems.forEach(item => {
+                        item.style.display = 'flex';
+                        item.style.visibility = 'visible';
+                    });
+                    
+                    const dashboardCard = toolsPanel.querySelector('.dashboard-card');
+                    if (dashboardCard) {
+                        dashboardCard.style.display = 'block';
+                        dashboardCard.style.visibility = 'visible';
+                    }
+                }
+            }
+
+            console.log(`[Tab Manager] Updated visibility for tab: ${activeTabId}`, { activePanelFound });
+        } catch (error) {
+            console.warn(`[Tab Manager] Error updating tab visibility:`, error);
         }
     }
 

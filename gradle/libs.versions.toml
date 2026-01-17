@@ -1,5 +1,5 @@
 [versions]
-kotlin-version = "2.2.0"
+kotlin-version = "2.0.0"
 ktor-version = "3.2.2"
 logback-version = "1.5.18"
 kotlin-mongo-driver-version = "5.5.1"
@@ -28,6 +28,7 @@ ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negoti
 ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor-version" }
 ktor-server-resources = { module = "io.ktor:ktor-server-resources", version.ref = "ktor-version" }
 ktor-server-compression = { module = "io.ktor:ktor-server-compression", version.ref = "ktor-version" }
+ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor-version" }
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt-version" }
 gcp-secret-manager = { module = "com.google.cloud:google-cloud-secretmanager", version.ref = "gcp-secret-manager-version" }
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin-version" }
