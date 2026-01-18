@@ -722,6 +722,114 @@ html.light-theme {
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
 }
 
+/* ============= JWT Inspector Result Styles ============= */
+
+.jwt-result-container {
+    display: grid;
+    gap: 1.25rem;
+    margin-top: 1rem;
+}
+
+.jwt-section {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.jwt-section-title {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--heading-color);
+    margin-bottom: 0.25rem;
+}
+
+.jwt-status {
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.jwt-time-info {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.jwt-code-block {
+    white-space: pre-wrap;
+    background: var(--user-action-input-bg);
+    border: 1px solid var(--user-action-border);
+    border-radius: 8px;
+    padding: 0.875rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-color);
+    overflow-x: auto;
+    margin: 0;
+}
+
+.jwt-table-wrapper {
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--user-action-border);
+    border-radius: 8px;
+}
+
+.jwt-claims-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.jwt-claim-key {
+    font-weight: 600;
+    color: var(--heading-color);
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--card-border);
+    vertical-align: top;
+    width: 30%;
+}
+
+.jwt-claim-value {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--card-border);
+    vertical-align: top;
+}
+
+.jwt-claim-value code {
+    background: var(--user-action-input-bg);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    word-break: break-all;
+}
+
+.jwt-no-claims {
+    padding: 0.5rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.jwt-signature-info {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--card-border);
+    margin-top: 0.5rem;
+}
+
+/* Make dialog wider for JWT Inspector */
+.user-action-dialog.jwt-inspector-dialog {
+    width: min(700px, 95vw);
+    max-height: 90vh;
+}
+
+.user-action-dialog.jwt-inspector-dialog .user-action-body {
+    max-height: calc(90vh - 180px);
+    overflow-y: auto;
+}
 
 /* ============= Loading States ============= */
 

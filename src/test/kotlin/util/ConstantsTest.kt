@@ -10,7 +10,6 @@ class ConstantsTest {
         // Test database constants
         assertEquals("weather", Constants.Database.DEFAULT_DB_NAME)
         assertEquals("feedback", Constants.Database.FEEDBACK_COLLECTION)
-        assertEquals("weather", Constants.Database.WEATHER_COLLECTION)
         assertEquals("users", Constants.Database.USERS_COLLECTION)
         assertEquals("_id", Constants.Database.ID_FIELD)
         assertEquals("email", Constants.Database.EMAIL_FIELD)
@@ -82,7 +81,6 @@ class ConstantsTest {
         )
         assertEquals("Failed to save feedback", Constants.Messages.FAILED_SAVE_FEEDBACK)
         assertEquals("Weather data retrieved successfully", Constants.Messages.WEATHER_RETRIEVED)
-        assertEquals("Failed to save weather data", Constants.Messages.FAILED_SAVE_WEATHER)
         assertEquals("Failed to fetch weather data", Constants.Messages.FAILED_FETCH_WEATHER)
         assertEquals(
             "Air pollution data retrieved successfully",

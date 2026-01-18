@@ -531,12 +531,16 @@ private suspend fun serveLoginPage(
                                     } else {
                                         loginButton.classList.remove('loading');
                                         loginButton.disabled = false;
+                                        const spinner = loginButton.querySelector('.button-spinner');
+                                        if (spinner) spinner.style.display = 'none';
                                         showBanner('error', data.message || 'Invalid email or password');
                                     }
                                 })
                                 .catch(error => {
                                     loginButton.classList.remove('loading');
                                     loginButton.disabled = false;
+                                    const spinner = loginButton.querySelector('.button-spinner');
+                                    if (spinner) spinner.style.display = 'none';
                                     showBanner('error', 'An error occurred. Please try again.');
                                     console.error('Login error:', error);
                                 });
@@ -556,81 +560,81 @@ private suspend fun serveLoginPage(
                 // Header with logo and theme toggle
                 createHeader(this)
 
-                // Content area with login form
+                // Content area with login form - Full viewport centered
                 div {
-                    classes = setOf("content-area", "login-container")
-                    style = "margin-top: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - 200px);"
+                    classes = setOf("login-wrapper")
+                    style = "min-height: calc(100vh - 120px); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem;"
 
-                    // Login Card
+                    // Login Card - Modern glassmorphism design
                     div {
-                        classes = setOf("login-card")
-                        style = "width: 100%; max-width: 440px;"
+                        classes = setOf("login-card-new")
+                        style = "width: 100%; max-width: 420px;"
 
                         // Header Section
                         div {
-                            classes = setOf("login-header")
+                            classes = setOf("login-header-new")
                             div {
-                                classes = setOf("login-icon-wrapper")
+                                classes = setOf("login-logo")
                                 unsafe {
-                                    raw("<span class='material-icons login-icon'>admin_panel_settings</span>")
+                                    raw("<span class='material-icons'>admin_panel_settings</span>")
                                 }
                             }
-                            h2 {
-                                classes = setOf("login-heading")
-                                +"Admin Login"
+                            h1 {
+                                classes = setOf("login-title")
+                                +"Welcome Back"
                             }
-                            span {
-                                classes = setOf("login-subtitle")
-                                +"Sign in to access the admin dashboard and manage your weather API."
+                            p {
+                                classes = setOf("login-subtitle-new")
+                                +"Sign in to access your admin dashboard"
                             }
                         }
 
                         // Login form
                         form {
                             id = "login-form"
-                            classes = setOf("login-form")
+                            classes = setOf("login-form-new")
 
                             div {
-                                classes = setOf("form-group")
+                                classes = setOf("form-field")
                                 label {
                                     attributes["for"] = "email"
-                                    classes = setOf("form-label")
-                                    +"Email Address"
+                                    classes = setOf("field-label")
+                                    +"Email"
                                 }
                                 div {
-                                    classes = setOf("input-wrapper")
+                                    classes = setOf("input-container")
                                     unsafe {
-                                        raw("<span class='material-icons input-icon'>email</span>")
+                                        raw("<span class='material-icons input-icon-new'>email</span>")
                                     }
                                     input {
                                         type = InputType.email
                                         id = "email"
                                         name = "email"
-                                        classes = setOf("form-input")
+                                        classes = setOf("input-field")
                                         attributes["required"] = ""
                                         attributes["autocomplete"] = "email"
-                                        attributes["placeholder"] = "Enter your email"
+                                        attributes["placeholder"] = "your.email@example.com"
                                     }
                                 }
                             }
 
                             div {
-                                classes = setOf("form-group")
+                                classes = setOf("form-field")
                                 label {
                                     attributes["for"] = "password"
-                                    classes = setOf("form-label")
+                                    classes = setOf("field-label")
                                     +"Password"
                                 }
                                 div {
-                                    classes = setOf("input-wrapper")
+                                    classes = setOf("input-container")
                                     unsafe {
-                                        raw("<span class='material-icons input-icon'>lock</span>")
+                                        raw("<span class='material-icons input-icon-new'>lock</span>")
                                     }
                                     input {
                                         type = InputType.password
                                         id = "password"
                                         name = "password"
-                                        classes = setOf("form-input")
+                                        classes = setOf("input-field")
                                         attributes["required"] = ""
                                         attributes["autocomplete"] = "current-password"
                                         attributes["placeholder"] = "Enter your password"
@@ -641,23 +645,14 @@ private suspend fun serveLoginPage(
                             button {
                                 attributes["type"] = "submit"
                                 id = "login-button"
-                                classes = setOf("login-button")
+                                classes = setOf("submit-button")
                                 span {
-                                    classes = setOf("button-content")
-                                    unsafe {
-                                        raw("<span class='material-icons button-icon'>login</span>")
-                                    }
-                                    span {
-                                        classes = setOf("button-text")
-                                        +"Sign In"
-                                    }
+                                    classes = setOf("button-text-new")
+                                    +"Sign In"
                                 }
                                 span {
-                                    classes = setOf("button-loader")
+                                    classes = setOf("button-spinner")
                                     style = "display: none;"
-                                }
-                                span {
-                                    classes = setOf("button-ripple")
                                 }
                             }
                         }
@@ -2646,49 +2641,69 @@ fun Route.adminAuthRoute() {
                                                             unsafe {
                                                                 raw(
                                                                     """
-                                                            <div class="data-grid" style="--data-columns: 1.4fr 2.6fr 1fr;">
-                                                                <div class="data-header">
-                                                                    <div>Tool</div>
-                                                                    <div>Description</div>
-                                                                    <div style="text-align: right;">Action</div>
-                                                                </div>
-                                                                <div class="data-row">
-                                                                    <div class="data-cell" data-label="Tool">Clear Weather Cache</div>
-                                                                    <div class="data-cell data-cell--wrap" data-label="Description">Purge cached weather and air quality responses so next requests fetch fresh data.</div>
-                                                                    <div class="data-cell data-actions" data-label="Action">
-                                                                        <button id="clear-cache-btn" class="btn btn-secondary" aria-label="Clear weather cache">Clear Cache</button>
-                                                                        <span id="clear-cache-spinner" class="loading-spinner" style="display:none;"></span>
+                                                            <div class="tools-grid">
+                                                                <div class="tool-card">
+                                                                    <div class="tool-card-icon">
+                                                                        <span class="material-icons">cached</span>
+                                                                    </div>
+                                                                    <div class="tool-card-content">
+                                                                        <div class="tool-card-title">Clear Weather Cache</div>
+                                                                        <div class="tool-card-description">Purge cached weather and air quality responses so next requests fetch fresh data.</div>
+                                                                        <div class="tool-card-action">
+                                                                            <button id="clear-cache-btn" class="btn btn-secondary" aria-label="Clear weather cache">Clear Cache</button>
+                                                                            <span id="clear-cache-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                                <div class="data-row">
-                                                                    <div class="data-cell" data-label="Tool">Run Health Check</div>
-                                                                    <div class="data-cell data-cell--wrap" data-label="Description">Validate upstream APIs and response latency across endpoints.</div>
-                                                                    <div class="data-cell data-actions" data-label="Action">
-                                                                        <button id="run-health-btn" class="btn btn-secondary" aria-label="Run health check">Run</button>
-                                                                        <span id="run-health-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                <div class="tool-card">
+                                                                    <div class="tool-card-icon">
+                                                                        <span class="material-icons">health_and_safety</span>
+                                                                    </div>
+                                                                    <div class="tool-card-content">
+                                                                        <div class="tool-card-title">Run Health Check</div>
+                                                                        <div class="tool-card-description">Validate upstream APIs and response latency across endpoints.</div>
+                                                                        <div class="tool-card-action">
+                                                                            <button id="run-health-btn" class="btn btn-secondary" aria-label="Run health check">Run</button>
+                                                                            <span id="run-health-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                                <div class="data-row">
-                                                                    <div class="data-cell" data-label="Tool">Warmup Endpoints</div>
-                                                                    <div class="data-cell data-cell--wrap" data-label="Description">Prime caches and reduce cold-start latency for critical endpoints.</div>
-                                                                    <div class="data-cell data-actions" data-label="Action">
-                                                                        <button id="warmup-btn" class="btn btn-secondary" aria-label="Warm up endpoints">Warm up</button>
-                                                                        <span id="warmup-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                <div class="tool-card">
+                                                                    <div class="tool-card-icon">
+                                                                        <span class="material-icons">local_fire_department</span>
+                                                                    </div>
+                                                                    <div class="tool-card-content">
+                                                                        <div class="tool-card-title">Warmup Endpoints</div>
+                                                                        <div class="tool-card-description">Prime caches and reduce cold-start latency for critical endpoints.</div>
+                                                                        <div class="tool-card-action">
+                                                                            <button id="warmup-btn" class="btn btn-secondary" aria-label="Warm up endpoints">Warm up</button>
+                                                                            <span id="warmup-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                                <div class="data-row">
-                                                                    <div class="data-cell" data-label="Tool">JWT Token Inspector</div>
-                                                                    <div class="data-cell data-cell--wrap" data-label="Description">Decode a JWT to inspect header, payload, and expiration.</div>
-                                                                    <div class="data-cell data-actions" data-label="Action">
-                                                                        <button id="jwt-inspector-btn" class="btn btn-secondary" aria-label="Open JWT Token Inspector">Open</button>
+                                                                <div class="tool-card">
+                                                                    <div class="tool-card-icon">
+                                                                        <span class="material-icons">vpn_key</span>
+                                                                    </div>
+                                                                    <div class="tool-card-content">
+                                                                        <div class="tool-card-title">JWT Token Inspector</div>
+                                                                        <div class="tool-card-description">Decode a JWT to inspect header, payload, and expiration.</div>
+                                                                        <div class="tool-card-action">
+                                                                            <button id="jwt-inspector-btn" class="btn btn-secondary" aria-label="Open JWT Token Inspector">Open</button>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                                <div class="data-row">
-                                                                    <div class="data-cell" data-label="Tool">Export Financial Data</div>
-                                                                <div class="data-cell data-cell--wrap" data-label="Description">Export payment records to CSV for reporting.</div>
-                                                                    <div class="data-cell data-actions" data-label="Action">
-                                                                        <button id="export-financial-btn" class="btn btn-secondary" aria-label="Export financial data">Export</button>
-                                                                        <span id="export-financial-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                <div class="tool-card">
+                                                                    <div class="tool-card-icon">
+                                                                        <span class="material-icons">file_download</span>
+                                                                    </div>
+                                                                    <div class="tool-card-content">
+                                                                        <div class="tool-card-title">Export Financial Data</div>
+                                                                        <div class="tool-card-description">Export payment records to CSV for reporting.</div>
+                                                                        <div class="tool-card-action">
+                                                                            <button id="export-financial-btn" class="btn btn-secondary" aria-label="Export financial data">Export</button>
+                                                                            <span id="export-financial-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>

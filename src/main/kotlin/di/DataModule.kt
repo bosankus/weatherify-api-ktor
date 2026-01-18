@@ -68,7 +68,7 @@ val dataModule = module {
     // Repositories
     single<UserRepository> { UserRepositoryImpl(get()) }
     single<FeedbackRepository> { FeedbackRepositoryImpl(get()) }
-    single<WeatherRepository> { WeatherRepositoryImpl(get(), get()) }
+    single<WeatherRepository> { WeatherRepositoryImpl(get()) }
     single<PaymentRepository> { PaymentRepositoryImpl(get()) }
     single<RefundRepository> { RefundRepositoryImpl(get()) }
     single<domain.repository.ServiceCatalogRepository> { data.repository.ServiceCatalogRepositoryImpl(get()) }

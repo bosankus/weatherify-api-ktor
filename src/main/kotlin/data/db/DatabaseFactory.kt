@@ -3,7 +3,6 @@ package bose.ankush.data.db
 import bose.ankush.data.model.Feedback
 import bose.ankush.data.model.Payment
 import bose.ankush.data.model.User
-import bose.ankush.data.model.Weather
 import bose.ankush.util.getSecretValue
 import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
@@ -22,8 +21,6 @@ object DatabaseFactory {
     private val database = dbClient.getDatabase(Environment.getDbName())
     private val feedbackCollection =
         database.getCollection<Feedback>(Constants.Database.FEEDBACK_COLLECTION)
-    private val weatherCollection =
-        database.getCollection<Weather>(Constants.Database.WEATHER_COLLECTION)
     private val usersCollection = database.getCollection<User>(Constants.Database.USERS_COLLECTION)
     private val paymentsCollection =
         database.getCollection<Payment>(Constants.Database.PAYMENTS_COLLECTION)
@@ -112,12 +109,6 @@ object DatabaseFactory {
     suspend fun deleteFeedbackById(id: String): Boolean {
         val query = createQuery(Constants.Database.ID_FIELD, id)
         return feedbackCollection.deleteOne(query).wasAcknowledged()
-    }
-
-    suspend fun saveWeatherData(weather: Weather): Boolean {
-        return executeDbOperation {
-            weatherCollection.insertOne(weather)
-        }
     }
 
     /** Find a user by email */

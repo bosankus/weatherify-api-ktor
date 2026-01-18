@@ -1451,6 +1451,11 @@
         };
     }
 
+    // Expose createUserActionDialog globally for use in other modules (e.g., JWT Inspector)
+    window.createUserActionDialog = createUserActionDialog;
+    window.showDialogError = showDialogError;
+    window.setDialogLoading = setDialogLoading;
+
     function showDialogError(errorEl, message) {
         if (!errorEl) return;
         errorEl.textContent = message;

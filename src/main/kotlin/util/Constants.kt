@@ -14,8 +14,8 @@ object Constants {
 
         // Collection names
         const val FEEDBACK_COLLECTION = "feedback"
-        const val WEATHER_COLLECTION = "weather"
         const val USERS_COLLECTION = "users"
+        const val SAVED_LOCATIONS_COLLECTION = "saved_locations"
         const val PAYMENTS_COLLECTION = "payments"
         const val REFUNDS_COLLECTION = "refunds"
 
@@ -116,7 +116,6 @@ object Constants {
 
         // Weather messages
         const val WEATHER_RETRIEVED = "Weather data retrieved successfully"
-        const val FAILED_SAVE_WEATHER = "Failed to save weather data"
         const val FAILED_FETCH_WEATHER = "Failed to fetch weather data"
         const val AIR_POLLUTION_RETRIEVED = "Air pollution data retrieved successfully"
         const val FAILED_FETCH_AIR_POLLUTION = "Failed to fetch air pollution data"

@@ -621,9 +621,7 @@ function initializeAdmin() {
         if (jwtBtn && !jwtBtn.dataset.bound) {
             jwtBtn.addEventListener('click', function(){
                 try {
-                    const content = buildJwtInspectorContent();
-                    showModal('JWT Token Inspector', content);
-                    bindJwtInspectorModal();
+                    showJwtInspectorDialog();
                 } catch(e) { console.error('Failed to open JWT Inspector', e); }
             });
             jwtBtn.dataset.bound = 'true';
@@ -1611,78 +1609,142 @@ function renderJwtResult(decoded){
     const time = computeTimeValidity(decoded.payload || {});
     const claims = decoded.payload || {};
     const keys = Object.keys(claims).sort();
-    const claimRows = keys.map(k => `<tr><td style="font-weight:600;color:var(--card-title)">${escapeHtml(k)}</td><td><code>${escapeHtml(String(claims[k]))}</code></td></tr>`).join('');
+    const claimRows = keys.map(k => `<tr><td class="jwt-claim-key">${escapeHtml(k)}</td><td class="jwt-claim-value"><code>${escapeHtml(String(claims[k]))}</code></td></tr>`).join('');
     const hasSig = (decoded.signature || '').length > 0;
+    const statusColor = time.status === 'Expired' ? '#ef4444' : (time.status === 'Valid by time' ? '#10b981' : '#f59e0b');
+    
     return [
-        '<div style="display:grid; gap:12px">',
-        '<div class="message info-message">Client-side decoding only. Signature verification is not performed here.</div>',
-        '<div style="display:grid; gap:6px">',
-        '<div style="font-weight:700;color:var(--card-title)">Time Validity</div>',
-        `<div>Status: <span style="font-weight:700;${time.status==='Expired'?'color:#ef4444':(time.status==='Valid by time'?'color:#10b981':'color:#f59e0b')}">${time.status}</span></div>`,
-        `<div>exp: ${time.exp != null ? tsToLocal(time.exp) + ` (${time.exp})` : 'n/a'}</div>`,
-        `<div>nbf: ${time.nbf != null ? tsToLocal(time.nbf) + ` (${time.nbf})` : 'n/a'}</div>`,
-        `<div>iat: ${time.iat != null ? tsToLocal(time.iat) + ` (${time.iat})` : 'n/a'}</div>`,
+        '<div class="jwt-result-container">',
+        '<div class="user-action-hint" style="margin-bottom:1rem">Client-side decoding only. Signature verification is not performed here.</div>',
+        '<div class="jwt-section">',
+        '<div class="jwt-section-title">Time Validity</div>',
+        `<div class="jwt-status" style="color:${statusColor}">Status: <strong>${time.status}</strong></div>`,
+        `<div class="jwt-time-info">exp: ${time.exp != null ? tsToLocal(time.exp) + ` (${time.exp})` : 'n/a'}</div>`,
+        `<div class="jwt-time-info">nbf: ${time.nbf != null ? tsToLocal(time.nbf) + ` (${time.nbf})` : 'n/a'}</div>`,
+        `<div class="jwt-time-info">iat: ${time.iat != null ? tsToLocal(time.iat) + ` (${time.iat})` : 'n/a'}</div>`,
         '</div>',
-        '<div style="display:grid; gap:6px">',
-        '<div style="font-weight:700;color:var(--card-title)">Header</div>',
-        `<pre style="white-space:pre-wrap;background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;padding:10px">${escapeHtml(JSON.stringify(decoded.header, null, 2))}</pre>`,
+        '<div class="jwt-section">',
+        '<div class="jwt-section-title">Header</div>',
+        `<pre class="jwt-code-block">${escapeHtml(JSON.stringify(decoded.header, null, 2))}</pre>`,
         '</div>',
-        '<div style="display:grid; gap:6px">',
-        '<div style="font-weight:700;color:var(--card-title)">Payload</div>',
-        `<pre style="white-space:pre-wrap;background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;padding:10px">${escapeHtml(JSON.stringify(decoded.payload, null, 2))}</pre>`,
+        '<div class="jwt-section">',
+        '<div class="jwt-section-title">Payload</div>',
+        `<pre class="jwt-code-block">${escapeHtml(JSON.stringify(decoded.payload, null, 2))}</pre>`,
         '</div>',
-        '<div style="display:grid; gap:6px">',
-        '<div style="font-weight:700;color:var(--card-title)">Claims</div>',
-        `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse">${claimRows || '<tr><td>No claims</td></tr>'}</table></div>`,
+        '<div class="jwt-section">',
+        '<div class="jwt-section-title">Claims</div>',
+        `<div class="jwt-table-wrapper"><table class="jwt-claims-table">${claimRows || '<tr><td colspan="2" class="jwt-no-claims">No claims</td></tr>'}</table></div>`,
         '</div>',
-        `<div>Signature present: <strong>${hasSig ? 'Yes' : 'No'}</strong> (not verified)</div>`,
+        `<div class="jwt-signature-info">Signature present: <strong>${hasSig ? 'Yes' : 'No'}</strong> (not verified)</div>`,
         '</div>'
     ].join('');
 }
 
-function buildJwtInspectorContent(){
-    return [
-        '<div style="display:grid; gap:10px">',
-        '<div class="message info-message">Paste a JWT below to decode its header and payload. Do not include the "Bearer " prefix.</div>',
-        '<textarea id="jwt-input" class="form-control" rows="5" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIiwiZXhwIjoxNzAwMDAwMDAwfQ.signature"></textarea>',
-        '<div style="display:flex; gap:8px; align-items:center">',
-        '<button id="jwt-decode-btn" class="btn btn-primary">Decode</button>',
-        '<button id="jwt-clear-btn" class="btn btn-secondary">Clear</button>',
-        '</div>',
-        '<div id="jwt-error" class="message error-message" style="display:none"></div>',
-        '<div id="jwt-result"></div>',
-        '</div>'
-    ].join('');
-}
+function showJwtInspectorDialog() {
+    // Check if createUserActionDialog is available (from admin-users.js)
+    if (typeof window.createUserActionDialog !== 'function') {
+        console.error('createUserActionDialog is not available');
+        showMessage('error', 'JWT Inspector dialog is not available');
+        return;
+    }
 
-function bindJwtInspectorModal(){
-    const input = document.getElementById('jwt-input');
-    const decodeBtn = document.getElementById('jwt-decode-btn');
-    const clearBtn = document.getElementById('jwt-clear-btn');
-    const result = document.getElementById('jwt-result');
-    const err = document.getElementById('jwt-error');
-    if (!input || !decodeBtn || !result) return;
+    const createUserActionDialog = window.createUserActionDialog;
+    const showDialogError = window.showDialogError || function(errorEl, message) {
+        if (!errorEl) return;
+        errorEl.textContent = message || 'Error';
+        errorEl.classList.add('show');
+    };
 
-    function showErr(msg){ if (!err) return; err.textContent = msg || 'Error'; err.style.display = 'block'; }
-    function hideErr(){ if (err) err.style.display = 'none'; }
+    const dialog = createUserActionDialog({
+        title: 'JWT Token Inspector',
+        subtitle: 'Decode and inspect JWT token header, payload, and claims',
+        confirmText: 'Decode',
+        confirmVariant: 'primary',
+        bodyHtml: `
+            <div class="user-action-field">
+                <label class="user-action-label" for="jwt-input">JWT Token</label>
+                <textarea 
+                    id="jwt-input" 
+                    class="user-action-input" 
+                    rows="5" 
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIiwiZXhwIjoxNzAwMDAwMDAwfQ.signature"
+                    style="resize: vertical; min-height: 100px; font-family: 'JetBrains Mono', monospace;"
+                ></textarea>
+            </div>
+            <div class="user-action-hint">Paste a JWT token to decode. The "Bearer " prefix will be automatically removed if present.</div>
+            <div class="user-action-error" id="jwt-error"></div>
+            <div id="jwt-result" style="margin-top: 1rem; display: none;"></div>
+        `
+    });
 
-    decodeBtn.addEventListener('click', function(){
-        hideErr();
-        result.innerHTML = '';
-        let value = (input.value || '').trim();
-        if (!value) { showErr('Please paste a JWT token'); return; }
-        if (value.toLowerCase().startsWith('bearer ')) value = value.slice(7).trim();
+    // Add class to dialog for wider styling
+    dialog.container.classList.add('jwt-inspector-dialog');
+
+    const input = dialog.container.querySelector('#jwt-input');
+    const errorEl = dialog.container.querySelector('#jwt-error');
+    const resultEl = dialog.container.querySelector('#jwt-result');
+
+    // Helper functions
+    function showError(message) {
+        showDialogError(errorEl, message);
+        if (resultEl) resultEl.style.display = 'none';
+    }
+
+    function hideError() {
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.classList.remove('show');
+        }
+    }
+
+    function showResult(html) {
+        if (resultEl) {
+            resultEl.innerHTML = html;
+            resultEl.style.display = 'block';
+        }
+        hideError();
+    }
+
+    function clearResult() {
+        if (resultEl) {
+            resultEl.innerHTML = '';
+            resultEl.style.display = 'none';
+        }
+        hideError();
+    }
+
+    // Handle confirm button click (Decode)
+    dialog.onConfirm(() => {
+        hideError();
+        clearResult();
+
+        let value = (input?.value || '').trim();
+        if (!value) {
+            showError('Please paste a JWT token');
+            input?.focus();
+            return;
+        }
+
+        // Remove "Bearer " prefix if present
+        if (value.toLowerCase().startsWith('bearer ')) {
+            value = value.slice(7).trim();
+        }
+
         try {
             const decoded = decodeJwtToken(value);
-            result.innerHTML = renderJwtResult(decoded);
-            showMessage('success', 'Token decoded');
-        } catch(e){
+            const resultHtml = renderJwtResult(decoded);
+            showResult(resultHtml);
+            showMessage('success', 'Token decoded successfully');
+        } catch (e) {
             console.error('JWT decode error', e);
-            showErr(e && e.message ? e.message : 'Failed to decode token');
+            showError(e && e.message ? e.message : 'Failed to decode token');
         }
     });
 
-    if (clearBtn) clearBtn.addEventListener('click', function(){ input.value=''; result.innerHTML=''; hideErr(); });
+    // Focus input when dialog opens
+    setTimeout(() => {
+        input?.focus();
+    }, 100);
 }
 
 // =============== End JWT Token Inspector ===============

@@ -2,7 +2,6 @@ package data.source
 
 import bose.ankush.data.model.Feedback
 import bose.ankush.data.model.User
-import bose.ankush.data.model.Weather
 import bose.ankush.util.getSecretValue
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
@@ -215,12 +214,13 @@ class DatabaseModule(
     }
 
     /**
-     * Get the weather collection
-     * @return The weather collection
+     * Get the saved locations collection
+     * @return The saved locations collection
      */
-    fun getWeatherCollection(): MongoCollection<Weather> {
-        return getCollection<Weather>(Constants.Database.WEATHER_COLLECTION)
+    fun getSavedLocationsCollection(): MongoCollection<bose.ankush.data.model.SavedLocation> {
+        return getCollection<bose.ankush.data.model.SavedLocation>(Constants.Database.SAVED_LOCATIONS_COLLECTION)
     }
+
 
     /**
      * Get the payment collection

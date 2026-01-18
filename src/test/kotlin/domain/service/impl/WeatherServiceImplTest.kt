@@ -15,7 +15,6 @@ class WeatherServiceImplTest {
     // Create a mock WeatherRepository for testing
     private class MockWeatherRepository : WeatherRepository {
         var shouldReturnSuccess = true
-        var shouldReturnCachedData = false
 
         override suspend fun getWeatherData(lat: String, lon: String): Result<Weather> {
             return if (shouldReturnSuccess) {
@@ -30,48 +29,6 @@ class WeatherServiceImplTest {
                 Result.success(AirQuality(listOf()))
             } else {
                 Result.error("Failed to get air pollution data")
-            }
-        }
-
-        override suspend fun getHistoricalWeatherData(
-            lat: String,
-            lon: String,
-            limit: Int?
-        ): Result<List<Weather>> {
-            return if (shouldReturnSuccess) {
-                if (shouldReturnCachedData) {
-                    // Return a weather object with a timestamp that's recent (less than 30 minutes old)
-                    val currentTime = System.currentTimeMillis() / 1000
-                    val weather = Weather(
-                        current = Weather.Current(
-                            clouds = 0,
-                            dt = currentTime - 60, // 1 minute ago
-                            feelsLike = 0.0,
-                            humidity = 0,
-                            pressure = 0,
-                            sunrise = 0,
-                            sunset = 0,
-                            temp = 0.0,
-                            uvi = 0.0,
-                            weather = listOf(),
-                            windGust = 0.0,
-                            windSpeed = 0.0
-                        )
-                    )
-                    Result.success(listOf(weather))
-                } else {
-                    Result.success(listOf(Weather()))
-                }
-            } else {
-                Result.error("Failed to get historical weather data")
-            }
-        }
-
-        override suspend fun saveWeatherData(weather: Weather): Result<Boolean> {
-            return if (shouldReturnSuccess) {
-                Result.success(true)
-            } else {
-                Result.error("Failed to save weather data")
             }
         }
     }
@@ -190,66 +147,4 @@ class WeatherServiceImplTest {
         }
     }
 
-    @Test
-    fun `test getHistoricalWeatherData with valid parameters`() {
-        runBlocking {
-            // Set up mock repository to return success
-            mockRepository.shouldReturnSuccess = true
-
-            // Call the method
-            val result = weatherService.getHistoricalWeatherData("40.7128", "-74.0060", 10)
-
-            // Verify the result
-            assertTrue(result.isSuccess)
-            assertEquals(1, result.getOrNull()?.size)
-            assertNotNull(result.getOrNull()?.get(0))
-        }
-    }
-
-    @Test
-    fun `test getCachedWeatherData with recent data`() {
-        runBlocking {
-            // Set up mock repository to return cached data
-            mockRepository.shouldReturnSuccess = true
-            mockRepository.shouldReturnCachedData = true
-
-            // Call the method
-            val result = weatherService.getCachedWeatherData("40.7128", "-74.0060")
-
-            // Verify the result
-            assertTrue(result.isSuccess)
-            assertNotNull(result.getOrNull())
-        }
-    }
-
-    @Test
-    fun `test getCachedWeatherData with no recent data`() {
-        runBlocking {
-            // Set up mock repository to return non-cached data
-            mockRepository.shouldReturnSuccess = true
-            mockRepository.shouldReturnCachedData = false
-
-            // Call the method
-            val result = weatherService.getCachedWeatherData("40.7128", "-74.0060")
-
-            // Verify the result
-            assertTrue(result.isError)
-            assertEquals(
-                "No recent cached weather data available",
-                (result as Result.Error).message
-            )
-        }
-    }
-
-    @Test
-    fun `test getCachedAirPollutionData`() {
-        runBlocking {
-            // Call the method
-            val result = weatherService.getCachedAirPollutionData("40.7128", "-74.0060")
-
-            // Verify the result (should always return error as per implementation)
-            assertTrue(result.isError)
-            assertEquals("No cached air pollution data available", (result as Result.Error).message)
-        }
-    }
 }

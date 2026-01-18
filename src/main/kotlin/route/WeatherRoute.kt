@@ -1,6 +1,5 @@
 package bose.ankush.route
 
-import bose.ankush.data.db.DatabaseFactory.saveWeatherData
 import bose.ankush.data.model.AirQuality
 import bose.ankush.data.model.Weather
 import bose.ankush.route.common.respondError
@@ -10,8 +9,6 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.koin.ktor.ext.inject
 import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
@@ -86,14 +83,6 @@ fun Route.weatherRoute() {
                     weatherData,
                     io.ktor.http.HttpStatusCode.OK
                 )
-
-                // Save data asynchronously
-                withContext(Dispatchers.IO) {
-                    val saved = saveWeatherData(weatherData)
-                    if (!saved) {
-                        println(Constants.Messages.FAILED_SAVE_WEATHER)
-                    }
-                }
             }.onFailure { e ->
                 call.respondError(
                     "${Constants.Messages.FAILED_FETCH_WEATHER}: ${e.message}",
