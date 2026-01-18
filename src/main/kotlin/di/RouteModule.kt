@@ -23,6 +23,7 @@ val routeModule = module {
     single<RouteRegistrar>(named("mock")) { MockRoutesRegistrar }
     single<RouteRegistrar>(named("decode")) { DecodeRoutesRegistrar }
     single<RouteRegistrar>(named("pollingengine")) { PollingEngineRoutesRegistrar }
+    single<RouteRegistrar>(named("locations")) { SavedLocationRoutesRegistrar }
 
     // Provide ordered list
     single<List<RouteRegistrar>> {
@@ -39,7 +40,8 @@ val routeModule = module {
             get(named("serviceCatalog")),
             get(named("mock")),
             get(named("decode")),
-            get(named("pollingengine"))
+            get(named("pollingengine")),
+            get(named("locations"))
         )
     }
 }

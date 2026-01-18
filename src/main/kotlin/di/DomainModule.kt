@@ -23,6 +23,7 @@ val domainModule = module {
     single<BillService> { BillServiceImpl(get(), get(), get(), get()) }
     single<NotificationService> { NotificationServiceImpl() }
     single<ServiceCatalogService> { domain.service.impl.ServiceCatalogServiceImpl(get(), get()) }
+    single { SavedLocationService(get()) }
 
     // Data Services
     single { ServiceCatalogSeedingService(get()) }

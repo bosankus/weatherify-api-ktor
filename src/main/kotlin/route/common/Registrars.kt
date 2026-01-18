@@ -2,6 +2,7 @@ package bose.ankush.route.common
 
 import bose.ankush.route.*
 import io.ktor.server.routing.*
+import route.savedLocationRoute
 
 /**
  * Registrar implementations that simply delegate to existing route extension functions.
@@ -82,5 +83,11 @@ object RefundRoutesRegistrar : RouteRegistrar {
 object ServiceCatalogRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         with(root) { serviceCatalogRoute() }
+    }
+}
+
+object SavedLocationRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { savedLocationRoute(org.koin.java.KoinJavaComponent.get(domain.service.SavedLocationService::class.java)) }
     }
 }

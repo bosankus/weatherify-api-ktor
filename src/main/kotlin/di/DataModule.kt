@@ -1,18 +1,10 @@
 package di
 
-import data.repository.FeedbackRepositoryImpl
-import data.repository.PaymentRepositoryImpl
-import data.repository.RefundRepositoryImpl
-import data.repository.UserRepositoryImpl
-import data.repository.WeatherRepositoryImpl
+import data.repository.*
 import data.source.DatabaseModule
 import data.source.WeatherApiClient
 import data.source.WeatherApiClientImpl
-import domain.repository.FeedbackRepository
-import domain.repository.PaymentRepository
-import domain.repository.RefundRepository
-import domain.repository.UserRepository
-import domain.repository.WeatherRepository
+import domain.repository.*
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -71,5 +63,6 @@ val dataModule = module {
     single<WeatherRepository> { WeatherRepositoryImpl(get()) }
     single<PaymentRepository> { PaymentRepositoryImpl(get()) }
     single<RefundRepository> { RefundRepositoryImpl(get()) }
-    single<domain.repository.ServiceCatalogRepository> { data.repository.ServiceCatalogRepositoryImpl(get()) }
+    single<ServiceCatalogRepository> { ServiceCatalogRepositoryImpl(get()) }
+    single<SavedLocationRepository> { SavedLocationRepositoryImpl(get()) }
 }
