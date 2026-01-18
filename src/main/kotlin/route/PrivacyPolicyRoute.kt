@@ -1,6 +1,7 @@
 package bose.ankush.route
 
 import bose.ankush.route.common.WebResources
+import bose.ankush.route.common.setCacheHeaders
 import io.ktor.http.*
 import io.ktor.server.html.*
 import io.ktor.server.routing.*
@@ -15,6 +16,8 @@ fun Route.privacyPolicyRoute() {
 
     route("/wfy/privacy-policy") {
         get {
+            // Cache static content for 1 hour (3600 seconds)
+            call.setCacheHeaders(maxAgeSeconds = 3600, isPublic = true, mustRevalidate = true)
             call.respondHtml(HttpStatusCode.OK) {
                 attributes["lang"] = "en"
                 head {

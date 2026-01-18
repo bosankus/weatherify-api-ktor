@@ -1,9 +1,9 @@
 [versions]
 kotlin-version = "2.0.0"
 ktor-version = "3.2.2"
-logback-version = "1.5.18"
+logback-version = "1.5.25"
 kotlin-mongo-driver-version = "5.5.1"
-gcp-secret-manager-version = "2.60.0"
+gcp-secret-manager-version = "2.81.0"
 bcrypt-version = "0.10.2"
 koin-version = "4.0.3"
 firebase-admin-version = "9.2.0"

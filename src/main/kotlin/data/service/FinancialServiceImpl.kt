@@ -7,7 +7,6 @@ import domain.repository.UserRepository
 import domain.service.FinancialService
 import org.slf4j.LoggerFactory
 import java.time.Instant
-import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -24,46 +23,52 @@ class FinancialServiceImpl(
     private val logger = LoggerFactory.getLogger(FinancialServiceImpl::class.java)
 
     override suspend fun getFinancialMetrics(): Result<FinancialMetrics> {
-        logger.debug("Calculating financial metrics")
+        logger.debug("Calculating financial metrics using database aggregations")
         return try {
-            // Fetch all payments from repository
-            // Note: Using large page size to get all records. In production, consider implementing
-            // aggregation queries at the database level for better performance.
-            val paymentsResult = paymentRepository.getAllPayments(1, 100000)
-            if (paymentsResult is Result.Error) {
-                return Result.error("Failed to fetch payments: ${paymentsResult.message}")
+            // Use database aggregation for verified payments aggregate (much faster)
+            val aggregateResult = paymentRepository.getVerifiedPaymentsAggregate()
+            if (aggregateResult is Result.Error) {
+                return Result.error("Failed to fetch payment aggregate: ${aggregateResult.message}")
             }
-            val allPayments = (paymentsResult as Result.Success).data.first
+            val (totalAmountPaise, totalPaymentsCount) = (aggregateResult as Result.Success).data
+            val totalRevenue = totalAmountPaise.toDouble() / 100.0
 
-            // Filter only verified/successful payments for revenue calculations
-            // Excludes failed, pending, or refunded payments
-            val verifiedPayments = allPayments.filter { it.status == "verified" }
-
-            // Calculate total revenue from all verified payments
-            // Amounts are stored in paise/cents, so divide by 100 to get currency units
-            val totalRevenue = verifiedPayments.mapNotNull { it.amount }.sum().toDouble() / 100.0
-
-            // Calculate monthly revenue for the current calendar month
+            // Calculate monthly revenue for the current calendar month using aggregation
             val now = Instant.now()
             val currentMonth = YearMonth.from(now.atZone(ZoneId.systemDefault()))
-            val monthlyRevenue = verifiedPayments.filter {
-                try {
-                    // Parse payment timestamp and extract year-month
-                    val paymentDate = Instant.parse(it.createdAt)
-                    val paymentMonth = YearMonth.from(paymentDate.atZone(ZoneId.systemDefault()))
-                    paymentMonth == currentMonth
-                } catch (_: Exception) {
-                    // Skip payments with invalid date formats
-                    false
+            val monthStart = currentMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val monthEnd = currentMonth.atEndOfMonth().atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
+            
+            val monthlyRevenueResult = paymentRepository.getMonthlyRevenue(monthStart.toString(), monthEnd.toString())
+            val monthlyRevenue = if (monthlyRevenueResult is Result.Success) {
+                monthlyRevenueResult.data.find { it.month == currentMonth.format(DateTimeFormatter.ofPattern("yyyy-MM")) }?.revenue ?: 0.0
+            } else {
+                logger.warn("Failed to get monthly revenue: ${(monthlyRevenueResult as? Result.Error)?.message}")
+                0.0
+            }
+
+            // Generate monthly revenue trend data for the last 12 months using aggregation
+            val last12MonthsStart = now.minus(java.time.Duration.ofDays(365))
+            val monthlyRevenueChartResult = paymentRepository.getMonthlyRevenue(
+                last12MonthsStart.toString(),
+                now.toString()
+            )
+            val monthlyRevenueChart = if (monthlyRevenueChartResult is Result.Success) {
+                // Fill in missing months with zero revenue
+                val chartData = monthlyRevenueChartResult.data.associateBy { it.month }
+                val nowZoned = now.atZone(ZoneId.systemDefault())
+                val last12Months = (0..11).map { monthsAgo ->
+                    nowZoned.minusMonths(monthsAgo.toLong()).let { YearMonth.from(it) }
+                        .format(DateTimeFormatter.ofPattern("yyyy-MM"))
+                }.reversed()
+                
+                last12Months.map { month ->
+                    chartData[month] ?: MonthlyRevenue(month, 0.0)
                 }
-            }.mapNotNull { it.amount }.sum().toDouble() / 100.0
-
-            // Count total number of verified payments for dashboard display
-            val totalPaymentsCount = verifiedPayments.size
-
-            // Generate monthly revenue trend data for the last 12 months
-            // Used for chart visualization in the admin dashboard
-            val monthlyRevenueChart = calculateMonthlyRevenueChart(verifiedPayments)
+            } else {
+                logger.warn("Failed to get monthly revenue chart: ${(monthlyRevenueChartResult as? Result.Error)?.message}")
+                calculateMonthlyRevenueChartFallback()
+            }
 
             // Fetch refund metrics
             val refundMetricsResult = refundService.getRefundMetrics()
@@ -91,7 +96,7 @@ class FinancialServiceImpl(
             val metrics = FinancialMetrics(
                 totalRevenue = totalRevenue,
                 monthlyRevenue = monthlyRevenue,
-                totalPaymentsCount = totalPaymentsCount,
+                totalPaymentsCount = totalPaymentsCount.toInt(),
                 monthlyRevenueChart = monthlyRevenueChart,
                 totalRefunds = totalRefunds,
                 monthlyRefunds = monthlyRefunds,
@@ -108,36 +113,21 @@ class FinancialServiceImpl(
     }
 
     /**
-     * Calculates monthly revenue for the last 12 months for chart visualization.
+     * Fallback method to calculate monthly revenue chart if aggregation fails.
+     * This should rarely be used, but provides a safety net.
      *
-     * @param payments List of verified payments to aggregate
-     * @return List of MonthlyRevenue objects with month identifier and revenue amount
+     * @return List of MonthlyRevenue objects with zero revenue for last 12 months
      */
-    private fun calculateMonthlyRevenueChart(payments: List<Payment>): List<MonthlyRevenue> {
+    private fun calculateMonthlyRevenueChartFallback(): List<MonthlyRevenue> {
         val now = Instant.now().atZone(ZoneId.systemDefault())
-
-        // Generate list of last 12 months (including current month)
-        // Start from 11 months ago and go to current month
         val last12Months = (0..11).map { monthsAgo ->
             now.minusMonths(monthsAgo.toLong()).let { YearMonth.from(it) }
-        }.reversed() // Reverse to get chronological order (oldest to newest)
-
+        }.reversed()
+        
         return last12Months.map { month ->
-            // Sum all payments that occurred in this specific month
-            val revenue = payments.filter {
-                try {
-                    val paymentDate = Instant.parse(it.createdAt)
-                    val paymentMonth = YearMonth.from(paymentDate.atZone(ZoneId.systemDefault()))
-                    paymentMonth == month
-                } catch (_: Exception) {
-                    // Skip payments with invalid timestamps
-                    false
-                }
-            }.mapNotNull { it.amount }.sum().toDouble() / 100.0
-
             MonthlyRevenue(
-                month = month.format(DateTimeFormatter.ofPattern("yyyy-MM")), // Format as "2024-02"
-                revenue = revenue
+                month = month.format(DateTimeFormatter.ofPattern("yyyy-MM")),
+                revenue = 0.0
             )
         }
     }
@@ -151,58 +141,23 @@ class FinancialServiceImpl(
     ): Result<PaymentHistoryResponse> {
         logger.debug("Getting payment history: page=$page, pageSize=$pageSize, status=$status")
         return try {
-            // Get all payments (we'll filter in memory for simplicity)
-            val paymentsResult = paymentRepository.getAllPayments(1, 100000)
+            // Use database-level filtering instead of fetching all records
+            val paymentsResult = paymentRepository.getPaymentsWithFilters(
+                page = page,
+                pageSize = pageSize,
+                status = status,
+                startDate = startDate,
+                endDate = endDate
+            )
             if (paymentsResult is Result.Error) {
                 return Result.error("Failed to fetch payments: ${paymentsResult.message}")
             }
 
-            var payments = (paymentsResult as Result.Success).data.first
-
-            // Apply status filter
-            if (!status.isNullOrBlank()) {
-                val allowedStatuses = when (val normalized = status.trim().lowercase()) {
-                    "success" -> setOf("verified", "success", "captured")
-                    "verified" -> setOf("verified")
-                    "captured" -> setOf("captured")
-                    "failed" -> setOf("failed")
-                    "pending" -> setOf("pending")
-                    "refunded" -> setOf("refunded")
-                    else -> setOf(normalized)
-                }
-
-                payments = payments.filter { payment ->
-                    payment.status?.lowercase() in allowedStatuses
-                }
-            }
-
-            // Apply date range filter
-            if (!startDate.isNullOrBlank() && !endDate.isNullOrBlank()) {
-                val start = LocalDate.parse(startDate)
-                val end = LocalDate.parse(endDate)
-                payments = payments.filter {
-                    try {
-                        val paymentDate = Instant.parse(it.createdAt)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                        !paymentDate.isBefore(start) && !paymentDate.isAfter(end)
-                    } catch (_: Exception) {
-                        false
-                    }
-                }
-            }
-
-            // Sort by date descending
-            payments = payments.sortedByDescending { it.createdAt }
-
-            // Calculate pagination
-            val totalCount = payments.size.toLong()
+            val (payments, totalCount) = (paymentsResult as Result.Success).data
             val totalPages = ((totalCount + pageSize - 1) / pageSize).toInt()
-            val skip = (page - 1) * pageSize
-            val paginatedPayments = payments.drop(skip).take(pageSize)
 
             // Convert to DTOs
-            val paymentDtos = paginatedPayments.map { payment ->
+            val paymentDtos = payments.map { payment ->
                 PaymentDto(
                     id = payment.id,
                     userEmail = payment.userEmail,
@@ -236,29 +191,37 @@ class FinancialServiceImpl(
     override suspend fun exportPayments(startDate: String, endDate: String): Result<String> {
         logger.debug("Exporting payments from $startDate to $endDate")
         return try {
-            val paymentsResult = paymentRepository.getAllPayments(1, 100000)
+            // Use database-level filtering with pagination
+            // First check the count to ensure we don't exceed limits
+            val countResult = paymentRepository.getPaymentsWithFilters(
+                page = 1,
+                pageSize = 1,
+                status = null,
+                startDate = startDate,
+                endDate = endDate
+            )
+            if (countResult is Result.Error) {
+                return Result.error("Failed to fetch payment count: ${countResult.message}")
+            }
+            val totalCount = (countResult as Result.Success).data.second
+
+            // Limit to 10,000 records
+            if (totalCount > 10000) {
+                return Result.error("Export exceeds 10,000 records limit. Please narrow your date range.")
+            }
+
+            // Fetch all matching payments using pagination
+            val paymentsResult = paymentRepository.getPaymentsWithFilters(
+                page = 1,
+                pageSize = totalCount.toInt(),
+                status = null,
+                startDate = startDate,
+                endDate = endDate
+            )
             if (paymentsResult is Result.Error) {
                 return Result.error("Failed to fetch payments: ${paymentsResult.message}")
             }
-
-            var payments = (paymentsResult as Result.Success).data.first
-
-            // Apply date range filter
-            val start = Instant.parse(startDate)
-            val end = Instant.parse(endDate)
-            payments = payments.filter {
-                try {
-                    val paymentDate = Instant.parse(it.createdAt)
-                    !paymentDate.isBefore(start) && !paymentDate.isAfter(end)
-                } catch (_: Exception) {
-                    false
-                }
-            }
-
-            // Limit to 10,000 records
-            if (payments.size > 10000) {
-                return Result.error("Export exceeds 10,000 records limit. Please narrow your date range.")
-            }
+            val payments = (paymentsResult as Result.Success).data.first
 
             val csv = generatePaymentsCsv(payments)
             logger.debug("Exported ${payments.size} payments")

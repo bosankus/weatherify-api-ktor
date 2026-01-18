@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.ktor.server.resources)
     implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.compression)
     implementation(libs.bcrypt)
     implementation(libs.ktor.server.html)
     implementation(libs.gcp.secret.manager)

@@ -3,6 +3,7 @@ package bose.ankush.route
 import bose.ankush.data.model.*
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
+import bose.ankush.route.common.setCacheHeaders
 import domain.model.Result
 import domain.service.ServiceCatalogService
 import io.ktor.http.*
@@ -76,6 +77,8 @@ fun Route.serviceCatalogRoute() {
             when (val result = serviceCatalogService.listServices(page, pageSize, status, searchQuery)) {
                 is Result.Success -> {
                     serviceCatalogLogger.info("Services listed successfully: ${result.data.totalCount} total")
+                    // Cache service catalog listings for 15 minutes (services change infrequently)
+                    call.setCacheHeaders(maxAgeSeconds = 900, isPublic = false, mustRevalidate = true)
                     call.respondSuccess(
                         message = "Services retrieved successfully",
                         data = result.data,

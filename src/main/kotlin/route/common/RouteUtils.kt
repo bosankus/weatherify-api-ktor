@@ -9,6 +9,26 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 
+/**
+ * Set cache control headers for responses.
+ * @param maxAgeSeconds Maximum age in seconds for the cache (default: 300 = 5 minutes)
+ * @param isPublic Whether the response can be cached by public caches (default: true)
+ * @param mustRevalidate Whether the cache must revalidate before serving stale content (default: true)
+ */
+fun ApplicationCall.setCacheHeaders(
+    maxAgeSeconds: Int = 300,
+    isPublic: Boolean = true,
+    mustRevalidate: Boolean = true
+) {
+    val cacheControl = buildString {
+        if (isPublic) append("public, ") else append("private, ")
+        append("max-age=$maxAgeSeconds")
+        if (mustRevalidate) append(", must-revalidate")
+    }
+    response.headers.append("Cache-Control", cacheControl)
+    response.headers.append("Vary", "Accept-Encoding")
+}
+
 /** Responds with a success message */
 suspend inline fun <reified T> ApplicationCall.respondSuccess(
     message: String,
