@@ -5,6 +5,8 @@ import domain.model.Result
 import domain.repository.PaymentRepository
 import domain.repository.UserRepository
 import domain.service.FinancialService
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.YearMonth
@@ -25,87 +27,98 @@ class FinancialServiceImpl(
     override suspend fun getFinancialMetrics(): Result<FinancialMetrics> {
         logger.debug("Calculating financial metrics using database aggregations")
         return try {
-            // Use database aggregation for verified payments aggregate (much faster)
-            val aggregateResult = paymentRepository.getVerifiedPaymentsAggregate()
-            if (aggregateResult is Result.Error) {
-                return Result.error("Failed to fetch payment aggregate: ${aggregateResult.message}")
-            }
-            val (totalAmountPaise, totalPaymentsCount) = (aggregateResult as Result.Success).data
-            val totalRevenue = totalAmountPaise.toDouble() / 100.0
-
-            // Calculate monthly revenue for the current calendar month using aggregation
             val now = Instant.now()
             val currentMonth = YearMonth.from(now.atZone(ZoneId.systemDefault()))
             val monthStart = currentMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
             val monthEnd = currentMonth.atEndOfMonth().atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
-            
-            val monthlyRevenueResult = paymentRepository.getMonthlyRevenue(monthStart.toString(), monthEnd.toString())
-            val monthlyRevenue = if (monthlyRevenueResult is Result.Success) {
-                monthlyRevenueResult.data.find { it.month == currentMonth.format(DateTimeFormatter.ofPattern("yyyy-MM")) }?.revenue ?: 0.0
-            } else {
-                logger.warn("Failed to get monthly revenue: ${(monthlyRevenueResult as? Result.Error)?.message}")
-                0.0
-            }
-
-            // Generate monthly revenue trend data for the last 12 months using aggregation
             val last12MonthsStart = now.minus(java.time.Duration.ofDays(365))
-            val monthlyRevenueChartResult = paymentRepository.getMonthlyRevenue(
-                last12MonthsStart.toString(),
-                now.toString()
-            )
-            val monthlyRevenueChart = if (monthlyRevenueChartResult is Result.Success) {
-                // Fill in missing months with zero revenue
-                val chartData = monthlyRevenueChartResult.data.associateBy { it.month }
-                val nowZoned = now.atZone(ZoneId.systemDefault())
-                val last12Months = (0..11).map { monthsAgo ->
-                    nowZoned.minusMonths(monthsAgo.toLong()).let { YearMonth.from(it) }
-                        .format(DateTimeFormatter.ofPattern("yyyy-MM"))
-                }.reversed()
-                
-                last12Months.map { month ->
-                    chartData[month] ?: MonthlyRevenue(month, 0.0)
+
+            // Execute independent queries in parallel for better performance
+            coroutineScope {
+                val aggregateDeferred = async { paymentRepository.getVerifiedPaymentsAggregate() }
+                val currentMonthRevenueDeferred = async {
+                    paymentRepository.getMonthlyRevenue(monthStart.toString(), monthEnd.toString())
                 }
-            } else {
-                logger.warn("Failed to get monthly revenue chart: ${(monthlyRevenueChartResult as? Result.Error)?.message}")
-                calculateMonthlyRevenueChartFallback()
+                val last12MonthsRevenueDeferred = async {
+                    paymentRepository.getMonthlyRevenue(last12MonthsStart.toString(), now.toString())
+                }
+                val refundMetricsDeferred = async { refundService.getRefundMetrics() }
+
+                // Wait for all queries to complete
+                val aggregateResult = aggregateDeferred.await()
+                val currentMonthRevenueResult = currentMonthRevenueDeferred.await()
+                val last12MonthsRevenueResult = last12MonthsRevenueDeferred.await()
+                val refundMetricsResult = refundMetricsDeferred.await()
+
+                // Process payment aggregate results
+                if (aggregateResult is Result.Error) {
+                    return@coroutineScope Result.error("Failed to fetch payment aggregate: ${aggregateResult.message}")
+                }
+                val (totalAmountPaise, totalPaymentsCount) = (aggregateResult as Result.Success).data
+                val totalRevenue = totalAmountPaise.toDouble() / 100.0
+
+                // Process current month revenue
+                val monthlyRevenue = if (currentMonthRevenueResult is Result.Success) {
+                    currentMonthRevenueResult.data.find { it.month == currentMonth.format(DateTimeFormatter.ofPattern("yyyy-MM")) }?.revenue ?: 0.0
+                } else {
+                    logger.warn("Failed to get monthly revenue: ${(currentMonthRevenueResult as? Result.Error)?.message}")
+                    0.0
+                }
+
+                // Process 12-month revenue chart
+                val monthlyRevenueChart = if (last12MonthsRevenueResult is Result.Success) {
+                    // Fill in missing months with zero revenue
+                    val chartData = last12MonthsRevenueResult.data.associateBy { it.month }
+                    val nowZoned = now.atZone(ZoneId.systemDefault())
+                    val last12Months = (0..11).map { monthsAgo ->
+                        nowZoned.minusMonths(monthsAgo.toLong()).let { YearMonth.from(it) }
+                            .format(DateTimeFormatter.ofPattern("yyyy-MM"))
+                    }.reversed()
+
+                    last12Months.map { month ->
+                        chartData[month] ?: MonthlyRevenue(month, 0.0)
+                    }
+                } else {
+                    logger.warn("Failed to get monthly revenue chart: ${(last12MonthsRevenueResult as? Result.Error)?.message}")
+                    calculateMonthlyRevenueChartFallback()
+                }
+
+                // Process refund metrics
+                val totalRefunds: Double
+                val monthlyRefunds: Double
+                val refundRate: Double
+
+                if (refundMetricsResult is Result.Success) {
+                    val refundMetrics = refundMetricsResult.data
+                    totalRefunds = refundMetrics.totalRefunds
+                    monthlyRefunds = refundMetrics.monthlyRefunds
+                    // Use the refund rate calculated by RefundService
+                    refundRate = refundMetrics.refundRate
+                } else {
+                    // If refund metrics fail, default to zero values
+                    logger.warn("Failed to fetch refund metrics: ${(refundMetricsResult as? Result.Error)?.message}")
+                    totalRefunds = 0.0
+                    monthlyRefunds = 0.0
+                    refundRate = 0.0
+                }
+
+                // Calculate net revenue (total revenue - total refunds)
+                val netRevenue = totalRevenue - totalRefunds
+
+                val metrics = FinancialMetrics(
+                    totalRevenue = totalRevenue,
+                    monthlyRevenue = monthlyRevenue,
+                    totalPaymentsCount = totalPaymentsCount.toInt(),
+                    monthlyRevenueChart = monthlyRevenueChart,
+                    totalRefunds = totalRefunds,
+                    monthlyRefunds = monthlyRefunds,
+                    refundRate = refundRate,
+                    netRevenue = netRevenue
+                )
+
+                logger.debug("Financial metrics calculated successfully")
+                Result.success(metrics)
             }
-
-            // Fetch refund metrics
-            val refundMetricsResult = refundService.getRefundMetrics()
-            val totalRefunds: Double
-            val monthlyRefunds: Double
-            val refundRate: Double
-
-            if (refundMetricsResult is Result.Success) {
-                val refundMetrics = refundMetricsResult.data
-                totalRefunds = refundMetrics.totalRefunds
-                monthlyRefunds = refundMetrics.monthlyRefunds
-                // Use the refund rate calculated by RefundService
-                refundRate = refundMetrics.refundRate
-            } else {
-                // If refund metrics fail, default to zero values
-                logger.warn("Failed to fetch refund metrics: ${(refundMetricsResult as? Result.Error)?.message}")
-                totalRefunds = 0.0
-                monthlyRefunds = 0.0
-                refundRate = 0.0
-            }
-
-            // Calculate net revenue (total revenue - total refunds)
-            val netRevenue = totalRevenue - totalRefunds
-
-            val metrics = FinancialMetrics(
-                totalRevenue = totalRevenue,
-                monthlyRevenue = monthlyRevenue,
-                totalPaymentsCount = totalPaymentsCount.toInt(),
-                monthlyRevenueChart = monthlyRevenueChart,
-                totalRefunds = totalRefunds,
-                monthlyRefunds = monthlyRefunds,
-                refundRate = refundRate,
-                netRevenue = netRevenue
-            )
-
-            logger.debug("Financial metrics calculated successfully")
-            Result.success(metrics)
         } catch (e: Exception) {
             logger.error("Failed to calculate financial metrics", e)
             Result.error("Failed to calculate financial metrics: ${e.message}", e)
@@ -123,7 +136,7 @@ class FinancialServiceImpl(
         val last12Months = (0..11).map { monthsAgo ->
             now.minusMonths(monthsAgo.toLong()).let { YearMonth.from(it) }
         }.reversed()
-        
+
         return last12Months.map { month ->
             MonthlyRevenue(
                 month = month.format(DateTimeFormatter.ofPattern("yyyy-MM")),

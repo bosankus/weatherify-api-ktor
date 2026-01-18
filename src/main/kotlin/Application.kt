@@ -4,6 +4,7 @@ import bose.ankush.base.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import kotlinx.coroutines.launch
 import org.koin.ktor.ext.inject
 
 fun main() {
@@ -19,6 +20,7 @@ fun Application.module() {
     configureFirebase()
     configureServiceCatalogSeeding()
     configureServiceTypeResolver()
+    configureDatabaseIndexes()
 }
 
 /**
@@ -36,9 +38,9 @@ fun configureFirebase() {
 fun Application.configureServiceCatalogSeeding() {
     val seedingService by inject<data.service.ServiceCatalogSeedingService>()
 
-    // Run seeding on application startup
+    // Run seeding asynchronously on application startup (non-blocking)
     monitor.subscribe(ApplicationStarted) {
-        kotlinx.coroutines.runBlocking {
+        this.launch {
             seedingService.seedInitialServices()
         }
     }
@@ -53,4 +55,19 @@ fun Application.configureServiceTypeResolver() {
 
     // Initialize the resolver after DI is configured
     util.ServiceTypeResolver.initialize(serviceCatalogRepository)
+}
+
+/**
+ * Configure database indexes asynchronously during application startup.
+ * This replaces runBlocking in init blocks for better startup performance.
+ */
+fun Application.configureDatabaseIndexes() {
+    val databaseModule by inject<data.source.DatabaseModule>()
+
+    // Create indexes asynchronously on application startup
+    monitor.subscribe(ApplicationStarted) {
+        this.launch {
+            databaseModule.createIndexes()
+        }
+    }
 }

@@ -14,7 +14,6 @@ import com.mongodb.kotlin.client.coroutine.MongoClient
 import com.mongodb.kotlin.client.coroutine.MongoCollection
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import config.Environment
-import kotlinx.coroutines.runBlocking
 import org.bson.Document
 import org.bson.conversions.Bson
 import org.slf4j.LoggerFactory
@@ -39,10 +38,11 @@ class DatabaseModule(
             .applyConnectionString(ConnectionString(connectionString))
             .applyToConnectionPoolSettings { builder ->
                 builder
-                    .maxSize(100)
-                    .minSize(10)
-                    .maxWaitTime(2, TimeUnit.SECONDS)
-                    .maxConnectionIdleTime(30, TimeUnit.SECONDS)
+                    .maxSize(50) // Reduced from 100 to optimize for typical load
+                    .minSize(5)  // Reduced idle connections
+                    .maxWaitTime(5, TimeUnit.SECONDS) // Increased wait time for better reliability
+                    .maxConnectionIdleTime(20, TimeUnit.SECONDS) // Reduced idle time
+                    .maxConnectionLifeTime(30, TimeUnit.MINUTES) // Add lifecycle limit to prevent stale connections
             }
             .applyToSocketSettings { builder ->
                 builder
@@ -55,18 +55,13 @@ class DatabaseModule(
     }
     private val database: MongoDatabase by lazy { client.getDatabase(dbName) }
 
-    init {
-        // Create indexes when the module is initialized
-        createIndexes()
-    }
-
     /**
-     * Create the necessary indexes for collections
+     * Create the necessary indexes for collections asynchronously.
+     * This should be called during application startup, not in init block.
      */
-    private fun createIndexes() {
-        runBlocking {
-            try {
-                logger.info("Creating indexes for collections")
+    suspend fun createIndexes() {
+        try {
+            logger.info("Creating indexes for collections")
                 // Create a unique index on the email field in users collection
                 getUsersCollection().createIndex(
                     Indexes.ascending(Constants.Database.EMAIL_FIELD),
@@ -152,10 +147,27 @@ class DatabaseModule(
                     Indexes.descending("createdAt")
                 )
 
-                logger.info("Indexes created successfully")
-            } catch (e: Exception) {
-                logger.error("Failed to create indexes", e)
-            }
+                // Compound index on userEmail + createdAt for user payment history queries
+                // This optimizes queries that filter by userEmail and sort by createdAt
+                paymentsCollection.createIndex(
+                    Indexes.compoundIndex(
+                        Indexes.ascending("userEmail"),
+                        Indexes.descending("createdAt")
+                    )
+                )
+
+                // Compound index on status + createdAt for filtered payment queries with sorting
+                // This optimizes queries that filter by status and sort by date
+                paymentsCollection.createIndex(
+                    Indexes.compoundIndex(
+                        Indexes.ascending("status"),
+                        Indexes.descending("createdAt")
+                    )
+                )
+
+            logger.info("Indexes created successfully")
+        } catch (e: Exception) {
+            logger.error("Failed to create indexes", e)
         }
     }
 
