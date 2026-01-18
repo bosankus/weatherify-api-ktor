@@ -60,11 +60,7 @@ fun Application.configureRouting() {
             )
 
             // Check for exact matches first
-            if (excludedPaths.contains(path)) {
-                return true
-            }
-
-            return false
+            return excludedPaths.contains(path)
         }
 
         // GET catch-all (exclude specific paths to prevent redirect loop)

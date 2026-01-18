@@ -455,7 +455,7 @@ private suspend fun serveLoginPage(
                                     }
                                 });
                             });
-                            
+
                             // Handle form submission
                             loginForm.addEventListener('submit', function(e) {
                                 e.preventDefault();
@@ -483,7 +483,7 @@ private suspend fun serveLoginPage(
                                         ripple.style.animation = 'ripple 0.6s ease-out';
                                     }, 10);
                                 }
-                                
+
                                 loginButton.classList.add('loading');
                                 loginButton.disabled = true;
 
@@ -560,12 +560,12 @@ private suspend fun serveLoginPage(
                 div {
                     classes = setOf("content-area", "login-container")
                     style = "margin-top: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - 200px);"
-                    
+
                     // Login Card
                     div {
                         classes = setOf("login-card")
                         style = "width: 100%; max-width: 440px;"
-                        
+
                         // Header Section
                         div {
                             classes = setOf("login-header")
@@ -584,12 +584,12 @@ private suspend fun serveLoginPage(
                                 +"Sign in to access the admin dashboard and manage your weather API."
                             }
                         }
-                        
+
                         // Login form
                         form {
                             id = "login-form"
                             classes = setOf("login-form")
-                            
+
                             div {
                                 classes = setOf("form-group")
                                 label {
@@ -1427,9 +1427,7 @@ fun Route.adminAuthRoute() {
                     val financialService: domain.service.FinancialService by application.inject()
 
                     // Generate CSV based on export type
-                    val csvResult = financialService.exportPayments(request.startDate, request.endDate)
-
-                    when (csvResult) {
+                    when (val csvResult = financialService.exportPayments(request.startDate, request.endDate)) {
                         is Result.Success -> {
                             val csvData = csvResult.data
                             val timestampMillis = System.currentTimeMillis()
@@ -1475,9 +1473,7 @@ fun Route.adminAuthRoute() {
 
         get("/dashboard") {
             // Check authentication without responding (to allow redirect)
-            val authResult = call.authenticateAdmin()
-
-            when (authResult) {
+            when (val authResult = call.authenticateAdmin()) {
                 is AuthHelper.AuthResult.Failure -> {
                     // Authentication failed, redirect to login with appropriate error
                     logger.info("Unauthenticated access to dashboard, redirecting to login")

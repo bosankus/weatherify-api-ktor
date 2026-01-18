@@ -161,8 +161,7 @@ class FinancialServiceImpl(
 
             // Apply status filter
             if (!status.isNullOrBlank()) {
-                val normalized = status.trim().lowercase()
-                val allowedStatuses = when (normalized) {
+                val allowedStatuses = when (val normalized = status.trim().lowercase()) {
                     "success" -> setOf("verified", "success", "captured")
                     "verified" -> setOf("verified")
                     "captured" -> setOf("captured")

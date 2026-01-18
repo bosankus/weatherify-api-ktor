@@ -27,9 +27,7 @@ fun Route.feedbackRoute() {
             println("User with email ${user.email} is accessing feedback data")
 
             call.executeRoute(Constants.Messages.FEEDBACK_RETRIEVED) {
-                val result = call.getQueryParameter(Constants.Api.PARAM_ID)
-
-                when (result) {
+                when (val result = call.getQueryParameter(Constants.Api.PARAM_ID)) {
                     is RouteResult.Success -> {
                         val feedbackId = result.data
                         val feedback = getFeedbackById(feedbackId)
@@ -93,9 +91,7 @@ fun Route.feedbackRoute() {
             println("User with email ${user.email} is deleting feedback")
 
             call.executeRoute(Constants.Messages.FEEDBACK_REMOVED) {
-                val result = call.getQueryParameter(Constants.Api.PARAM_ID)
-
-                when (result) {
+                when (val result = call.getQueryParameter(Constants.Api.PARAM_ID)) {
                     is RouteResult.Success -> {
                         val feedbackId = result.data
                         val deleted = deleteFeedbackById(feedbackId)

@@ -57,9 +57,7 @@ fun Route.authRoute() {
             }
 
             // Check if user already exists
-            val existingUserResult = userRepository.findUserByEmail(request.email)
-
-            when (existingUserResult) {
+            when (val existingUserResult = userRepository.findUserByEmail(request.email)) {
                 is Result.Success -> {
                     if (existingUserResult.data != null) {
                         logger.warn("User already exists: ${request.email}")
@@ -128,9 +126,7 @@ fun Route.authRoute() {
             )
 
             // Save user to database
-            val createResult = userRepository.createUser(user)
-
-            when (createResult) {
+            when (val createResult = userRepository.createUser(user)) {
                 is Result.Success -> {
                     if (createResult.data) {
                         logger.info("User registered successfully: ${request.email}")
@@ -325,9 +321,7 @@ fun Route.authRoute() {
             logger.info("Login request received for email: ${request.email}")
 
             // Find user by email
-            val userResult = userRepository.findUserByEmail(request.email)
-
-            when (userResult) {
+            when (val userResult = userRepository.findUserByEmail(request.email)) {
                 is Result.Success -> {
                     val user = userResult.data
                     if (user == null) {
@@ -542,7 +536,7 @@ fun Route.authRoute() {
             // Check Content-Type before attempting to receive
             val contentType = call.request.contentType()
             if (!contentType.match(ContentType.Application.Json)) {
-                logger.warn("Refresh token request received without proper Content-Type: ${contentType.toString()}")
+                logger.warn("Refresh token request received without proper Content-Type: $contentType")
                 call.respondError(
                     Constants.Messages.VALIDATION_ERROR + ": Content-Type must be application/json",
                     mapOf("error" to "Invalid Content-Type", "received" to contentType.toString()),
@@ -611,9 +605,7 @@ fun Route.authRoute() {
             }
 
             // Find user by email to ensure they still exist and are active
-            val userResult = userRepository.findUserByEmail(email)
-
-            when (userResult) {
+            when (val userResult = userRepository.findUserByEmail(email)) {
                 is Result.Success -> {
                     val user = userResult.data
                     if (user == null) {

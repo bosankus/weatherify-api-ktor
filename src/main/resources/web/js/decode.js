@@ -1,6 +1,6 @@
 (function(){
   var CURRENT_MODE = 'json'; // 'json' | 'xml' | 'protobuf'
-  
+
   // Format configuration system
   var FORMAT_CONFIGS = {
     json: {
@@ -37,7 +37,7 @@
       supportsMinify: false
     }
   };
-  
+
   function getMode(){
     var sel = document.getElementById('format-select');
     var val = sel && sel.value ? sel.value.toLowerCase() : CURRENT_MODE;
@@ -183,21 +183,21 @@
     return { ok:false, error: parsed.error || 'Invalid JSON', fixed: fixed };
   }
   function autoFixNow(){
-    if (getMode() !== 'json'){ 
-      var err = byId('error-box'); 
-      if (err){ 
-        err.textContent = 'Auto Fix is available only in JSON mode.'; 
-        err.style.display='block'; 
-      } 
-      return; 
+    if (getMode() !== 'json'){
+      var err = byId('error-box');
+      if (err){
+        err.textContent = 'Auto Fix is available only in JSON mode.';
+        err.style.display='block';
+      }
+      return;
     }
     var inp = byId('json-input'); if (!inp) return;
     var text = inp.value || '';
     if (!text.trim()){ formatNow(); return; }
-    
+
     var originalLength = text.length;
     var res = attemptAutoFix(text);
-    
+
     if (res.ok){
       inp.value = res.pretty;
       formatNow();
@@ -326,13 +326,13 @@
     var btnUnescape = byId('btn-unescape');
     var btnCreateMock = byId('btn-create-mock');
     var btnMinify = byId('btn-minify');
-    
+
     if (btnAutofix) btnAutofix.disabled = !config.supportsAutoFix;
     if (btnSort) btnSort.disabled = !config.supportsSortKeys;
     if (btnUnescape) btnUnescape.disabled = !config.supportsUnescape;
     if (btnCreateMock) btnCreateMock.disabled = !config.supportsMockAPI;
     if (btnMinify) btnMinify.disabled = !config.supportsMinify;
-    
+
     if (!config.supportsMockAPI){ hideMockBox(); }
   }
   function updatePlaceholderForMode(){
@@ -379,33 +379,33 @@
     var err = byId('error-box');
     var btn = byId('btn-create-mock');
     var payload = getJsonForMock();
-    
+
     // Validation before creating mock
     if (!payload){
       if (err){ err.textContent = 'Please provide valid JSON to create a mock.'; err.style.display = 'block'; }
       showToast('Invalid JSON for mock API', 'error');
       return;
     }
-    
+
     // Add loading state
     if (btn){
       btn.disabled = true;
       btn.textContent = 'Creating...';
     }
-    
+
     try {
       var res = await fetch('/mock/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload });
       var txt = await res.text();
       var data = {};
       try { data = JSON.parse(txt); } catch(_e) { data = { status:false, message: 'Unexpected response' }; }
-      
+
       if (!res.ok || !data || data.status === false){
         var msg = (data && data.message) ? data.message : ('Failed to create mock: ' + res.status);
         if (err){ err.textContent = msg; err.style.display = 'block'; }
         showToast('Failed to create mock API', 'error');
         return;
       }
-      
+
       var url = data.data && data.data.url;
       var id = data.data && data.data.id;
       if (url && id){
@@ -425,20 +425,20 @@
     }
   }
   async function resetMock(){
-    var box = byId('mock-api-box'); 
+    var box = byId('mock-api-box');
     var err = byId('error-box');
     var btn = byId('btn-mock-reset');
-    
+
     if (!box) return;
     var id = box.getAttribute('data-mock-id');
     if (!id){ hideMockBox(); return; }
-    
+
     // Add loading state
     if (btn){
       btn.disabled = true;
       btn.textContent = 'Deleting...';
     }
-    
+
     try {
       var res = await fetch('/mock/' + encodeURIComponent(id), { method: 'DELETE' });
       if (!res.ok){
@@ -466,7 +466,7 @@
     if (!url) return;
     var tmp = document.createElement('textarea');
     tmp.value = url; document.body.appendChild(tmp); tmp.select();
-    try { 
+    try {
       document.execCommand('copy');
       showToast('URL copied to clipboard!', 'success');
     } finally { document.body.removeChild(tmp); }
@@ -491,7 +491,7 @@
       toast.style.cssText = 'position:fixed;top:80px;right:20px;padding:12px 20px;border-radius:8px;font-weight:500;z-index:10000;opacity:0;box-shadow:0 4px 12px rgba(0,0,0,0.15);pointer-events:none;';
       document.body.appendChild(toast);
     }
-    
+
     toast.textContent = message;
     if (type === 'success'){
       toast.style.background = 'rgba(16, 185, 129, 0.95)';
@@ -503,11 +503,11 @@
       toast.style.background = 'rgba(59, 130, 246, 0.95)';
       toast.style.color = '#fff';
     }
-    
+
     // Trigger animation
     toast.style.animation = 'fadeInSlide 0.3s ease forwards';
     toast.style.opacity = '1';
-    
+
     setTimeout(function(){
       toast.style.animation = 'fadeOut 0.3s ease forwards';
       setTimeout(function(){
@@ -536,20 +536,20 @@
     var err = byId('error-box');
     var gutter = byId('line-gutter');
     if (!inp || !out || !err || !gutter) return;
-    
+
     var text = (inp.value || '').trim();
     var mode = getMode();
-    
+
     // Clear previous errors
     err.style.display = 'none';
     err.textContent = '';
-    
+
     if (!text){
       out.textContent = '';
       gutter.innerHTML = '';
       return;
     }
-    
+
     if (mode === 'json'){
       try {
         var obj = JSON.parse(text);
@@ -561,7 +561,7 @@
         // Show detailed error with line/column info
         var errorMsg = e.message || 'Invalid JSON';
         var line = null, column = null;
-        
+
         // Try to extract line and column from error message
         var match = errorMsg.match(/position\s+(\d+)/i);
         if (match){
@@ -575,7 +575,7 @@
           match = errorMsg.match(/column\s+(\d+)/i);
           if (match) column = parseInt(match[1], 10);
         }
-        
+
         // Display error with line/column info
         var errorText = 'Syntax Error: ' + errorMsg;
         if (line !== null){
@@ -584,13 +584,13 @@
         }
         err.textContent = errorText;
         err.style.display = 'block';
-        
+
         // Highlight error line in gutter
         if (line !== null){
           var textLines = text.split('\n');
           gutter.innerHTML = buildGutter(textLines.length, line);
         }
-        
+
         // Show raw text in output
         out.textContent = text;
       }
@@ -619,13 +619,13 @@
         }
         err.textContent = xmlError;
         err.style.display = 'block';
-        
+
         // Highlight error line
         if (xmlRes.line){
           var xmlLines = text.split('\n');
           gutter.innerHTML = buildGutter(xmlLines.length, xmlRes.line);
         }
-        
+
         out.textContent = text;
       }
     } else if (mode === 'protobuf'){
@@ -666,7 +666,7 @@
       showToast('Nothing to copy', 'error');
       return;
     }
-    
+
     var tmp = document.createElement('textarea');
     tmp.value = text;
     document.body.appendChild(tmp);
@@ -690,7 +690,7 @@
       showToast('Nothing to download', 'error');
       return;
     }
-    
+
     var config = getFormatConfig();
     var blob = new Blob([text], { type: config.mimeType });
     var url = URL.createObjectURL(blob);
@@ -760,7 +760,7 @@
   // Hook into global initializer if present
   if (typeof window.initializeApp === 'function'){
     var prev = window.initializeApp;
-    window.initializeApp = function(){ try{ prev(); }catch(e){}; try{ initDecode(); }catch(e){ console.error(e); } };
+    window.initializeApp = function(){ try{ prev(); }catch(e){} try{ initDecode(); }catch(e){ console.error(e); } };
   } else {
     document.addEventListener('DOMContentLoaded', initDecode);
   }

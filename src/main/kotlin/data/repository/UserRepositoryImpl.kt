@@ -41,15 +41,13 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
                 return Result.success(null)
             }
 
-            val rawId = doc["_id"]
-            val idStr = when (rawId) {
+            val idStr = when (val rawId = doc["_id"]) {
                 is ObjectId -> rawId.toHexString()
                 is String -> rawId
                 else -> rawId?.toString() ?: ObjectId().toHexString()
             }
 
-            val roleValue = doc.get("role")
-            val role = when (roleValue) {
+            val role = when (val roleValue = doc.get("role")) {
                 is String -> try {
                     UserRole.valueOf(roleValue)
                 } catch (_: Exception) {
