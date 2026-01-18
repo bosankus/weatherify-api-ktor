@@ -900,8 +900,8 @@ function initializeFinanceTab() {
 
 }
 
-// Helper function to format date
-function formatDate(dateString) {
+// Use common utilities from admin-utils.js
+const formatDate = window.formatDate || function(dateString) {
     if (!dateString) return 'N/A';
     try {
         const date = new Date(dateString);
@@ -909,10 +909,9 @@ function formatDate(dateString) {
     } catch (error) {
         return dateString;
     }
-}
+};
 
-// Helper function to escape HTML
-function escapeHtml(str) {
+const escapeHtml = window.escapeHtml || function(str) {
     if (str == null) return '';
     return String(str)
         .replace(/&/g, '&amp;')
@@ -920,6 +919,6 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-}
+};
 
 console.log('Finance admin module loaded');

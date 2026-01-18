@@ -11,10 +11,11 @@
 
     /**
      * Helper function to get element by ID
+     * Use common q() from admin-utils.js if available
      */
-    function q(id) {
+    const q = window.q || function(id) {
         return document.getElementById(id);
-    }
+    };
 
     /**
      * Helper function to get theme-aware colors

@@ -276,12 +276,12 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
 
                     <div class="modal-form-group" id="partial-amount-group" style="display: none;">
                         <label for="refund-amount" class="modal-form-label required">Amount (₹)</label>
-                        <input 
-                            type="number" 
-                            id="refund-amount" 
-                            name="amount" 
+                        <input
+                            type="number"
+                            id="refund-amount"
+                            name="amount"
                             class="modal-form-input"
-                            min="0.01" 
+                            min="0.01"
                             max="${refundableInRupees}"
                             step="0.01"
                             placeholder="Enter amount"
@@ -302,9 +302,9 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
 
                     <div class="modal-form-group">
                         <label for="refund-notes" class="modal-form-label">Notes (Optional)</label>
-                        <textarea 
-                            id="refund-notes" 
-                            name="notes" 
+                        <textarea
+                            id="refund-notes"
+                            name="notes"
                             class="modal-form-textarea"
                             rows="3"
                             placeholder="Add internal notes for this refund..."
@@ -362,16 +362,16 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                 let refundAmount;
                 if (refundType === 'partial') {
                     const amountInRupees = parseFloat(refundAmountInput.value);
-                    
+
                     // Validate partial amount
                     if (isNaN(amountInRupees) || amountInRupees <= 0) {
                         showMessage('error', 'Please enter a valid refund amount');
                         return;
                     }
-                    
+
                     // Convert rupees to paise
                     refundAmount = Math.round(amountInRupees * 100);
-                    
+
                     if (refundAmount > refundableAmount) {
                         showMessage('error', `Refund amount cannot exceed ₹${(refundableAmount / 100).toFixed(2)}`);
                         return;
@@ -392,10 +392,10 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                         if (response.status === true) {
                             showMessage('success', response.message || 'Refund initiated successfully');
             if (typeof closeFinancePanel === 'function') closeFinancePanel();
-                            
+
                             // Update only the specific payment row instead of reloading entire list
                             updatePaymentRowAfterRefund(payment.razorpayPaymentId);
-                            
+
                             // Reload financial metrics to reflect refund in total revenue
                             if (typeof loadFinancialMetrics === 'function') {
                                 loadFinancialMetrics();
@@ -438,7 +438,7 @@ function updatePaymentRowAfterRefund(paymentId) {
         const txnCell = row.querySelector('td:nth-child(6) code'); // Transaction ID is 6th column
         if (txnCell && txnCell.textContent === paymentId) {
             targetRow = row;
-            
+
             // Extract payment data from the row
             payment = {
                 userEmail: row.querySelector('td:nth-child(1)')?.textContent || 'N/A',
@@ -533,7 +533,7 @@ function showRefundHistoryModal(paymentId) {
                 const totalRefunded = (summary.totalRefunded || 0) / 100;
                 const refundableAmount = (summary.refundableAmount || summary.remainingRefundable || 0) / 100;
 
-                let refundsHtml = '';
+                let refundsHtml;
                 if (refunds.length === 0) {
                     refundsHtml = '<div class="refund-details-empty">No refunds found for this payment</div>';
                 } else {
@@ -685,12 +685,12 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
     actionsCell.appendChild(actionsGroup);
 
     const totalAmount = payment.amount || 0;
-    
+
     // Use refundData if available, otherwise fall back to payment object
-    let refundedAmount = 0;
-    let isFullyRefunded = false;
-    let hasPartialRefund = false;
-    
+    let refundedAmount;
+    let isFullyRefunded;
+    let hasPartialRefund;
+
     if (refundData) {
         refundedAmount = refundData.totalRefunded || 0;
         isFullyRefunded = refundData.isFullyRefunded || false;
@@ -720,7 +720,7 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
             statusCell.style.textAlign = 'center';
             statusCell.textContent = 'REFUNDED';
         }
-        
+
         // Show refunded badge styled like Details button (clickable to view history)
         const badge = document.createElement('button');
         badge.className = 'btn-details btn-sm';
@@ -838,7 +838,7 @@ function showRefundDetailsModal(refundSummary) {
     const originalAmount = (refundSummary.originalAmount || 0) / 100;
     const totalRefunded = (refundSummary.totalRefunded || 0) / 100;
     const remainingRefundable = (refundSummary.remainingRefundable || 0) / 100;
-    
+
     // Generate status banner based on refund statuses
     let statusBanner = '';
     const hasProcessed = refunds.some(r => r.status === 'PROCESSED');
@@ -846,7 +846,7 @@ function showRefundDetailsModal(refundSummary) {
     const hasFailed = refunds.some(r => r.status === 'FAILED');
     const overallStatusClass = hasFailed ? 'refund-status--error' : hasPending ? 'refund-status--warning' : hasProcessed ? 'refund-status--success' : 'refund-status--neutral';
     const overallStatusLabel = hasFailed ? 'Refund Failed' : hasPending ? 'Processing' : hasProcessed ? 'Refund Completed' : 'No Refunds';
-    
+
     if (hasFailed) {
         statusBanner = `
             <div class="status-banner status-banner-error">
@@ -882,11 +882,11 @@ function showRefundDetailsModal(refundSummary) {
     const refundsHtml = refunds.map((refund, index) => {
         const statusClass = refund.status === 'PROCESSED' ? 'refund-status--success' :
             refund.status === 'FAILED' ? 'refund-status--error' : 'refund-status--warning';
-        
+
         const statusIcon = refund.status === 'PROCESSED' ? '✓' :
             refund.status === 'FAILED' ? '✗' : '⟳';
         const refundAmount = ((refund.amount || 0) / 100).toFixed(2);
-        
+
         // Calculate processing time
         let processingTime = 'N/A';
         if (refund.status === 'PROCESSED' && refund.createdAt && refund.processedAt) {
@@ -904,7 +904,7 @@ function showRefundDetailsModal(refundSummary) {
             const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
             processingTime = `${diffHours}h ${diffMins}m (pending)`;
         }
-        
+
         return `
             <div class="refund-history-card refund-card">
                 <div class="refund-history-header">
@@ -1045,15 +1045,15 @@ function showRefundDetailsModal(refundSummary) {
 function refreshRefundStatus(paymentId) {
     const refreshBtn = document.getElementById('refresh-status-btn');
     const refreshIcon = document.getElementById('refresh-icon');
-    
+
     if (!refreshBtn || !paymentId) return;
-    
+
     // Disable button and show loading state
     refreshBtn.disabled = true;
     if (refreshIcon) {
         refreshIcon.style.animation = 'spin 1s linear infinite';
     }
-    
+
     window.RefundAPI.checkRefundStatus(paymentId)
         .then(response => {
             if (response.status === true && response.data) {
@@ -1086,7 +1086,7 @@ function showPaymentDetailsModal(payment) {
 
     const amount = (payment.amount || 0).toFixed(2);
     const status = payment.status || 'PENDING';
-    const statusClass = status === 'verified' || status === 'SUCCESS' ? 'status-processed' : 
+    const statusClass = status === 'verified' || status === 'SUCCESS' ? 'status-processed' :
                        status === 'FAILED' ? 'status-failed' : 'status-pending';
 
     const modalContent = `
@@ -1131,8 +1131,8 @@ function showPaymentDetailsModal(payment) {
     showFinancePanel('Payment Details', modalContent);
 }
 
-// Helper function to format date
-function formatDate(dateString) {
+// Use common utilities from admin-utils.js
+const formatDate = window.formatDate || function(dateString) {
     if (!dateString) return 'N/A';
     try {
         const date = new Date(dateString);
@@ -1140,10 +1140,9 @@ function formatDate(dateString) {
     } catch (error) {
         return dateString;
     }
-}
+};
 
-// Helper function to escape HTML
-function escapeHtml(str) {
+const escapeHtml = window.escapeHtml || function(str) {
     if (str == null) return '';
     return String(str)
         .replace(/&/g, '&amp;')
@@ -1151,6 +1150,6 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-}
+};
 
 console.log('Refund admin module loaded');

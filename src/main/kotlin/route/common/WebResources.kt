@@ -97,6 +97,7 @@ object WebResources {
     private val headerJs = readResourceFile("/web/js/header.js")
     private val decodeJs = readResourceFile("/web/js/decode.js")
     private val tableUtilsJs = readResourceFile("/web/js/table-utils.js")
+    private val adminUtilsJs = readResourceFile("/web/js/admin-utils.js")
 
     /**
      * Read a file from the resources directory
@@ -225,7 +226,13 @@ object WebResources {
             attributes["src"] = "https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"
             attributes["crossorigin"] = "anonymous"
         }
-        // Include table utilities FIRST (before other admin scripts)
+        // Include common admin utilities FIRST (before other admin scripts)
+        head.script {
+            unsafe {
+                raw(adminUtilsJs)
+            }
+        }
+        // Include table utilities (after admin utils)
         head.script {
             unsafe {
                 raw(tableUtilsJs)

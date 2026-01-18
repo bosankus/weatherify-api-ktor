@@ -189,14 +189,15 @@ function runWarmup() {
 
 
 
-function escapeHtml(str){
+// Use common escapeHtml from admin-utils.js
+const escapeHtml = window.escapeHtml || function(str) {
     return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-}
+};
 
 // Enhanced modal system with accessibility and focus management
 let modalFocusTrap = null;
@@ -752,12 +753,18 @@ function renderUsersTable(users) {
     const fragment = document.createDocumentFragment();
 
     if (users.length === 0) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 6;
-        cell.innerHTML = '<div class="users-cell-muted" style="padding: 1.25rem; text-align: center;">No users found</div>';
-        row.appendChild(cell);
-        fragment.appendChild(row);
+        // Use table-utils.js for empty state
+        const emptyRow = typeof createEmptyTableRow === 'function' 
+            ? createEmptyTableRow(6, 'No users found')
+            : (() => {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 6;
+                cell.innerHTML = '<div class="users-cell-muted" style="padding: 1.25rem; text-align: center;">No users found</div>';
+                row.appendChild(cell);
+                return row;
+            })();
+        fragment.appendChild(emptyRow);
         tableBody.replaceChildren(fragment);
         return;
     }
@@ -778,11 +785,16 @@ function renderUsersTable(users) {
         emailCell.appendChild(userCell);
         row.appendChild(emailCell);
 
-        // Created at cell
-        const createdAtCell = document.createElement('td');
-        const createdText = document.createElement('div');
-        createdText.textContent = formatDate(user.createdAt);
-        createdAtCell.appendChild(createdText);
+        // Created at cell - use table-utils if available
+        const createdAtCell = typeof createTableCell === 'function'
+            ? createTableCell(formatDate(user.createdAt))
+            : (() => {
+                const cell = document.createElement('td');
+                const text = document.createElement('div');
+                text.textContent = formatDate(user.createdAt);
+                cell.appendChild(text);
+                return cell;
+            })();
         row.appendChild(createdAtCell);
 
         // Role cell
@@ -1046,9 +1058,9 @@ function updateUserPremium(email, isPremium, checkboxEl) {
  * @param {string} dateString - The date string to format
  * @returns {string} The formatted date string
  */
-function formatDate(dateString) {
+// Use common formatDate from admin-utils.js
+const formatDate = window.formatDate || function(dateString) {
     if (!dateString) return 'N/A';
-
     try {
         const date = new Date(dateString);
         return date.toLocaleString();
@@ -1869,19 +1881,22 @@ function bindJwtInspectorModal(){
 
     // Legacy state reference removed - use ReportsState directly
 
-    function q(id){ return document.getElementById(id); }
-    function cssVar(name){
+    // Use common utilities from admin-utils.js
+    const q = window.q || function(id) { return document.getElementById(id); };
+    const cssVar = window.AdminUtils?.cssVar || function(name) {
         try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch(_) { return ''; }
-    }
-
-    function parseDateSafe(v){
+    };
+    const parseDateSafe = window.AdminUtils?.parseDateSafe || function(v) {
         try {
             const d = new Date(v);
             return isNaN(d.getTime()) ? null : d;
         } catch(_) { return null; }
-    }
-
-    function endOfDay(d){ const nd = new Date(d); nd.setHours(23,59,59,999); return nd; }
+    };
+    const endOfDay = window.AdminUtils?.endOfDay || function(d) {
+        const nd = new Date(d);
+        nd.setHours(23, 59, 59, 999);
+        return nd;
+    };
 
     function getRangeDays(){
         const sel = q('reports-range');
@@ -4679,7 +4694,8 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
         endDate: ''
     };
 
-    function q(id){ return document.getElementById(id); }
+    // Use common q() from admin-utils.js
+    const q = window.q || function(id) { return document.getElementById(id); };
 
     /**
      * Load financial metrics from the API
@@ -4716,10 +4732,10 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
             const totalPayments = q('total-payments');
 
             if (totalRevenue) {
-                totalRevenue.textContent = formatCurrency(metrics.totalRevenue || 0);
+                totalRevenue.textContent = formatCurrencyRupees(metrics.totalRevenue || 0);
             }
             if (monthlyRevenue) {
-                monthlyRevenue.textContent = formatCurrency(metrics.monthlyRevenue || 0);
+                monthlyRevenue.textContent = formatCurrencyRupees(metrics.monthlyRevenue || 0);
             }
             if (totalPayments) {
                 totalPayments.textContent = (metrics.totalPaymentsCount || 0).toLocaleString();
@@ -4745,17 +4761,11 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
         });
     }
 
-    /**
-     * Format currency value (local function for finance module)
-     * Formats values already in rupees (not paise)
-     * @param {number} value - The value to format (in rupees)
-     * @returns {string} Formatted currency string
-     */
-    // eslint-disable-next-line no-shadow
-    function formatCurrency(value) {
+    // Use common formatCurrencyRupees from admin-utils.js for values already in rupees
+    const formatCurrencyRupees = window.AdminUtils?.formatCurrencyRupees || function(value) {
         if (typeof value !== 'number') value = 0;
         return '₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+    };
 
     /**
      * Render revenue chart using Chart.js
@@ -4975,13 +4985,19 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
         const fragment = document.createDocumentFragment();
 
         if (payments.length === 0) {
-            const row = document.createElement('tr');
-            const cell = document.createElement('td');
-            cell.colSpan = 7;
-            cell.textContent = 'No payments found';
-            cell.style.textAlign = 'center';
-            row.appendChild(cell);
-            fragment.appendChild(row);
+            // Use table-utils.js for empty state
+            const emptyRow = typeof createEmptyTableRow === 'function'
+                ? createEmptyTableRow(7, 'No payments found')
+                : (() => {
+                    const row = document.createElement('tr');
+                    const cell = document.createElement('td');
+                    cell.colSpan = 7;
+                    cell.textContent = 'No payments found';
+                    cell.style.textAlign = 'center';
+                    row.appendChild(cell);
+                    return row;
+                })();
+            fragment.appendChild(emptyRow);
             tableBody.replaceChildren(fragment);
             return;
         }
@@ -4989,28 +5005,45 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
         payments.forEach(payment => {
             const row = document.createElement('tr');
 
-            // User Email
-            const emailCell = document.createElement('td');
-            emailCell.textContent = payment.userEmail || 'N/A';
+            // User Email - use table-utils if available
+            const emailCell = typeof createTableCell === 'function'
+                ? createTableCell(payment.userEmail || 'N/A')
+                : (() => {
+                    const cell = document.createElement('td');
+                    cell.textContent = payment.userEmail || 'N/A';
+                    return cell;
+                })();
             row.appendChild(emailCell);
 
-            // Amount
-            const amountCell = document.createElement('td');
-            if (payment.amount != null) {
-                amountCell.textContent = formatCurrency(payment.amount);
-            } else {
-                amountCell.textContent = '-';
-            }
+            // Amount - use table-utils if available
+            const amountText = payment.amount != null ? formatCurrency(payment.amount) : '-';
+            const amountCell = typeof createTableCell === 'function'
+                ? createTableCell(amountText)
+                : (() => {
+                    const cell = document.createElement('td');
+                    cell.textContent = amountText;
+                    return cell;
+                })();
             row.appendChild(amountCell);
 
-            // Currency
-            const currencyCell = document.createElement('td');
-            currencyCell.textContent = payment.currency || 'INR';
+            // Currency - use table-utils if available
+            const currencyCell = typeof createTableCell === 'function'
+                ? createTableCell(payment.currency || 'INR')
+                : (() => {
+                    const cell = document.createElement('td');
+                    cell.textContent = payment.currency || 'INR';
+                    return cell;
+                })();
             row.appendChild(currencyCell);
 
-            // Payment Method
-            const methodCell = document.createElement('td');
-            methodCell.textContent = payment.paymentMethod || 'N/A';
+            // Payment Method - use table-utils if available
+            const methodCell = typeof createTableCell === 'function'
+                ? createTableCell(payment.paymentMethod || 'N/A')
+                : (() => {
+                    const cell = document.createElement('td');
+                    cell.textContent = payment.paymentMethod || 'N/A';
+                    return cell;
+                })();
             row.appendChild(methodCell);
 
             // Status with badge
@@ -5041,9 +5074,14 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
             txnCell.style.fontSize = '0.85em';
             row.appendChild(txnCell);
 
-            // Date
-            const dateCell = document.createElement('td');
-            dateCell.textContent = formatDate(payment.createdAt);
+            // Date - use table-utils if available
+            const dateCell = typeof createTableCell === 'function'
+                ? createTableCell(formatDate(payment.createdAt))
+                : (() => {
+                    const cell = document.createElement('td');
+                    cell.textContent = formatDate(payment.createdAt);
+                    return cell;
+                })();
             row.appendChild(dateCell);
 
             fragment.appendChild(row);
@@ -5215,7 +5253,8 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 
 // ================= Financial Export Tool =================
 (function(){
-    function q(id){ return document.getElementById(id); }
+    // Use common q() from admin-utils.js
+    const q = window.q || function(id) { return document.getElementById(id); };
 
     /**
      * Show the financial export modal
@@ -5507,18 +5546,14 @@ async function fetchRefundSummary(paymentId) {
     }
 }
 
-/**
- * Format currency amount from paise to rupees with symbol
- * @param {number} amountPaise - Amount in paise
- * @returns {string} Formatted currency string (e.g., "₹1,234.56")
- */
-function formatCurrency(amountPaise) {
+// Use common formatCurrency from admin-utils.js (handles paise to rupees conversion)
+const formatCurrency = window.formatCurrency || function(amountPaise) {
     if (typeof amountPaise !== 'number' || isNaN(amountPaise)) {
         return '₹0.00';
     }
     const rupees = amountPaise / 100;
     return '₹' + rupees.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+};
 
 /**
  * Render refund button or badge based on payment refund status
@@ -6035,7 +6070,8 @@ async function viewRefundHistory(paymentId) {
         refundChart: null
     };
 
-    function q(id){ return document.getElementById(id); }
+    // Use common q() from admin-utils.js
+    const q = window.q || function(id) { return document.getElementById(id); };
 
     /**
      * Load refund metrics from the API
@@ -6283,9 +6319,15 @@ async function viewRefundHistory(paymentId) {
             applyFinanceTableStyles(tbody);
         }
 
-        // Handle empty state
+        // Handle empty state - use table-utils if available
         if (!refunds || refunds.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 2rem; color: var(--text-secondary);">No refunds found</td></tr>';
+            if (typeof createEmptyTableRow === 'function') {
+                const emptyRow = createEmptyTableRow(8, 'No refunds found');
+                tbody.innerHTML = '';
+                tbody.appendChild(emptyRow);
+            } else {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 2rem; color: var(--text-secondary);">No refunds found</td></tr>';
+            }
             return;
         }
 
