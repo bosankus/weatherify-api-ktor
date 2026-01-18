@@ -921,6 +921,7 @@ function renderPagination() {
  * Update a user's role
  * @param {string} email - The user's email
  * @param {string} role - The new role
+ * @param {HTMLElement} selectEl - The select element that triggered the update
  */
 function updateUserRole(email, role, selectEl) {
     const prev = selectEl ? (selectEl.dataset.prevValue || 'USER') : null;
@@ -960,6 +961,7 @@ function updateUserRole(email, role, selectEl) {
  * Update a user's active status
  * @param {string} email - The user's email
  * @param {boolean} isActive - The new active status
+ * @param {HTMLElement} checkboxEl - The checkbox element that triggered the update
  */
 function updateUserStatus(email, isActive, checkboxEl) {
     const prev = checkboxEl ? (checkboxEl.dataset.prevChecked === 'true') : null;
@@ -1586,7 +1588,7 @@ function computeTimeValidity(payload){
     const exp = typeof payload.exp === 'number' ? payload.exp : null;
     const nbf = typeof payload.nbf === 'number' ? payload.nbf : null;
     const iat = typeof payload.iat === 'number' ? payload.iat : null;
-    let status = 'Unknown';
+    let status;
     if (exp && nowSec > exp) status = 'Expired';
     else if (nbf && nowSec < nbf) status = 'Not yet valid';
     else status = 'Valid by time';
@@ -1627,7 +1629,6 @@ function renderJwtResult(decoded){
 }
 
 function buildJwtInspectorContent(){
-    const token = '';
     return [
         '<div style="display:grid; gap:10px">',
         '<div class="message info-message">Paste a JWT below to decode its header and payload. Do not include the "Bearer " prefix.</div>',
@@ -1693,10 +1694,7 @@ function bindJwtInspectorModal(){
         isLoading: false,       // Loading state
         error: null,            // Error message if any
         
-        // Charts
-        chart: null,            // Chart.js instance for registration trend
-        roleChart: null,        // Chart.js instance for role distribution
-        activeChart: null,      // Chart.js instance for active/inactive
+        // Charts - now handled by reports-charts.js module using ECharts
         initialized: false,     // Initialization flag
         
         // Performance optimization
@@ -1846,14 +1844,7 @@ function bindJwtInspectorModal(){
             ReportsState.lastUpdated = null;
             ReportsState.isLoading = false;
             ReportsState.error = null;
-            if (ReportsState.chart) {
-                try {
-                    ReportsState.chart.destroy();
-                } catch (e) {
-                    console.warn('Failed to destroy chart:', e);
-                }
-                ReportsState.chart = null;
-            }
+            // Chart cleanup is now handled by reports-charts.js module
             ReportsState.initialized = false;
         },
 
@@ -1876,8 +1867,7 @@ function bindJwtInspectorModal(){
         }
     };
 
-    // Legacy state reference for backward compatibility
-    const state = ReportsState;
+    // Legacy state reference removed - use ReportsState directly
 
     function q(id){ return document.getElementById(id); }
     function cssVar(name){
@@ -2089,8 +2079,19 @@ function bindJwtInspectorModal(){
 
     // ================= End KPI Calculation Functions =================
 
+    /**
+     * Update KPI display elements
+     * @param {Array} users - Filtered users for period-specific metrics
+     * @param {number|string} days - Number of days or time range identifier
+     * @param {Object} series - Chart series data with labels and data arrays
+     */
     function updateKpis(users, days, series){
         try {
+            // Validate series data if provided
+            if (series && (!series.labels || !series.data || !Array.isArray(series.labels) || !Array.isArray(series.data))) {
+                console.warn('Invalid series data provided to updateKpis:', series);
+            }
+            
             // Use the comprehensive calculateKPIs function
             const kpis = calculateKPIs(ReportsState.users, users, days);
             
@@ -2112,7 +2113,32 @@ function bindJwtInspectorModal(){
             if (elGrowth) elGrowth.textContent = kpis.growthRate || '0%';
             if (elRetention) elRetention.textContent = kpis.retentionRate || '0%';
             
+            // Apply tickColor to KPI card subtitles for consistent theming
+            const tickColorValue = tickColor();
+            const subtitleEl = q('kpi-new-users-subtitle');
+            if (subtitleEl) {
+                subtitleEl.style.color = tickColorValue;
+            }
+            // Also apply to any other subtitle elements in KPI cards
+            const kpiCards = document.querySelectorAll('.kpi-card');
+            kpiCards.forEach(card => {
+                const subtitle = card.querySelector('[style*="text-secondary"]');
+                if (subtitle && subtitle.style) {
+                    subtitle.style.color = tickColorValue;
+                }
+            });
+            
+            // Log series data for debugging if available
+            if (series && series.data && Array.isArray(series.data)) {
+                const totalInSeries = series.data.reduce((sum, val) => sum + (val || 0), 0);
+                if (totalInSeries > 0) {
+                    console.log('KPIs updated:', kpis, `Series total: ${totalInSeries} registrations`);
+                } else {
             console.log('KPIs updated:', kpis);
+                }
+            } else {
+                console.log('KPIs updated:', kpis);
+            }
         } catch(e) { 
             console.error('Failed to update KPIs', e);
             // Set fallback values on error
@@ -2131,201 +2157,13 @@ function bindJwtInspectorModal(){
         }
     }
 
-    function lineColor(){ return '#6366f1'; }
-    function gridColor(){ return (cssVar('--card-border') || 'rgba(99,102,241,0.2)'); }
+    // Removed unused functions: lineColor, gridColor - chart rendering now handled by reports-charts.js
     function tickColor(){ return (cssVar('--text-secondary') || '#9ca3af'); }
 
-    function destroyChart(){ 
-        try { 
-            if (ReportsState.chart) { 
-                ReportsState.chart.destroy(); 
-                ReportsState.chart = null; 
-            }
-            if (ReportsState.roleChart) {
-                ReportsState.roleChart.destroy();
-                ReportsState.roleChart = null;
-            }
-            if (ReportsState.activeChart) {
-                ReportsState.activeChart.destroy();
-                ReportsState.activeChart = null;
-            }
-        } catch(e) {
-            console.warn('Failed to destroy charts:', e);
-        }
-    }
+    // Chart destruction is now handled by reports-charts.js module using ECharts
 
-    function renderChart(series){
-        const canvas = q('reports-chart');
-        const empty = q('reports-empty');
-        const chartsContainer = q('reports-charts-container');
-        
-        if (!canvas) {
-            console.warn('Chart canvas not found');
-            return;
-        }
-        
-        // Validate series data
-        if (!series || !Array.isArray(series.data) || !Array.isArray(series.labels)) {
-            console.warn('Invalid series data provided to renderChart');
-            if (empty) {
-                empty.textContent = 'Invalid chart data';
-                empty.classList.remove('hidden');
-                empty.classList.add('visible');
-            }
-            return;
-        }
-        
-        const hasData = series.data.some(v => v > 0);
-        
-        if (!hasData) {
-            // No data in the selected range - show empty state message
-            if (empty) {
-                empty.textContent = 'No user registrations in the selected time range';
-                empty.classList.remove('hidden');
-                empty.classList.add('visible');
-            }
-            // Still destroy any existing chart
-            destroyChart();
-            return;
-        }
-        
-        // Hide empty state when we have data
-        if (empty) {
-            empty.classList.add('hidden');
-            empty.classList.remove('visible');
-        }
-        
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js not available');
-            if (empty) {
-                empty.textContent = 'Chart library not available';
-                empty.classList.remove('hidden');
-                empty.classList.add('visible');
-            }
-            return;
-        }
-        
-        destroyChart();
-        const ctx = canvas.getContext('2d');
-        
-        // Performance optimization: Detect large datasets (>1000 users)
-        const isLargeDataset = ReportsState.users.length > 1000;
-        const dataPointCount = series.data.length;
-        
-        // Disable glow effect for large datasets to improve performance
-        const glowPlugin = !isLargeDataset ? {
-            id: 'glowLine',
-            beforeDatasetDraw(chart, args) {
-                if (!args || !args.meta || args.meta.type !== 'line') return;
-                const ctx = chart.ctx;
-                const ds = chart.data && chart.data.datasets ? chart.data.datasets[args.index] : null;
-                ctx.save();
-                ctx.shadowColor = (ds && ds.borderColor) || lineColor();
-                ctx.shadowBlur = 1;
-                ctx.shadowOffsetX = 0;
-                ctx.shadowOffsetY = 0;
-            },
-            afterDatasetDraw(chart, args) {
-                const ctx = chart.ctx;
-                try { ctx.restore(); } catch(_) {}
-            }
-        } : null;
-
-        // gradient fill for a subtle modern look
-        let gradient;
-        try {
-            gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 260);
-            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.22)');
-            gradient.addColorStop(1, 'rgba(99, 102, 241, 0.02)');
-        } catch(_) {
-            gradient = 'rgba(99, 102, 241, 0.12)';
-        }
-
-        // Performance optimization: Reduce animation duration for large datasets
-        const animationDuration = isLargeDataset ? 0 : 700;
-        
-        // Performance optimization: Simplify line rendering for large datasets
-        const tension = isLargeDataset ? 0 : 0.6;
-        const borderWidth = isLargeDataset ? 2 : 2.5;
-        
-        console.log(`Rendering chart with ${dataPointCount} data points (${ReportsState.users.length} total users). Large dataset optimization: ${isLargeDataset ? 'enabled' : 'disabled'}`);
-
-        const plugins = glowPlugin ? [glowPlugin] : [];
-
-        ReportsState.chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: series.labels.map(k => {
-                    try { const d = new Date(k); return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch(_) { return k; }
-                }),
-                datasets: [{
-                    label: 'New users',
-                    data: series.data,
-                    borderColor: lineColor(),
-                    backgroundColor: gradient,
-                    fill: true,
-                    cubicInterpolationMode: isLargeDataset ? 'default' : 'monotone',
-                    tension: tension,
-                    borderWidth: borderWidth,
-                    pointRadius: 0,
-                    pointHoverRadius: isLargeDataset ? 0 : 3
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: animationDuration, easing: 'easeOutCubic' },
-                interaction: { 
-                    mode: 'index', 
-                    intersect: false,
-                    // Make touch-friendly
-                    axis: 'x'
-                },
-                elements: {
-                    line: { borderJoinStyle: 'round', capBezierPoints: true },
-                    point: { 
-                        hitRadius: isLargeDataset ? 5 : 10,
-                        // Larger hit radius for touch devices
-                        hoverRadius: isLargeDataset ? 0 : 5
-                    }
-                },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        enabled: true,
-                        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                        titleColor: '#ffffff',
-                        bodyColor: '#ffffff',
-                        displayColors: false,
-                        padding: 10,
-                        mode: 'index',
-                        intersect: false,
-                        // Touch-friendly tooltip
-                        position: 'nearest'
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false, drawBorder: false },
-                        ticks: { 
-                            color: tickColor(), 
-                            maxTicksLimit: window.innerWidth < 768 ? 5 : 8, 
-                            maxRotation: 0,
-                            autoSkip: true,
-                            autoSkipPadding: 10
-                        }
-                    },
-                    y: {
-                        display: false,
-                        beginAtZero: true,
-                        grid: { display: false, drawBorder: false },
-                        ticks: { display: false }
-                    }
-                }
-            },
-            plugins: plugins
-        });
-    }
+    // Chart rendering is now handled by reports-charts.js module using ECharts
+    // Old Chart.js implementation removed
 
     /**
      * Show error banner for API failures
@@ -2554,336 +2392,26 @@ function bindJwtInspectorModal(){
         // Hide empty state and show data
         hideEmptyState();
         
-        // Generate chart data
+        // Generate chart data (for KPI calculations)
         const series = aggregateDaily(ReportsState.filteredUsers, days);
         
         // Update KPIs with all users (for total counts) and filtered users (for period-specific metrics)
         updateKpis(ReportsState.filteredUsers, days, series);
         
-        // Render charts
-        renderChart(series);
-        renderRoleChart();
-        renderActiveInactiveChart();
-        
-        // Also trigger financial trends chart refresh if module is available
-        if (window.ReportsChartsModule && typeof window.ReportsChartsModule.loadFinancialTrendsChart === 'function') {
+        // Render sales chart using ECharts module
+        if (window.ReportsChartsModule && typeof window.ReportsChartsModule.loadSalesChart === 'function') {
             try {
-                window.ReportsChartsModule.loadFinancialTrendsChart();
+                window.ReportsChartsModule.loadSalesChart();
             } catch (e) {
-                console.warn('Failed to load financial trends chart:', e);
+                console.warn('Failed to load sales chart:', e);
             }
         }
     }
 
     // ================= Additional Chart Functions =================
 
-    /**
-     * Chart initialization configuration with theme colors
-     * Returns default chart configuration that adapts to light/dark theme
-     */
-    function getChartDefaults() {
-        return {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: {
-                duration: 700,
-                easing: 'easeOutCubic'
-            },
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'bottom',
-                    labels: {
-                        color: tickColor(),
-                        padding: 15,
-                        font: {
-                            size: 12,
-                            family: "'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-                        },
-                        usePointStyle: true,
-                        pointStyle: 'circle'
-                    }
-                },
-                tooltip: {
-                    enabled: true,
-                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
-                    titleColor: '#ffffff',
-                    bodyColor: '#ffffff',
-                    borderColor: 'rgba(99, 102, 241, 0.5)',
-                    borderWidth: 1,
-                    padding: 12,
-                    displayColors: true,
-                    boxPadding: 6,
-                    cornerRadius: 8
-                }
-            }
-        };
-    }
-
-    /**
-     * Get color palette for charts based on current theme
-     */
-    function getChartColors() {
-        return {
-            primary: '#6366f1',
-            success: '#10b981',
-            warning: '#f59e0b',
-            error: '#ef4444',
-            info: '#3b82f6',
-            purple: '#8b5cf6',
-            pink: '#ec4899',
-            // Role colors
-            user: '#3b82f6',
-            moderator: '#f59e0b',
-            admin: '#ef4444',
-            // Status colors
-            active: '#10b981',
-            inactive: '#6b7280'
-        };
-    }
-
-    /**
-     * Render Users by Role pie chart
-     * Aggregates users by role (USER, MODERATOR, ADMIN)
-     * Renders pie chart with percentage labels and color coding
-     */
-    function renderRoleChart() {
-        const canvas = q('reports-role-chart');
-        if (!canvas) return;
-
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js not available for role chart');
-            return;
-        }
-
-        // Destroy existing chart if any
-        if (ReportsState.roleChart) {
-            try {
-                ReportsState.roleChart.destroy();
-                ReportsState.roleChart = null;
-            } catch (e) {
-                console.warn('Failed to destroy role chart:', e);
-            }
-        }
-
-        // Aggregate users by role
-        const users = ReportsState.users || [];
-        const roleCounts = {
-            USER: 0,
-            MODERATOR: 0,
-            ADMIN: 0
-        };
-
-        users.forEach(user => {
-            const role = (user.role || 'USER').toUpperCase();
-            if (roleCounts.hasOwnProperty(role)) {
-                roleCounts[role]++;
-            } else {
-                roleCounts.USER++; // Default to USER if unknown role
-            }
-        });
-
-        const colors = getChartColors();
-        const chartData = {
-            labels: ['Users', 'Moderators', 'Admins'],
-            datasets: [{
-                data: [roleCounts.USER, roleCounts.MODERATOR, roleCounts.ADMIN],
-                backgroundColor: [
-                    colors.user,
-                    colors.moderator,
-                    colors.admin
-                ],
-                borderColor: cssVar('--card-bg') || '#ffffff',
-                borderWidth: 2,
-                hoverOffset: 8
-            }]
-        };
-
-        const ctx = canvas.getContext('2d');
-        const defaults = getChartDefaults();
-        
-        // Performance optimization: Detect large datasets
-        const isLargeDataset = ReportsState.users.length > 1000;
-        
-        // Disable animations for large datasets
-        const animationConfig = isLargeDataset ? { duration: 0 } : defaults.animation;
-
-        ReportsState.roleChart = new Chart(ctx, {
-            type: 'pie',
-            data: chartData,
-            options: {
-                ...defaults,
-                animation: animationConfig,
-                responsive: true,
-                maintainAspectRatio: true,
-                aspectRatio: window.innerWidth < 768 ? 1.5 : 2,
-                plugins: {
-                    ...defaults.plugins,
-                    legend: {
-                        ...defaults.plugins.legend,
-                        position: window.innerWidth < 768 ? 'bottom' : 'right',
-                        labels: {
-                            ...defaults.plugins.legend.labels,
-                            padding: window.innerWidth < 768 ? 10 : 15,
-                            boxWidth: window.innerWidth < 768 ? 12 : 15
-                        }
-                    },
-                    tooltip: {
-                        ...defaults.plugins.tooltip,
-                        callbacks: {
-                            label: function(context) {
-                                const label = context.label || '';
-                                const value = context.parsed || 0;
-                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-                                return `${label}: ${value} (${percentage}%)`;
-                            }
-                        }
-                    }
-                },
-                // Touch-friendly interactions
-                interaction: {
-                    mode: 'point',
-                    intersect: true
-                }
-            }
-        });
-    }
-
-    /**
-     * Render Active vs Inactive donut chart
-     * Calculates active and inactive user counts
-     * Renders donut chart with center text showing total
-     * Uses success/error colors for active/inactive
-     */
-    function renderActiveInactiveChart() {
-        const canvas = q('reports-active-chart');
-        if (!canvas) return;
-
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js not available for active/inactive chart');
-            return;
-        }
-
-        // Destroy existing chart if any
-        if (ReportsState.activeChart) {
-            try {
-                ReportsState.activeChart.destroy();
-                ReportsState.activeChart = null;
-            } catch (e) {
-                console.warn('Failed to destroy active chart:', e);
-            }
-        }
-
-        // Calculate active and inactive counts
-        const users = ReportsState.users || [];
-        const activeCount = users.filter(u => u.isActive === true).length;
-        const inactiveCount = users.length - activeCount;
-
-        const colors = getChartColors();
-        const chartData = {
-            labels: ['Active', 'Inactive'],
-            datasets: [{
-                data: [activeCount, inactiveCount],
-                backgroundColor: [
-                    colors.active,
-                    colors.inactive
-                ],
-                borderColor: cssVar('--card-bg') || '#ffffff',
-                borderWidth: 2,
-                hoverOffset: 8
-            }]
-        };
-
-        const ctx = canvas.getContext('2d');
-        const defaults = getChartDefaults();
-        
-        // Performance optimization: Detect large datasets
-        const isLargeDataset = ReportsState.users.length > 1000;
-        
-        // Disable animations for large datasets
-        const animationConfig = isLargeDataset ? { duration: 0 } : defaults.animation;
-
-        // Plugin to draw center text
-        const centerTextPlugin = {
-            id: 'centerText',
-            beforeDraw: function(chart) {
-                if (chart.config.type !== 'doughnut') return;
-                
-                const width = chart.width;
-                const height = chart.height;
-                const ctx = chart.ctx;
-                
-                ctx.restore();
-                const fontSize = (height / 114).toFixed(2);
-                ctx.font = `bold ${fontSize}em 'Space Grotesk', sans-serif`;
-                ctx.textBaseline = 'middle';
-                ctx.fillStyle = tickColor();
-                
-                const total = users.length;
-                const text = String(total);
-                const textX = Math.round((width - ctx.measureText(text).width) / 2);
-                const textY = height / 2;
-                
-                ctx.fillText(text, textX, textY);
-                
-                // Draw "Total Users" label below
-                ctx.font = `${(fontSize * 0.4).toFixed(2)}em 'Space Grotesk', sans-serif`;
-                ctx.fillStyle = cssVar('--text-secondary') || '#9ca3af';
-                const labelText = 'Total Users';
-                const labelX = Math.round((width - ctx.measureText(labelText).width) / 2);
-                const labelY = textY + (fontSize * 20);
-                ctx.fillText(labelText, labelX, labelY);
-                
-                ctx.save();
-            }
-        };
-
-        ReportsState.activeChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: chartData,
-            options: {
-                ...defaults,
-                animation: animationConfig,
-                responsive: true,
-                maintainAspectRatio: true,
-                aspectRatio: window.innerWidth < 768 ? 1.5 : 2,
-                cutout: '70%',
-                plugins: {
-                    ...defaults.plugins,
-                    legend: {
-                        ...defaults.plugins.legend,
-                        position: 'bottom',
-                        labels: {
-                            ...defaults.plugins.legend.labels,
-                            padding: window.innerWidth < 768 ? 10 : 15,
-                            boxWidth: window.innerWidth < 768 ? 12 : 15
-                        }
-                    },
-                    tooltip: {
-                        ...defaults.plugins.tooltip,
-                        callbacks: {
-                            label: function(context) {
-                                const label = context.label || '';
-                                const value = context.parsed || 0;
-                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-                                return `${label}: ${value} (${percentage}%)`;
-                            }
-                        }
-                    }
-                },
-                // Touch-friendly interactions
-                interaction: {
-                    mode: 'point',
-                    intersect: true
-                }
-            },
-            plugins: [centerTextPlugin]
-        });
-    }
-
-    // ================= End Additional Chart Functions =================
+    // Chart rendering is now handled by reports-charts.js module using ECharts
+    // Old Chart.js implementations (getChartDefaults, getChartColors) removed as they are no longer used
 
     /**
      * Fetch all users with pagination support
@@ -2980,195 +2508,11 @@ function bindJwtInspectorModal(){
         return fetchAllUsers();
     }
 
-    /**
-     * Filter users by date range based on createdAt timestamp
-     * Supports preset time ranges (7, 30, 90, 180, 365 days) and custom date range filtering
-     * @param {Array} users - Array of user objects
-     * @param {number|string} timeRange - Number of days or 'custom' for custom range
-     * @param {string} customStart - Custom start date (ISO format) - optional
-     * @param {string} customEnd - Custom end date (ISO format) - optional
-     * @returns {Array} Filtered array of users
-     */
-    function filterUsersByDateRange(users, timeRange, customStart, customEnd) {
-        if (!Array.isArray(users)) {
-            return [];
-        }
+    // filterUsersByDateRange function removed - filtering is now handled by ReportsStateManager.updateFilteredUsers()
 
-        // Handle custom date range
-        if (timeRange === 'custom' && customStart && customEnd) {
-            const start = parseDateSafe(customStart);
-            const end = parseDateSafe(customEnd);
-            
-            if (!start || !end) {
-                console.warn('Invalid custom date range provided');
-                return users;
-            }
-            
-            // Set end date to end of day for inclusive filtering
-            const endOfDayDate = endOfDay(end);
-            
-            return users.filter(user => {
-                const createdAt = parseDateSafe(user.createdAt);
-                return createdAt && createdAt >= start && createdAt <= endOfDayDate;
-            });
-        }
+    // Duplicate function declarations removed - functions are already defined above in KPI Calculation Functions section
 
-        // Handle preset time ranges (7, 30, 90, 180, 365 days)
-        const days = parseInt(timeRange, 10);
-        if (isNaN(days) || days <= 0) {
-            console.warn('Invalid time range provided, returning all users');
-            return users;
-        }
-
-        // Calculate cutoff date
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - days);
-        cutoff.setHours(0, 0, 0, 0);
-
-        return users.filter(user => {
-            const createdAt = parseDateSafe(user.createdAt);
-            return createdAt && createdAt >= cutoff;
-        });
-    }
-
-    /**
-     * Count users created within a specific time range
-     * @param {Array} users - Array of user objects
-     * @param {number} days - Number of days to look back
-     * @returns {number} Count of users created in the range
-     */
-    function countUsersInRange(users, days) {
-        if (!Array.isArray(users) || isNaN(days) || days <= 0) {
-            return 0;
-        }
-
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - days);
-        cutoff.setHours(0, 0, 0, 0);
-
-        return users.filter(user => {
-            const createdAt = parseDateSafe(user.createdAt);
-            return createdAt && createdAt >= cutoff;
-        }).length;
-    }
-
-    /**
-     * Calculate active user rate as a percentage
-     * @param {Array} users - Array of user objects
-     * @returns {number} Active rate as a percentage (0-100)
-     */
-    function calculateActiveRate(users) {
-        if (!Array.isArray(users) || users.length === 0) {
-            return 0;
-        }
-
-        const activeCount = users.filter(user => user.isActive === true).length;
-        return Math.round((activeCount / users.length) * 100);
-    }
-
-    /**
-     * Calculate user growth rate comparing two time periods
-     * @param {Array} users - Array of user objects
-     * @param {number} days - Number of days for current period
-     * @returns {string} Growth rate as a percentage string (e.g., "+15%", "-5%")
-     */
-    function calculateGrowthRate(users, days) {
-        if (!Array.isArray(users) || isNaN(days) || days <= 0) {
-            return '0%';
-        }
-
-        // Current period: last N days
-        const currentPeriodStart = new Date();
-        currentPeriodStart.setDate(currentPeriodStart.getDate() - days);
-        currentPeriodStart.setHours(0, 0, 0, 0);
-
-        // Previous period: N days before that
-        const previousPeriodStart = new Date(currentPeriodStart);
-        previousPeriodStart.setDate(previousPeriodStart.getDate() - days);
-
-        const currentPeriodUsers = users.filter(user => {
-            const createdAt = parseDateSafe(user.createdAt);
-            return createdAt && createdAt >= currentPeriodStart;
-        }).length;
-
-        const previousPeriodUsers = users.filter(user => {
-            const createdAt = parseDateSafe(user.createdAt);
-            return createdAt && createdAt >= previousPeriodStart && createdAt < currentPeriodStart;
-        }).length;
-
-        if (previousPeriodUsers === 0) {
-            return currentPeriodUsers > 0 ? '+100%' : '0%';
-        }
-
-        const growthRate = ((currentPeriodUsers - previousPeriodUsers) / previousPeriodUsers) * 100;
-        const sign = growthRate > 0 ? '+' : '';
-        return sign + Math.round(growthRate) + '%';
-    }
-
-    /**
-     * Calculate user retention rate
-     * Retention rate = (users still active from N days ago) / (total users from N days ago)
-     * @param {Array} users - Array of user objects
-     * @param {number} days - Number of days to look back
-     * @returns {string} Retention rate as a percentage string (e.g., "85%")
-     */
-    function calculateRetentionRate(users, days) {
-        if (!Array.isArray(users) || isNaN(days) || days <= 0) {
-            return '0%';
-        }
-
-        // Get users created N or more days ago
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - days);
-        cutoff.setHours(0, 0, 0, 0);
-
-        const oldUsers = users.filter(user => {
-            const createdAt = parseDateSafe(user.createdAt);
-            return createdAt && createdAt < cutoff;
-        });
-
-        if (oldUsers.length === 0) {
-            return '0%';
-        }
-
-        // Count how many of those old users are still active
-        const activeOldUsers = oldUsers.filter(user => user.isActive === true).length;
-
-        const retentionRate = (activeOldUsers / oldUsers.length) * 100;
-        return Math.round(retentionRate) + '%';
-    }
-
-    /**
-     * Calculate all KPI metrics for the reports dashboard
-     * @param {Array} users - Array of user objects
-     * @param {number} days - Number of days for the time range
-     * @returns {Object} Object containing all KPI metrics
-     */
-    function calculateKPIs(users, days) {
-        if (!Array.isArray(users)) {
-            return {
-                totalUsers: 0,
-                newUsers: 0,
-                activeRate: '0%',
-                premiumUsers: 0,
-                adminUsers: 0,
-                moderators: 0,
-                growthRate: '0%',
-                retentionRate: '0%'
-            };
-        }
-
-        return {
-            totalUsers: users.length,
-            newUsers: countUsersInRange(users, days),
-            activeRate: calculateActiveRate(users) + '%',
-            premiumUsers: users.filter(u => u.isPremium === true).length,
-            adminUsers: users.filter(u => (u.role || '').toUpperCase() === 'ADMIN').length,
-            moderators: users.filter(u => (u.role || '').toUpperCase() === 'MODERATOR').length,
-            growthRate: calculateGrowthRate(users, days),
-            retentionRate: calculateRetentionRate(users, days)
-        };
-    }
+    // Duplicate calculateKPIs function removed - using the one above that takes (allUsers, filteredUsers, days)
 
     /**
      * Debounced render function to avoid excessive re-renders
@@ -3271,40 +2615,8 @@ function bindJwtInspectorModal(){
      * Uses CSS variables for consistent theming across dashboard
      */
     function bindThemeReactivity(){
-        // Observe html class changes to refresh chart colors when theme switches
-        try {
-            const html = document.documentElement;
-            const obs = new MutationObserver(() => { 
-                if (ReportsState.initialized && ReportsState.chart) { 
-                    console.log('Theme changed, re-rendering charts with new colors');
-                    render(); 
-                } 
-            });
-            obs.observe(html, { attributes: true, attributeFilter: ['class', 'data-theme'] });
-        } catch(e) {
-            console.warn('Failed to observe theme changes:', e);
-        }
-        
-        // Also listen to theme toggle button directly
-        const toggle = document.getElementById('theme-toggle');
-        if (toggle && !toggle.dataset.reportBound) {
-            toggle.addEventListener('change', () => { 
-                if (ReportsState.initialized && ReportsState.chart) { 
-                    console.log('Theme toggle changed, re-rendering charts');
-                    // Small delay to allow CSS variables to update
-                    setTimeout(() => render(), 50);
-                } 
-            });
-            toggle.dataset.reportBound = 'true';
-        }
-        
-        // Listen for custom theme change events if they exist
-        document.addEventListener('themeChanged', function() {
-            if (ReportsState.initialized && ReportsState.chart) {
-                console.log('Theme change event received, re-rendering charts');
-                setTimeout(() => render(), 50);
-            }
-        });
+        // Theme reactivity is now handled by reports-charts.js module
+        // Charts automatically update when theme changes via MutationObserver
     }
 
     /**
@@ -3312,21 +2624,8 @@ function bindJwtInspectorModal(){
      * Debounces resize events to avoid excessive re-renders
      */
     function bindResponsiveHandler() {
-        let resizeTimer;
-        const handleResize = () => {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => {
-                if (ReportsState.initialized && ReportsState.chart) {
-                    // Re-render charts with new responsive settings
-                    render();
-                }
-            }, 250); // Debounce by 250ms
-        };
-        
-        if (!window.__reportsResizeBound) {
-            window.addEventListener('resize', handleResize);
-            window.__reportsResizeBound = true;
-        }
+        // Responsive handling is now done by ECharts automatically
+        // ECharts handles window resize events internally
     }
 
     // ================= CSV Export Functions =================
@@ -5447,10 +4746,12 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
     }
 
     /**
-     * Format currency value
-     * @param {number} value - The value to format
+     * Format currency value (local function for finance module)
+     * Formats values already in rupees (not paise)
+     * @param {number} value - The value to format (in rupees)
      * @returns {string} Formatted currency string
      */
+    // eslint-disable-next-line no-shadow
     function formatCurrency(value) {
         if (typeof value !== 'number') value = 0;
         return '₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -5878,19 +5179,6 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
             dateTo.dataset.bound = 'true';
         }
 
-        // Initialize refund analytics when finance tab loads
-        console.log('[Finance Module] Checking for RefundAnalyticsModule...', typeof window.RefundAnalyticsModule);
-        if (typeof window.RefundAnalyticsModule !== 'undefined' && 
-            typeof window.RefundAnalyticsModule.ensureInitialized === 'function') {
-            console.log('[Finance Module] Initializing refund analytics...');
-            try {
-                window.RefundAnalyticsModule.ensureInitialized();
-            } catch (e) {
-                console.error('[Finance Module] Error initializing refund analytics:', e);
-            }
-        } else {
-            console.warn('[Finance Module] RefundAnalyticsModule not available');
-        }
 
         state.initialized = true;
         console.log('[Finance Module] Finance tab initialized');
@@ -5923,697 +5211,6 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 })();
 
 
-// ================= Refund Analytics Module =================
-(function(){
-    const state = {
-        initialized: false,
-        currentPage: 1,
-        pageSize: 20,
-        totalPages: 1,
-        totalCount: 0,
-        statusFilter: '',
-        startDate: '',
-        endDate: ''
-    };
-
-    function q(id){ return document.getElementById(id); }
-
-    /**
-     * Load refund metrics from the API
-     */
-    function loadRefundMetrics() {
-        console.log('[Refund Analytics] loadRefundMetrics called');
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'application/json' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        console.log('[Refund Analytics] Fetching /refunds/metrics...');
-        fetch('/refunds/metrics', {
-            method: 'GET',
-            credentials: 'include',
-            headers
-        })
-        .then(response => {
-            console.log('[Refund Analytics] Response status:', response.status, response.statusText);
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access refund metrics');
-                }
-                throw new Error('Failed to load refund metrics');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            console.log('[Refund Analytics] Received payload:', payload);
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading refund metrics');
-            }
-
-            const metrics = payload.data;
-            console.log('[Refund Analytics] Metrics data:', metrics);
-
-            // Render refund metrics cards
-            renderRefundMetricsCards(metrics);
-
-            // Note: Refund chart is now in Reports tab, not Finance tab
-            // Chart rendering is handled by reports-charts.js module
-
-            console.log('[Refund Analytics] Refund metrics loaded successfully');
-        })
-        .catch(error => {
-            console.error('[Refund Analytics] Error loading refund metrics:', error);
-            showErrorMessage(error.message || 'Failed to load refund metrics');
-        });
-    }
-
-    /**
-     * Render refund metrics cards
-     * @param {Object} metrics - Refund metrics data
-     */
-    function renderRefundMetricsCards(metrics) {
-        // Update metric cards with formatted currency
-        const totalRefunds = q('total-refunds');
-        const monthlyRefunds = q('monthly-refunds');
-        const refundRate = q('refund-rate');
-        const instantRefunds = q('instant-refunds');
-        const normalRefunds = q('normal-refunds');
-        const avgProcessingTime = q('avg-processing-time');
-
-        if (totalRefunds) {
-            totalRefunds.textContent = formatCurrency(metrics.totalRefunds || 0);
-        }
-        if (monthlyRefunds) {
-            monthlyRefunds.textContent = formatCurrency(metrics.monthlyRefunds || 0);
-        }
-        if (refundRate) {
-            refundRate.textContent = (metrics.refundRate || 0).toFixed(2) + '%';
-        }
-        if (instantRefunds) {
-            instantRefunds.textContent = (metrics.instantRefundCount || 0).toLocaleString();
-        }
-        if (normalRefunds) {
-            normalRefunds.textContent = (metrics.normalRefundCount || 0).toLocaleString();
-        }
-        if (avgProcessingTime) {
-            avgProcessingTime.textContent = (metrics.averageProcessingTimeHours || 0).toFixed(1) + 'h';
-        }
-    }
-
-    /**
-     * Format currency value
-     * @param {number} value - The value to format
-     * @returns {string} Formatted currency string
-     */
-    function formatCurrency(value) {
-        if (typeof value !== 'number') value = 0;
-        return '₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    // Note: renderRefundChart function removed - chart is now in Reports tab
-    // Chart rendering is handled by reports-charts.js module
-
-    /**
-     * Load refund history from the API with pagination and filters
-     * @param {number} page - The page number to load
-     * @param {number} pageSize - The number of refunds per page
-     * @param {string} statusFilter - Optional status filter
-     * @param {string} startDate - Optional start date filter
-     * @param {string} endDate - Optional end date filter
-     */
-    function loadRefundHistory(page, pageSize, statusFilter, startDate, endDate) {
-        page = page || 1;
-        pageSize = pageSize || 20;
-        statusFilter = statusFilter || '';
-        startDate = startDate || '';
-        endDate = endDate || '';
-
-        // Show loader
-        const loader = q('refunds-loader');
-        if (loader) loader.style.display = 'block';
-
-        // Build URL with query parameters
-        let url = `/refunds/history?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
-        if (statusFilter) {
-            url += `&status=${encodeURIComponent(statusFilter)}`;
-        }
-        if (startDate) {
-            url += `&startDate=${encodeURIComponent(startDate)}`;
-        }
-        if (endDate) {
-            url += `&endDate=${encodeURIComponent(endDate)}`;
-        }
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'application/json' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        fetch(url, {
-            method: 'GET',
-            credentials: 'include',
-            headers
-        })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access refund history');
-                }
-                throw new Error('Failed to load refund history');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading refund history');
-            }
-
-            const data = payload.data;
-            const refunds = Array.isArray(data.refunds) ? data.refunds : [];
-
-            // Update state
-            state.currentPage = data.pagination?.page || page;
-            state.pageSize = data.pagination?.pageSize || pageSize;
-            state.totalPages = data.pagination?.totalPages || 1;
-            state.totalCount = data.pagination?.totalCount || 0;
-            state.statusFilter = statusFilter;
-            state.startDate = startDate;
-            state.endDate = endDate;
-
-            // Hide loader
-            if (loader) loader.style.display = 'none';
-
-            // Render refunds table
-            renderRefundHistoryTable(refunds);
-
-            // Render pagination
-            renderRefundsPagination();
-
-            console.log('Loaded refund history:', refunds);
-        })
-        .catch(error => {
-            console.error('Error loading refund history:', error);
-            if (loader) loader.style.display = 'none';
-            showErrorMessage(error.message || 'Failed to load refund history');
-        });
-    }
-
-    /**
-     * Render the refund history table
-     * @param {Array} refunds - Array of refund objects
-     */
-    function renderRefundHistoryTable(refunds) {
-        const tableBody = q('refunds-table-body');
-        if (!tableBody) return;
-        if (typeof applyFinanceTableStyles === 'function') {
-            applyFinanceTableStyles(tableBody);
-        }
-
-        const fragment = document.createDocumentFragment();
-
-        if (refunds.length === 0) {
-            const row = document.createElement('tr');
-            const cell = document.createElement('td');
-            cell.colSpan = 8;
-            cell.textContent = 'No refunds found';
-            cell.style.textAlign = 'center';
-            row.appendChild(cell);
-            fragment.appendChild(row);
-            tableBody.replaceChildren(fragment);
-            return;
-        }
-
-        refunds.forEach(refund => {
-            const row = document.createElement('tr');
-
-            // Refund ID
-            const refundIdCell = document.createElement('td');
-            refundIdCell.textContent = refund.refundId || 'N/A';
-            refundIdCell.style.fontFamily = 'monospace';
-            refundIdCell.style.fontSize = '0.85em';
-            row.appendChild(refundIdCell);
-
-            // User Email
-            const emailCell = document.createElement('td');
-            emailCell.textContent = refund.userEmail || 'N/A';
-            row.appendChild(emailCell);
-
-            // Amount (API returns rupees, formatCurrency expects paise)
-            const amountCell = document.createElement('td');
-            const amountValue = Number(refund.amount);
-            if (Number.isFinite(amountValue)) {
-                amountCell.textContent = formatCurrency(Math.round(amountValue * 100));
-            } else {
-                amountCell.textContent = '-';
-            }
-            row.appendChild(amountCell);
-
-            // Status with badge
-            const statusCell = document.createElement('td');
-            const status = refund.status || 'UNKNOWN';
-            const statusBadge = document.createElement('span');
-            statusBadge.className = 'status-badge';
-            
-            // Add status-specific class
-            if (status === 'PROCESSED') {
-                statusBadge.classList.add('status-processed');
-            } else if (status === 'FAILED') {
-                statusBadge.classList.add('status-failed');
-            } else if (status === 'PENDING') {
-                statusBadge.classList.add('status-pending');
-            }
-
-            statusBadge.textContent = status;
-            statusCell.appendChild(statusBadge);
-            row.appendChild(statusCell);
-
-            // Type (speed)
-            const typeCell = document.createElement('td');
-            const speed = refund.speedProcessed || refund.speedRequested || 'N/A';
-            typeCell.textContent = speed.charAt(0).toUpperCase() + speed.slice(1).toLowerCase();
-            row.appendChild(typeCell);
-
-            // Processed By
-            const processedByCell = document.createElement('td');
-            processedByCell.textContent = refund.processedBy || 'N/A';
-            row.appendChild(processedByCell);
-
-            // Date
-            const dateCell = document.createElement('td');
-            dateCell.textContent = formatDate(refund.createdAt);
-            row.appendChild(dateCell);
-
-            // Actions
-            const actionsCell = document.createElement('td');
-            actionsCell.className = 'refund-actions';
-            const viewBtn = document.createElement('button');
-            viewBtn.className = 'btn-details btn-sm';
-            viewBtn.textContent = 'View';
-            viewBtn.addEventListener('click', function() {
-                viewRefundDetails(refund.refundId);
-            });
-            actionsCell.appendChild(viewBtn);
-            row.appendChild(actionsCell);
-
-            fragment.appendChild(row);
-        });
-
-        tableBody.replaceChildren(fragment);
-    }
-
-    /**
-     * Render pagination controls for refunds
-     */
-    function renderRefundsPagination() {
-        const paginationContainer = q('refunds-pagination');
-        if (!paginationContainer) return;
-
-        paginationContainer.innerHTML = '';
-
-        if (state.totalPages <= 1) {
-            return;
-        }
-
-        // Previous button
-        const prevButton = document.createElement('button');
-        prevButton.className = `pagination-button ${state.currentPage === 1 ? 'disabled' : ''}`;
-        prevButton.textContent = 'Previous';
-        prevButton.disabled = state.currentPage === 1;
-        prevButton.addEventListener('click', () => {
-            if (state.currentPage > 1) {
-                loadRefundHistory(state.currentPage - 1, state.pageSize, state.statusFilter, state.startDate, state.endDate);
-            }
-        });
-        paginationContainer.appendChild(prevButton);
-
-        // Page buttons
-        const maxButtons = 5;
-        const startPage = Math.max(1, state.currentPage - Math.floor(maxButtons / 2));
-        const endPage = Math.min(state.totalPages, startPage + maxButtons - 1);
-
-        for (let i = startPage; i <= endPage; i++) {
-            const pageButton = document.createElement('button');
-            pageButton.className = `pagination-button ${i === state.currentPage ? 'active' : ''}`;
-            pageButton.textContent = i;
-            pageButton.addEventListener('click', () => {
-                if (i !== state.currentPage) {
-                    loadRefundHistory(i, state.pageSize, state.statusFilter, state.startDate, state.endDate);
-                }
-            });
-            paginationContainer.appendChild(pageButton);
-        }
-
-        // Next button
-        const nextButton = document.createElement('button');
-        nextButton.className = `pagination-button ${state.currentPage === state.totalPages ? 'disabled' : ''}`;
-        nextButton.textContent = 'Next';
-        nextButton.disabled = state.currentPage === state.totalPages;
-        nextButton.addEventListener('click', () => {
-            if (state.currentPage < state.totalPages) {
-                loadRefundHistory(state.currentPage + 1, state.pageSize, state.statusFilter, state.startDate, state.endDate);
-            }
-        });
-        paginationContainer.appendChild(nextButton);
-    }
-
-    /**
-     * Filter refunds based on status and date range
-     */
-    function filterRefunds() {
-        const statusFilter = q('refund-status-filter');
-        const dateFrom = q('refund-date-from');
-        const dateTo = q('refund-date-to');
-
-        const status = statusFilter ? statusFilter.value : '';
-        const startDate = dateFrom ? dateFrom.value.trim() : '';
-        const endDate = dateTo ? dateTo.value.trim() : '';
-
-        // Validate date range if both dates are provided
-        if (startDate && endDate) {
-            const dateValidation = ValidationUtils.validateDateRange(startDate, endDate);
-            if (!dateValidation.valid) {
-                showErrorMessage(dateValidation.message);
-                return;
-            }
-        }
-
-        // Validate individual dates if only one is provided
-        if (startDate && !ValidationUtils.isValidDate(startDate)) {
-            showErrorMessage('Invalid start date format. Use YYYY-MM-DD');
-            return;
-        }
-
-        if (endDate && !ValidationUtils.isValidDate(endDate)) {
-            showErrorMessage('Invalid end date format. Use YYYY-MM-DD');
-            return;
-        }
-
-        // Load refund history with filters
-        loadRefundHistory(1, state.pageSize, status, startDate, endDate);
-    }
-
-    /**
-     * Export refunds to CSV
-     * @param {string} startDate - Start date for export
-     * @param {string} endDate - End date for export
-     */
-    function exportRefunds(startDate, endDate) {
-        if (!startDate || !endDate) {
-            showErrorMessage('Please select both start and end dates for export');
-            return;
-        }
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'text/csv' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        const url = `/refunds/export?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
-
-        fetch(url, {
-            method: 'GET',
-            credentials: 'include',
-            headers
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to export refunds');
-            }
-            return response.text();
-        })
-        .then(csvData => {
-            downloadCSV(csvData, `refunds_${startDate}_to_${endDate}.csv`);
-            showMessage('success', 'Refunds exported successfully');
-        })
-        .catch(error => {
-            console.error('Error exporting refunds:', error);
-            showErrorMessage(error.message || 'Failed to export refunds');
-        });
-    }
-
-    /**
-     * Download CSV data as a file
-     * @param {string} csvData - CSV data string
-     * @param {string} filename - Filename for download
-     */
-    function downloadCSV(csvData, filename) {
-        const blob = new Blob([csvData], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }
-
-    /**
-     * View refund details in a modal
-     * @param {string} refundId - The refund ID to view
-     */
-    function viewRefundDetails(refundId) {
-        if (!refundId) {
-            showErrorMessage('Refund ID is required');
-            return;
-        }
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'application/json' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        // Show loading modal
-        const loadingContent = '<div class="modal-loading"><div class="loading-spinner"></div><div class="loading-text">Loading refund details...</div></div>';
-        showFinancePanel('Refund Details', loadingContent);
-
-        fetch(`/refunds/${encodeURIComponent(refundId)}`, {
-            method: 'GET',
-            credentials: 'include',
-            headers
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to load refund details');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response');
-            }
-
-            const refund = payload.data;
-
-            const statusKey = String(refund.status || '').toUpperCase();
-            const statusValue = escapeHtml(refund.status || 'UNKNOWN');
-            const statusClass = statusKey === 'PROCESSED' ? 'refund-status--success' :
-                statusKey === 'FAILED' ? 'refund-status--error' :
-                statusKey === 'PENDING' ? 'refund-status--warning' : 'refund-status--neutral';
-            const amountValue = Number(refund.amount);
-            const amountFormatted = Number.isFinite(amountValue)
-                ? formatCurrency(Math.round(amountValue * 100))
-                : '₹0.00';
-            const speedRequested = refund.speedRequested ? String(refund.speedRequested).toLowerCase() : '';
-            const speedProcessed = refund.speedProcessed ? String(refund.speedProcessed).toLowerCase() : '';
-            const formatSpeed = (speed) =>
-                speed ? speed.charAt(0).toUpperCase() + speed.slice(1) : 'N/A';
-            const speedLabel = speedProcessed ? formatSpeed(speedProcessed) : formatSpeed(speedRequested);
-            const userEmail = refund.userEmail ? escapeHtml(refund.userEmail) : 'N/A';
-            const processedBy = refund.processedBy ? escapeHtml(refund.processedBy) : 'N/A';
-            const paymentId = refund.paymentId ? escapeHtml(refund.paymentId) : 'N/A';
-            const refundId = refund.refundId ? escapeHtml(refund.refundId) : 'N/A';
-
-            const detailsHtml = `
-                <div class="refund-details-shell">
-                    <div class="refund-details-header">
-                        <div>
-                            <p class="refund-eyebrow">Refund analytics</p>
-                            <h3 class="refund-details-title">Refund details</h3>
-                            <p class="refund-details-subtitle">${refundId} · ${paymentId}</p>
-                        </div>
-                        <span class="refund-status-pill ${statusClass}">${statusValue}</span>
-                    </div>
-
-                    <div class="refund-metric-grid">
-                        <div class="refund-metric-card refund-metric-card--neutral">
-                            <div class="refund-metric-label">Amount</div>
-                            <div class="refund-metric-value">${amountFormatted}</div>
-                        </div>
-                        <div class="refund-metric-card refund-metric-card--positive">
-                            <div class="refund-metric-label">Speed</div>
-                            <div class="refund-metric-value">${escapeHtml(speedLabel)}</div>
-                        </div>
-                        <div class="refund-metric-card refund-metric-card--neutral">
-                            <div class="refund-metric-label">Currency</div>
-                            <div class="refund-metric-value">${escapeHtml(refund.currency || 'INR')}</div>
-                        </div>
-                    </div>
-
-                    <div class="refund-details-grid">
-                        <div class="refund-details-section">
-                            <div class="refund-section-title">Transaction</div>
-                            <div class="refund-kv">
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Refund ID</span>
-                                    <span class="refund-kv-value"><span class="refund-code">${refundId}</span></span>
-                                </div>
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Payment ID</span>
-                                    <span class="refund-kv-value"><span class="refund-code">${paymentId}</span></span>
-                                </div>
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Status</span>
-                                    <span class="refund-kv-value">${statusValue}</span>
-                                </div>
-                                ${refund.reason ? `
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Reason</span>
-                                    <span class="refund-kv-value">${escapeHtml(refund.reason)}</span>
-                                </div>
-                                ` : ''}
-                            </div>
-                        </div>
-
-                        <div class="refund-details-section">
-                            <div class="refund-section-title">Customer</div>
-                            <div class="refund-kv">
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">User email</span>
-                                    <span class="refund-kv-value">${userEmail}</span>
-                                </div>
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Processed by</span>
-                                    <span class="refund-kv-value">${processedBy}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="refund-details-section">
-                            <div class="refund-section-title">Processing</div>
-                            <div class="refund-kv">
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Speed requested</span>
-                                    <span class="refund-kv-value">${escapeHtml(formatSpeed(speedRequested))}</span>
-                                </div>
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Speed processed</span>
-                                    <span class="refund-kv-value">${escapeHtml(formatSpeed(speedProcessed))}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="refund-details-section">
-                            <div class="refund-section-title">Timeline</div>
-                            <div class="refund-kv">
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Created at</span>
-                                    <span class="refund-kv-value">${formatDate(refund.createdAt)}</span>
-                                </div>
-                                ${refund.processedAt ? `
-                                <div class="refund-kv-row">
-                                    <span class="refund-kv-label">Processed at</span>
-                                    <span class="refund-kv-value">${formatDate(refund.processedAt)}</span>
-                                </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            showFinancePanel('Refund Details', detailsHtml);
-        })
-        .catch(error => {
-            console.error('Error loading refund details:', error);
-            const errorContent = `<div class="modal-status modal-status-error">${escapeHtml(error.message || 'Failed to load refund details')}</div>`;
-            showModal('Error', errorContent);
-        });
-    }
-
-    /**
-     * Initialize Refund Analytics section
-     */
-    function ensureInitialized() {
-        console.log('[Refund Analytics] ensureInitialized called, state.initialized:', state.initialized);
-        if (state.initialized) {
-            console.log('[Refund Analytics] Already initialized, skipping');
-            return;
-        }
-        const panel = q('finance');
-        if (!panel) {
-            console.warn('[Refund Analytics] Finance panel not found');
-            return;
-        }
-
-        console.log('[Refund Analytics] Initializing refund analytics...');
-
-        // Load refund metrics
-        console.log('[Refund Analytics] Loading refund metrics...');
-        loadRefundMetrics();
-
-        // Load refund history with default pagination
-        console.log('[Refund Analytics] Loading refund history...');
-        loadRefundHistory(1, 20, '', '', '');
-
-        // Bind status filter
-        const statusFilter = q('refund-status-filter');
-        if (statusFilter && !statusFilter.dataset.bound) {
-            statusFilter.addEventListener('change', filterRefunds);
-            statusFilter.dataset.bound = 'true';
-        }
-
-        // Bind date filters
-        const dateFrom = q('refund-date-from');
-        if (dateFrom && !dateFrom.dataset.bound) {
-            dateFrom.addEventListener('change', filterRefunds);
-            dateFrom.dataset.bound = 'true';
-        }
-
-        const dateTo = q('refund-date-to');
-        if (dateTo && !dateTo.dataset.bound) {
-            dateTo.addEventListener('change', filterRefunds);
-            dateTo.dataset.bound = 'true';
-        }
-
-        // Bind export button
-        const exportBtn = q('export-refunds-btn');
-        if (exportBtn && !exportBtn.dataset.bound) {
-            exportBtn.addEventListener('click', function() {
-                const startDate = dateFrom ? dateFrom.value.trim() : '';
-                const endDate = dateTo ? dateTo.value.trim() : '';
-                exportRefunds(startDate, endDate);
-            });
-            exportBtn.dataset.bound = 'true';
-        }
-
-        state.initialized = true;
-        console.log('[Refund Analytics] Refund analytics initialized successfully');
-    }
-
-    // Bind initialization to finance tab activation
-    document.addEventListener('DOMContentLoaded', function() {
-        try {
-            const tab = document.querySelector('[data-tab="finance"]');
-            if (tab && !tab.dataset.refundBound) {
-                tab.addEventListener('click', ensureInitialized);
-                tab.dataset.refundBound = 'true';
-            }
-            // If already active, init immediately
-            const panel = q('finance');
-            if (panel && panel.classList.contains('active')) {
-                ensureInitialized();
-            }
-        } catch(e) { console.warn('Refund analytics tab binding failed', e); }
-    });
-
-    // Expose functions globally for testing/debugging
-    window.RefundAnalyticsModule = {
-        ensureInitialized,
-        loadRefundMetrics,
-        loadRefundHistory,
-        filterRefunds,
-        renderRefundChart,
-        exportRefunds,
-        viewRefundDetails
-    };
-})();
 
 
 // ================= Financial Export Tool =================
@@ -6642,7 +5239,7 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
                            title="Please select an end date" />
                 </div>
 
-                <div id="export-error" class="message error-message" style="display:none;border-left:4px solid #ef4444;padding:12px 16px;display:flex;align-items:start;gap:12px;">
+                <div id="export-error" class="message error-message" style="display:none;border-left:4px solid #ef4444;padding:12px 16px;align-items:start;gap:12px;">
                     <span class="material-icons" style="color:#ef4444;font-size:20px;flex-shrink:0;">error</span>
                     <div style="flex:1;">
                         <div style="font-weight:600;margin-bottom:4px;color:#ef4444;">Error</div>
@@ -6756,8 +5353,7 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 
                     // Generate filename with timestamp
                     const timestamp = new Date().toISOString().slice(0, 10);
-                    const filename = `financial-export-${exportType}-${timestamp}.csv`;
-                    a.download = filename;
+                    a.download = `financial-export-${exportType}-${timestamp}.csv`;
 
                     document.body.appendChild(a);
                     a.click();
@@ -6826,8 +5422,6 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
      */
     function initializeExportTool() {
         const exportBtn = q('export-financial-btn');
-        const exportSpinner = q('export-financial-spinner');
-
         if (exportBtn && !exportBtn.dataset.bound) {
             exportBtn.addEventListener('click', function() {
                 showFinancialExportModal();
@@ -6864,7 +5458,9 @@ async function fetchRefundSummary(paymentId) {
     try {
         const token = localStorage.getItem('jwt_token');
         if (!token) {
-            throw new Error('Authentication required');
+            // Show user-friendly error message
+            showMessage('error', 'Your session has expired. Please refresh the page and login again.');
+            return null;
         }
 
         const response = await fetch(`/refunds/payment/${encodeURIComponent(paymentId)}`, {
@@ -6877,22 +5473,37 @@ async function fetchRefundSummary(paymentId) {
         });
 
         if (!response.ok) {
+            // Show user-friendly error message
+            let errorMsg;
             if (response.status === 401 || response.status === 403) {
-                throw new Error('Authentication failed. Please login again.');
+                errorMsg = 'Your session has expired. Please refresh the page and login again.';
+            } else if (response.status === 404) {
+                errorMsg = 'Refund information not found for this payment.';
+            } else {
+                errorMsg = `Unable to load refund details (Error ${response.status}). Please try again later.`;
             }
-            throw new Error(`Failed to fetch refund summary: ${response.status}`);
+            showMessage('error', errorMsg);
+            return null;
         }
 
         const data = await response.json();
         
         if (!data || data.status !== true || !data.data) {
-            throw new Error(data && data.message ? data.message : 'Invalid response from server');
+            // Show user-friendly error message
+            const errorMsg = data && data.message 
+                ? data.message 
+                : 'The server returned invalid data. Please try again or contact support if the problem persists.';
+            showMessage('error', errorMsg);
+            return null;
         }
 
         return data.data; // Returns PaymentRefundSummary object
     } catch (error) {
+        // Handle unexpected errors
         console.error('Error fetching refund summary:', error);
-        throw error;
+        const errorMsg = error.message || 'An unexpected error occurred while loading refund information.';
+        showMessage('error', errorMsg);
+        return null;
     }
 }
 
@@ -6923,6 +5534,12 @@ async function renderRefundButton(paymentId, container) {
     try {
         // Fetch refund summary for payment
         const summary = await fetchRefundSummary(paymentId);
+        
+        // Handle null return (error case)
+        if (!summary) {
+            container.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.875rem;">Refund unavailable</span>';
+            return;
+        }
         
         // Clear container
         container.innerHTML = '';
@@ -6976,8 +5593,8 @@ async function renderRefundButton(paymentId, container) {
             container.appendChild(button);
         }
     } catch (error) {
+        // Error is caught and handled gracefully with fallback UI
         console.error('Error rendering refund button:', error);
-        // Show error state or fallback UI
         container.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.875rem;">Refund unavailable</span>';
     }
 }
@@ -6995,6 +5612,12 @@ async function openRefundModal(paymentId) {
     try {
         // Fetch payment and refund details
         const summary = await fetchRefundSummary(paymentId);
+        
+        // Handle null return (error case)
+        if (!summary) {
+            showMessage('error', 'Unable to load refund information. Please try again.');
+            return;
+        }
         
         // Build modal content
         const modalContent = `
@@ -7161,7 +5784,9 @@ async function submitRefund(paymentId, maxRefundable) {
     try {
         const token = localStorage.getItem('jwt_token');
         if (!token) {
-            throw new Error('Authentication required');
+            // Show error and return early instead of throwing
+            showMessage('error', 'Your session has expired. Please refresh the page and login again.');
+            return;
         }
         
         const response = await fetch('/refunds/initiate', {
@@ -7175,7 +5800,28 @@ async function submitRefund(paymentId, maxRefundable) {
             body: JSON.stringify(requestBody)
         });
         
-        const data = await response.json();
+        if (!response.ok) {
+            // Handle HTTP errors
+            let errorMsg;
+            if (response.status === 401 || response.status === 403) {
+                errorMsg = 'Your session has expired. Please refresh the page and login again.';
+            } else if (response.status === 404) {
+                errorMsg = 'Refund endpoint not found. Please contact support.';
+            } else {
+                errorMsg = `Unable to process refund (Error ${response.status}). Please try again later.`;
+            }
+            showMessage('error', errorMsg);
+            return;
+        }
+        
+        let data;
+        try {
+            data = await response.json();
+        } catch (parseError) {
+            // Handle JSON parsing errors
+            showMessage('error', 'The server returned invalid data. Please try again or contact support.');
+            return;
+        }
         
         if (data.status === true && data.data && data.data.success) {
             showMessage('success', data.data.message || 'Refund processed successfully');
@@ -7184,8 +5830,10 @@ async function submitRefund(paymentId, maxRefundable) {
             showMessage('error', (data.data && data.data.message) || data.message || 'Refund failed');
         }
     } catch (error) {
+        // Handle unexpected errors (network errors, etc.)
         console.error('Refund submission failed:', error);
-        showMessage('error', error.message || 'Failed to process refund');
+        const errorMsg = error.message || 'Failed to process refund. Please try again or contact support if the problem persists.';
+        showMessage('error', errorMsg);
     }
 }
 
@@ -7206,6 +5854,12 @@ async function renderRefundStatus(paymentId, container) {
     try {
         // Fetch refund summary for payment
         const summary = await fetchRefundSummary(paymentId);
+        
+        // Handle null return (error case)
+        if (!summary) {
+            container.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.875rem;">Refund status unavailable</span>';
+            return;
+        }
         
         // Clear container
         container.innerHTML = '';
@@ -7259,6 +5913,12 @@ async function viewRefundHistory(paymentId) {
         // Fetch refund summary for payment
         const summary = await fetchRefundSummary(paymentId);
         
+        // Handle null return (error case)
+        if (!summary) {
+            showFinancePanel('Refund History', '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Unable to load refund history. Please try again.</div>');
+            return;
+        }
+        
         // Build payment summary section
         const summaryHtml = `
             <div class="summary-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
@@ -7285,7 +5945,7 @@ async function viewRefundHistory(paymentId) {
         `;
         
         // Build refunds list section
-        let refundsHtml = '';
+        let refundsHtml;
         if (summary.refunds && summary.refunds.length > 0) {
             refundsHtml = `
                 <div class="refunds-section">
@@ -7629,14 +6289,15 @@ async function viewRefundHistory(paymentId) {
             return;
         }
 
-        // Build table rows HTML for each refund
-        const rows = refunds.map(refund => {
+        // Build table rows HTML for each refund and insert into tbody
+        // eslint-disable-next-line no-return-assign
+        tbody.innerHTML = refunds.map(refund => {
             // Format amounts as currency (convert from rupees to paise)
             const amount = formatCurrency((refund.amount || 0) * 100);
             
             // Add status badges with appropriate colors
-            let statusBadge = '';
             const status = (refund.status || '').toUpperCase();
+            let statusBadge;
             if (status === 'PENDING') {
                 statusBadge = '<span class="badge badge-pending">Pending</span>';
             } else if (status === 'PROCESSED') {
@@ -7673,9 +6334,6 @@ async function viewRefundHistory(paymentId) {
                 </tr>
             `;
         }).join('');
-
-        // Insert into refund-history-tbody element
-        tbody.innerHTML = rows;
     }
 
     /**
@@ -7703,6 +6361,8 @@ async function viewRefundHistory(paymentId) {
 
         // Add previous button
         const prevDisabled = currentPage === 1;
+        const nextDisabled = currentPage === totalPages;
+        
         html += `
             <button 
                 class="pagination-button ${prevDisabled ? 'disabled' : ''}" 
@@ -7729,7 +6389,6 @@ async function viewRefundHistory(paymentId) {
         }
 
         // Add next button
-        const nextDisabled = currentPage === totalPages;
         html += `
             <button 
                 class="pagination-button ${nextDisabled ? 'disabled' : ''}" 
@@ -7766,6 +6425,7 @@ async function viewRefundHistory(paymentId) {
         })
         .then(response => {
             if (!response.ok) {
+                // Error is intentionally caught and handled by the calling function
                 throw new Error('Failed to load refund details');
             }
             return response.json();
@@ -8036,16 +6696,7 @@ async function viewRefundHistory(paymentId) {
 
 // ================= Refund Export Functionality =================
 
-/**
- * Format currency amount from paise to rupees with symbol
- * @param {number} amountPaise - Amount in paise
- * @returns {string} Formatted currency string (e.g., "₹1,234.56")
- */
-function formatCurrency(amountPaise) {
-    if (typeof amountPaise !== 'number' || isNaN(amountPaise)) return '₹0.00';
-    const rupees = amountPaise / 100;
-    return '₹' + rupees.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+// Duplicate formatCurrency function removed - using the one defined earlier
 
 /**
  * Download CSV file with given content
@@ -8129,17 +6780,30 @@ async function exportRefunds() {
         });
         
         if (!response.ok) {
+            // Handle HTTP errors and show message, then return early
+            let errorMsg;
             if (response.status === 403) {
-                throw new Error('You do not have permission to export refunds');
+                errorMsg = 'You do not have permission to export refunds. Please contact your administrator.';
             } else if (response.status === 404) {
-                throw new Error('No refunds found for the selected date range');
+                errorMsg = 'No refunds found for the selected date range. Please try a different date range.';
+            } else if (response.status === 401) {
+                errorMsg = 'Your session has expired. Please refresh the page and login again.';
             } else {
-                throw new Error('Failed to export refunds');
+                errorMsg = `Unable to export refunds (Error ${response.status}). Please try again later or contact support.`;
             }
+            showMessage('error', errorMsg);
+            return;
         }
         
         // Get CSV content from response
-        const csvContent = await response.text();
+        let csvContent;
+        try {
+            csvContent = await response.text();
+        } catch (textError) {
+            // Handle text parsing errors
+            showMessage('error', 'Failed to read export data. Please try again or contact support.');
+            return;
+        }
         
         // Generate filename with date range
         const filename = `refunds_${startDate}_to_${endDate}.csv`;

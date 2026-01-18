@@ -443,6 +443,19 @@ private suspend fun serveLoginPage(
                                 });
                             }
 
+                            // Add input focus animations
+                            const inputs = loginForm.querySelectorAll('.form-input');
+                            inputs.forEach(input => {
+                                input.addEventListener('focus', function() {
+                                    this.parentElement.classList.add('focused');
+                                });
+                                input.addEventListener('blur', function() {
+                                    if (!this.value) {
+                                        this.parentElement.classList.remove('focused');
+                                    }
+                                });
+                            });
+                            
                             // Handle form submission
                             loginForm.addEventListener('submit', function(e) {
                                 e.preventDefault();
@@ -455,6 +468,22 @@ private suspend fun serveLoginPage(
                                     return;
                                 }
 
+                                // Add ripple effect
+                                const ripple = loginButton.querySelector('.button-ripple');
+                                if (ripple) {
+                                    const rect = loginButton.getBoundingClientRect();
+                                    const size = Math.max(rect.width, rect.height);
+                                    const clickX = e.clientX || rect.left + rect.width / 2;
+                                    const clickY = e.clientY || rect.top + rect.height / 2;
+                                    ripple.style.width = ripple.style.height = size + 'px';
+                                    ripple.style.left = (clickX - rect.left - size / 2) + 'px';
+                                    ripple.style.top = (clickY - rect.top - size / 2) + 'px';
+                                    ripple.style.animation = 'none';
+                                    setTimeout(() => {
+                                        ripple.style.animation = 'ripple 0.6s ease-out';
+                                    }, 10);
+                                }
+                                
                                 loginButton.classList.add('loading');
                                 loginButton.disabled = true;
 
@@ -529,64 +558,107 @@ private suspend fun serveLoginPage(
 
                 // Content area with login form
                 div {
-                    classes = setOf("content-area")
-                    style = "margin-top: 2rem;"
-                    h2 {
-                        classes = setOf("login-heading")
-                        +"Admin Login"
-                    }
-                    span {
-                        classes = setOf("login-subtitle")
-                        +"Sign in to access the admin features and manage your weather API."
-                    }
-                    // Login form
-                    form {
-                        id = "login-form"
-                        classes = setOf("login-form")
+                    classes = setOf("content-area", "login-container")
+                    style = "margin-top: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - 200px);"
+                    
+                    // Login Card
+                    div {
+                        classes = setOf("login-card")
+                        style = "width: 100%; max-width: 440px;"
+                        
+                        // Header Section
                         div {
-                            classes = setOf("form-group")
-                            label {
-                                attributes["for"] = "email"
-                                +"Email"
+                            classes = setOf("login-header")
+                            div {
+                                classes = setOf("login-icon-wrapper")
+                                unsafe {
+                                    raw("<span class='material-icons login-icon'>admin_panel_settings</span>")
+                                }
                             }
-                            input {
-                                type = InputType.email
-                                id = "email"
-                                name = "email"
-                                attributes["required"] = ""
-                                attributes["autocomplete"] = "email"
-                            }
-                        }
-
-                        div {
-                            classes = setOf("form-group")
-                            label {
-                                attributes["for"] = "password"
-                                +"Password"
-                            }
-                            input {
-                                type = InputType.password
-                                id = "password"
-                                name = "password"
-                                attributes["required"] = ""
-                                attributes["autocomplete"] = "current-password"
-                            }
-                        }
-
-                        button {
-                            attributes["type"] = "submit"
-                            id = "login-button"
-                            classes = setOf("login-button")
-                            style =
-                                "display: flex; align-items: center; justify-content: center; gap: 0.5em; width: 100%;"
-                            span {
-                                id = "login-loading"
-                                classes = setOf("loading-spinner")
-                                style = "display: none; margin-right: 0.5em;"
+                            h2 {
+                                classes = setOf("login-heading")
+                                +"Admin Login"
                             }
                             span {
-                                style = "text-align: center; width: 100%;"
-                                +"Login"
+                                classes = setOf("login-subtitle")
+                                +"Sign in to access the admin dashboard and manage your weather API."
+                            }
+                        }
+                        
+                        // Login form
+                        form {
+                            id = "login-form"
+                            classes = setOf("login-form")
+                            
+                            div {
+                                classes = setOf("form-group")
+                                label {
+                                    attributes["for"] = "email"
+                                    classes = setOf("form-label")
+                                    +"Email Address"
+                                }
+                                div {
+                                    classes = setOf("input-wrapper")
+                                    unsafe {
+                                        raw("<span class='material-icons input-icon'>email</span>")
+                                    }
+                                    input {
+                                        type = InputType.email
+                                        id = "email"
+                                        name = "email"
+                                        classes = setOf("form-input")
+                                        attributes["required"] = ""
+                                        attributes["autocomplete"] = "email"
+                                        attributes["placeholder"] = "Enter your email"
+                                    }
+                                }
+                            }
+
+                            div {
+                                classes = setOf("form-group")
+                                label {
+                                    attributes["for"] = "password"
+                                    classes = setOf("form-label")
+                                    +"Password"
+                                }
+                                div {
+                                    classes = setOf("input-wrapper")
+                                    unsafe {
+                                        raw("<span class='material-icons input-icon'>lock</span>")
+                                    }
+                                    input {
+                                        type = InputType.password
+                                        id = "password"
+                                        name = "password"
+                                        classes = setOf("form-input")
+                                        attributes["required"] = ""
+                                        attributes["autocomplete"] = "current-password"
+                                        attributes["placeholder"] = "Enter your password"
+                                    }
+                                }
+                            }
+
+                            button {
+                                attributes["type"] = "submit"
+                                id = "login-button"
+                                classes = setOf("login-button")
+                                span {
+                                    classes = setOf("button-content")
+                                    unsafe {
+                                        raw("<span class='material-icons button-icon'>login</span>")
+                                    }
+                                    span {
+                                        classes = setOf("button-text")
+                                        +"Sign In"
+                                    }
+                                }
+                                span {
+                                    classes = setOf("button-loader")
+                                    style = "display: none;"
+                                }
+                                span {
+                                    classes = setOf("button-ripple")
+                                }
                             }
                         }
                     }
@@ -2388,211 +2460,6 @@ fun Route.adminAuthRoute() {
                                                             "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
                                                     }
 
-                                                    // Refund Analytics Section
-                                                    div {
-                                                        style =
-                                                            "margin-top: 3rem; padding-top: 2rem; border-top: 2px solid var(--card-border);"
-
-                                                        // Section Header
-                                                        h2 {
-                                                            style =
-                                                                "color: var(--card-title); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;"
-                                                            unsafe {
-                                                                raw("<span class='material-icons' style='font-size:24px;'>money_off</span> Refund Analytics")
-                                                            }
-                                                        }
-
-                                                        // Refund Metrics Cards
-                                                        div {
-                                                            classes = setOf("finance-summary")
-                                                            style = "margin-bottom: 1.5rem;"
-
-                                                            // Total Refunds Card
-                                                            div {
-                                                                classes = setOf("metric-card")
-                                                                div {
-                                                                    classes = setOf("metric-label")
-                                                                    +"Total Refunds"
-                                                                }
-                                                                div {
-                                                                    classes = setOf("metric-value")
-                                                                    id = "total-refunds"
-                                                                    +"$0.00"
-                                                                }
-                                                            }
-
-                                                            // Monthly Refunds Card
-                                                            div {
-                                                                classes = setOf("metric-card")
-                                                                div {
-                                                                    classes = setOf("metric-label")
-                                                                    +"Monthly Refunds"
-                                                                }
-                                                                div {
-                                                                    classes = setOf("metric-value")
-                                                                    id = "monthly-refunds"
-                                                                    +"$0.00"
-                                                                }
-                                                            }
-
-                                                            // Refund Rate Card
-                                                            div {
-                                                                classes = setOf("metric-card")
-                                                                div {
-                                                                    classes = setOf("metric-label")
-                                                                    +"Refund Rate"
-                                                                }
-                                                                div {
-                                                                    classes = setOf("metric-value")
-                                                                    id = "refund-rate"
-                                                                    +"0.00%"
-                                                                }
-                                                            }
-
-                                                            // Instant Refunds Card
-                                                            div {
-                                                                classes = setOf("metric-card")
-                                                                div {
-                                                                    classes = setOf("metric-label")
-                                                                    +"Instant Refunds"
-                                                                }
-                                                                div {
-                                                                    classes = setOf("metric-value")
-                                                                    id = "instant-refunds"
-                                                                    +"0"
-                                                                }
-                                                            }
-
-                                                            // Normal Refunds Card
-                                                            div {
-                                                                classes = setOf("metric-card")
-                                                                div {
-                                                                    classes = setOf("metric-label")
-                                                                    +"Normal Refunds"
-                                                                }
-                                                                div {
-                                                                    classes = setOf("metric-value")
-                                                                    id = "normal-refunds"
-                                                                    +"0"
-                                                                }
-                                                            }
-
-                                                            // Average Processing Time Card
-                                                            div {
-                                                                classes = setOf("metric-card")
-                                                                div {
-                                                                    classes = setOf("metric-label")
-                                                                    +"Avg Processing Time"
-                                                                }
-                                                                div {
-                                                                    classes = setOf("metric-value")
-                                                                    id = "avg-processing-time"
-                                                                    +"0.0h"
-                                                                }
-                                                            }
-                                                        }
-
-                                                        // Refund History Section
-                                                        div {
-                                                            classes = setOf("finance-actions")
-
-                                                            button {
-                                                                id = "export-refunds-btn"
-                                                                classes = setOf("btn", "btn-secondary")
-                                                                unsafe {
-                                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>download</span> Export Refunds")
-                                                                }
-                                                            }
-
-                                                            select {
-                                                                id = "refund-status-filter"
-                                                                classes = setOf("role-select")
-                                                                option {
-                                                                    value = ""
-                                                                    +"All Statuses"
-                                                                }
-                                                                option {
-                                                                    value = "PENDING"
-                                                                    +"Pending"
-                                                                }
-                                                                option {
-                                                                    value = "PROCESSED"
-                                                                    +"Processed"
-                                                                }
-                                                                option {
-                                                                    value = "FAILED"
-                                                                    +"Failed"
-                                                                }
-                                                            }
-
-                                                            input {
-                                                                type = InputType.date
-                                                                id = "refund-date-from"
-                                                                classes = setOf("date-input")
-                                                                placeholder = "Start Date"
-                                                            }
-
-                                                            input {
-                                                                type = InputType.date
-                                                                id = "refund-date-to"
-                                                                classes = setOf("date-input")
-                                                                placeholder = "End Date"
-                                                            }
-                                                        }
-
-                                                        // Refund History Table
-                                                        div {
-                                                            classes = setOf("dashboard-card-content")
-                                                            style = "overflow-x: auto;"
-
-                                                            // Loader
-                                                            div {
-                                                                id = "refunds-loader"
-                                                                classes = setOf("loading-spinner")
-                                                                style = "display: none; margin: 2rem auto;"
-                                                            }
-
-                                                            table {
-                                                                classes = setOf("payments-table", "refunds-table")
-                                                                thead {
-                                                                    tr {
-                                                                        th { +"Refund ID" }
-                                                                        th { +"User Email" }
-                                                                        th { +"Amount" }
-                                                                        th {
-                                                                            style = "text-align: center;"
-                                                                            +"Status"
-                                                                        }
-                                                                        th { +"Type" }
-                                                                        th { +"Processed By" }
-                                                                        th { +"Date" }
-                                                                        th {
-                                                                            style = "text-align: center;"
-                                                                            +"Actions"
-                                                                        }
-                                                                    }
-                                                                }
-                                                                tbody {
-                                                                    id = "refunds-table-body"
-                                                                    tr {
-                                                                        td {
-                                                                            colSpan = "8"
-                                                                            style =
-                                                                                "text-align: center; padding: 2rem; color: var(--text-secondary);"
-                                                                            +"Loading refund history..."
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-
-                                                        // Refund Pagination Controls
-                                                        div {
-                                                            id = "refunds-pagination"
-                                                            style =
-                                                                "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
-                                                        }
-                                                    }
                                                 }
 
                                                 // Reports Panel
@@ -2748,33 +2615,15 @@ fun Route.adminAuthRoute() {
                                                         </div>
                                                         </div>
 
-                                                        <!-- Charts Container -->
+                                                        <!-- Sales Chart Container -->
                                                         <div id="reports-charts-container" style="display: block;">
-                                                        <!-- Charts Grid -->
-                                                        <div class="reports-charts-grid" style="display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 2rem;">
-                                                            <!-- User Registrations Chart -->
-                                                            <div class="chart-container" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem;">
-                                                                <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600; color: var(--heading-color); display: flex; align-items: center; gap: 0.5rem;">
-                                                                    <span class="material-icons" style="font-size: 20px; color: #6366f1;">people</span>
-                                                                    User Registrations
+                                                            <div class="chart-container" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem; margin-top: 2rem;">
+                                                                <h3 style="margin: 0 0 1.5rem 0; font-size: 1.25rem; font-weight: 600; color: var(--heading-color); display: flex; align-items: center; gap: 0.5rem;">
+                                                                    <span class="material-icons" style="font-size: 24px; color: #6366f1;">trending_up</span>
+                                                                    Sales Overview
                                                                 </h3>
-                                                                <div style="position:relative;min-height:300px">
-                                                                    <canvas id="reports-chart" height="300" aria-label="User registrations chart" role="img"></canvas>
-                                                                </div>
-                                                            </div>
-
-                                                            <!-- Combined Revenue & Refund Chart -->
-                                                            <div class="chart-container" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem;">
-                                                                <div style="display: flex; align-items: center; margin-bottom: 1rem;">
-                                                                    <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--heading-color); display: flex; align-items: center; gap: 0.5rem;">
-                                                                        <span class="material-icons" style="font-size: 20px; color: #6366f1;">show_chart</span>
-                                                                        Revenue & Refund Trends
-                                                                    </h3>
-                                                                </div>
-                                                                <div style="position:relative;min-height:400px">
-                                                                    <canvas id="financial-trends-chart" height="400" aria-label="Revenue and refund trends chart showing monthly revenue, refunds, and net revenue" role="img"></canvas>
-                                                                    <div id="financial-trends-empty" class="message info-message hidden" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);">Not enough data to render chart</div>
-                                                                </div>
+                                                                <div id="sales-chart" style="width: 100%; min-height: 450px;"></div>
+                                                                <div id="sales-chart-empty" class="message info-message hidden" style="text-align: center; padding: 3rem 1rem;">Not enough data to render chart</div>
                                                             </div>
                                                         </div>
                                                         """

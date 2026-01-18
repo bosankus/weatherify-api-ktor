@@ -220,9 +220,9 @@ object WebResources {
      * @param head The HEAD element to add the JavaScript to
      */
     fun includeAdminJs(head: HEAD) {
-        // Include Chart.js from CDN first so it's available to admin.js
+        // Include ECharts from CDN first so it's available to admin.js and reports-charts.js
         head.script {
-            attributes["src"] = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+            attributes["src"] = "https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"
             attributes["crossorigin"] = "anonymous"
         }
         // Include table utilities FIRST (before other admin scripts)
