@@ -58,11 +58,6 @@ object Environment {
         return System.getenv(Constants.Env.JWT_REALM) ?: Constants.Auth.DEFAULT_JWT_REALM
     }
 
-    /** Notifications: Cloud Function URL if configured */
-    fun getFcmFunctionUrl(): String? {
-        return System.getenv(Constants.Env.FCM_FUNCTION_URL)?.takeIf { it.isNotBlank() }
-    }
-
     /** Analytics (GA4): measurement ID or null if missing */
     fun getGaMeasurementId(): String? {
         return System.getenv(Constants.Env.GA_MEASUREMENT_ID)?.takeIf { it.isNotBlank() }
@@ -81,25 +76,8 @@ object Environment {
         )
     }
 
-    /**
-     * Check if refund feature is enabled
-     * Falls back to true (enabled by default)
-     */
-    fun isRefundFeatureEnabled(): Boolean {
-        return (System.getenv(Constants.Env.REFUND_FEATURE_ENABLED) ?: "true").equals(
-            "true",
-            ignoreCase = true
-        )
-    }
-
-    /**
-     * Check if instant refund is enabled
-     * Falls back to true (enabled by default)
-     */
-    fun isInstantRefundEnabled(): Boolean {
-        return (System.getenv(Constants.Env.INSTANT_REFUND_ENABLED) ?: "true").equals(
-            "true",
-            ignoreCase = true
-        )
+    /** Get GCP Project ID for Vertex AI */
+    fun getGcpProjectId(): String {
+        return System.getenv(Constants.Env.GCP_PROJECT_ID) ?: "weatherify-api" // Fallback
     }
 }

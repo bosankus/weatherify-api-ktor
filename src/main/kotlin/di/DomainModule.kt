@@ -1,11 +1,9 @@
 package di
 
+import config.Environment.getGcpProjectId
 import data.service.*
 import domain.service.*
-import domain.service.impl.AuthServiceImpl
-import domain.service.impl.FeedbackServiceImpl
-import domain.service.impl.RefundServiceImpl
-import domain.service.impl.WeatherServiceImpl
+import domain.service.impl.*
 import org.koin.dsl.module
 
 /**
@@ -22,8 +20,10 @@ val domainModule = module {
     single<FinancialService> { FinancialServiceImpl(get(), get(), get()) }
     single<BillService> { BillServiceImpl(get(), get(), get(), get()) }
     single<NotificationService> { NotificationServiceImpl() }
-    single<ServiceCatalogService> { domain.service.impl.ServiceCatalogServiceImpl(get(), get()) }
+    single<ServiceCatalogService> { ServiceCatalogServiceImpl(get(), get()) }
     single { SavedLocationService(get()) }
+    single { VertexAiService(projectId = getGcpProjectId()) }
+    single { TripService(get(), get(), get(), get()) }
 
     // Data Services
     single { ServiceCatalogSeedingService(get()) }

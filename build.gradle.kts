@@ -82,6 +82,9 @@ dependencies {
     // PDF Generation
     implementation("com.itextpdf:itext7-core:8.0.4")
 
+    // Google Cloud Vertex AI SDK
+    implementation(libs.gcp.vertexai)
+
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
 }

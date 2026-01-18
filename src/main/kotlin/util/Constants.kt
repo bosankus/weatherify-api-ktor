@@ -6,7 +6,7 @@ package util
  */
 object Constants {
     /**
-     * Database related constants
+     * Database-related constants
      */
     object Database {
         // Database drivers and connection strings
@@ -18,6 +18,7 @@ object Constants {
         const val SAVED_LOCATIONS_COLLECTION = "saved_locations"
         const val PAYMENTS_COLLECTION = "payments"
         const val REFUNDS_COLLECTION = "refunds"
+        const val TRIPS_COLLECTION = "trips"
 
         // Field names
         const val ID_FIELD = "_id"
@@ -25,7 +26,7 @@ object Constants {
     }
 
     /**
-     * Authentication related constants
+     * Authentication-related constants
      */
     object Auth {
         // JWT configuration
@@ -54,7 +55,7 @@ object Constants {
     }
 
     /**
-     * API related constants
+     * API-related constants
      */
     object Api {
         // API endpoints
@@ -129,7 +130,7 @@ object Constants {
         const val NETWORK_ERROR = "Network operation failed"
         const val UNKNOWN_ERROR = "An unexpected error occurred"
 
-        // Out of scope messages
+        // Out-of-scope messages
         const val ENDPOINT_NOT_FOUND = "The requested endpoint does not exist"
     }
 
@@ -150,23 +151,16 @@ object Constants {
         const val WEATHER_URL = "WEATHER_URL"
         const val AIR_POLLUTION_URL = "AIR_POLLUTION_URL"
 
-        // Notifications / FCM
-        const val FCM_FUNCTION_URL = "FCM_FUNCTION_URL" // Optional: HTTPS Cloud Function endpoint
-        // const val FCM_SERVER_KEY = "FCM_SERVER_KEY"     // Optional: Legacy FCM server key
-
         // Analytics (GA4 via Firebase)
         const val GA_MEASUREMENT_ID = "GA_MEASUREMENT_ID"
         const val GA_API_SECRET = "GA_API_SECRET"
         const val GA_ENABLED = "GA_ENABLED" // "true" to enable server-side analytics
 
         // Email configuration (SendGrid API)
-        @Suppress("unused")
-        const val SENDGRID_API_KEY = "SENDGRID_API_KEY"
         const val FROM_EMAIL = "FROM_EMAIL"
         const val FROM_NAME = "FROM_NAME"
 
         // Refund feature flags
-        const val REFUND_FEATURE_ENABLED = "REFUND_FEATURE_ENABLED"
-        const val INSTANT_REFUND_ENABLED = "INSTANT_REFUND_ENABLED"
+        const val GCP_PROJECT_ID = "GCP_PROJECT_ID"
     }
 }

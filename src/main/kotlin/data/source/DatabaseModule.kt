@@ -1,7 +1,6 @@
 package data.source
 
-import bose.ankush.data.model.Feedback
-import bose.ankush.data.model.User
+import bose.ankush.data.model.*
 import bose.ankush.util.getSecretValue
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
@@ -15,6 +14,7 @@ import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import config.Environment
 import org.bson.Document
 import org.bson.conversions.Bson
+import org.bson.types.ObjectId
 import org.slf4j.LoggerFactory
 import util.Constants
 import java.io.Closeable
@@ -217,8 +217,16 @@ class DatabaseModule(
      * Get the saved locations collection
      * @return The saved locations collection
      */
-    fun getSavedLocationsCollection(): MongoCollection<bose.ankush.data.model.SavedLocation> {
-        return getCollection<bose.ankush.data.model.SavedLocation>(Constants.Database.SAVED_LOCATIONS_COLLECTION)
+    fun getSavedLocationsCollection(): MongoCollection<SavedLocation> {
+        return getCollection<SavedLocation>(Constants.Database.SAVED_LOCATIONS_COLLECTION)
+    }
+
+    /**
+     * Get the trips collection
+     * @return The trips collection
+     */
+    fun getTripsCollection(): MongoCollection<Trip> {
+        return getCollection<Trip>(Constants.Database.TRIPS_COLLECTION)
     }
 
 
@@ -226,32 +234,32 @@ class DatabaseModule(
      * Get the payment collection
      * @return The payment collection
      */
-    fun getPaymentsCollection(): MongoCollection<bose.ankush.data.model.Payment> {
-        return getCollection<bose.ankush.data.model.Payment>(Constants.Database.PAYMENTS_COLLECTION)
+    fun getPaymentsCollection(): MongoCollection<Payment> {
+        return getCollection<Payment>(Constants.Database.PAYMENTS_COLLECTION)
     }
 
     /**
      * Get the refunds collection
      * @return The refunds collection
      */
-    fun getRefundsCollection(): MongoCollection<bose.ankush.data.model.Refund> {
-        return getCollection<bose.ankush.data.model.Refund>(Constants.Database.REFUNDS_COLLECTION)
+    fun getRefundsCollection(): MongoCollection<Refund> {
+        return getCollection<Refund>(Constants.Database.REFUNDS_COLLECTION)
     }
 
     /**
      * Get the services collection
      * @return The services collection
      */
-    fun getServicesCollection(): MongoCollection<bose.ankush.data.model.ServiceConfig> {
-        return getCollection<bose.ankush.data.model.ServiceConfig>("services")
+    fun getServicesCollection(): MongoCollection<ServiceConfig> {
+        return getCollection<ServiceConfig>("services")
     }
 
     /**
      * Get the service history collection
      * @return The service history collection
      */
-    fun getServiceHistoryCollection(): MongoCollection<bose.ankush.data.model.ServiceHistory> {
-        return getCollection<bose.ankush.data.model.ServiceHistory>("service_history")
+    fun getServiceHistoryCollection(): MongoCollection<ServiceHistory> {
+        return getCollection<ServiceHistory>("service_history")
     }
 
     /**
@@ -283,10 +291,10 @@ class DatabaseModule(
         return if (field == Constants.Database.ID_FIELD) {
             when (value) {
                 is String -> {
-                    // Support both ObjectId-based and legacy string-based _id
-                    if (org.bson.types.ObjectId.isValid(value)) {
+                    // Support both ObjectId-based and legacy-string-based _id
+                    if (ObjectId.isValid(value)) {
                         Filters.or(
-                            Filters.eq(field, org.bson.types.ObjectId(value)),
+                            Filters.eq(field, ObjectId(value)),
                             Filters.eq(field, value)
                         )
                     } else {
@@ -294,7 +302,7 @@ class DatabaseModule(
                     }
                 }
 
-                is org.bson.types.ObjectId -> Filters.eq(field, value)
+                is ObjectId -> Filters.eq(field, value)
                 else -> Filters.eq(field, value)
             }
         } else {

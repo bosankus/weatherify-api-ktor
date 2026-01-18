@@ -1,7 +1,10 @@
 package bose.ankush.route.common
 
 import bose.ankush.route.*
+import domain.service.SavedLocationService
+import domain.service.TripService
 import io.ktor.server.routing.*
+import org.koin.java.KoinJavaComponent.get
 import route.savedLocationRoute
 
 /**
@@ -88,6 +91,12 @@ object ServiceCatalogRoutesRegistrar : RouteRegistrar {
 
 object SavedLocationRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
-        with(root) { savedLocationRoute(org.koin.java.KoinJavaComponent.get(domain.service.SavedLocationService::class.java)) }
+        with(root) { savedLocationRoute(get(SavedLocationService::class.java)) }
+    }
+}
+
+object TravelRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { travelRoute(get(TripService::class.java)) }
     }
 }

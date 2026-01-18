@@ -65,4 +65,5 @@ val dataModule = module {
     single<RefundRepository> { RefundRepositoryImpl(get()) }
     single<ServiceCatalogRepository> { ServiceCatalogRepositoryImpl(get()) }
     single<SavedLocationRepository> { SavedLocationRepositoryImpl(get()) }
+    single<TripRepository> { TripRepositoryImpl(get()) }
 }
