@@ -2,6 +2,7 @@ package data.repository
 
 import bose.ankush.data.model.MonthlyRevenue
 import bose.ankush.data.model.Payment
+import bose.ankush.data.model.ServiceType
 import com.mongodb.client.model.Accumulators
 import com.mongodb.client.model.Aggregates
 import com.mongodb.client.model.Filters
@@ -14,8 +15,11 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import org.bson.Document
 import org.bson.conversions.Bson
+import org.bson.types.ObjectId
 import org.slf4j.LoggerFactory
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Implementation of PaymentRepository that uses MongoDB for data storage.
@@ -89,7 +93,7 @@ class PaymentRepositoryImpl(private val databaseModule: DatabaseModule) : Paymen
         logger.debug("Calculating total revenue using aggregation")
         return try {
             val pipeline = listOf(
-                Aggregates.match(Filters.eq("status", "verified")),
+                Aggregates.match(Filters.`in`("status", "verified", "captured", "success")),
                 Aggregates.group(
                     null,
                     Accumulators.sum("totalAmount", "\$amount")
@@ -138,16 +142,38 @@ class PaymentRepositoryImpl(private val databaseModule: DatabaseModule) : Paymen
 
             if (!startDate.isNullOrBlank() && !endDate.isNullOrBlank()) {
                 try {
-                    val start = Instant.parse(startDate)
-                    val end = Instant.parse(endDate)
-                    filterConditions.add(
-                        Filters.and(
-                            Filters.gte("createdAt", start.toString()),
-                            Filters.lte("createdAt", end.toString())
+                    val startInstant = try {
+                        Instant.parse(startDate)
+                    } catch (_: Exception) {
+                        try {
+                            LocalDate.parse(startDate).atStartOfDay(ZoneId.systemDefault()).toInstant()
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+
+                    val endInstant = try {
+                        Instant.parse(endDate)
+                    } catch (_: Exception) {
+                        try {
+                            LocalDate.parse(endDate).atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+
+                    if (startInstant != null && endInstant != null) {
+                        filterConditions.add(
+                            Filters.and(
+                                Filters.gte("createdAt", startInstant.toString()),
+                                Filters.lte("createdAt", endInstant.toString())
+                            )
                         )
-                    )
+                    } else {
+                        logger.warn("Could not parse dates: $startDate, $endDate")
+                    }
                 } catch (e: Exception) {
-                    logger.warn("Invalid date format: $startDate or $endDate", e)
+                    logger.warn("Error processing dates: $startDate or $endDate", e)
                 }
             }
 
@@ -160,14 +186,64 @@ class PaymentRepositoryImpl(private val databaseModule: DatabaseModule) : Paymen
             // Count total matching documents
             val totalCount = getPaymentsCollection().countDocuments(filter)
 
-            // Apply pagination
+            // Apply pagination and retrieve as Documents to handle mixed _id types
             val skip = (page - 1) * pageSize
-            val payments = getPaymentsCollection()
-                .find(filter)
+            val paymentDocs = getPaymentsCollection()
+                .find(filter, Document::class.java)
                 .sort(Sorts.descending("createdAt"))
                 .skip(skip)
                 .limit(pageSize)
                 .toList()
+
+            // Manually map Documents to Payment objects, handling both STRING and ObjectId _id
+            val payments = paymentDocs.mapNotNull { doc ->
+                try {
+                    // Handle _id field - can be either String or ObjectId
+                    val id = when (val idValue = doc.get("_id")) {
+                        is String -> {
+                            // Try to parse string as ObjectId, or create new one if invalid
+                            try {
+                                ObjectId(idValue)
+                            } catch (_: Exception) {
+                                logger.warn("Invalid ObjectId string: $idValue, creating new ObjectId")
+                                ObjectId()
+                            }
+                        }
+                        is ObjectId -> idValue
+                        else -> {
+                            logger.warn("Unexpected _id type: ${idValue?.javaClass?.name}, creating new ObjectId")
+                            ObjectId()
+                        }
+                    }
+
+                    Payment(
+                        id = id,
+                        userEmail = doc.getString("userEmail") ?: "",
+                        orderId = doc.getString("razorpay_order_id") ?: "",
+                        paymentId = doc.getString("razorpay_payment_id") ?: "",
+                        signature = doc.getString("razorpay_signature") ?: "",
+                        amount = doc.getInteger("amount"),
+                        currency = doc.getString("currency"),
+                        receipt = doc.getString("receipt"),
+                        status = doc.getString("status"),
+                        notes = doc.get("notes")?.let { 
+                            @Suppress("UNCHECKED_CAST")
+                            it as Map<String, String> 
+                        },
+                        createdAt = doc.getString("createdAt") ?: Instant.now().toString(),
+                        verifiedAt = doc.getString("verifiedAt"),
+                        userId = doc.getString("userId"),
+                        serviceType = doc.getString("serviceType")?.let {
+                            try { ServiceType.valueOf(it) } catch (_: Exception) { null }
+                        },
+                        requestIp = doc.getString("requestIp"),
+                        userAgent = doc.getString("userAgent")
+                    )
+                } catch (e: Exception) {
+                    logger.error("Failed to map payment document: ${e.message}", e)
+                    null
+                }
+            }
 
             logger.debug("Retrieved ${payments.size} payments out of $totalCount total")
             Result.success(Pair(payments, totalCount))
@@ -181,7 +257,7 @@ class PaymentRepositoryImpl(private val databaseModule: DatabaseModule) : Paymen
         logger.debug("Getting verified payments aggregate using database aggregation")
         return try {
             val pipeline = listOf(
-                Aggregates.match(Filters.eq("status", "verified")),
+                Aggregates.match(Filters.`in`("status", "verified", "captured", "success")),
                 Aggregates.group(
                     null,
                     Accumulators.sum("totalAmount", "\$amount"),
@@ -218,7 +294,7 @@ class PaymentRepositoryImpl(private val databaseModule: DatabaseModule) : Paymen
             val pipeline = listOf(
                 Aggregates.match(
                     Filters.and(
-                        Filters.eq("status", "verified"),
+                        Filters.`in`("status", "verified", "captured", "success"),
                         Filters.gte("createdAt", start.toString()),
                         Filters.lte("createdAt", end.toString())
                     )
@@ -287,7 +363,7 @@ class PaymentRepositoryImpl(private val databaseModule: DatabaseModule) : Paymen
     override suspend fun getVerifiedPaymentsCount(): Result<Long> {
         logger.debug("Getting verified payments count")
         return try {
-            val count = getPaymentsCollection().countDocuments(Filters.eq("status", "verified"))
+            val count = getPaymentsCollection().countDocuments(Filters.`in`("status", "verified", "captured", "success"))
             logger.debug("Verified payments count: $count")
             Result.success(count)
         } catch (e: Exception) {

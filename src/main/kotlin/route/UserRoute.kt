@@ -4,7 +4,6 @@ import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
-import bose.ankush.util.WeatherCache
 import domain.model.Result
 import domain.repository.UserRepository
 import domain.service.NotificationService
@@ -555,15 +554,6 @@ fun Route.userRoute() {
             }
         }
 
-        // Clear weather cache
-        route("/cache") {
-            post("/clear") {
-                call.getAuthenticatedAdminOrRespond() ?: return@post
-                WeatherCache.clearCache()
-                call.respondSuccess("Cache cleared", true)
-            }
-        }
-
         // Tools endpoints removed - AdminAuthRoute.kt already has /tools
     }
 }
@@ -627,52 +617,4 @@ data class PremiumUpdateResponseDTO(
 data class NotificationRequest(
     val title: String? = null,
     val body: String? = null
-)
-
-// Tools DTOs
-@Suppress("unused")
-@Serializable
-data class ToolsHealthData(
-    val weatherUrl: String,
-    val probeWeatherUrl: String,
-    val weatherStatusCode: Int,
-    val weatherStatusText: String,
-    val weatherOk: Boolean,
-    val weatherLatencyMs: Long,
-    val weatherContentType: String? = null,
-    val weatherBytes: Int? = null,
-    val weatherError: String? = null,
-    val airUrl: String,
-    val probeAirUrl: String,
-    val airStatusCode: Int,
-    val airStatusText: String,
-    val airOk: Boolean,
-    val airLatencyMs: Long,
-    val airContentType: String? = null,
-    val airBytes: Int? = null,
-    val airError: String? = null,
-    val timestamp: Long
-)
-
-@Serializable
-data class WarmupItem(
-    val lat: Double,
-    val lon: Double,
-    val name: String? = null,
-    val weatherStatusCode: Int,
-    val weatherOk: Boolean,
-    val weatherLatencyMs: Long,
-    val weatherError: String? = null,
-    val airStatusCode: Int,
-    val airOk: Boolean,
-    val airLatencyMs: Long,
-    val airError: String? = null
-)
-
-@Suppress("unused")
-@Serializable
-data class WarmupResponse(
-    val results: List<WarmupItem>,
-    val ok: Boolean,
-    val timestamp: Long
 )

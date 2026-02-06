@@ -8,216 +8,12 @@ import domain.service.RefundService
 import kotlinx.coroutines.runBlocking
 import org.bson.types.ObjectId
 import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.time.ZoneOffset
+import java.util.LinkedHashMap
 import kotlin.test.*
 
 class FinancialServiceImplTest {
-
-    // Mock UserRepository for testing
-    private class MockUserRepository : UserRepository {
-        var users = mutableMapOf<String, User>()
-        var shouldReturnError = false
-        var errorMessage = "Repository error"
-
-        override suspend fun findUserByEmail(email: String): Result<User?> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                Result.success(users[email])
-            }
-        }
-
-        override suspend fun createUser(user: User): Result<Boolean> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                users[user.email] = user
-                Result.success(true)
-            }
-        }
-
-        override suspend fun updateUser(user: User): Result<Boolean> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                users[user.email] = user
-                Result.success(true)
-            }
-        }
-
-        override suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): Result<Boolean> {
-            return Result.success(true)
-        }
-
-        override suspend fun getAllUsers(
-            filter: Map<String, Any>?,
-            sortBy: String?,
-            sortOrder: Int?,
-            page: Int?,
-            pageSize: Int?
-        ): Result<Pair<List<User>, Long>> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                val userList = users.values.toList()
-                Result.success(Pair(userList, userList.size.toLong()))
-            }
-        }
-    }
-
-    // Mock PaymentRepository for testing
-    private class MockPaymentRepository : PaymentRepository {
-        var payments = mutableListOf<Payment>()
-        var shouldReturnError = false
-        var errorMessage = "Payment repository error"
-
-        override suspend fun getPaymentByTransactionId(transactionId: String): Result<Payment?> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                Result.success(payments.find { it.paymentId == transactionId })
-            }
-        }
-
-        override suspend fun getPaymentsByUserId(userId: String): Result<List<Payment>> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                Result.success(payments.filter { it.userId == userId })
-            }
-        }
-
-        override suspend fun getPaymentsByUserEmail(userEmail: String): Result<List<Payment>> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                Result.success(payments.filter { it.userEmail == userEmail })
-            }
-        }
-
-        override suspend fun getAllPayments(page: Int, pageSize: Int): Result<Pair<List<Payment>, Long>> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                Result.success(Pair(payments, payments.size.toLong()))
-            }
-        }
-
-        override suspend fun getTotalRevenue(): Result<Double> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                val total = payments.filter { it.status == "verified" }
-                    .mapNotNull { it.amount }
-                    .sum()
-                    .toDouble() / 100.0
-                Result.success(total)
-            }
-        }
-    }
-
-    // Mock RefundService for testing
-    private class MockRefundService : RefundService {
-        var shouldReturnError = false
-        var errorMessage = "Refund service error"
-        var totalRefunds = 0.0
-        var monthlyRefunds = 0.0
-        var refundRate = 0.0
-
-        override suspend fun initiateRefund(
-            adminEmail: String,
-            request: InitiateRefundRequest
-        ): Result<RefundResponse> {
-            return Result.success(RefundResponse(true, "Success"))
-        }
-
-        override suspend fun getRefund(refundId: String): Result<RefundDto> {
-            return Result.success(
-                RefundDto(
-                    refundId = refundId,
-                    paymentId = "pay_1",
-                    amount = 100.0,
-                    currency = "INR",
-                    status = RefundStatus.PROCESSED,
-                    speedRequested = RefundSpeed.OPTIMUM,
-                    speedProcessed = RefundSpeed.NORMAL,
-                    userEmail = "user@example.com",
-                    processedBy = "admin@example.com",
-                    reason = null,
-                    createdAt = Instant.now().toString(),
-                    processedAt = Instant.now().toString()
-                )
-            )
-        }
-
-        override suspend fun getRefundsForPayment(paymentId: String): Result<PaymentRefundSummary> {
-            return Result.success(
-                PaymentRefundSummary(
-                    paymentId = paymentId,
-                    originalAmount = 10000,
-                    totalRefunded = 0,
-                    remainingRefundable = 10000,
-                    refunds = emptyList(),
-                    isFullyRefunded = false
-                )
-            )
-        }
-
-        override suspend fun checkPaymentRefundStatus(paymentId: String): Result<PaymentRefundSummary> {
-            return Result.success(
-                PaymentRefundSummary(
-                    paymentId = paymentId,
-                    originalAmount = 10000,
-                    totalRefunded = 0,
-                    remainingRefundable = 10000,
-                    refunds = emptyList(),
-                    isFullyRefunded = false
-                )
-            )
-        }
-
-        override suspend fun getRefundHistory(
-            page: Int,
-            pageSize: Int,
-            status: RefundStatus?,
-            startDate: String?,
-            endDate: String?
-        ): Result<RefundHistoryResponse> {
-            return Result.success(
-                RefundHistoryResponse(
-                    refunds = emptyList(),
-                    pagination = PaginationInfo(page, pageSize, 0, 0)
-                )
-            )
-        }
-
-        override suspend fun getRefundMetrics(): Result<RefundMetrics> {
-            return if (shouldReturnError) {
-                Result.error(errorMessage)
-            } else {
-                Result.success(
-                    RefundMetrics(
-                        totalRefunds = totalRefunds,
-                        monthlyRefunds = monthlyRefunds,
-                        refundRate = refundRate,
-                        totalRefundCount = 0,
-                        monthlyRefundCount = 0,
-                        instantRefundCount = 0,
-                        normalRefundCount = 0,
-                        averageProcessingTimeHours = 0.0,
-                        monthlyRefundChart = emptyList()
-                    )
-                )
-            }
-        }
-
-        override suspend fun exportRefunds(startDate: String, endDate: String): Result<String> {
-            return Result.success("")
-        }
-
-        override suspend fun handleRefundWebhook(signature: String, payload: String): Result<Boolean> {
-            return Result.success(true)
-        }
-    }
 
     private lateinit var mockUserRepository: MockUserRepository
     private lateinit var mockPaymentRepository: MockPaymentRepository
@@ -239,7 +35,7 @@ class FinancialServiceImplTest {
             // Add verified payments
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_1",
@@ -252,7 +48,7 @@ class FinancialServiceImplTest {
             )
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_2",
+                    id = ObjectId(),
                     userEmail = "user2@example.com",
                     orderId = "order_2",
                     paymentId = "pay_2",
@@ -286,7 +82,7 @@ class FinancialServiceImplTest {
             // Add verified payments
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_1",
@@ -299,7 +95,7 @@ class FinancialServiceImplTest {
             )
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_2",
+                    id = ObjectId(),
                     userEmail = "user2@example.com",
                     orderId = "order_2",
                     paymentId = "pay_2",
@@ -337,7 +133,7 @@ class FinancialServiceImplTest {
             // Add verified payments
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_1",
@@ -370,7 +166,7 @@ class FinancialServiceImplTest {
         runBlocking {
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_1",
@@ -383,7 +179,7 @@ class FinancialServiceImplTest {
             )
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_2",
+                    id = ObjectId(),
                     userEmail = "user2@example.com",
                     orderId = "order_2",
                     paymentId = "pay_2",
@@ -408,7 +204,7 @@ class FinancialServiceImplTest {
     fun `test financial metrics with payments`() {
         runBlocking {
             val payment = Payment(
-                id = "pay_1",
+                id = ObjectId(),
                 userEmail = "user1@example.com",
                 orderId = "order_1",
                 paymentId = "pay_sub_1",
@@ -444,7 +240,7 @@ class FinancialServiceImplTest {
             repeat(15) { i ->
                 mockPaymentRepository.payments.add(
                     Payment(
-                        id = "pay_$i",
+                        id = ObjectId(),
                         userEmail = "user$i@example.com",
                         orderId = "order_$i",
                         paymentId = "pay_$i",
@@ -474,7 +270,7 @@ class FinancialServiceImplTest {
         runBlocking {
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_1",
@@ -487,7 +283,7 @@ class FinancialServiceImplTest {
             )
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_2",
+                    id = ObjectId(),
                     userEmail = "user2@example.com",
                     orderId = "order_2",
                     paymentId = "pay_2",
@@ -521,7 +317,7 @@ class FinancialServiceImplTest {
 
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_1",
@@ -534,7 +330,7 @@ class FinancialServiceImplTest {
             )
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_2",
+                    id = ObjectId(),
                     userEmail = "user2@example.com",
                     orderId = "order_2",
                     paymentId = "pay_2",
@@ -556,7 +352,7 @@ class FinancialServiceImplTest {
             assertTrue(result.isSuccess)
             val response = (result as Result.Success).data
             assertEquals(1, response.payments.size)
-            assertEquals("pay_1", response.payments[0].id)
+            assertEquals("pay_1", response.payments[0].transactionId)
         }
     }
 
@@ -567,7 +363,7 @@ class FinancialServiceImplTest {
             val now = Instant.now()
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_1",
@@ -598,7 +394,7 @@ class FinancialServiceImplTest {
             val now = Instant.now()
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user,with,commas@example.com",
                     orderId = "order_1",
                     paymentId = "pay_1",
@@ -630,7 +426,7 @@ class FinancialServiceImplTest {
             repeat(10001) { i ->
                 mockPaymentRepository.payments.add(
                     Payment(
-                        id = "pay_$i",
+                        id = ObjectId(),
                         userEmail = "user$i@example.com",
                         orderId = "order_$i",
                         paymentId = "pay_$i",
@@ -663,7 +459,7 @@ class FinancialServiceImplTest {
 
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_recent",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_recent",
@@ -676,7 +472,7 @@ class FinancialServiceImplTest {
             )
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_old",
+                    id = ObjectId(),
                     userEmail = "user2@example.com",
                     orderId = "order_2",
                     paymentId = "pay_old",
@@ -706,7 +502,7 @@ class FinancialServiceImplTest {
             val now = Instant.now()
             mockPaymentRepository.payments.add(
                 Payment(
-                    id = "pay_1",
+                    id = ObjectId(),
                     userEmail = "user1@example.com",
                     orderId = "order_1",
                     paymentId = "pay_sub_1",
@@ -758,5 +554,302 @@ class FinancialServiceImplTest {
             assertTrue(result.isError)
             assertTrue((result as Result.Error).message.contains("User not found"))
         }
+    }
+}
+
+// Mock UserRepository for testing
+private class MockUserRepository : UserRepository {
+    var users = mutableMapOf<String, User>()
+    var shouldReturnError = false
+    var errorMessage = "Repository error"
+
+    override suspend fun findUserByEmail(email: String): Result<User?> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            Result.success(users[email])
+        }
+    }
+
+    override suspend fun createUser(user: User): Result<Boolean> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            users[user.email] = user
+            Result.success(true)
+        }
+    }
+
+    override suspend fun updateUser(user: User): Result<Boolean> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            users[user.email] = user
+            Result.success(true)
+        }
+    }
+
+    override suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): Result<Boolean> {
+        return Result.success(true)
+    }
+
+    override suspend fun clearFcmTokenByEmail(email: String): Result<Boolean> {
+        return if (shouldReturnError) Result.error(errorMessage) else Result.success(true)
+    }
+
+    override suspend fun getAllUsers(
+        filter: Map<String, Any>?,
+        sortBy: String?,
+        sortOrder: Int?,
+        page: Int?,
+        pageSize: Int?
+    ): Result<Pair<List<User>, Long>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val userList = users.values.toList()
+            Result.success(Pair(userList, userList.size.toLong()))
+        }
+    }
+
+    override suspend fun deleteUserByEmail(email: String): Result<Boolean> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            users.remove(email)
+            Result.success(true)
+        }
+    }
+}
+
+// Mock PaymentRepository for testing
+private class MockPaymentRepository : PaymentRepository {
+    var payments = mutableListOf<Payment>()
+    var shouldReturnError = false
+    var errorMessage = "Payment repository error"
+
+    override suspend fun getPaymentByTransactionId(transactionId: String): Result<Payment?> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            Result.success(payments.find { it.paymentId == transactionId })
+        }
+    }
+
+    override suspend fun getPaymentsByUserId(userId: String): Result<List<Payment>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            Result.success(payments.filter { it.userId == userId })
+        }
+    }
+
+    override suspend fun getPaymentsByUserEmail(userEmail: String): Result<List<Payment>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            Result.success(payments.filter { it.userEmail == userEmail })
+        }
+    }
+
+    override suspend fun getAllPayments(page: Int, pageSize: Int): Result<Pair<List<Payment>, Long>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            Result.success(Pair(payments, payments.size.toLong()))
+        }
+    }
+
+    override suspend fun getPaymentsWithFilters(
+        page: Int,
+        pageSize: Int,
+        status: String?,
+        startDate: String?,
+        endDate: String?
+    ): Result<Pair<List<Payment>, Long>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val filtered = payments.filter { p ->
+                val statusOk = status?.let { p.status == it } ?: true
+                val startOk = startDate?.let { s ->
+                    runCatching { Instant.parse(p.createdAt).isAfter(Instant.parse(s)) || Instant.parse(p.createdAt) == Instant.parse(s) }.getOrDefault(true)
+                } ?: true
+                val endOk = endDate?.let { e ->
+                    runCatching { Instant.parse(p.createdAt).isBefore(Instant.parse(e)) || Instant.parse(p.createdAt) == Instant.parse(e) }.getOrDefault(true)
+                } ?: true
+                statusOk && startOk && endOk
+            }
+            val total = filtered.size.toLong()
+            val from = ((page - 1) * pageSize).coerceAtLeast(0)
+            val to = (from + pageSize).coerceAtMost(filtered.size)
+            val pageList = if (from < to) filtered.subList(from, to) else emptyList()
+            Result.success(Pair(pageList, total))
+        }
+    }
+
+    override suspend fun getTotalRevenue(): Result<Double> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val total = payments.filter { it.status == "verified" }
+                .mapNotNull { it.amount }
+                .sum()
+                .toDouble() / 100.0
+            Result.success(total)
+        }
+    }
+
+    override suspend fun getVerifiedPaymentsAggregate(): Result<Pair<Long, Long>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val verified = payments.filter { it.status == "verified" }
+            val sum = verified.mapNotNull { it.amount }.sumOf { it.toLong() }
+            Result.success(Pair(sum, verified.size.toLong()))
+        }
+    }
+
+    override suspend fun getMonthlyRevenue(startDate: String, endDate: String): Result<List<MonthlyRevenue>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            // Simplistic aggregation: group verified payments by month between dates
+            val start = runCatching { Instant.parse(startDate) }.getOrElse { Instant.EPOCH }
+            val end = runCatching { Instant.parse(endDate) }.getOrElse { Instant.now() }
+            val map = LinkedHashMap<String, Long>()
+            val formatter = DateTimeFormatter.ofPattern("yyyy-MM")
+                .withZone(ZoneOffset.UTC)
+            payments.filter { it.status == "verified" }.forEach { p ->
+                val ts = runCatching { Instant.parse(p.createdAt) }.getOrNull() ?: return@forEach
+                if (ts.isBefore(start) || ts.isAfter(end)) return@forEach
+                val key = formatter.format(ts)
+                val amt = (p.amount ?: 0).toLong()
+                map[key] = (map[key] ?: 0L) + amt
+            }
+            val list = map.entries.map { MonthlyRevenue(month = it.key, revenue = it.value.toDouble() / 100.0) }
+            Result.success(list)
+        }
+    }
+
+    override suspend fun getPaymentCountByStatus(): Result<Map<String, Long>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val counts = payments.groupingBy { it.status ?: "" }.eachCount()
+            Result.success(counts.mapValues { it.value.toLong() })
+        }
+    }
+
+    override suspend fun getVerifiedPaymentsCount(): Result<Long> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            Result.success(payments.count { it.status == "verified" }.toLong())
+        }
+    }
+}
+
+// Mock RefundService for testing
+private class MockRefundService : RefundService {
+    var shouldReturnError = false
+    var errorMessage = "Refund service error"
+    var totalRefunds = 0.0
+    var monthlyRefunds = 0.0
+    var refundRate = 0.0
+
+    override suspend fun initiateRefund(
+        adminEmail: String,
+        request: InitiateRefundRequest
+    ): Result<RefundResponse> {
+        return Result.success(RefundResponse(true, "Success"))
+    }
+
+    override suspend fun getRefund(refundId: String): Result<RefundDto> {
+        return Result.success(
+            RefundDto(
+                refundId = refundId,
+                paymentId = "pay_1",
+                amount = 100.0,
+                currency = "INR",
+                status = RefundStatus.PROCESSED,
+                speedRequested = RefundSpeed.OPTIMUM,
+                speedProcessed = RefundSpeed.NORMAL,
+                userEmail = "user@example.com",
+                processedBy = "admin@example.com",
+                reason = null,
+                createdAt = Instant.now().toString(),
+                processedAt = Instant.now().toString()
+            )
+        )
+    }
+
+    override suspend fun getRefundsForPayment(paymentId: String): Result<PaymentRefundSummary> {
+        return Result.success(
+            PaymentRefundSummary(
+                paymentId = paymentId,
+                originalAmount = 10000,
+                totalRefunded = 0,
+                remainingRefundable = 10000,
+                refunds = emptyList(),
+                isFullyRefunded = false
+            )
+        )
+    }
+
+    override suspend fun checkPaymentRefundStatus(paymentId: String): Result<PaymentRefundSummary> {
+        return Result.success(
+            PaymentRefundSummary(
+                paymentId = paymentId,
+                originalAmount = 10000,
+                totalRefunded = 0,
+                remainingRefundable = 10000,
+                refunds = emptyList(),
+                isFullyRefunded = false
+            )
+        )
+    }
+
+    override suspend fun getRefundHistory(
+        page: Int,
+        pageSize: Int,
+        status: RefundStatus?,
+        startDate: String?,
+        endDate: String?
+    ): Result<RefundHistoryResponse> {
+        return Result.success(
+            RefundHistoryResponse(
+                refunds = emptyList(),
+                pagination = PaginationInfo(page, pageSize, 0, 0)
+            )
+        )
+    }
+
+    override suspend fun getRefundMetrics(): Result<RefundMetrics> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            Result.success(
+                RefundMetrics(
+                    totalRefunds = totalRefunds,
+                    monthlyRefunds = monthlyRefunds,
+                    refundRate = refundRate,
+                    totalRefundCount = 0,
+                    monthlyRefundCount = 0,
+                    instantRefundCount = 0,
+                    normalRefundCount = 0,
+                    averageProcessingTimeHours = 0.0,
+                    monthlyRefundChart = emptyList()
+                )
+            )
+        }
+    }
+
+    override suspend fun exportRefunds(startDate: String, endDate: String): Result<String> {
+        return Result.success("")
+    }
+
+    override suspend fun handleRefundWebhook(signature: String, payload: String): Result<Boolean> {
+        return Result.success(true)
     }
 }

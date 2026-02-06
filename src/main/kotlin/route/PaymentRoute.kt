@@ -18,6 +18,9 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
@@ -336,64 +339,68 @@ fun Route.paymentRoute() {
             return@post
         }
 
-        try {
-            when (val emailResult = billService.sendPaymentBillEmail(userEmail, paymentId)) {
-                is Result.Success -> {
-                    val sent = emailResult.data == true
-                    paymentLogger.info("Payment bill email sent to $userEmail: $sent")
+        // Run email and notification sending in background to avoid blocking the response
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                when (val emailResult = billService.sendPaymentBillEmail(userEmail, paymentId)) {
+                    is Result.Success -> {
+                        val sent = emailResult.data == true
+                        paymentLogger.info("Payment bill email sent to $userEmail: $sent")
+                    }
+
+                    is Result.Error -> {
+                        paymentLogger.warn("Failed to send payment bill email to $userEmail: ${emailResult.message}")
+                    }
                 }
-                is Result.Error -> {
-                    paymentLogger.warn("Failed to send payment bill email to $userEmail: ${emailResult.message}")
-                }
+            } catch (e: Exception) {
+                paymentLogger.warn("Failed to send payment bill email to $userEmail", e)
             }
-        } catch (e: Exception) {
-            paymentLogger.warn("Failed to send payment bill email to $userEmail", e)
-        }
 
-        try {
-            val fcmToken = dbUser.fcmToken
-            if (!fcmToken.isNullOrBlank()) {
-                val serviceName = serviceConfig?.displayName
-                    ?: payment.serviceType?.name
-                    ?: "Service"
-                val expiryText = serviceConfig?.pricingTiers
-                    ?.firstOrNull { it.isDefault }
-                    ?.let { tier ->
-                        val baseInstant = try {
-                            Instant.parse(payment.verifiedAt ?: payment.createdAt)
-                        } catch (_: Exception) {
-                            Instant.now()
-                        }
-                        val baseDate = ZonedDateTime.ofInstant(baseInstant, ZoneId.systemDefault())
-                        val expiryDate = when (tier.durationType) {
-                            DurationType.DAYS -> baseDate.plusDays(tier.duration.toLong())
-                            DurationType.MONTHS -> baseDate.plusMonths(tier.duration.toLong())
-                            DurationType.YEARS -> baseDate.plusYears(tier.duration.toLong())
-                        }
-                        DateTimeFormatter.ofPattern("MMM dd, yyyy").format(expiryDate)
-                    } ?: "N/A"
+            try {
+                val fcmToken = dbUser.fcmToken
+                if (!fcmToken.isNullOrBlank()) {
+                    val serviceName = serviceConfig?.displayName
+                        ?: payment.serviceType?.name
+                        ?: "Service"
+                    val expiryText = serviceConfig?.pricingTiers
+                        ?.firstOrNull { it.isDefault }
+                        ?.let { tier ->
+                            val baseInstant = try {
+                                Instant.parse(payment.verifiedAt ?: payment.createdAt)
+                            } catch (_: Exception) {
+                                Instant.now()
+                            }
+                            val baseDate = ZonedDateTime.ofInstant(baseInstant, ZoneId.systemDefault())
+                            val expiryDate = when (tier.durationType) {
+                                DurationType.DAYS -> baseDate.plusDays(tier.duration.toLong())
+                                DurationType.MONTHS -> baseDate.plusMonths(tier.duration.toLong())
+                                DurationType.YEARS -> baseDate.plusYears(tier.duration.toLong())
+                            }
+                            DateTimeFormatter.ofPattern("MMM dd, yyyy").format(expiryDate)
+                        } ?: "N/A"
 
-                val title = "Subscription activated"
-                val body = "$serviceName subscribed successfully. Expires on $expiryText."
+                    val title = "Subscription activated"
+                    val body = "$serviceName subscribed successfully. Expires on $expiryText."
 
-                val notificationResult = notificationService.sendNotification(
-                    token = fcmToken,
-                    title = title,
-                    body = body
-                )
-
-                if (notificationResult.isSuccess) {
-                    paymentLogger.info("Payment push notification sent to $userEmail")
-                } else {
-                    paymentLogger.warn(
-                        "Failed to send payment push notification to $userEmail: ${notificationResult.exceptionOrNull()?.message}"
+                    val notificationResult = notificationService.sendNotification(
+                        token = fcmToken,
+                        title = title,
+                        body = body
                     )
+
+                    if (notificationResult.isSuccess) {
+                        paymentLogger.info("Payment push notification sent to $userEmail")
+                    } else {
+                        paymentLogger.warn(
+                            "Failed to send payment push notification to $userEmail: ${notificationResult.exceptionOrNull()?.message}"
+                        )
+                    }
+                } else {
+                    paymentLogger.debug("No FCM token for $userEmail; skipping payment notification")
                 }
-            } else {
-                paymentLogger.debug("No FCM token for $userEmail; skipping payment notification")
+            } catch (e: Exception) {
+                paymentLogger.warn("Failed to send payment push notification to $userEmail", e)
             }
-        } catch (e: Exception) {
-            paymentLogger.warn("Failed to send payment push notification to $userEmail", e)
         }
 
         call.respondSuccess(

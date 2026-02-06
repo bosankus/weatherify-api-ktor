@@ -6,10 +6,12 @@ import bose.ankush.data.model.UserRole
 import bose.ankush.route.common.WebResources
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
+import bose.ankush.util.WeatherCache
 import config.Environment
 import config.JwtConfig
 import domain.model.Result
 import domain.service.AuthService
+import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.html.*
@@ -563,7 +565,8 @@ private suspend fun serveLoginPage(
                 // Content area with login form - Full viewport centered
                 div {
                     classes = setOf("login-wrapper")
-                    style = "min-height: calc(100vh - 120px); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem;"
+                    style =
+                        "min-height: calc(100vh - 120px); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem;"
 
                     // Login Card - Modern glassmorphism design
                     div {
@@ -673,6 +676,7 @@ private suspend fun serveLoginPage(
 fun Route.adminAuthRoute() {
 
     val authService: AuthService by application.inject()
+    val databaseModule: data.source.DatabaseModule by application.inject()
     val logger = LoggerFactory.getLogger("AdminAuthRoute")
     val pageName = "Admin Authentication - Androidplay Weather API"
 
@@ -1466,32 +1470,263 @@ fun Route.adminAuthRoute() {
             }
         }
 
-        get("/dashboard") {
-            // Check authentication without responding (to allow redirect)
-            when (val authResult = call.authenticateAdmin()) {
-                is AuthHelper.AuthResult.Failure -> {
-                    // Authentication failed, redirect to login with appropriate error
-                    logger.info("Unauthenticated access to dashboard, redirecting to login")
-                    call.respondRedirect("/login?error=auth_required", permanent = false)
-                    return@get
+        // POST /tools/cache/clear - Clear weather cache
+        post("/cache/clear") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
+            logger.info("Admin ${admin.email} clearing weather cache")
+            WeatherCache.clearCache()
+            call.respondSuccess("Weather cache cleared successfully", true)
+        }
+
+        // GET /tools/health - Legacy health endpoint (kept for compatibility)
+        get("/health") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
+            logger.info("Admin ${admin.email} running system health check (GET)")
+
+            val databaseHealthy = databaseModule.checkHealth()
+
+            // Probe weather API (simple legacy response)
+            val weatherUrl = WeatherCache.getProbeWeatherUrl()
+            val airUrl = WeatherCache.getProbeAirPollutionUrl()
+
+            val startTime = System.currentTimeMillis()
+            val client = WeatherCache.getWeatherClient()
+
+            val weatherResponse = runCatching { client.get(weatherUrl) }.getOrNull()
+            val weatherLatency = System.currentTimeMillis() - startTime
+
+            val airStartTime = System.currentTimeMillis()
+            val airResponse = runCatching { client.get(airUrl) }.getOrNull()
+            val airLatency = System.currentTimeMillis() - airStartTime
+
+            val healthData = mapOf(
+                "status" to if (databaseHealthy && weatherResponse?.status?.isSuccess() == true) "healthy" else "degraded",
+                "checks" to mapOf(
+                    "database" to if (databaseHealthy) "healthy" else "unhealthy",
+                    "weatherApi" to if (weatherResponse?.status?.isSuccess() == true) "healthy" else "unhealthy",
+                    "airPollutionApi" to if (airResponse?.status?.isSuccess() == true) "healthy" else "unhealthy"
+                ),
+                "metrics" to mapOf(
+                    "weatherLatencyMs" to weatherLatency,
+                    "airLatencyMs" to airLatency
+                ),
+                "timestamp" to System.currentTimeMillis()
+            )
+
+            call.respondSuccess("Health check completed", healthData)
+        }
+
+        // POST /tools/health - Detailed health endpoint used by UI
+        post("/health") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
+            logger.info("Admin ${admin.email} running system health check (POST)")
+
+            val client = WeatherCache.getWeatherClient()
+            val baseWeatherUrl = WeatherCache.getWeatherUrl()
+            val baseAirUrl = WeatherCache.getAirPollutionUrl()
+            val probeWeatherUrl = WeatherCache.getProbeWeatherUrl()
+            val probeAirUrl = WeatherCache.getProbeAirPollutionUrl()
+
+            var weatherOk = false
+            var airOk = false
+            var weatherStatusCode: Int? = null
+            var airStatusCode: Int? = null
+            var weatherStatusText: String? = null
+            var airStatusText: String? = null
+            var weatherLatencyMs: Long = -1
+            var airLatencyMs: Long = -1
+            var weatherContentType: String? = null
+            var airContentType: String? = null
+            var weatherBytes: Long? = null
+            var airBytes: Long? = null
+            var weatherError: String? = null
+            var airError: String? = null
+
+            // Weather probe
+            run {
+                val t0 = System.currentTimeMillis()
+                try {
+                    val resp = client.get(probeWeatherUrl)
+                    weatherLatencyMs = System.currentTimeMillis() - t0
+                    weatherStatusCode = resp.status.value
+                    weatherStatusText = resp.status.description
+                    weatherOk = resp.status.isSuccess()
+                    weatherContentType = resp.headers[HttpHeaders.ContentType]
+                    weatherBytes = resp.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                } catch (e: Exception) {
+                    weatherLatencyMs = System.currentTimeMillis() - t0
+                    weatherOk = false
+                    weatherError = e.message
+                }
+            }
+
+            // Air probe
+            run {
+                val t0 = System.currentTimeMillis()
+                try {
+                    val resp = client.get(probeAirUrl)
+                    airLatencyMs = System.currentTimeMillis() - t0
+                    airStatusCode = resp.status.value
+                    airStatusText = resp.status.description
+                    airOk = resp.status.isSuccess()
+                    airContentType = resp.headers[HttpHeaders.ContentType]
+                    airBytes = resp.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                } catch (e: Exception) {
+                    airLatencyMs = System.currentTimeMillis() - t0
+                    airOk = false
+                    airError = e.message
+                }
+            }
+
+            val data = mapOf(
+                "weatherUrl" to baseWeatherUrl,
+                "probeWeatherUrl" to probeWeatherUrl,
+                "weatherOk" to weatherOk,
+                "weatherStatusCode" to (weatherStatusCode ?: 0),
+                "weatherStatusText" to (weatherStatusText ?: ""),
+                "weatherLatencyMs" to weatherLatencyMs,
+                "weatherContentType" to (weatherContentType ?: ""),
+                "weatherBytes" to (weatherBytes ?: 0L),
+                "weatherError" to (weatherError ?: ""),
+                "airUrl" to baseAirUrl,
+                "probeAirUrl" to probeAirUrl,
+                "airOk" to airOk,
+                "airStatusCode" to (airStatusCode ?: 0),
+                "airStatusText" to (airStatusText ?: ""),
+                "airLatencyMs" to airLatencyMs,
+                "airContentType" to (airContentType ?: ""),
+                "airBytes" to (airBytes ?: 0L),
+                "airError" to (airError ?: ""),
+                "timestamp" to System.currentTimeMillis()
+            )
+
+            call.respondSuccess("Health check completed", data)
+        }
+
+        // POST /tools/warmup - Prime caches for popular locations and collect detailed results
+        post("/warmup") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
+            logger.info("Admin ${admin.email} warming up endpoints")
+
+            data class City(val name: String, val lat: Double, val lon: Double)
+            val targets = listOf(
+                City("New Delhi", 28.6139, 77.2090),
+                City("Mumbai", 19.0760, 72.8777),
+                City("Bengaluru", 12.9716, 77.5946),
+                City("London", 51.5074, -0.1278),
+                City("New York", 40.7128, -74.0060)
+            )
+
+            val client = WeatherCache.getWeatherClient()
+            val weatherUrl = WeatherCache.getWeatherUrl()
+            val airUrl = WeatherCache.getAirPollutionUrl()
+            val apiKey = WeatherCache.getApiKey()
+
+            val results = mutableListOf<Map<String, Any>>()
+            var overallOk = true
+
+            for (city in targets) {
+                var weatherOk = false
+                var airOk = false
+                var weatherStatusCode = 0
+                var airStatusCode = 0
+                var weatherLatencyMs: Long = -1
+                var airLatencyMs: Long = -1
+                var weatherError = ""
+                var airError = ""
+
+                // Weather request
+                run {
+                    val t0 = System.currentTimeMillis()
+                    try {
+                        val resp = client.get(weatherUrl) {
+                            parameter("lat", city.lat)
+                            parameter("lon", city.lon)
+                            parameter("appid", apiKey)
+                            parameter("exclude", "minutely")
+                        }
+                        weatherLatencyMs = System.currentTimeMillis() - t0
+                        weatherStatusCode = resp.status.value
+                        weatherOk = resp.status.isSuccess()
+                    } catch (e: Exception) {
+                        weatherLatencyMs = System.currentTimeMillis() - t0
+                        weatherOk = false
+                        weatherError = e.message ?: ""
+                    }
                 }
 
-                is AuthHelper.AuthResult.Success -> {
-                    val admin = authResult.user
-                    val userEmail = admin.email
-                    logger.info("Serving admin dashboard to admin user: $userEmail")
+                // Air request
+                run {
+                    val t0 = System.currentTimeMillis()
+                    try {
+                        val resp = client.get(airUrl) {
+                            parameter("lat", city.lat)
+                            parameter("lon", city.lon)
+                            parameter("appid", apiKey)
+                        }
+                        airLatencyMs = System.currentTimeMillis() - t0
+                        airStatusCode = resp.status.value
+                        airOk = resp.status.isSuccess()
+                    } catch (e: Exception) {
+                        airLatencyMs = System.currentTimeMillis() - t0
+                        airOk = false
+                        airError = e.message ?: ""
+                    }
+                }
 
-                    // Respond with the admin dashboard HTML
-                    call.respondHtml(HttpStatusCode.OK) {
-                        attributes["lang"] = "en"
-                        head {
-                            setupHead(pageName, includeAdminJs = true)
+                overallOk = overallOk && weatherOk && airOk
 
-                            // Include page-specific CSS if needed
-                            style {
-                                unsafe {
-                                    raw(
-                                        """
+                results += mapOf(
+                    "name" to city.name,
+                    "lat" to city.lat,
+                    "lon" to city.lon,
+                    "weatherOk" to weatherOk,
+                    "weatherStatusCode" to weatherStatusCode,
+                    "weatherLatencyMs" to weatherLatencyMs,
+                    "weatherError" to weatherError,
+                    "airOk" to airOk,
+                    "airStatusCode" to airStatusCode,
+                    "airLatencyMs" to airLatencyMs,
+                    "airError" to airError
+                )
+            }
+
+            val payload = mapOf(
+                "ok" to overallOk,
+                "timestamp" to System.currentTimeMillis(),
+                "results" to results
+            )
+
+            call.respondSuccess("Warmup completed", payload)
+        }
+    }
+
+    get("/dashboard") {
+        // Check authentication without responding (to allow redirect)
+        when (val authResult = call.authenticateAdmin()) {
+            is AuthHelper.AuthResult.Failure -> {
+                // Authentication failed, redirect to login with appropriate error
+                logger.info("Unauthenticated access to dashboard, redirecting to login")
+                call.respondRedirect("/login?error=auth_required", permanent = false)
+                return@get
+            }
+
+            is AuthHelper.AuthResult.Success -> {
+                val admin = authResult.user
+                val userEmail = admin.email
+                logger.info("Serving admin dashboard to admin user: $userEmail")
+
+                // Respond with the admin dashboard HTML
+                call.respondHtml(HttpStatusCode.OK) {
+                    attributes["lang"] = "en"
+                    head {
+                        setupHead(pageName, includeAdminJs = true)
+
+                        // Include page-specific CSS if needed
+                        style {
+                            unsafe {
+                                raw(
+                                    """
                                 /* Admin dashboard specific styles */
                                 .admin-container {
     /* Full width with padding on sides */
@@ -2063,6 +2298,172 @@ fun Route.adminAuthRoute() {
                                     border: 1px solid rgba(59, 130, 246, 0.3);
                                 }
 
+                                /* Payment Actions & Bill Column Styles */
+                                .payment-actions,
+                                .payment-bill {
+                                    text-align: center;
+                                    vertical-align: middle;
+                                }
+
+                                .payments-table th:nth-child(8),
+                                .payments-table td:nth-child(8),
+                                .payments-table th:nth-child(9),
+                                .payments-table td:nth-child(9) {
+                                    text-align: center;
+                                    width: 80px;
+                                    min-width: 80px;
+                                }
+
+                                .action-button-wrapper,
+                                .bill-button-wrapper {
+                                    display: inline-flex;
+                                    gap: 0.5rem;
+                                    align-items: center;
+                                    justify-content: center;
+                                }
+
+                                .bill-action-button,
+                                .refund-action-button {
+                                    display: inline-flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    width: 36px;
+                                    height: 36px;
+                                    border-radius: 8px;
+                                    border: 1px solid var(--endpoint-border);
+                                    background: var(--endpoint-bg);
+                                    color: var(--text-color);
+                                    cursor: pointer;
+                                    transition: all 0.2s ease;
+                                    position: relative;
+                                }
+
+                                .bill-action-button:hover:not(.is-disabled),
+                                .refund-action-button:hover:not(.is-disabled) {
+                                    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+                                    border-color: #6366f1;
+                                    color: white;
+                                    transform: translateY(-2px);
+                                    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+                                }
+
+                                .bill-action-button.is-disabled,
+                                .refund-action-button.is-disabled {
+                                    opacity: 0.4;
+                                    cursor: not-allowed;
+                                    background: var(--card-bg);
+                                }
+
+                                .bill-action-button.is-loading,
+                                .refund-action-button.is-loading {
+                                    pointer-events: none;
+                                }
+
+                                .bill-action-button .material-icons,
+                                .refund-action-button .material-icons {
+                                    font-size: 20px;
+                                }
+
+                                /* Action button with badge for refund status */
+                                .refund-action-button.has-refund {
+                                    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
+                                    border-color: rgba(239, 68, 68, 0.3);
+                                }
+
+                                .refund-action-button.has-refund:hover {
+                                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                                    border-color: #ef4444;
+                                    color: white;
+                                }
+
+                                .refund-action-button.has-partial-refund {
+                                    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+                                    border-color: rgba(245, 158, 11, 0.3);
+                                }
+
+                                .refund-action-button.has-partial-refund:hover {
+                                    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+                                    border-color: #f59e0b;
+                                    color: white;
+                                }
+
+                                /* Loading spinner for buttons */
+                                .loading-spinner {
+                                    width: 20px;
+                                    height: 20px;
+                                    border: 2px solid rgba(99, 102, 241, 0.2);
+                                    border-top-color: #6366f1;
+                                    border-radius: 50%;
+                                    animation: spin 0.6s linear infinite;
+                                }
+
+                                @keyframes spin {
+                                    to { transform: rotate(360deg); }
+                                }
+
+                                /* Tooltip styles */
+                                .action-tooltip {
+                                    position: absolute;
+                                    bottom: 100%;
+                                    left: 50%;
+                                    transform: translateX(-50%) translateY(-8px);
+                                    background: rgba(0, 0, 0, 0.9);
+                                    color: white;
+                                    padding: 0.5rem 0.75rem;
+                                    border-radius: 6px;
+                                    font-size: 0.75rem;
+                                    white-space: nowrap;
+                                    opacity: 0;
+                                    pointer-events: none;
+                                    transition: opacity 0.2s ease;
+                                    z-index: 1000;
+                                }
+
+                                .bill-action-button:hover .action-tooltip,
+                                .refund-action-button:hover .action-tooltip {
+                                    opacity: 1;
+                                }
+
+                                /* Status indicator badge on action buttons */
+                                .action-status-badge {
+                                    position: absolute;
+                                    top: -4px;
+                                    right: -4px;
+                                    width: 12px;
+                                    height: 12px;
+                                    border-radius: 50%;
+                                    border: 2px solid var(--card-bg);
+                                }
+
+                                .action-status-badge.checking {
+                                    background: #f59e0b;
+                                    animation: pulse 1.5s ease-in-out infinite;
+                                }
+
+                                .action-status-badge.ready {
+                                    background: #10b981;
+                                }
+
+                                .action-status-badge.error {
+                                    background: #ef4444;
+                                }
+
+                                @keyframes pulse {
+                                    0%, 100% { opacity: 1; }
+                                    50% { opacity: 0.5; }
+                                }
+
+                                /* Dark theme adjustments */
+                                [data-theme="dark"] .bill-action-button:not(.is-disabled):hover,
+                                [data-theme="dark"] .refund-action-button:not(.is-disabled):hover {
+                                    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+                                }
+
+                                [data-theme="dark"] .action-tooltip {
+                                    background: rgba(255, 255, 255, 0.95);
+                                    color: #1f2937;
+                                }
+
                                 /* KPI Card Styles */
                                 .kpi-card {
                                     cursor: default;
@@ -2124,146 +2525,111 @@ fun Route.adminAuthRoute() {
                                     }
                                 }
                                 """
-                                    )
-                                }
-                            }
-
-                            // Tabs initialization script
-                            script {
-                                unsafe {
-                                    raw(
-                                        """
-                                (function(){
-                                    function initDashboardTabs(){
-                                        try {
-                                            const tabs = document.querySelectorAll('.tab');
-                                            const panels = document.querySelectorAll('.tab-panel');
-                                            let iamLoaded = false;
-                                            let financeLoaded = false;
-                                            function activateTab(name){
-                                                tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-                                                panels.forEach(p => p.classList.toggle('active', p.id === name));
-                                                if(name === 'iam' && !iamLoaded){
-                                                    iamLoaded = true;
-                                                    if (typeof loadUsers === 'function') {
-                                                        loadUsers(1, 10);
-                                                    }
-                                                }
-                                                if(name === 'finance' && !financeLoaded){
-                                                    financeLoaded = true;
-                                                    if (typeof initializeFinanceTab === 'function') {
-                                                        initializeFinanceTab();
-                                                    }
-                                                }
-                                            }
-                                            tabs.forEach(tab => tab.addEventListener('click', function(){
-                                                activateTab(this.dataset.tab);
-                                            }));
-                                            // Default activate IAM
-                                            activateTab('iam');
-                                        } catch(e){ console.error('Failed to init tabs', e); }
-                                    }
-                                    document.addEventListener('DOMContentLoaded', initDashboardTabs);
-                                })();
-                                """
-                                    )
-                                }
+                                )
                             }
                         }
-                        body {
-                            // Use a single, consistent container for all dashboard content
+
+                        // Tabs initialization script
+                        // Tabs initialization script
+                        // Note: Tab management is handled by admin-tab-manager.js
+                        // which is included via WebResources.includeAdminJs
+                    }
+                    body {
+                        // Use a single, consistent container for all dashboard content
+                        div {
+                            classes = setOf("container", "main-container")
+                            style =
+                                "max-width: 100%; width: 100%; margin: 0; padding: 1rem 2rem; box-sizing: border-box;" // <-- Full width with padding
+
+                            createHeader(this)
+
+                            // Admin dashboard content
                             div {
-                                classes = setOf("container", "main-container")
+                                classes = setOf("admin-container")
                                 style =
-                                    "max-width: 100%; width: 100%; margin: 0; padding: 1rem 2rem; box-sizing: border-box;" // <-- Full width with padding
+                                    "max-width: 100%; width: 100%; box-sizing: border-box;" // <-- Ensure admin-container fills parent
 
-                                createHeader(this)
-
-                                // Admin dashboard content
                                 div {
-                                    classes = setOf("admin-container")
-                                    style =
-                                        "max-width: 100%; width: 100%; box-sizing: border-box;" // <-- Ensure admin-container fills parent
-
-                                    div {
-                                        classes = setOf("admin-header")
-                                        h2 {
-                                            classes = setOf("admin-title")
-                                            +"Dashboard"
-                                        }
+                                    classes = setOf("admin-header")
+                                    h2 {
+                                        classes = setOf("admin-title")
+                                        +"Dashboard"
                                     }
+                                }
 
-                                    // Dashboard content
+                                // Dashboard content
+                                div {
+                                    classes = setOf("dashboard-content")
+                                    style =
+                                        "display: grid; gap: 2rem; width: 100%; box-sizing: border-box;" // <-- Always full width
+
+                                    // Tabs section
                                     div {
-                                        classes = setOf("dashboard-content")
+                                        classes = setOf("dashboard-section")
                                         style =
-                                            "display: grid; gap: 2rem; width: 100%; box-sizing: border-box;" // <-- Always full width
+                                            "position: relative; min-width: 0; width: 100%; box-sizing: border-box;" // <-- Always full width
 
-                                        // Tabs section
+                                        // Tabs navigation
                                         div {
-                                            classes = setOf("dashboard-section")
-                                            style =
-                                                "position: relative; min-width: 0; width: 100%; box-sizing: border-box;" // <-- Always full width
-
-                                            // Tabs navigation
-                                            div {
-                                                classes = setOf("tabs")
-                                                span {
-                                                    classes = setOf("tab", "active")
-                                                    attributes["data-tab"] = "iam"
-                                                    unsafe {
-                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>group</span> Users")
-                                                    }
-                                                }
-                                                span {
-                                                    classes = setOf("tab")
-                                                    attributes["data-tab"] = "finance"
-                                                    unsafe {
-                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>payments</span> Finance")
-                                                    }
-                                                }
-                                                span {
-                                                    classes = setOf("tab")
-                                                    attributes["data-tab"] = "reports"
-                                                    unsafe {
-                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>analytics</span> Reports")
-                                                    }
-                                                }
-                                                span {
-                                                    classes = setOf("tab")
-                                                    attributes["data-tab"] = "tools"
-                                                    unsafe {
-                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>build_circle</span> Tools")
-                                                    }
-                                                }
-                                                span {
-                                                    classes = setOf("tab")
-                                                    attributes["data-tab"] = "service-catalog"
-                                                    unsafe {
-                                                        raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>inventory_2</span> Service Catalog")
-                                                    }
+                                            classes = setOf("tabs")
+                                            span {
+                                                classes = setOf("tab", "active")
+                                                attributes["data-tab"] = "iam"
+                                                unsafe {
+                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>group</span> Users")
                                                 }
                                             }
 
-                                            // Tabs content panels
+                                            span {
+                                                classes = setOf("tab")
+                                                attributes["data-tab"] = "finance"
+                                                unsafe {
+                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>payments</span> Finance")
+                                                }
+                                            }
+
+                                            span {
+                                                classes = setOf("tab")
+                                                attributes["data-tab"] = "reports"
+                                                unsafe {
+                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>analytics</span> Reports")
+                                                }
+                                            }
+                                            span {
+                                                classes = setOf("tab")
+                                                attributes["data-tab"] = "tools"
+                                                unsafe {
+                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>build_circle</span> Tools")
+                                                }
+                                            }
+                                            span {
+                                                classes = setOf("tab")
+                                                attributes["data-tab"] = "service-catalog"
+                                                unsafe {
+                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>inventory_2</span> Service Catalog")
+                                                }
+                                            }
+                                        }
+
+                                        // Tabs content panels
+                                        div {
+                                            classes = setOf("tab-content")
+                                            style =
+                                                "width: 100%; box-sizing: border-box;" // <-- Always full width
+
+                                            // IAM Panel
                                             div {
-                                                classes = setOf("tab-content")
+                                                classes = setOf("tab-panel", "active")
+                                                id = "iam"
                                                 style =
                                                     "width: 100%; box-sizing: border-box;" // <-- Always full width
-
-                                                // IAM Panel
                                                 div {
-                                                    classes = setOf("tab-panel", "active")
-                                                    id = "iam"
-                                                    style =
-                                                        "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                                    classes = setOf("dashboard-card")
                                                     div {
-                                                        classes = setOf("dashboard-card")
-                                                        div {
-                                                            classes = setOf("dashboard-card-content")
-                                                            unsafe {
-                                                                raw(
-                                                                    """
+                                                        classes = setOf("dashboard-card-content")
+                                                        unsafe {
+                                                            raw(
+                                                                """
                                                             <div id="success-message" class="message success-message hidden"></div>
                                                             <div id="error-message" class="message error-message hidden"></div>
                                                             <div id="info-message" class="message info-message hidden"></div>
@@ -2297,175 +2663,63 @@ fun Route.adminAuthRoute() {
 
                                                             <div id="pagination" class="users-pagination"></div>
                                                             """
-                                                                )
-                                                            }
+                                                            )
                                                         }
                                                     }
                                                 }
+                                            }
 
-                                                // Finance Panel
+                                            // Finance Panel
+                                            div {
+                                                classes = setOf("tab-panel")
+                                                id = "finance"
+                                                style = "width: 100%; box-sizing: border-box;"
+
+                                                // Metrics Cards (populated by JS)
                                                 div {
-                                                    classes = setOf("tab-panel")
-                                                    id = "finance"
-                                                    style =
-                                                        "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                                    id = "finance-metrics"
+                                                    classes = setOf("finance-summary")
+                                                }
 
-                                                    // Financial Summary Cards
+                                                // Filters (populated by JS)
+                                                div {
+                                                    id = "finance-filters"
+                                                    classes = setOf("finance-actions")
+                                                }
+
+                                                // Payment Table Container (populated by JS)
+                                                div {
+                                                    id = "finance-table-container"
+                                                    classes = setOf("dashboard-card-content")
+                                                    style = "overflow-x: auto;"
+
                                                     div {
-                                                        classes = setOf("finance-summary")
-
-                                                        // Total Revenue Card
-                                                        div {
-                                                            classes = setOf("metric-card")
-                                                            div {
-                                                                classes = setOf("metric-label")
-                                                                +"Total Revenue"
-                                                            }
-                                                            div {
-                                                                classes = setOf("metric-value")
-                                                                id = "total-revenue"
-                                                                +"$0.00"
-                                                            }
-                                                        }
-
-                                                        // Monthly Revenue Card
-                                                        div {
-                                                            classes = setOf("metric-card")
-                                                            div {
-                                                                classes = setOf("metric-label")
-                                                                +"Monthly Revenue"
-                                                            }
-                                                            div {
-                                                                classes = setOf("metric-value")
-                                                                id = "monthly-revenue"
-                                                                +"$0.00"
-                                                            }
-                                                        }
-
-                                                        // Total Payments Card
-                                                        div {
-                                                            classes = setOf("metric-card")
-                                                            div {
-                                                                classes = setOf("metric-label")
-                                                                +"Total Payments"
-                                                            }
-                                                            div {
-                                                                classes = setOf("metric-value")
-                                                                id = "total-payments"
-                                                                +"0"
-                                                            }
-                                                        }
+                                                        style = "text-align: center; padding: 2rem; color: var(--text-secondary);"
+                                                        +"Loading financial data..."
                                                     }
+                                                }
 
-                                                    // Payment History Section
-                                                    div {
-                                                        classes = setOf("finance-actions")
+                                                // Pagination (populated by JS)
+                                                div {
+                                                    id = "finance-pagination"
+                                                    style = "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
+                                                }
+                                            }
 
-                                                        select {
-                                                            id = "payment-status-filter"
-                                                            classes = setOf("role-select")
-                                                            option {
-                                                                value = ""
-                                                                +"All Statuses"
-                                                            }
-                                                            option {
-                                                                value = "verified"
-                                                                +"Success"
-                                                            }
-                                                            option {
-                                                                value = "failed"
-                                                                +"Failed"
-                                                            }
-                                                            option {
-                                                                value = "pending"
-                                                                +"Pending"
-                                                            }
-                                                            option {
-                                                                value = "refunded"
-                                                                +"Refunded"
-                                                            }
-                                                        }
 
-                                                        input {
-                                                            type = InputType.date
-                                                            id = "payment-date-from"
-                                                            classes = setOf("date-input")
-                                                            placeholder = "Start Date"
-                                                        }
-
-                                                        input {
-                                                            type = InputType.date
-                                                            id = "payment-date-to"
-                                                            classes = setOf("date-input")
-                                                            placeholder = "End Date"
-                                                        }
-                                                    }
-
-                                                    // Payment History Table
+                                            // Reports Panel
+                                            div {
+                                                classes = setOf("tab-panel")
+                                                id = "reports"
+                                                style =
+                                                    "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                                div {
+                                                    classes = setOf("dashboard-card")
                                                     div {
                                                         classes = setOf("dashboard-card-content")
-                                                        style = "overflow-x: auto;"
-
-                                                        table {
-                                                            classes = setOf("payments-table")
-                                                            thead {
-                                                                tr {
-                                                                    th { +"User Email" }
-                                                                    th { +"Amount" }
-                                                                    th { +"Currency" }
-                                                                    th { +"Payment Method" }
-                                                                    th {
-                                                                        style = "text-align: center;"
-                                                                        +"Status"
-                                                                    }
-                                                                    th { +"Transaction ID" }
-                                                                    th { +"Date" }
-                                                                    th {
-                                                                        style = "text-align: center;"
-                                                                        +"Actions"
-                                                                    }
-                                                                    th {
-                                                                        style = "text-align: center;"
-                                                                        +"Bill"
-                                                                    }
-                                                                }
-                                                            }
-                                                            tbody {
-                                                                id = "payments-table-body"
-                                                                tr {
-                                                                    td {
-                                                                        colSpan = "9"
-                                                                        style =
-                                                                            "text-align: center; padding: 2rem; color: var(--text-secondary);"
-                                                                        +"Loading payment history..."
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-
-                                                    // Pagination Controls
-                                                    div {
-                                                        id = "payments-pagination"
-                                                        style =
-                                                            "display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem;"
-                                                    }
-
-                                                }
-
-                                                // Reports Panel
-                                                div {
-                                                    classes = setOf("tab-panel")
-                                                    id = "reports"
-                                                    style =
-                                                        "width: 100%; box-sizing: border-box;" // <-- Always full width
-                                                    div {
-                                                        classes = setOf("dashboard-card")
-                                                        div {
-                                                            classes = setOf("dashboard-card-content")
-                                                            unsafe {
-                                                                raw(
-                                                                    """
+                                                        unsafe {
+                                                            raw(
+                                                                """
                                                         <!-- Enhanced Header Section -->
                                                         <div id="reports-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
                                                             <div style="display:flex;align-items:center;gap:0.75rem;">
@@ -2618,29 +2872,29 @@ fun Route.adminAuthRoute() {
                                                             </div>
                                                         </div>
                                                         """
-                                                                )
-                                                            }
+                                                            )
                                                         }
                                                     }
                                                 }
+                                            }
 
-                                                // Tools Panel
+                                            // Tools Panel
+                                            div {
+                                                classes = setOf("tab-panel")
+                                                id = "tools"
+                                                style =
+                                                    "width: 100%; box-sizing: border-box;"
                                                 div {
-                                                    classes = setOf("tab-panel")
-                                                    id = "tools"
-                                                    style =
-                                                        "width: 100%; box-sizing: border-box;"
+                                                    classes = setOf("dashboard-card")
                                                     div {
-                                                        classes = setOf("dashboard-card")
-                                                        div {
-                                                            classes =
-                                                                setOf("dashboard-card-title"); +"Tools"
-                                                        }
-                                                        div {
-                                                            classes = setOf("dashboard-card-content")
-                                                            unsafe {
-                                                                raw(
-                                                                    """
+                                                        classes =
+                                                            setOf("dashboard-card-title"); +"Tools"
+                                                    }
+                                                    div {
+                                                        classes = setOf("dashboard-card-content")
+                                                        unsafe {
+                                                            raw(
+                                                                """
                                                             <div class="tools-grid">
                                                                 <div class="tool-card">
                                                                     <div class="tool-card-icon">
@@ -2708,34 +2962,40 @@ fun Route.adminAuthRoute() {
                                                                 </div>
                                                             </div>
                                                             """
-                                                                )
-                                                            }
+                                                            )
                                                         }
                                                     }
                                                 }
+                                            }
 
-                                                // Service Catalog Panel
+                                            // Service Catalog Panel
+                                            div {
+                                                classes = setOf("tab-panel")
+                                                id = "service-catalog"
+                                                style = "width: 100%; box-sizing: border-box;"
                                                 div {
-                                                    classes = setOf("tab-panel")
-                                                    id = "service-catalog"
-                                                    style = "width: 100%; box-sizing: border-box;"
+                                                    classes = setOf("dashboard-card")
                                                     div {
-                                                        classes = setOf("dashboard-card")
-                                                        div {
-                                                            classes = setOf("dashboard-card-content")
-                                                            unsafe {
-                                                                raw(
-                                                                    """
+                                                        classes = setOf("dashboard-card-content")
+                                                        unsafe {
+                                                            raw(
+                                                                """
                                                             <div class="service-catalog-page">
                                                                 <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
                                                                     <div>
                                                                         <div class="service-catalog-heading">Service Catalog</div>
                                                                         <div class="service-catalog-subtitle">Browse and verify available services.</div>
                                                                     </div>
-                                                                    <button id="service-catalog-refresh" class="btn btn-secondary btn-sm">
-                                                                        <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:6px;">refresh</span>
-                                                                        Refresh
-                                                                    </button>
+                                                                    <div style="display:flex; gap:0.75rem;">
+                                                                        <button id="create-service-btn" class="btn btn-primary btn-sm">
+                                                                            <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:6px;">add_circle</span>
+                                                                            Create New Service
+                                                                        </button>
+                                                                        <button id="service-catalog-refresh" class="btn btn-secondary btn-sm">
+                                                                            <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:6px;">refresh</span>
+                                                                            Refresh
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
 
                                                                 <div class="service-catalog-controls">
@@ -2763,13 +3023,14 @@ fun Route.adminAuthRoute() {
 
                                                                 <div id="service-catalog-loader" class="skeleton" style="height:6px;width:100%;display:none;"></div>
 
-                                                                <div class="data-grid" style="--data-columns: 2fr 1fr 1fr 1fr 1.2fr;">
+                                                                <div class="data-grid" style="--data-columns: 2fr 1fr 1fr 1fr 1.2fr 64px;">
                                                                     <div class="data-header">
                                                                         <div>Service</div>
                                                                         <div>Status</div>
                                                                         <div class="data-cell--right">Purchases</div>
                                                                         <div class="data-cell--right">Price</div>
                                                                         <div class="data-cell--right">Created</div>
+                                                                        <div class="data-cell--right">Actions</div>
                                                                     </div>
                                                                     <div id="service-catalog-list" class="data-body"></div>
                                                                 </div>
@@ -2777,40 +3038,163 @@ fun Route.adminAuthRoute() {
                                                                 <div id="service-catalog-empty" class="data-empty hidden">No services available.</div>
 
                                                                 <div id="service-catalog-pagination" class="service-catalog-pagination"></div>
+
+                                                                <!-- Service Form Modal -->
+                                                                <div id="service-form-modal" class="modal" style="display:none;">
+                                                                    <div class="modal-overlay" id="service-form-overlay"></div>
+                                                                    <div class="modal-container" style="max-width: 700px;">
+                                                                        <div class="modal-header">
+                                                                            <h3 id="service-form-title" class="modal-title">Create New Service</h3>
+                                                                            <button class="modal-close" id="service-form-close" aria-label="Close modal">
+                                                                                <span class="material-icons">close</span>
+                                                                            </button>
+                                                                        </div>
+                                                                        <div class="modal-body">
+                                                                            <form id="service-form" style="display:grid; gap:1.5rem;">
+                                                                                <!-- Service Code -->
+                                                                                <div class="form-group">
+                                                                                    <label for="service-code" class="form-label">Service Code *</label>
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        id="service-code"
+                                                                                        class="form-control"
+                                                                                        placeholder="e.g., PREMIUM_MONTHLY"
+                                                                                        required
+                                                                                        pattern="[A-Z0-9_]+"
+                                                                                        title="Only uppercase letters, numbers, and underscores"
+                                                                                    />
+                                                                                    <small class="form-hint">Unique identifier (uppercase, numbers, underscores only)</small>
+                                                                                </div>
+
+                                                                                <!-- Display Name -->
+                                                                                <div class="form-group">
+                                                                                    <label for="service-display-name" class="form-label">Display Name *</label>
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        id="service-display-name"
+                                                                                        class="form-control"
+                                                                                        placeholder="e.g., Premium Monthly Subscription"
+                                                                                        required
+                                                                                    />
+                                                                                    <small class="form-hint">User-friendly name shown to customers</small>
+                                                                                </div>
+
+                                                                                <!-- Description -->
+                                                                                <div class="form-group">
+                                                                                    <label for="service-description" class="form-label">Description</label>
+                                                                                    <textarea
+                                                                                        id="service-description"
+                                                                                        class="form-control"
+                                                                                        rows="3"
+                                                                                        placeholder="Describe what this service offers..."
+                                                                                    ></textarea>
+                                                                                </div>
+
+                                                                                <!-- Pricing -->
+                                                                                <div style="display:grid; grid-template-columns: 2fr 1fr; gap:1rem;">
+                                                                                    <div class="form-group">
+                                                                                        <label for="service-price" class="form-label">Price (in paise) *</label>
+                                                                                        <input
+                                                                                            type="number"
+                                                                                            id="service-price"
+                                                                                            class="form-control"
+                                                                                            placeholder="e.g., 9900 (₹99.00)"
+                                                                                            min="0"
+                                                                                            required
+                                                                                        />
+                                                                                        <small class="form-hint">Amount in paise (100 paise = ₹1)</small>
+                                                                                    </div>
+                                                                                    <div class="form-group">
+                                                                                        <label for="service-currency" class="form-label">Currency</label>
+                                                                                        <select id="service-currency" class="form-control">
+                                                                                            <option value="INR">INR</option>
+                                                                                            <option value="USD">USD</option>
+                                                                                            <option value="EUR">EUR</option>
+                                                                                        </select>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <!-- Status -->
+                                                                                <div class="form-group">
+                                                                                    <label for="service-status" class="form-label">Status *</label>
+                                                                                    <select id="service-status" class="form-control" required>
+                                                                                        <option value="ACTIVE">Active</option>
+                                                                                        <option value="INACTIVE">Inactive</option>
+                                                                                        <option value="ARCHIVED">Archived</option>
+                                                                                    </select>
+                                                                                    <small class="form-hint">Only ACTIVE services are available for purchase</small>
+                                                                                </div>
+
+                                                                                <!-- Availability (Optional) -->
+                                                                                <div class="form-group">
+                                                                                    <label class="form-label">Availability (Optional)</label>
+                                                                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                                                                                        <div>
+                                                                                            <label for="service-available-from" class="form-label" style="font-size:0.875rem;">Available From</label>
+                                                                                            <input
+                                                                                                type="date"
+                                                                                                id="service-available-from"
+                                                                                                class="form-control"
+                                                                                            />
+                                                                                        </div>
+                                                                                        <div>
+                                                                                            <label for="service-available-until" class="form-label" style="font-size:0.875rem;">Available Until</label>
+                                                                                            <input
+                                                                                                type="date"
+                                                                                                id="service-available-until"
+                                                                                                class="form-control"
+                                                                                            />
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <small class="form-hint">Leave empty for always available</small>
+                                                                                </div>
+
+                                                                                <div id="service-form-error" class="message error-message hidden"></div>
+                                                                            </form>
+                                                                        </div>
+                                                                        <div class="modal-footer">
+                                                                            <button type="button" class="btn btn-secondary" id="service-form-cancel">Cancel</button>
+                                                                            <button type="submit" class="btn btn-primary" id="service-form-submit">
+                                                                                <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:6px;">save</span>
+                                                                                Create Service
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                             """
-                                                                )
-                                                            }
+                                                            )
                                                         }
                                                     }
                                                 }
+                                            }
 
-                                                // Announcements Panel
+                                            // Announcements Panel
+                                            div {
+                                                classes = setOf("tab-panel")
+                                                id = "announcements"
+                                                style =
+                                                    "width: 100%; box-sizing: border-box;" // <-- Always full width
                                                 div {
-                                                    classes = setOf("tab-panel")
-                                                    id = "announcements"
-                                                    style =
-                                                        "width: 100%; box-sizing: border-box;" // <-- Always full width
+                                                    classes = setOf("dashboard-card")
                                                     div {
-                                                        classes = setOf("dashboard-card")
-                                                        div {
-                                                            classes = setOf("dashboard-card-title")
-                                                            unsafe {
-                                                                raw(
-                                                                    """
+                                                        classes = setOf("dashboard-card-title")
+                                                        unsafe {
+                                                            raw(
+                                                                """
                                                             <span style="display:inline-flex; align-items:center; gap:6px; position:relative;">
                                                                 <span>Service Announcements</span>
                                                                 <span id=\"ann-help-trigger\" class=\"material-icons\" tabindex=\"0\" aria-label=\"How to use and why to use Service Announcements\" aria-controls=\"ann-help-popover\" aria-expanded=\"false\" style=\"font-size:18px; color: var(--text-secondary); cursor: help;\">info</span>
                                                             </span>
                                                             <div id=\"ann-help-popover\" role=\"dialog\" aria-hidden=\"true\" aria-labelledby=\"ann-help-title\" style=\"position: fixed; display:none; z-index: 9999; max-width: 380px; padding: 12px 14px; border-radius: 10px; background: var(--endpoint-bg, var(--card-bg)); color: var(--text-color); border: 1px solid var(--endpoint-border, var(--card-border)); box-shadow: 0 8px 24px var(--card-shadow);\">\n                                                              <div id=\"ann-help-title\" style=\"font-weight:700; margin-bottom:6px; color: var(--card-title); display:flex; align-items:center; gap:6px;\">\n                                                                <span class=\"material-icons\" style=\"font-size:18px; color:#6366f1;\">campaign</span>\n                                                                <span>Service announcements guide</span>\n                                                              </div>\n                                                              <div style=\"font-size: 0.92rem; line-height: 1.5;\">\n                                                                <div style=\"margin-bottom:8px;\">\n                                                                  <strong>How to use</strong>\n                                                                  <ul style=\"margin:6px 0 0 18px;\">\n                                                                    <li>Write a clear message for all users.</li>\n                                                                    <li>Select severity: Info, Warning, or Critical.</li>\n                                                                    <li>Optionally set Duration (minutes) or an Until date-time.</li>\n                                                                    <li>If both time fields are empty, the announcement remains until you clear it.</li>\n                                                                  </ul>\n                                                                </div>\n                                                                <div>\n                                                                  <strong>When to use (examples)</strong>\n                                                                  <ul style=\"margin:6px 0 0 18px;\">\n                                                                    <li>Planned maintenance: warning with an until time.</li>\n                                                                    <li>Service outage: critical with short duration.</li>\n                                                                    <li>New feature rollout: info without time.</li>\n                                                                  </ul>\n                                                                </div>\n                                                              </div>\n                                                            </div>\n                                                            <script>\n                                                            (function(){\n                                                              if (window.__annHelpBound) return;\n                                                              window.__annHelpBound = true;\n                                                              function initAnnPopover(){\n                                                                try {\n                                                                  var trigger = document.getElementById('ann-help-trigger');\n                                                                  var pop = document.getElementById('ann-help-popover');\n                                                                  if (!trigger || !pop) return;\n                                                                  var hoverTimeout;\n                                                                  function show(){\n                                                                    if (!pop) return;\n                                                                    if (hoverTimeout) { clearTimeout(hoverTimeout); }\n                                                                    // Position near the icon (viewport coords)\n                                                                    var rect = trigger.getBoundingClientRect();\n                                                                    pop.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - 400)) + 'px';\n                                                                    pop.style.top = (rect.bottom + 8) + 'px';\n                                                                    pop.style.display = 'block';\n                                                                    pop.setAttribute('aria-hidden','false');\n                                                                    trigger.setAttribute('aria-expanded','true');\n                                                                  }\n                                                                  function hide(){\n                                                                    hoverTimeout = setTimeout(function(){\n                                                                      if (!pop) return;\n                                                                      pop.style.display = 'none';\n                                                                      pop.setAttribute('aria-hidden','true');\n                                                                      trigger.setAttribute('aria-expanded','false');\n                                                                    }, 120);\n                                                                  }\n                                                                  trigger.addEventListener('mouseenter', show);\n                                                                  trigger.addEventListener('mouseleave', hide);\n                                                                  pop.addEventListener('mouseenter', function(){ if (hoverTimeout) clearTimeout(hoverTimeout); });\n                                                                  pop.addEventListener('mouseleave', hide);\n                                                                  trigger.addEventListener('click', function(e){ e.stopPropagation(); if (pop.style.display === 'block') { pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); } else { show(); } });\n                                                                  document.addEventListener('click', function(e){ if (!pop || pop.style.display !== 'block') return; if (!pop.contains(e.target) && e.target !== trigger) { pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); }});\n                                                                  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') { if (!pop) return; pop.style.display = 'none'; pop.setAttribute('aria-hidden','true'); trigger.setAttribute('aria-expanded','false'); }});\n                                                                  window.addEventListener('resize', function(){ if (pop && pop.style.display === 'block') { var r = trigger.getBoundingClientRect(); pop.style.left = Math.max(12, Math.min(r.left, window.innerWidth - 400)) + 'px'; pop.style.top = (r.bottom + 8) + 'px'; }});\n                                                                  window.addEventListener('scroll', function(){ if (pop && pop.style.display === 'block') { var r2 = trigger.getBoundingClientRect(); pop.style.left = Math.max(12, Math.min(r2.left, window.innerWidth - 400)) + 'px'; pop.style.top = (r2.bottom + 8) + 'px'; }}, true);\n                                                                } catch (err) { console.error('Failed to init announcement help popover', err); }\n                                                              }\n                                                              if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', initAnnPopover); } else { initAnnPopover(); }\n                                                            })();\n                                                            </script>\n                                                            """
-                                                                )
-                                                            }
+                                                            )
                                                         }
-                                                        div {
-                                                            classes = setOf("dashboard-card-content")
-                                                            unsafe {
-                                                                raw(
-                                                                    """
+                                                    }
+                                                    div {
+                                                        classes = setOf("dashboard-card-content")
+                                                        unsafe {
+                                                            raw(
+                                                                """
                                                             <div id="ann-preview" class="announcement-preview" aria-live="polite"></div>
                                                             <form id="ann-form" class="form form-compact" onsubmit="return false;">
                                                                 <div class="form-group">
@@ -2832,25 +3216,31 @@ fun Route.adminAuthRoute() {
                                                                 </div>
                                                             </form>
                                                             """
-                                                                )
-                                                            }
+                                                            )
                                                         }
-
                                                     }
+
                                                 }
                                             }
                                         }
                                     }
-
                                 }
-                                // Footer
-                                createFooter(this)
+
                             }
+                            // Refund Panel (Global scope to avoid clipping)
+                            div {
+                                id = "refund-panel"
+                                classes = setOf("sliding-panel")
+                                style = "display: none;"
+                            }
+                            // Footer
+                            createFooter(this)
                         }
                     }
                 }
             }
         }
     }
-
 }
+
+

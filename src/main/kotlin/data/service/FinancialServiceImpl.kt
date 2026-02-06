@@ -52,7 +52,7 @@ class FinancialServiceImpl(
 
                 // Process payment aggregate results
                 if (aggregateResult is Result.Error) {
-                    return@coroutineScope Result.error("Failed to fetch payment aggregate: ${aggregateResult.message}")
+                    return@coroutineScope Result.error("Failed to fetch payments: ${aggregateResult.message}")
                 }
                 val (totalAmountPaise, totalPaymentsCount) = (aggregateResult as Result.Success).data
                 val totalRevenue = totalAmountPaise.toDouble() / 100.0
@@ -172,7 +172,7 @@ class FinancialServiceImpl(
             // Convert to DTOs
             val paymentDtos = payments.map { payment ->
                 PaymentDto(
-                    id = payment.id,
+                    id = payment.id.toHexString(),
                     userEmail = payment.userEmail,
                     amount = (payment.amount ?: 0).toDouble() / 100.0,
                     currency = payment.currency ?: "INR",
@@ -268,7 +268,7 @@ class FinancialServiceImpl(
             // Convert payments to DTOs
             val paymentDtos = payments.map { payment ->
                 PaymentDto(
-                    id = payment.id,
+                    id = payment.id.toHexString(),
                     userEmail = payment.userEmail,
                     amount = (payment.amount ?: 0).toDouble() / 100.0,
                     currency = payment.currency ?: "INR",
@@ -304,7 +304,7 @@ class FinancialServiceImpl(
 
         val rows = payments.joinToString("\n") { payment ->
             listOf(
-                payment.id,
+                payment.id.toHexString(),
                 payment.userEmail,
                 ((payment.amount ?: 0).toDouble() / 100.0).toString(),
                 payment.currency ?: "INR",

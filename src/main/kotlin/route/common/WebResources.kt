@@ -80,6 +80,7 @@ object WebResources {
     private val themeToggleCss = readResourceFile("/web/css/theme-toggle.css")
     private val adminHeaderCss = readResourceFile("/web/css/admin-header.css")
     private val adminUsersCss = readResourceFile("/web/css/admin-users.css")
+    private val financialDashboardCss = readResourceFile("/web/css/financial-dashboard.css")
     private val headerCss = readResourceFile("/web/css/header.css")
 
     // JavaScript file contents
@@ -90,10 +91,11 @@ object WebResources {
     private val adminTabManagerJs = readResourceFile("/web/js/admin-tab-manager.js")
     private val adminUsersJs = readResourceFile("/web/js/admin-users.js")
     private val adminJs = readResourceFile("/web/js/admin.js")
-    private val financeAdminJs = readResourceFile("/web/js/finance-admin.js")
+    private val financialDashboardJs = readResourceFile("/web/js/financial-dashboard.js")
     private val refundAdminJs = readResourceFile("/web/js/refund-admin.js")
     private val serviceCatalogAdminJs = readResourceFile("/web/js/service-catalog-admin.js")
     private val reportsChartsJs = readResourceFile("/web/js/reports-charts.js")
+    private val adminToolsJs = readResourceFile("/web/js/admin-tools.js")
     private val headerJs = readResourceFile("/web/js/header.js")
     private val decodeJs = readResourceFile("/web/js/decode.js")
     private val tableUtilsJs = readResourceFile("/web/js/table-utils.js")
@@ -132,6 +134,7 @@ object WebResources {
                 raw(themeToggleCss)
                 raw(headerCss)
                 raw(adminUsersCss)
+                raw(financialDashboardCss)
             }
         }
     }
@@ -261,10 +264,10 @@ object WebResources {
                 raw(adminJs)
             }
         }
-        // Include finance admin JavaScript
+        // Include financial dashboard JavaScript
         head.script {
             unsafe {
-                raw(financeAdminJs)
+                raw(financialDashboardJs)
             }
         }
         // Include refund admin JavaScript
@@ -283,6 +286,12 @@ object WebResources {
         head.script {
             unsafe {
                 raw(reportsChartsJs)
+            }
+        }
+        // Include admin tools JavaScript
+        head.script {
+            unsafe {
+                raw(adminToolsJs)
             }
         }
         // Ensure admin dashboard initializes after DOM is ready

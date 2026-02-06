@@ -1,6 +1,5 @@
 package di
 
-import config.Environment.getGcpProjectId
 import data.service.*
 import domain.service.*
 import domain.service.impl.*
@@ -22,8 +21,6 @@ val domainModule = module {
     single<NotificationService> { NotificationServiceImpl() }
     single<ServiceCatalogService> { ServiceCatalogServiceImpl(get(), get()) }
     single { SavedLocationService(get()) }
-    single { VertexAiService(projectId = getGcpProjectId()) }
-    single { TripService(get(), get(), get(), get()) }
 
     // Data Services
     single { ServiceCatalogSeedingService(get()) }

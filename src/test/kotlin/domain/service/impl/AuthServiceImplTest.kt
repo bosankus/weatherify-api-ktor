@@ -21,6 +21,9 @@ class AuthServiceImplTest {
         override suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): domain.model.Result<Boolean> =
             domain.model.Result.Success(true)
 
+        override suspend fun clearFcmTokenByEmail(email: String): domain.model.Result<Boolean> =
+            domain.model.Result.Success(true)
+
         override suspend fun getAllUsers(
             filter: Map<String, Any>?,
             sortBy: String?,
@@ -29,6 +32,9 @@ class AuthServiceImplTest {
             pageSize: Int?
         ): domain.model.Result<Pair<List<bose.ankush.data.model.User>, Long>> =
             throw NotImplementedError("Not needed for these tests")
+
+        override suspend fun deleteUserByEmail(email: String): domain.model.Result<Boolean> =
+            domain.model.Result.Success(true)
     }
 
     // Create an instance of AuthServiceImpl with the mock repository

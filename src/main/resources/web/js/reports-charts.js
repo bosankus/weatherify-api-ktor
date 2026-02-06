@@ -3,7 +3,7 @@
  * Handles rendering of sales chart showing new users and total sales using ECharts
  */
 
-(function() {
+(function () {
     'use strict';
 
     // Chart instance
@@ -13,7 +13,7 @@
      * Helper function to get element by ID
      * Use common q() from admin-utils.js if available
      */
-    const q = window.q || function(id) {
+    const q = window.q || function (id) {
         return document.getElementById(id);
     };
 
@@ -23,11 +23,15 @@
     function getThemeColors() {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         return {
-            text: isDark ? '#e5e7eb' : '#374151',
-            grid: isDark ? '#374151' : '#e5e7eb',
-            background: isDark ? '#1f2937' : '#ffffff',
+            text: isDark ? '#f3f4f6' : '#1f2937',
+            textSecondary: isDark ? '#d1d5db' : '#6b7280',
+            grid: isDark ? '#4b5563' : '#d1d5db',
+            gridLight: isDark ? '#374151' : '#e5e7eb',
+            background: isDark ? '#111827' : '#ffffff',
             cardBg: isDark ? '#1f2937' : '#ffffff',
-            cardBorder: isDark ? '#374151' : '#e5e7eb'
+            cardBorder: isDark ? '#374151' : '#e5e7eb',
+            tooltipBg: isDark ? 'rgba(31, 41, 55, 0.98)' : 'rgba(255, 255, 255, 0.98)',
+            tooltipBorder: isDark ? '#6366f1' : '#6366f1'
         };
     }
 
@@ -48,15 +52,15 @@
      */
     function aggregateUsersByMonth(users) {
         const monthlyData = new Map();
-        
+
         users.forEach(user => {
             const createdAt = parseDateSafe(user.createdAt);
             if (!createdAt || isNaN(createdAt.getTime())) return;
-            
+
             const monthKey = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
             monthlyData.set(monthKey, (monthlyData.get(monthKey) || 0) + 1);
         });
-        
+
         return monthlyData;
     }
 
@@ -66,13 +70,13 @@
     function getLast12Months() {
         const months = [];
         const now = new Date();
-        
+
         for (let i = 11; i >= 0; i--) {
             const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
             months.push(monthKey);
         }
-        
+
         return months;
     }
 
@@ -95,7 +99,7 @@
     function renderSalesChart(usersData, salesData) {
         const chartContainer = q('sales-chart');
         const emptyState = q('sales-chart-empty');
-        
+
         if (!chartContainer) {
             console.warn('Sales chart container not found');
             return;
@@ -114,12 +118,12 @@
         // Aggregate user data by month
         const usersMap = aggregateUsersByMonth(usersData || []);
         const allMonths = getLast12Months();
-        
+
         // Prepare data arrays
         const newUsersData = allMonths.map(month => usersMap.get(month) || 0);
         const salesValues = [];
         const monthLabels = allMonths.map(formatMonthLabel);
-        
+
         // Process sales data
         if (salesData && Array.isArray(salesData)) {
             const salesMap = new Map();
@@ -128,7 +132,7 @@
                     salesMap.set(item.month, item.revenue);
                 }
             });
-            
+
             allMonths.forEach(month => {
                 salesValues.push(salesMap.get(month) || 0);
             });
@@ -179,18 +183,26 @@
                 axisPointer: {
                     type: 'cross',
                     crossStyle: {
-                        color: '#999'
+                        color: isDark ? '#9ca3af' : '#6b7280'
+                    },
+                    lineStyle: {
+                        color: isDark ? '#6b7280' : '#9ca3af',
+                        width: 1,
+                        type: 'dashed'
                     }
                 },
-                backgroundColor: isDark ? 'rgba(31, 41, 55, 0.95)' : 'rgba(0, 0, 0, 0.9)',
-                borderColor: isDark ? 'rgba(99, 102, 241, 0.5)' : 'rgba(99, 102, 241, 0.3)',
-                borderWidth: 1.5,
+                backgroundColor: colors.tooltipBg,
+                borderColor: colors.tooltipBorder,
+                borderWidth: 2,
                 textStyle: {
-                    color: '#ffffff',
-                    fontSize: 12
+                    color: isDark ? '#f3f4f6' : '#1f2937',
+                    fontSize: 13,
+                    fontWeight: '500'
                 },
-                padding: [12, 16],
-                formatter: function(params) {
+                padding: [14, 18],
+                shadowBlur: 10,
+                shadowColor: isDark ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.1)',
+                formatter: function (params) {
                     let result = `<div style="font-weight: 600; margin-bottom: 8px;">${params[0].axisValue}</div>`;
                     params.forEach(param => {
                         if (param.seriesName === 'New Users') {
@@ -240,10 +252,11 @@
                         type: 'shadow'
                     },
                     axisLabel: {
-                            color: colors.text,
-                        fontSize: 11,
+                        color: colors.text,
+                        fontSize: 12,
+                        fontWeight: '500',
                         rotate: 45,
-                        margin: 10
+                        margin: 12
                     },
                     axisLine: {
                         lineStyle: {
@@ -266,9 +279,10 @@
                         padding: [0, 0, 0, 10]
                     },
                     axisLabel: {
-                            color: colors.text,
-                        fontSize: 11,
-                        formatter: function(value) {
+                        color: colors.text,
+                        fontSize: 12,
+                        fontWeight: '500',
+                        formatter: function (value) {
                             return Math.round(value);
                         }
                     },
@@ -281,7 +295,8 @@
                         lineStyle: {
                             color: colors.grid,
                             type: 'dashed',
-                            opacity: 0.3
+                            opacity: isDark ? 0.4 : 0.3,
+                            width: 1
                         }
                     }
                 },
@@ -290,19 +305,20 @@
                     name: 'Sales (₹)',
                     position: 'right',
                     nameTextStyle: {
-                            color: colors.text,
+                        color: colors.text,
                         fontSize: 12,
                         padding: [0, 10, 0, 0]
-                            },
+                    },
                     axisLabel: {
                         color: colors.text,
-                        fontSize: 11,
-                        formatter: function(value) {
-                                if (value >= 100000) {
-                                    return '₹' + (value / 100000).toFixed(1) + 'L';
-                                } else if (value >= 1000) {
-                                    return '₹' + (value / 1000).toFixed(1) + 'k';
-                                }
+                        fontSize: 12,
+                        fontWeight: '500',
+                        formatter: function (value) {
+                            if (value >= 100000) {
+                                return '₹' + (value / 100000).toFixed(1) + 'L';
+                            } else if (value >= 1000) {
+                                return '₹' + (value / 1000).toFixed(1) + 'k';
+                            }
                             return '₹' + Math.round(value);
                         }
                     },
@@ -337,7 +353,7 @@
                         }
                     },
                     barWidth: '40%',
-                    animationDelay: function(idx) {
+                    animationDelay: function (idx) {
                         return idx * 50;
                     }
                 },
@@ -368,7 +384,7 @@
                             width: 4
                         }
                     },
-                    animationDelay: function(idx) {
+                    animationDelay: function (idx) {
                         return idx * 50 + 100;
                     }
                 }
@@ -382,7 +398,7 @@
         salesChartInstance.setOption(option);
 
         // Handle window resize
-        window.addEventListener('resize', function() {
+        window.addEventListener('resize', function () {
             if (salesChartInstance) {
                 salesChartInstance.resize();
             }
@@ -396,21 +412,21 @@
      */
     async function fetchAllUsers() {
         try {
-        const token = localStorage.getItem('jwt_token');
+            const token = localStorage.getItem('jwt_token');
             let allUsers = [];
             let page = 1;
             let hasMore = true;
             const pageSize = 100;
-        
+
             while (hasMore) {
                 try {
                     const response = await fetch(`/admin/users?page=${page}&pageSize=${pageSize}`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': token ? `Bearer ${token}` : ''
-            }
+                        method: 'GET',
+                        credentials: 'include',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Authorization': token ? `Bearer ${token}` : ''
+                        }
                     });
 
                     if (!response.ok) {
@@ -418,9 +434,9 @@
                         const errorMsg = response.status === 401 || response.status === 403
                             ? 'Your session has expired. Please refresh the page and login again.'
                             : response.status === 404
-                            ? 'Users endpoint not found. Please contact support.'
-                            : `Unable to load user data (Error ${response.status}). Please try again later.`;
-                        
+                                ? 'Users endpoint not found. Please contact support.'
+                                : `Unable to load user data (Error ${response.status}). Please try again later.`;
+
                         if (typeof window.showMessage === 'function') {
                             window.showMessage('error', errorMsg);
                         } else {
@@ -432,7 +448,7 @@
                     const payload = await response.json();
                     if (payload.status === true && payload.data && Array.isArray(payload.data.users)) {
                         allUsers = allUsers.concat(payload.data.users);
-                        
+
                         const pagination = payload.data.pagination;
                         if (pagination && pagination.totalPages) {
                             hasMore = page < pagination.totalPages;
@@ -469,12 +485,12 @@
         try {
             const token = localStorage.getItem('jwt_token');
             const response = await fetch('/finance/metrics', {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': token ? `Bearer ${token}` : ''
-            }
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                }
             });
 
             if (!response.ok) {
@@ -482,9 +498,9 @@
                 const errorMsg = response.status === 401 || response.status === 403
                     ? 'Your session has expired. Please refresh the page and login again.'
                     : response.status === 404
-                    ? 'Financial metrics endpoint not found. Please contact support.'
-                    : `Unable to load sales data (Error ${response.status}). Please try again later.`;
-                
+                        ? 'Financial metrics endpoint not found. Please contact support.'
+                        : `Unable to load sales data (Error ${response.status}). Please try again later.`;
+
                 if (typeof window.showMessage === 'function') {
                     window.showMessage('error', errorMsg);
                 } else {
@@ -509,7 +525,7 @@
      */
     async function loadSalesChart() {
         const emptyState = q('sales-chart-empty');
-        
+
         try {
             // Fetch both users and sales data in parallel
             const [usersData, salesData] = await Promise.all([
@@ -544,12 +560,12 @@
     }
 
     // Listen for tab changes
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         // Find all tab buttons
         const tabButtons = document.querySelectorAll('[data-tab]');
-        
+
         tabButtons.forEach(button => {
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function () {
                 const tabName = this.getAttribute('data-tab');
                 if (tabName === 'reports') {
                     // Small delay to ensure DOM is ready
@@ -565,8 +581,8 @@
         }
 
         // Listen for theme changes to update chart
-        const themeObserver = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
+        const themeObserver = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
                     if (salesChartInstance) {
                         // Re-render chart with new theme

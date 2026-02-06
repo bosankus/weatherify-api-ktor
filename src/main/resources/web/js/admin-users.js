@@ -3,7 +3,7 @@
  * Handles user management with improved performance and better user experience
  */
 
-(function() {
+(function () {
     'use strict';
 
     // ============= State Management =============
@@ -522,7 +522,7 @@
             select.appendChild(option);
         });
 
-        select.addEventListener('change', function() {
+        select.addEventListener('change', function () {
             handleRoleChange(user.email, this.value, this);
         });
 
@@ -550,7 +550,7 @@
         input.dataset.prevChecked = String(!!user.isActive);
 
         input.setAttribute('aria-label', 'Toggle user status');
-        input.addEventListener('change', function() {
+        input.addEventListener('change', function () {
             handleStatusChange(user.email, this.checked, this);
         });
 
@@ -581,7 +581,7 @@
         input.dataset.prevChecked = String(!!user.isPremium);
 
         input.setAttribute('aria-label', 'Toggle premium access');
-        input.addEventListener('change', function() {
+        input.addEventListener('change', function () {
             handlePremiumChange(user.email, this.checked, this);
         });
 
@@ -1212,10 +1212,12 @@
                 <div class="user-action-field">
                     <label class="user-action-label" for="reset-password-input">New password</label>
                     <input id="reset-password-input" type="password" class="user-action-input" placeholder="Enter a strong password" autocomplete="new-password">
+                    <div id="password-strength-indicator" style="font-size: 0.75rem; margin-top: 4px; display: none;"></div>
                 </div>
                 <div class="user-action-field">
                     <label class="user-action-label" for="reset-password-confirm">Confirm password</label>
                     <input id="reset-password-confirm" type="password" class="user-action-input" placeholder="Re-enter password" autocomplete="new-password">
+                    <div id="password-match-indicator" style="font-size: 0.75rem; margin-top: 4px; display: none;"></div>
                 </div>
                 <div class="user-action-hint">Use at least 8 characters with upper, lower, number, and special.</div>
                 <div class="user-action-error" id="reset-password-error"></div>
@@ -1225,11 +1227,64 @@
         const passwordInput = dialog.container.querySelector('#reset-password-input');
         const confirmInput = dialog.container.querySelector('#reset-password-confirm');
         const errorEl = dialog.container.querySelector('#reset-password-error');
+        const strengthIndicator = dialog.container.querySelector('#password-strength-indicator');
+        const matchIndicator = dialog.container.querySelector('#password-match-indicator');
+        const submitBtn = dialog.confirmButton;
+
+        // Initial state
+        if (submitBtn) submitBtn.disabled = true;
+
+        function validateInputs() {
+            const password = passwordInput?.value || '';
+            const confirm = confirmInput?.value || '';
+            let isLengthValid = false;
+            let isMatchValid = false;
+
+            // Password length validation
+            if (password) {
+                if (password.length >= 8) {
+                    strengthIndicator.textContent = '✓ Password format is valid';
+                    strengthIndicator.style.color = '#10b981'; // green
+                    strengthIndicator.style.display = 'block';
+                    isLengthValid = true;
+                } else {
+                    strengthIndicator.textContent = `⚠ Password must be at least 8 characters (${password.length}/8)`;
+                    strengthIndicator.style.color = '#f59e0b'; // orange/yellow
+                    strengthIndicator.style.display = 'block';
+                }
+            } else {
+                strengthIndicator.style.display = 'none';
+            }
+
+            // Match validation
+            if (confirm) {
+                if (password === confirm) {
+                    matchIndicator.textContent = '✓ Passwords match';
+                    matchIndicator.style.color = '#10b981';
+                    matchIndicator.style.display = 'block';
+                    isMatchValid = true;
+                } else {
+                    matchIndicator.textContent = '⚠ Passwords do not match';
+                    matchIndicator.style.color = '#ef4444'; // red
+                    matchIndicator.style.display = 'block';
+                }
+            } else {
+                matchIndicator.style.display = 'none';
+            }
+
+            if (submitBtn) {
+                submitBtn.disabled = !(isLengthValid && isMatchValid);
+            }
+        }
+
+        passwordInput?.addEventListener('input', validateInputs);
+        confirmInput?.addEventListener('input', validateInputs);
 
         dialog.onConfirm(async () => {
             const password = passwordInput?.value || '';
             const confirm = confirmInput?.value || '';
 
+            // Double check validation on submit
             if (!password || password.length < 8) {
                 showDialogError(errorEl, 'Password must be at least 8 characters.');
                 passwordInput?.focus();
@@ -1251,15 +1306,24 @@
                 const response = await window.UserRoute.resetPassword(user.email, password);
 
                 if (!response.ok) {
-                    // Show user-friendly error message
-                    let errorMsg = 'Unable to reset password. ';
-                    if (response.status === 401 || response.status === 403) {
-                        errorMsg = 'Your session has expired. Please refresh the page and login again.';
-                    } else if (response.status === 404) {
-                        errorMsg = 'User not found.';
-                    } else {
-                        errorMsg += `Please try again (Error ${response.status}).`;
+                    // Try to get error message from body first
+                    let errorData = null;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) { /* ignore */ }
+
+                    let errorMsg = errorData?.message || 'Unable to reset password. ';
+
+                    if (!errorData?.message) {
+                        if (response.status === 401 || response.status === 403) {
+                            errorMsg = 'Your session has expired. Please refresh the page and login again.';
+                        } else if (response.status === 404) {
+                            errorMsg = 'User not found.';
+                        } else {
+                            errorMsg += `Please try again (Error ${response.status}).`;
+                        }
                     }
+
                     showDialogError(errorEl, errorMsg);
                     return;
                 }
@@ -1495,7 +1559,7 @@
      * Format date
      * Uses common formatDate from admin-utils.js with custom format
      */
-    const formatDate = window.formatDate || function(dateString) {
+    const formatDate = window.formatDate || function (dateString) {
         if (!dateString) return 'N/A';
         try {
             const date = new Date(dateString);
@@ -1537,7 +1601,7 @@
      * Escape HTML
      * Uses common escapeHtml from admin-utils.js
      */
-    const escapeHtml = window.escapeHtml || function(str) {
+    const escapeHtml = window.escapeHtml || function (str) {
         return String(str)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')

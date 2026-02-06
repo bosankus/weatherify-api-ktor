@@ -171,6 +171,20 @@ class DatabaseModule(
     }
 
     /**
+     * Check if the database is healthy by attempting to run a ping command.
+     * @return true if healthy, false otherwise
+     */
+    suspend fun checkHealth(): Boolean {
+        return try {
+            database.runCommand(Document("ping", 1))
+            true
+        } catch (e: Exception) {
+            logger.error("Database health check failed", e)
+            false
+        }
+    }
+
+    /**
      * Get a collection with the specified name and type
      * @param collectionName The name of the collection
      * @return The MongoDB collection
@@ -221,13 +235,6 @@ class DatabaseModule(
         return getCollection<SavedLocation>(Constants.Database.SAVED_LOCATIONS_COLLECTION)
     }
 
-    /**
-     * Get the trips collection
-     * @return The trips collection
-     */
-    fun getTripsCollection(): MongoCollection<Trip> {
-        return getCollection<Trip>(Constants.Database.TRIPS_COLLECTION)
-    }
 
 
     /**

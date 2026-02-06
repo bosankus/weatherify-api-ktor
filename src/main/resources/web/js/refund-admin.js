@@ -337,7 +337,7 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
 
         // Toggle partial amount input based on refund type
         if (refundTypeSelect) {
-            refundTypeSelect.addEventListener('change', function() {
+            refundTypeSelect.addEventListener('change', function () {
                 if (this.value === 'partial') {
                     partialAmountGroup.style.display = 'block';
                     refundAmountInput.required = true;
@@ -389,9 +389,9 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                 // Call API to initiate refund
                 window.RefundAPI.initiateRefund(payment.razorpayPaymentId, refundAmount, reason, notes)
                     .then(response => {
-                        if (response.status === true) {
+                        if (response.status === true && response.data && response.data.success) {
                             showMessage('success', response.message || 'Refund initiated successfully');
-            if (typeof closeFinancePanel === 'function') closeFinancePanel();
+                            if (typeof closeFinancePanel === 'function') closeFinancePanel();
 
                             // Update only the specific payment row instead of reloading entire list
                             updatePaymentRowAfterRefund(payment.razorpayPaymentId);
@@ -401,7 +401,8 @@ function showRefundFormModal(payment, amount, refundedAmount, refundableAmount, 
                                 loadFinancialMetrics();
                             }
                         } else {
-                            throw new Error(response.message || 'Failed to initiate refund');
+                            const errorMsg = response.data?.message || response.message || 'Failed to initiate refund';
+                            throw new Error(errorMsg);
                         }
                     })
                     .catch(error => {
@@ -1087,7 +1088,7 @@ function showPaymentDetailsModal(payment) {
     const amount = (payment.amount || 0).toFixed(2);
     const status = payment.status || 'PENDING';
     const statusClass = status === 'verified' || status === 'SUCCESS' ? 'status-processed' :
-                       status === 'FAILED' ? 'status-failed' : 'status-pending';
+        status === 'FAILED' ? 'status-failed' : 'status-pending';
 
     const modalContent = `
         <div class="payment-details-modal">
@@ -1132,7 +1133,7 @@ function showPaymentDetailsModal(payment) {
 }
 
 // Use common utilities from admin-utils.js
-const formatDate = window.formatDate || function(dateString) {
+const formatDate = window.formatDate || function (dateString) {
     if (!dateString) return 'N/A';
     try {
         const date = new Date(dateString);
@@ -1142,7 +1143,7 @@ const formatDate = window.formatDate || function(dateString) {
     }
 };
 
-const escapeHtml = window.escapeHtml || function(str) {
+const escapeHtml = window.escapeHtml || function (str) {
     if (str == null) return '';
     return String(str)
         .replace(/&/g, '&amp;')

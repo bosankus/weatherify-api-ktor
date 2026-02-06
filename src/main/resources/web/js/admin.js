@@ -25,32 +25,32 @@ window.UserRoute = window.UserRoute || {
             credentials: 'include',
             headers
         })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access this resource');
+            .then(response => {
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        throw new Error('You do not have permission to access this resource');
+                    }
+                    throw new Error('Failed to load users');
                 }
-                throw new Error('Failed to load users');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading users');
-            }
-            // FIX: Do not force !!u.isActive or !!u.isPremium, use the value as returned (should be boolean from backend)
-            const mappedUsers = Array.isArray(payload.data.users) ? payload.data.users.map(u => ({
-                email: u.email,
-                role: u.role,
-                isActive: u.isActive,
-                isPremium: u.isPremium,
-                createdAt: u.createdAt
-            })) : [];
-            return {
-                users: mappedUsers,
-                pagination: payload.data.pagination || { page, pageSize, totalPages: 1, totalCount: mappedUsers.length }
-            };
-        });
+                return response.json();
+            })
+            .then(payload => {
+                if (!payload || payload.status !== true || !payload.data) {
+                    throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading users');
+                }
+                // FIX: Do not force !!u.isActive or !!u.isPremium, use the value as returned (should be boolean from backend)
+                const mappedUsers = Array.isArray(payload.data.users) ? payload.data.users.map(u => ({
+                    email: u.email,
+                    role: u.role,
+                    isActive: u.isActive,
+                    isPremium: u.isPremium,
+                    createdAt: u.createdAt
+                })) : [];
+                return {
+                    users: mappedUsers,
+                    pagination: payload.data.pagination || { page, pageSize, totalPages: 1, totalCount: mappedUsers.length }
+                };
+            });
     },
     updateRole(email, role) {
         const url = `/admin/users/${encodeURIComponent(email)}/role`;
@@ -128,7 +128,7 @@ window.UserRoute = window.UserRoute || {
  * Call admin endpoint to clear weather cache
  */
 function clearWeatherCache() {
-    return fetch('/cache/clear', {
+    return fetch('/tools/cache/clear', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -190,7 +190,7 @@ function runWarmup() {
 
 
 // Use common escapeHtml from admin-utils.js
-const escapeHtml = window.escapeHtml || function(str) {
+const escapeHtml = window.escapeHtml || function (str) {
     return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -204,7 +204,7 @@ let modalFocusTrap = null;
 let previousActiveElement = null;
 
 // Ensure modal CSS/HTML and helpers exist for Admin dashboard
-function ensureAdminModal(){
+function ensureAdminModal() {
     try {
         // Load modal CSS if not already loaded
         if (!document.getElementById('modal-css-link')) {
@@ -214,9 +214,9 @@ function ensureAdminModal(){
             link.href = '/web/css/modal.css';
             document.head.appendChild(link);
         }
-        
+
         // No fallback CSS needed - using modal.css
-        
+
         // Inject HTML once - support both old and new structure
         if (!document.getElementById('apiModal')) {
             const modal = document.createElement('div');
@@ -244,13 +244,13 @@ function ensureAdminModal(){
                 </div>
             `;
             document.body.appendChild(modal);
-            
+
             // Event listeners
             const closeBtn = modal.querySelector('#modal-close');
             const closeBtnLegacy = modal.querySelector('#modal-close-legacy');
             if (closeBtn) closeBtn.addEventListener('click', closeModal);
             if (closeBtnLegacy) closeBtnLegacy.addEventListener('click', closeModal);
-            window.addEventListener('click', function(event){ if (event.target === modal) closeModal(); });
+            window.addEventListener('click', function (event) { if (event.target === modal) closeModal(); });
         }
     } catch (e) { console.warn('Failed to ensure admin modal', e); }
 }
@@ -272,7 +272,7 @@ function showModal(title, content, options = {}) {
         const modalContent = document.getElementById('modalContent');
         const modalContentDiv = modal ? modal.querySelector('.modal-content') : null;
         if (!modal || !modalContent || !modalContentDiv) return;
-        
+
         // Handle modal size
         modalContentDiv.classList.remove('modal-large', 'modal-extra-large');
         if (options.size === 'large') {
@@ -280,18 +280,18 @@ function showModal(title, content, options = {}) {
         } else if (options.size === 'extra-large') {
             modalContentDiv.classList.add('modal-extra-large');
         }
-        
+
         // Determine if we should use legacy mode
         // Use legacy only if explicitly requested AND no subtitle/footer provided
         const useLegacy = options.useLegacy === true && !options.subtitle && !options.footer;
-        
+
         if (useLegacy) {
             // Legacy structure for backward compatibility
             const modalTitleLegacy = document.getElementById('modalTitleLegacy');
             const closeBtnLegacy = modal.querySelector('#modal-close-legacy');
             const modalHeader = document.getElementById('modalHeader');
             const modalFooter = document.getElementById('modalFooter');
-            
+
             if (modalTitleLegacy) {
                 modalTitleLegacy.textContent = title;
                 modalTitleLegacy.style.display = 'block';
@@ -299,7 +299,7 @@ function showModal(title, content, options = {}) {
             if (closeBtnLegacy) closeBtnLegacy.style.display = 'block';
             if (modalHeader) modalHeader.style.display = 'none';
             if (modalFooter) modalFooter.style.display = 'none';
-            
+
             modalContent.innerHTML = content;
         } else {
             // New enhanced structure
@@ -309,7 +309,7 @@ function showModal(title, content, options = {}) {
             const modalFooter = document.getElementById('modalFooter');
             const modalTitleLegacy = document.getElementById('modalTitleLegacy');
             const closeBtnLegacy = modal.querySelector('#modal-close-legacy');
-            
+
             if (modalTitle) modalTitle.textContent = title;
             if (modalSubtitle) {
                 if (options.subtitle) {
@@ -331,18 +331,18 @@ function showModal(title, content, options = {}) {
             }
             if (modalTitleLegacy) modalTitleLegacy.style.display = 'none';
             if (closeBtnLegacy) closeBtnLegacy.style.display = 'none';
-            
+
             modalContent.innerHTML = content;
         }
-        
+
         // Store previous active element for focus restoration
         previousActiveElement = document.activeElement;
-        
+
         // Reset any previous inline styles that might interfere
         modal.style.opacity = '';
         modalContentDiv.style.transform = '';
         modalContentDiv.style.opacity = '';
-        
+
         // Ensure modal is positioned correctly
         modal.style.position = 'fixed';
         modal.style.zIndex = '10000';
@@ -353,19 +353,19 @@ function showModal(title, content, options = {}) {
         modal.style.display = 'flex';
         modal.style.alignItems = 'center';
         modal.style.justifyContent = 'center';
-        
+
         // Force reflow to ensure display:flex is applied before adding active class
         void modal.offsetHeight;
-        
+
         // Add active class to trigger CSS transitions
         modal.classList.add('active');
-        
+
         document.body.style.overflow = 'hidden';
         document.addEventListener('keydown', handleEscKey);
-        
+
         // Setup focus trap
         setupFocusTrap(modal);
-        
+
         // Focus first focusable element
         setTimeout(() => {
             const firstFocusable = modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
@@ -384,10 +384,10 @@ function closeModal() {
         const modal = document.getElementById('apiModal');
         const modalContentDiv = modal ? modal.querySelector('.modal-content') : null;
         if (!modal || !modalContentDiv) return;
-        
+
         // Remove focus trap
         removeFocusTrap();
-        
+
         // Hide modal with animation
         requestAnimationFrame(() => {
             modal.style.opacity = '0';
@@ -403,9 +403,9 @@ function closeModal() {
                 document.body.style.overflow = 'auto';
             }, 300);
         });
-        
+
         document.removeEventListener('keydown', handleEscKey);
-        
+
         // Restore focus to previous element
         if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
             try {
@@ -434,10 +434,10 @@ function setupFocusTrap(modal) {
     );
     const firstFocusable = focusableElements[0];
     const lastFocusable = focusableElements[focusableElements.length - 1];
-    
+
     function trapFocus(e) {
         if (e.key !== 'Tab') return;
-        
+
         if (e.shiftKey) {
             if (document.activeElement === firstFocusable) {
                 e.preventDefault();
@@ -450,7 +450,7 @@ function setupFocusTrap(modal) {
             }
         }
     }
-    
+
     modalFocusTrap = trapFocus;
     modal.addEventListener('keydown', trapFocus);
 }
@@ -463,7 +463,7 @@ function removeFocusTrap() {
     }
 }
 
-function buildHealthHtml(data){
+function buildHealthHtml(data) {
     const badge = (b) => b ? '<span style="color:#10b981;font-weight:600;">OK</span>' : '<span style="color:#ef4444;font-weight:600;">FAIL</span>';
     const row = (k, v) => `<div style="display:flex; gap:8px; margin:2px 0;"><div style="min-width:180px;color:var(--text-color);font-weight:600;">${k}</div><div>${v}</div></div>`;
     const section = (title, body) => `<div style="border:1px solid var(--card-border);background:var(--card-bg);border-radius:8px;padding:12px;margin-top:10px;"><div style="font-weight:700;color:var(--card-title);margin-bottom:6px;">${title}</div>${body}</div>`;
@@ -492,7 +492,7 @@ function buildHealthHtml(data){
     ].join('');
 }
 
-function buildWarmupHtml(data){
+function buildWarmupHtml(data) {
     if (!data || !Array.isArray(data.results)) return '<div>No data</div>';
     const badge = (b) => b ? '<span style="color:#10b981;font-weight:600;">OK</span>' : '<span style="color:#ef4444;font-weight:600;">FAIL</span>';
     const header = `<div style="display:grid;grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;gap:6px;font-weight:700;color:var(--card-title);margin-top:6px;">
@@ -526,7 +526,7 @@ function initializeAdmin() {
             initializeHeader({
                 homeUrl: '/',
                 subtitle: 'ADMIN PORTAL',
-                actions: [ { type: 'theme-toggle' }, { type: 'user-info' }, { type: 'logout' } ]
+                actions: [{ type: 'theme-toggle' }, { type: 'user-info' }, { type: 'logout' }]
             });
         }
         // After rendering header actions, (re)initialize the theme toggle to ensure listeners are bound
@@ -539,7 +539,7 @@ function initializeAdmin() {
         // Bind logout
         const logoutBtn = document.getElementById('logout-button');
         if (logoutBtn && !logoutBtn.dataset.bound) {
-            logoutBtn.addEventListener('click', function(e){ e.preventDefault(); if (typeof logout === 'function') logout(); });
+            logoutBtn.addEventListener('click', function (e) { e.preventDefault(); if (typeof logout === 'function') logout(); });
             logoutBtn.dataset.bound = 'true';
         }
 
@@ -547,7 +547,7 @@ function initializeAdmin() {
         const clearBtn = document.getElementById('clear-cache-btn');
         const spinner = document.getElementById('clear-cache-spinner');
         if (clearBtn && !clearBtn.dataset.bound) {
-            clearBtn.addEventListener('click', function(){
+            clearBtn.addEventListener('click', function () {
                 if (spinner) spinner.style.display = 'inline-block';
                 clearBtn.disabled = true;
                 clearWeatherCache()
@@ -570,12 +570,19 @@ function initializeAdmin() {
         const healthBtn = document.getElementById('run-health-btn');
         const healthSpinner = document.getElementById('run-health-spinner');
         if (healthBtn && !healthBtn.dataset.bound) {
-            healthBtn.addEventListener('click', function(){
+            healthBtn.addEventListener('click', function () {
                 if (healthSpinner) healthSpinner.style.display = 'inline-block';
                 healthBtn.disabled = true;
                 runHealthCheck()
                     .then((data) => {
-                        try { showModal('Health Check Results', buildHealthHtml(data)); } catch(e) { console.warn('Failed to show health modal', e); }
+                        try {
+                            if (typeof showFinancePanel === 'function') {
+                                const footer = '<button type="button" class="modal-btn modal-btn-secondary" onclick="closeFinancePanel()">Close</button>';
+                                showFinancePanel('Health Check Results', buildHealthHtml(data), { footer });
+                            } else {
+                                showModal('Health Check Results', buildHealthHtml(data));
+                            }
+                        } catch (e) { console.warn('Failed to show health panel', e); }
                         const overallOk = (data.weatherOk === true) && (data.airOk === true);
                         showMessage(overallOk ? 'success' : 'error', overallOk ? 'Health check passed' : 'Health check has failures');
                     })
@@ -595,12 +602,19 @@ function initializeAdmin() {
         const warmBtn = document.getElementById('warmup-btn');
         const warmSpinner = document.getElementById('warmup-spinner');
         if (warmBtn && !warmBtn.dataset.bound) {
-            warmBtn.addEventListener('click', function(){
+            warmBtn.addEventListener('click', function () {
                 if (warmSpinner) warmSpinner.style.display = 'inline-block';
                 warmBtn.disabled = true;
                 runWarmup()
                     .then((data) => {
-                        try { showModal('Warmup Results', buildWarmupHtml(data)); } catch(e) { console.warn('Failed to show warmup modal', e); }
+                        try {
+                            if (typeof showFinancePanel === 'function') {
+                                const footer = '<button type="button" class="modal-btn modal-btn-secondary" onclick="closeFinancePanel()">Close</button>';
+                                showFinancePanel('Warmup Results', buildWarmupHtml(data), { footer });
+                            } else {
+                                showModal('Warmup Results', buildWarmupHtml(data));
+                            }
+                        } catch (e) { console.warn('Failed to show warmup panel', e); }
                         showMessage(data.ok ? 'success' : 'error', data.ok ? 'Warmup completed' : 'Warmup completed with failures');
                     })
                     .catch(err => {
@@ -619,10 +633,10 @@ function initializeAdmin() {
         // Bind JWT Token Inspector tool
         const jwtBtn = document.getElementById('jwt-inspector-btn');
         if (jwtBtn && !jwtBtn.dataset.bound) {
-            jwtBtn.addEventListener('click', function(){
+            jwtBtn.addEventListener('click', function () {
                 try {
                     showJwtInspectorDialog();
-                } catch(e) { console.error('Failed to open JWT Inspector', e); }
+                } catch (e) { console.error('Failed to open JWT Inspector', e); }
             });
             jwtBtn.dataset.bound = 'true';
         }
@@ -639,26 +653,26 @@ function initializeAdmin() {
                     container.appendChild(footer);
                 }
             }
-        } catch(e) { console.warn('Failed to inject dashboard footer', e); }
+        } catch (e) { console.warn('Failed to inject dashboard footer', e); }
 
         // Guarded initial load for IAM users: run once if IAM panel exists and table is empty
         try {
             const iamPanel = document.getElementById('iam');
             const tbody = document.getElementById('users-table-body');
-        if (iamPanel && tbody && !window.__iamLoadedOnce) {
-            const hasRows = Array.isArray(tbody.rows) ? tbody.rows.length > 0 : tbody.children.length > 0;
-            if (!hasRows) {
-                if (window.UsersModule && typeof window.UsersModule.loadUsers === 'function') {
-                    window.__iamLoadedOnce = true;
-                    window.UsersModule.loadUsers(1, 10);
-                    return;
-                }
-                if (typeof loadUsers === 'function') {
-                    window.__iamLoadedOnce = true;
-                    loadUsers(1, 10);
+            if (iamPanel && tbody && !window.__iamLoadedOnce) {
+                const hasRows = Array.isArray(tbody.rows) ? tbody.rows.length > 0 : tbody.children.length > 0;
+                if (!hasRows) {
+                    if (window.UsersModule && typeof window.UsersModule.loadUsers === 'function') {
+                        window.__iamLoadedOnce = true;
+                        window.UsersModule.loadUsers(1, 10);
+                        return;
+                    }
+                    if (typeof loadUsers === 'function') {
+                        window.__iamLoadedOnce = true;
+                        loadUsers(1, 10);
+                    }
                 }
             }
-        }
         } catch (e) {
             console.warn('IAM initial load guard failed:', e);
         }
@@ -692,7 +706,7 @@ function loadUsers(page, pageSize) {
             try {
                 const loader = document.getElementById('iam-loader');
                 if (loader) loader.style.display = 'none';
-            } catch (e) {}
+            } catch (e) { }
 
             // Log users to console
             console.log('Fetched users:', users);
@@ -725,7 +739,7 @@ function loadUsers(page, pageSize) {
             try {
                 const loader = document.getElementById('iam-loader');
                 if (loader) loader.style.display = 'none';
-            } catch (e) {}
+            } catch (e) { }
             showErrorMessage(error.message || 'An error occurred while loading users');
 
             // If error is due to authentication, redirect to login
@@ -752,7 +766,7 @@ function renderUsersTable(users) {
 
     if (users.length === 0) {
         // Use table-utils.js for empty state
-        const emptyRow = typeof createEmptyTableRow === 'function' 
+        const emptyRow = typeof createEmptyTableRow === 'function'
             ? createEmptyTableRow(6, 'No users found')
             : (() => {
                 const row = document.createElement('tr');
@@ -810,7 +824,7 @@ function renderUsersTable(users) {
         });
         roleSelect.dataset.prevValue = user.role || 'USER';
 
-        roleSelect.addEventListener('change', function() {
+        roleSelect.addEventListener('change', function () {
             updateUserRole(user.email, this.value, this);
         });
 
@@ -829,7 +843,7 @@ function renderUsersTable(users) {
         statusInput.dataset.email = user.email;
         statusInput.dataset.prevChecked = String(!!user.isActive);
 
-        statusInput.addEventListener('change', function() {
+        statusInput.addEventListener('change', function () {
             updateUserStatus(user.email, this.checked, this);
         });
 
@@ -852,7 +866,7 @@ function renderUsersTable(users) {
         premiumInput.dataset.email = user.email;
         premiumInput.dataset.prevChecked = String(!!user.isPremium);
 
-        premiumInput.addEventListener('change', function() {
+        premiumInput.addEventListener('change', function () {
             updateUserPremium(user.email, this.checked, this);
         });
 
@@ -938,33 +952,33 @@ function updateUserRole(email, role, selectEl) {
     if (selectEl) selectEl.disabled = true;
     // Make API request to update role
     window.UserRoute.updateRole(email, role)
-    .then(response => {
-        if (!response.ok) {
-            if (response.status === 403) {
-                throw new Error('You do not have permission to update user roles');
-            } else {
-                throw new Error('Failed to update user role');
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('You do not have permission to update user roles');
+                } else {
+                    throw new Error('Failed to update user role');
+                }
             }
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.status === true) {
-            if (selectEl) selectEl.dataset.prevValue = role;
-            showMessage('success', `Role updated successfully for ${email}`);
-        } else {
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === true) {
+                if (selectEl) selectEl.dataset.prevValue = role;
+                showMessage('success', `Role updated successfully for ${email}`);
+            } else {
+                if (selectEl && prev) selectEl.value = prev;
+                showErrorMessage(data.message || 'Failed to update user role');
+            }
+        })
+        .catch(error => {
+            console.error('Error updating user role:', error);
             if (selectEl && prev) selectEl.value = prev;
-            showErrorMessage(data.message || 'Failed to update user role');
-        }
-    })
-    .catch(error => {
-        console.error('Error updating user role:', error);
-        if (selectEl && prev) selectEl.value = prev;
-        showErrorMessage(error.message || 'An error occurred while updating user role');
-    })
-    .finally(() => {
-        if (selectEl) selectEl.disabled = false;
-    });
+            showErrorMessage(error.message || 'An error occurred while updating user role');
+        })
+        .finally(() => {
+            if (selectEl) selectEl.disabled = false;
+        });
 }
 
 /**
@@ -983,34 +997,34 @@ function updateUserStatus(email, isActive, checkboxEl) {
     const statusText = isActive ? 'activating' : 'deactivating';
     // Make API request to update status
     window.UserRoute.updateStatus(email, isActive)
-    .then(response => {
-        if (!response.ok) {
-            if (response.status === 403) {
-                throw new Error('You do not have permission to update user status');
-            } else {
-                throw new Error(`Failed to ${statusText} user`);
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('You do not have permission to update user status');
+                } else {
+                    throw new Error(`Failed to ${statusText} user`);
+                }
             }
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.status === true) {
-            const resultText = isActive ? 'activated' : 'deactivated';
-            if (checkboxEl) checkboxEl.dataset.prevChecked = String(isActive);
-            showMessage('success', `User ${email} ${resultText} successfully`);
-        } else {
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === true) {
+                const resultText = isActive ? 'activated' : 'deactivated';
+                if (checkboxEl) checkboxEl.dataset.prevChecked = String(isActive);
+                showMessage('success', `User ${email} ${resultText} successfully`);
+            } else {
+                if (checkboxEl && prev !== null) checkboxEl.checked = prev;
+                showErrorMessage(data.message || `Failed to ${statusText} user`);
+            }
+        })
+        .catch(error => {
+            console.error(`Error ${statusText} user:`, error);
             if (checkboxEl && prev !== null) checkboxEl.checked = prev;
-            showErrorMessage(data.message || `Failed to ${statusText} user`);
-        }
-    })
-    .catch(error => {
-        console.error(`Error ${statusText} user:`, error);
-        if (checkboxEl && prev !== null) checkboxEl.checked = prev;
-        showErrorMessage(error.message || `An error occurred while ${statusText} user`);
-    })
-    .finally(() => {
-        if (checkboxEl) checkboxEl.disabled = false;
-    });
+            showErrorMessage(error.message || `An error occurred while ${statusText} user`);
+        })
+        .finally(() => {
+            if (checkboxEl) checkboxEl.disabled = false;
+        });
 }
 
 function updateUserPremium(email, isPremium, checkboxEl) {
@@ -1021,34 +1035,34 @@ function updateUserPremium(email, isPremium, checkboxEl) {
     if (checkboxEl) checkboxEl.disabled = true;
     const actionText = isPremium ? 'enabling premium for' : 'disabling premium for';
     window.UserRoute.updatePremium(email, isPremium)
-    .then(response => {
-        if (!response.ok) {
-            if (response.status === 403) {
-                throw new Error('You do not have permission to update premium status');
-            } else {
-                throw new Error(`Failed while ${actionText} user`);
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('You do not have permission to update premium status');
+                } else {
+                    throw new Error(`Failed while ${actionText} user`);
+                }
             }
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.status === true) {
-            if (checkboxEl) checkboxEl.dataset.prevChecked = String(isPremium);
-            const resultText = isPremium ? 'Premium enabled' : 'Premium disabled';
-            showMessage('success', `${resultText} for ${email}`);
-        } else {
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === true) {
+                if (checkboxEl) checkboxEl.dataset.prevChecked = String(isPremium);
+                const resultText = isPremium ? 'Premium enabled' : 'Premium disabled';
+                showMessage('success', `${resultText} for ${email}`);
+            } else {
+                if (checkboxEl && prev !== null) checkboxEl.checked = prev;
+                showErrorMessage(data.message || 'Failed to update premium status');
+            }
+        })
+        .catch(error => {
+            console.error('Error updating premium status:', error);
             if (checkboxEl && prev !== null) checkboxEl.checked = prev;
-            showErrorMessage(data.message || 'Failed to update premium status');
-        }
-    })
-    .catch(error => {
-        console.error('Error updating premium status:', error);
-        if (checkboxEl && prev !== null) checkboxEl.checked = prev;
-        showErrorMessage(error.message || 'An error occurred while updating premium status');
-    })
-    .finally(() => {
-        if (checkboxEl) checkboxEl.disabled = false;
-    });
+            showErrorMessage(error.message || 'An error occurred while updating premium status');
+        })
+        .finally(() => {
+            if (checkboxEl) checkboxEl.disabled = false;
+        });
 }
 
 /**
@@ -1057,7 +1071,7 @@ function updateUserPremium(email, isPremium, checkboxEl) {
  * @returns {string} The formatted date string
  */
 // Use common formatDate from admin-utils.js
-const formatDate = window.formatDate || function(dateString) {
+const formatDate = window.formatDate || function (dateString) {
     if (!dateString) return 'N/A';
     try {
         const date = new Date(dateString);
@@ -1383,12 +1397,12 @@ function showMessage(type, message, timeout, title) {
         const timer = setTimeout(hide, duration);
 
         // Click to dismiss
-        banner.addEventListener('click', function() {
+        banner.addEventListener('click', function () {
             clearTimeout(timer);
             hide();
         });
 
-        closeBtn.addEventListener('click', function(e) {
+        closeBtn.addEventListener('click', function (e) {
             e.stopPropagation();
             clearTimeout(timer);
             hide();
@@ -1404,7 +1418,7 @@ function showMessage(type, message, timeout, title) {
  * @param {string} [title] - Optional title
  */
 function showSuccessMessage(message, title) {
-    try { showMessage('success', message || 'Success', 4000, title); } catch (_) {}
+    try { showMessage('success', message || 'Success', 4000, title); } catch (_) { }
 }
 
 /**
@@ -1429,7 +1443,7 @@ function showErrorMessage(message, title) {
         errorTitle = 'Authentication Error';
     }
 
-    try { showMessage('error', formattedMessage, 5000, errorTitle); } catch (_) {}
+    try { showMessage('error', formattedMessage, 5000, errorTitle); } catch (_) { }
 }
 
 /**
@@ -1438,7 +1452,7 @@ function showErrorMessage(message, title) {
  * @param {string} [title] - Optional title
  */
 function showInfoMessage(message, title) {
-    try { showMessage('info', message || '', 4000, title); } catch (_) {}
+    try { showMessage('info', message || '', 4000, title); } catch (_) { }
 }
 
 /**
@@ -1447,7 +1461,7 @@ function showInfoMessage(message, title) {
  * @param {string} [title] - Optional title
  */
 function showWarningMessage(message, title) {
-    try { showMessage('warning', message || '', 4000, title); } catch (_) {}
+    try { showMessage('warning', message || '', 4000, title); } catch (_) { }
 }
 
 /**
@@ -1561,21 +1575,21 @@ document.addEventListener('DOMContentLoaded', initializeAdmin);
 
 
 // ================= JWT Token Inspector =================
-function base64UrlDecodeToString(input){
+function base64UrlDecodeToString(input) {
     if (typeof input !== 'string') return '';
     let str = input.replace(/-/g, '+').replace(/_/g, '/');
     const pad = str.length % 4;
     if (pad === 2) str += '==';
     else if (pad === 3) str += '=';
     else if (pad === 1) throw new Error('Invalid base64url string');
-    try { return atob(str); } catch(e){ throw new Error('Base64 decode failed'); }
+    try { return atob(str); } catch (e) { throw new Error('Base64 decode failed'); }
 }
 
-function safeJsonParse(str){
-    try { return JSON.parse(str); } catch(e){ throw new Error('Invalid JSON'); }
+function safeJsonParse(str) {
+    try { return JSON.parse(str); } catch (e) { throw new Error('Invalid JSON'); }
 }
 
-function decodeJwtToken(token){
+function decodeJwtToken(token) {
     if (!token || typeof token !== 'string') throw new Error('No token provided');
     const parts = token.split('.');
     if (parts.length !== 3) throw new Error('Invalid JWT format');
@@ -1585,16 +1599,16 @@ function decodeJwtToken(token){
     const header = safeJsonParse(headerStr);
     const payload = safeJsonParse(payloadStr);
     const signature = s || '';
-    return { header, payload, signature, raw: { header:h, payload:p, signature:s } };
+    return { header, payload, signature, raw: { header: h, payload: p, signature: s } };
 }
 
-function tsToLocal(tsSec){
+function tsToLocal(tsSec) {
     if (typeof tsSec !== 'number') return 'n/a';
-    try { return new Date(tsSec * 1000).toLocaleString(); } catch(e){ return String(tsSec); }
+    try { return new Date(tsSec * 1000).toLocaleString(); } catch (e) { return String(tsSec); }
 }
 
-function computeTimeValidity(payload){
-    const nowSec = Math.floor(Date.now()/1000);
+function computeTimeValidity(payload) {
+    const nowSec = Math.floor(Date.now() / 1000);
     const exp = typeof payload.exp === 'number' ? payload.exp : null;
     const nbf = typeof payload.nbf === 'number' ? payload.nbf : null;
     const iat = typeof payload.iat === 'number' ? payload.iat : null;
@@ -1605,14 +1619,14 @@ function computeTimeValidity(payload){
     return { nowSec, exp, nbf, iat, status };
 }
 
-function renderJwtResult(decoded){
+function renderJwtResult(decoded) {
     const time = computeTimeValidity(decoded.payload || {});
     const claims = decoded.payload || {};
     const keys = Object.keys(claims).sort();
     const claimRows = keys.map(k => `<tr><td class="jwt-claim-key">${escapeHtml(k)}</td><td class="jwt-claim-value"><code>${escapeHtml(String(claims[k]))}</code></td></tr>`).join('');
     const hasSig = (decoded.signature || '').length > 0;
     const statusColor = time.status === 'Expired' ? '#ef4444' : (time.status === 'Valid by time' ? '#10b981' : '#f59e0b');
-    
+
     return [
         '<div class="jwt-result-container">',
         '<div class="user-action-hint" style="margin-bottom:1rem">Client-side decoding only. Signature verification is not performed here.</div>',
@@ -1649,7 +1663,7 @@ function showJwtInspectorDialog() {
     }
 
     const createUserActionDialog = window.createUserActionDialog;
-    const showDialogError = window.showDialogError || function(errorEl, message) {
+    const showDialogError = window.showDialogError || function (errorEl, message) {
         if (!errorEl) return;
         errorEl.textContent = message || 'Error';
         errorEl.classList.add('show');
@@ -1663,10 +1677,10 @@ function showJwtInspectorDialog() {
         bodyHtml: `
             <div class="user-action-field">
                 <label class="user-action-label" for="jwt-input">JWT Token</label>
-                <textarea 
-                    id="jwt-input" 
-                    class="user-action-input" 
-                    rows="5" 
+                <textarea
+                    id="jwt-input"
+                    class="user-action-input"
+                    rows="5"
                     placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIiwiZXhwIjoxNzAwMDAwMDAwfQ.signature"
                     style="resize: vertical; min-height: 100px; font-family: 'JetBrains Mono', monospace;"
                 ></textarea>
@@ -1751,26 +1765,26 @@ function showJwtInspectorDialog() {
 
 
 // ================= Reports (Usage Analytics) =================
-(function(){
+(function () {
     // Enhanced ReportsState object to manage users data, time range, and loading states
     const ReportsState = {
         // Data
         users: [],              // All user data
         filteredUsers: [],      // Users within selected time range
-        
+
         // Time range
         timeRange: '30',        // Selected time range in days (default: 30)
         customStart: null,      // Custom range start date
         customEnd: null,        // Custom range end date
-        
+
         // UI state
         lastUpdated: null,      // Timestamp of last data fetch
         isLoading: false,       // Loading state
         error: null,            // Error message if any
-        
+
         // Charts - now handled by reports-charts.js module using ECharts
         initialized: false,     // Initialization flag
-        
+
         // Performance optimization
         cacheExpiry: 5 * 60 * 1000,  // Cache duration: 5 minutes in milliseconds
         debounceTimer: null     // Timer for debouncing time range changes
@@ -1797,12 +1811,12 @@ function showJwtInspectorDialog() {
                 ReportsState.filteredUsers = [];
                 return;
             }
-            
+
             // Handle custom date range
             if (ReportsState.timeRange === 'custom' && ReportsState.customStart && ReportsState.customEnd) {
                 const start = parseDateSafe(ReportsState.customStart);
                 const end = parseDateSafe(ReportsState.customEnd);
-                
+
                 if (start && end) {
                     ReportsState.filteredUsers = ReportsState.users.filter(user => {
                         const createdAt = parseDateSafe(user.createdAt);
@@ -1813,7 +1827,7 @@ function showJwtInspectorDialog() {
                 }
                 return;
             }
-            
+
             // Handle preset time ranges
             const days = parseInt(ReportsState.timeRange, 10) || 30;
             const cutoff = new Date();
@@ -1847,39 +1861,39 @@ function showJwtInspectorDialog() {
             ReportsState.customStart = startDate;
             ReportsState.customEnd = endDate;
             ReportsState.timeRange = 'custom';
-            
+
             // Filter users by custom range
             const start = parseDateSafe(startDate);
             const end = parseDateSafe(endDate);
-            
+
             // Validate date range
             if (!start || !end) {
                 this.setError('Invalid date format. Please select valid dates.');
                 return false;
             }
-            
+
             if (start > end) {
                 this.setError('End date must be after start date.');
                 return false;
             }
-            
+
             // Check if date range is too far in the future
             const now = new Date();
             if (start > now) {
                 this.setError('Start date cannot be in the future.');
                 return false;
             }
-            
+
             // Clear any previous errors
             this.clearError();
-            
+
             if (start && end) {
                 ReportsState.filteredUsers = ReportsState.users.filter(user => {
                     const createdAt = parseDateSafe(user.createdAt);
                     return createdAt && createdAt >= start && createdAt <= endOfDay(end);
                 });
             }
-            
+
             return true;
         },
 
@@ -1944,43 +1958,43 @@ function showJwtInspectorDialog() {
     // Legacy state reference removed - use ReportsState directly
 
     // Use common utilities from admin-utils.js
-    const q = window.q || function(id) { return document.getElementById(id); };
-    const cssVar = window.AdminUtils?.cssVar || function(name) {
-        try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch(_) { return ''; }
+    const q = window.q || function (id) { return document.getElementById(id); };
+    const cssVar = window.AdminUtils?.cssVar || function (name) {
+        try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (_) { return ''; }
     };
-    const parseDateSafe = window.AdminUtils?.parseDateSafe || function(v) {
+    const parseDateSafe = window.AdminUtils?.parseDateSafe || function (v) {
         try {
             const d = new Date(v);
             return isNaN(d.getTime()) ? null : d;
-        } catch(_) { return null; }
+        } catch (_) { return null; }
     };
-    const endOfDay = window.AdminUtils?.endOfDay || function(d) {
+    const endOfDay = window.AdminUtils?.endOfDay || function (d) {
         const nd = new Date(d);
         nd.setHours(23, 59, 59, 999);
         return nd;
     };
 
-    function getRangeDays(){
+    function getRangeDays() {
         const sel = q('reports-range');
         const n = sel ? parseInt(sel.value, 10) : 30;
         return isNaN(n) ? 30 : n;
     }
 
-    function buildEmptySeries(days){
+    function buildEmptySeries(days) {
         const labels = [];
         const data = [];
         const now = new Date();
         for (let i = days - 1; i >= 0; i--) {
             const d = new Date(now);
             d.setDate(d.getDate() - i);
-            const key = d.toISOString().slice(0,10);
+            const key = d.toISOString().slice(0, 10);
             labels.push(key);
             data.push(0);
         }
         return { labels, data };
     }
 
-    function aggregateDaily(users, days){
+    function aggregateDaily(users, days) {
         const series = buildEmptySeries(days);
         const byKey = Object.create(null);
         series.labels.forEach((k, idx) => { byKey[k] = idx; });
@@ -1990,7 +2004,7 @@ function showJwtInspectorDialog() {
             const d = parseDateSafe(u.createdAt);
             if (!d) return;
             if (d < new Date(cutoff.toDateString())) return;
-            const key = d.toISOString().slice(0,10);
+            const key = d.toISOString().slice(0, 10);
             const idx = byKey[key];
             if (typeof idx === 'number') series.data[idx]++;
         });
@@ -1998,7 +2012,7 @@ function showJwtInspectorDialog() {
     }
 
     // ================= KPI Calculation Functions =================
-    
+
     /**
      * Count users created within the specified time range
      * @param {Array} users - Array of all users
@@ -2007,11 +2021,11 @@ function showJwtInspectorDialog() {
      */
     function countUsersInRange(users, days) {
         if (!Array.isArray(users) || users.length === 0) return 0;
-        
+
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - days);
         cutoff.setHours(0, 0, 0, 0);
-        
+
         return users.filter(user => {
             const createdAt = parseDateSafe(user.createdAt);
             return createdAt && createdAt >= cutoff;
@@ -2025,10 +2039,10 @@ function showJwtInspectorDialog() {
      */
     function calculateActiveRate(users) {
         if (!Array.isArray(users) || users.length === 0) return '0%';
-        
+
         const activeCount = users.filter(u => u.isActive === true).length;
         const rate = Math.round((activeCount / users.length) * 100);
-        
+
         return rate + '%';
     }
 
@@ -2040,40 +2054,40 @@ function showJwtInspectorDialog() {
      */
     function calculateGrowthRate(allUsers, days) {
         if (!Array.isArray(allUsers) || allUsers.length === 0) return '0%';
-        
+
         const now = new Date();
-        
+
         // Current period cutoff
         const currentCutoff = new Date(now);
         currentCutoff.setDate(currentCutoff.getDate() - days);
         currentCutoff.setHours(0, 0, 0, 0);
-        
+
         // Previous period cutoff (same duration, but earlier)
         const previousCutoff = new Date(currentCutoff);
         previousCutoff.setDate(previousCutoff.getDate() - days);
         previousCutoff.setHours(0, 0, 0, 0);
-        
+
         // Count users in current period
         const currentCount = allUsers.filter(user => {
             const createdAt = parseDateSafe(user.createdAt);
             return createdAt && createdAt >= currentCutoff && createdAt < now;
         }).length;
-        
+
         // Count users in previous period
         const previousCount = allUsers.filter(user => {
             const createdAt = parseDateSafe(user.createdAt);
             return createdAt && createdAt >= previousCutoff && createdAt < currentCutoff;
         }).length;
-        
+
         // Calculate growth rate
         if (previousCount === 0) {
             // If no users in previous period, show current count as growth
             return currentCount > 0 ? '+100%' : '0%';
         }
-        
+
         const growthRate = Math.round(((currentCount - previousCount) / previousCount) * 100);
         const sign = growthRate > 0 ? '+' : '';
-        
+
         return sign + growthRate + '%';
     }
 
@@ -2086,24 +2100,24 @@ function showJwtInspectorDialog() {
      */
     function calculateRetentionRate(allUsers, days) {
         if (!Array.isArray(allUsers) || allUsers.length === 0) return '0%';
-        
+
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - days);
         cutoff.setHours(0, 0, 0, 0);
-        
+
         // Users created before the period (existing users at start of period)
         const existingUsers = allUsers.filter(user => {
             const createdAt = parseDateSafe(user.createdAt);
             return createdAt && createdAt < cutoff;
         });
-        
+
         if (existingUsers.length === 0) return '0%';
-        
+
         // Count how many of those existing users are still active
         const retainedUsers = existingUsers.filter(u => u.isActive === true).length;
-        
+
         const retentionRate = Math.round((retainedUsers / existingUsers.length) * 100);
-        
+
         return retentionRate + '%';
     }
 
@@ -2120,26 +2134,26 @@ function showJwtInspectorDialog() {
         const activeRate = calculateActiveRate(allUsers);
         const growthRate = calculateGrowthRate(allUsers, days);
         const retentionRate = calculateRetentionRate(allUsers, days);
-        
+
         // Additional metrics
-        const premiumUsers = Array.isArray(allUsers) 
-            ? allUsers.filter(u => u.isPremium === true).length 
+        const premiumUsers = Array.isArray(allUsers)
+            ? allUsers.filter(u => u.isPremium === true).length
             : 0;
-        
+
         const adminUsers = Array.isArray(allUsers)
             ? allUsers.filter(u => (u.role || '').toUpperCase() === 'ADMIN').length
             : 0;
-        
+
         const moderators = Array.isArray(allUsers)
             ? allUsers.filter(u => (u.role || '').toUpperCase() === 'MODERATOR').length
             : 0;
-        
+
         const activeUsers = Array.isArray(allUsers)
             ? allUsers.filter(u => u.isActive === true).length
             : 0;
-        
+
         const inactiveUsers = totalUsers - activeUsers;
-        
+
         return {
             totalUsers,
             newUsers,
@@ -2162,16 +2176,16 @@ function showJwtInspectorDialog() {
      * @param {number|string} days - Number of days or time range identifier
      * @param {Object} series - Chart series data with labels and data arrays
      */
-    function updateKpis(users, days, series){
+    function updateKpis(users, days, series) {
         try {
             // Validate series data if provided
             if (series && (!series.labels || !series.data || !Array.isArray(series.labels) || !Array.isArray(series.data))) {
                 console.warn('Invalid series data provided to updateKpis:', series);
             }
-            
+
             // Use the comprehensive calculateKPIs function
             const kpis = calculateKPIs(ReportsState.users, users, days);
-            
+
             // Update DOM elements with calculated KPIs
             const elTotal = q('kpi-total-users');
             const elNew = q('kpi-new-users');
@@ -2180,7 +2194,7 @@ function showJwtInspectorDialog() {
             const elPre = q('kpi-premium');
             const elGrowth = q('kpi-growth-rate');
             const elRetention = q('kpi-retention-rate');
-            
+
             // Update all KPI elements with proper null checks
             if (elTotal) elTotal.textContent = String(kpis.totalUsers || 0);
             if (elNew) elNew.textContent = String(kpis.newUsers || 0);
@@ -2189,7 +2203,7 @@ function showJwtInspectorDialog() {
             if (elPre) elPre.textContent = String(kpis.premiumUsers || 0);
             if (elGrowth) elGrowth.textContent = kpis.growthRate || '0%';
             if (elRetention) elRetention.textContent = kpis.retentionRate || '0%';
-            
+
             // Apply tickColor to KPI card subtitles for consistent theming
             const tickColorValue = tickColor();
             const subtitleEl = q('kpi-new-users-subtitle');
@@ -2204,19 +2218,19 @@ function showJwtInspectorDialog() {
                     subtitle.style.color = tickColorValue;
                 }
             });
-            
+
             // Log series data for debugging if available
             if (series && series.data && Array.isArray(series.data)) {
                 const totalInSeries = series.data.reduce((sum, val) => sum + (val || 0), 0);
                 if (totalInSeries > 0) {
                     console.log('KPIs updated:', kpis, `Series total: ${totalInSeries} registrations`);
                 } else {
-            console.log('KPIs updated:', kpis);
+                    console.log('KPIs updated:', kpis);
                 }
             } else {
                 console.log('KPIs updated:', kpis);
             }
-        } catch(e) { 
+        } catch (e) {
             console.error('Failed to update KPIs', e);
             // Set fallback values on error
             const elTotal = q('kpi-total-users');
@@ -2235,7 +2249,7 @@ function showJwtInspectorDialog() {
     }
 
     // Removed unused functions: lineColor, gridColor - chart rendering now handled by reports-charts.js
-    function tickColor(){ return (cssVar('--text-secondary') || '#9ca3af'); }
+    function tickColor() { return (cssVar('--text-secondary') || '#9ca3af'); }
 
     // Chart destruction is now handled by reports-charts.js module using ECharts
 
@@ -2249,12 +2263,12 @@ function showJwtInspectorDialog() {
      */
     function showErrorBanner(message, showRetry) {
         const errorBanner = q('reports-error-banner');
-        
+
         if (errorBanner) {
-            const retryButton = showRetry ? 
-                '<button id="reports-error-retry-btn" class="btn btn-secondary" style="margin-left: 1rem;">Retry</button>' : 
+            const retryButton = showRetry ?
+                '<button id="reports-error-retry-btn" class="btn btn-secondary" style="margin-left: 1rem;">Retry</button>' :
                 '';
-            
+
             errorBanner.innerHTML = `
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: var(--error-bg, #fee); border: 1px solid var(--error-border, #fcc); border-radius: 8px; margin-bottom: 1rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -2270,24 +2284,24 @@ function showJwtInspectorDialog() {
                     </div>
                 </div>
             `;
-            
+
             errorBanner.style.display = 'block';
-            
+
             // Bind dismiss button
             setTimeout(() => {
                 const dismissBtn = q('reports-error-dismiss-btn');
                 if (dismissBtn) {
-                    dismissBtn.addEventListener('click', function() {
+                    dismissBtn.addEventListener('click', function () {
                         hideErrorBanner();
                         ReportsStateManager.clearError();
                     });
                 }
-                
+
                 // Bind retry button if shown
                 if (showRetry) {
                     const retryBtn = q('reports-error-retry-btn');
                     if (retryBtn) {
-                        retryBtn.addEventListener('click', function() {
+                        retryBtn.addEventListener('click', function () {
                             hideErrorBanner();
                             refreshReports();
                         });
@@ -2320,7 +2334,7 @@ function showJwtInspectorDialog() {
         } catch (e) {
             console.warn('Failed to show validation error toast:', e);
         }
-        
+
         // Also show in error banner
         showErrorBanner(message, false);
     }
@@ -2334,12 +2348,12 @@ function showJwtInspectorDialog() {
         const empty = q('reports-empty');
         const chartsContainer = q('reports-charts-container');
         const kpisContainer = q('reports-kpis-container');
-        
+
         if (empty) {
             empty.textContent = message;
             empty.classList.remove('hidden');
             empty.classList.add('visible');
-            
+
             // Add icon based on type
             if (type === 'no-data' && empty) {
                 empty.innerHTML = `
@@ -2358,12 +2372,12 @@ function showJwtInspectorDialog() {
                         <button id="reports-clear-filter-btn" class="btn btn-primary" style="margin-top: 1rem;">Clear Filters</button>
                     </div>
                 `;
-                
+
                 // Bind clear filter button
                 setTimeout(() => {
                     const clearBtn = q('reports-clear-filter-btn');
                     if (clearBtn) {
-                        clearBtn.addEventListener('click', function() {
+                        clearBtn.addEventListener('click', function () {
                             const rangeSelect = q('reports-range');
                             if (rangeSelect) {
                                 rangeSelect.value = '30';
@@ -2375,7 +2389,7 @@ function showJwtInspectorDialog() {
                 }, 0);
             }
         }
-        
+
         // Hide charts and KPIs when showing empty state
         if (chartsContainer) chartsContainer.style.display = 'none';
         if (kpisContainer) kpisContainer.style.display = 'none';
@@ -2388,18 +2402,18 @@ function showJwtInspectorDialog() {
         const empty = q('reports-empty');
         const chartsContainer = q('reports-charts-container');
         const kpisContainer = q('reports-kpis-container');
-        
+
         if (empty) {
             empty.classList.add('hidden');
             empty.classList.remove('visible');
         }
-        
+
         // Show charts and KPIs when hiding empty state
         if (chartsContainer) chartsContainer.style.display = 'block';
         if (kpisContainer) kpisContainer.style.display = 'grid';
     }
 
-    function render(){
+    function render() {
         // Show loading state if data is being fetched
         if (ReportsState.isLoading) {
             const empty = q('reports-empty');
@@ -2410,9 +2424,9 @@ function showJwtInspectorDialog() {
             }
             return;
         }
-        
+
         const days = getRangeDays();
-        
+
         // Check for errors first - differentiate between API errors and no data
         if (ReportsState.error) {
             // API error - show error banner with retry option
@@ -2432,12 +2446,12 @@ function showJwtInspectorDialog() {
                     `;
                     empty.classList.remove('hidden');
                     empty.classList.add('visible');
-                    
+
                     // Bind retry button
                     setTimeout(() => {
                         const retryBtn = q('reports-error-retry-btn');
                         if (retryBtn) {
-                            retryBtn.addEventListener('click', function() {
+                            retryBtn.addEventListener('click', function () {
                                 refreshReports();
                             });
                         }
@@ -2448,33 +2462,33 @@ function showJwtInspectorDialog() {
         } else {
             hideErrorBanner();
         }
-        
+
         // Check for empty states - differentiate between no data vs no results in range
         if (!ReportsState.users || ReportsState.users.length === 0) {
             // No users exist at all - this is a valid "no data" state, not an error
             showEmptyState('No users have been registered yet. Users will appear here once they sign up.', 'no-data');
             return;
         }
-        
+
         // Ensure filteredUsers is up to date
         ReportsStateManager.updateFilteredUsers();
-        
+
         if (!ReportsState.filteredUsers || ReportsState.filteredUsers.length === 0) {
             // No users in the selected time range - this is a valid "no results" state
             const rangeText = days === 'custom' ? 'the selected date range' : `the last ${days} days`;
             showEmptyState(`No users found in ${rangeText}. Try selecting a different time range.`, 'no-results');
             return;
         }
-        
+
         // Hide empty state and show data
         hideEmptyState();
-        
+
         // Generate chart data (for KPI calculations)
         const series = aggregateDaily(ReportsState.filteredUsers, days);
-        
+
         // Update KPIs with all users (for total counts) and filtered users (for period-specific metrics)
         updateKpis(ReportsState.filteredUsers, days, series);
-        
+
         // Render sales chart using ECharts module
         if (window.ReportsChartsModule && typeof window.ReportsChartsModule.loadSalesChart === 'function') {
             try {
@@ -2503,7 +2517,7 @@ function showJwtInspectorDialog() {
         if (!window.UserRoute || typeof window.UserRoute.listUsers !== 'function') {
             return Promise.reject(new Error('Users API unavailable'));
         }
-        
+
         // Check if we have cached data that's still valid (within 5 minutes)
         if (!forceRefresh && ReportsState.users.length > 0 && ReportsState.lastUpdated) {
             const cacheAge = Date.now() - ReportsState.lastUpdated;
@@ -2514,25 +2528,25 @@ function showJwtInspectorDialog() {
                 console.log(`Cache expired (age: ${Math.round(cacheAge / 1000)}s), fetching fresh data`);
             }
         }
-        
+
         ReportsStateManager.setLoading(true);
         ReportsStateManager.clearError();
-        
+
         try {
             let allUsers = [];
             let page = 1;
             let hasMore = true;
             const pageSize = 100; // Fetch 100 users per page
-            
+
             // Loop through all pages to fetch all users
             while (hasMore) {
                 try {
                     const { users, pagination } = await window.UserRoute.listUsers(page, pageSize);
-                    
+
                     if (Array.isArray(users) && users.length > 0) {
                         allUsers = allUsers.concat(users);
                     }
-                    
+
                     // Check if there are more pages
                     if (pagination && pagination.totalPages) {
                         hasMore = page < pagination.totalPages;
@@ -2541,7 +2555,7 @@ function showJwtInspectorDialog() {
                         // If no pagination info or no more users, stop
                         hasMore = false;
                     }
-                    
+
                     // Safety check: prevent infinite loops
                     if (page > 1000) {
                         console.warn('Reached maximum page limit (1000), stopping pagination');
@@ -2553,26 +2567,26 @@ function showJwtInspectorDialog() {
                     hasMore = false;
                 }
             }
-            
+
             // Store fetched data in ReportsState
             ReportsStateManager.setUsers(allUsers);
             ReportsStateManager.setLoading(false);
-            
+
             console.log(`Fetched ${allUsers.length} users across ${page - 1} pages`);
             return allUsers;
-            
+
         } catch (error) {
             ReportsStateManager.setLoading(false);
             const errorMessage = error.message || 'Failed to load users';
             ReportsStateManager.setError(errorMessage);
-            
+
             // Display error message to user
             try {
                 showMessage('error', errorMessage);
             } catch (e) {
                 console.warn('Failed to show error toast:', e);
             }
-            
+
             throw error;
         }
     }
@@ -2600,7 +2614,7 @@ function showJwtInspectorDialog() {
         if (ReportsState.debounceTimer) {
             clearTimeout(ReportsState.debounceTimer);
         }
-        
+
         // Set new timer
         ReportsState.debounceTimer = setTimeout(() => {
             render();
@@ -2614,21 +2628,21 @@ function showJwtInspectorDialog() {
      * Restores time range on page reload
      * Debounces time range changes by 300ms to avoid excessive re-renders
      */
-    function bindRange(){
+    function bindRange() {
         const sel = q('reports-range');
         if (sel && !sel.dataset.bound) {
-            sel.addEventListener('change', function() {
+            sel.addEventListener('change', function () {
                 const days = sel.value;
-                
+
                 // Clear any previous errors
                 ReportsStateManager.clearError();
                 hideErrorBanner();
-                
+
                 if (days === 'custom') {
                     // Show custom date range inputs
                     const customDateRange = q('custom-date-range');
                     if (customDateRange) customDateRange.style.display = 'flex';
-                    
+
                     // Show custom date inputs if they exist
                     const customInputs = q('reports-custom-dates');
                     if (customInputs) customInputs.style.display = 'block';
@@ -2636,45 +2650,45 @@ function showJwtInspectorDialog() {
                     // Hide custom date inputs
                     const customDateRange = q('custom-date-range');
                     if (customDateRange) customDateRange.style.display = 'none';
-                    
+
                     const customInputs = q('reports-custom-dates');
                     if (customInputs) customInputs.style.display = 'none';
-                    
+
                     // Apply preset time range
                     ReportsStateManager.setTimeRange(days);
-                    
+
                     // Persist to sessionStorage
                     persistTimeRange();
-                    
+
                     // Use debounced render to avoid excessive re-renders
                     debouncedRender();
                 }
             });
             sel.dataset.bound = 'true';
         }
-        
+
         // Bind custom date range inputs
         const startInput = q('reports-start-date');
         const endInput = q('reports-end-date');
         const applyBtn = q('apply-custom-range');
-        
+
         if (applyBtn && !applyBtn.dataset.bound) {
-            applyBtn.addEventListener('click', function() {
+            applyBtn.addEventListener('click', function () {
                 const startDate = startInput ? startInput.value : '';
                 const endDate = endInput ? endInput.value : '';
-                
+
                 if (!startDate || !endDate) {
                     showValidationError('Please select both start and end dates.');
                     return;
                 }
-                
+
                 // Validate and apply custom range
                 const isValid = ReportsStateManager.setCustomRange(startDate, endDate);
-                
+
                 if (isValid) {
                     // Persist to sessionStorage
                     persistTimeRange();
-                    
+
                     // Use debounced render to avoid excessive re-renders
                     debouncedRender();
                 } else {
@@ -2691,7 +2705,7 @@ function showJwtInspectorDialog() {
      * Ensures charts adapt to light/dark mode transitions
      * Uses CSS variables for consistent theming across dashboard
      */
-    function bindThemeReactivity(){
+    function bindThemeReactivity() {
         // Theme reactivity is now handled by reports-charts.js module
         // Charts automatically update when theme changes via MutationObserver
     }
@@ -2717,17 +2731,17 @@ function showJwtInspectorDialog() {
             const users = ReportsState.users || [];
             const filteredUsers = ReportsState.filteredUsers || [];
             const days = getRangeDays();
-            
+
             // Calculate KPIs
             const kpis = calculateKPIs(users, filteredUsers, days);
-            
+
             // CSV Header
             const lines = [];
             lines.push('# Analytics & Reports Export');
             lines.push(`# Generated: ${new Date().toLocaleString()}`);
             lines.push(`# Time Range: ${days === 'custom' ? 'Custom' : 'Last ' + days + ' days'}`);
             lines.push('');
-            
+
             // KPI Summary Section
             lines.push('## Key Performance Indicators');
             lines.push('Metric,Value');
@@ -2740,11 +2754,11 @@ function showJwtInspectorDialog() {
             lines.push(`Growth Rate,${kpis.growthRate}`);
             lines.push(`Retention Rate,${kpis.retentionRate}`);
             lines.push('');
-            
+
             // User Details Section
             lines.push('## User Details');
             lines.push('Email,Role,Status,Premium,Created At');
-            
+
             // Add all users to CSV
             users.forEach(user => {
                 const email = escapeCSV(user.email || '');
@@ -2752,10 +2766,10 @@ function showJwtInspectorDialog() {
                 const status = user.isActive ? 'Active' : 'Inactive';
                 const premium = user.isPremium ? 'Yes' : 'No';
                 const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleString() : 'N/A';
-                
+
                 lines.push(`${email},${role},${status},${premium},${createdAt}`);
             });
-            
+
             return lines.join('\n');
         } catch (error) {
             console.error('Error generating CSV:', error);
@@ -2770,14 +2784,14 @@ function showJwtInspectorDialog() {
      */
     function escapeCSV(value) {
         if (value == null) return '';
-        
+
         const str = String(value);
-        
+
         // If value contains comma, quote, or newline, wrap in quotes and escape quotes
         if (str.includes(',') || str.includes('"') || str.includes('\n')) {
             return '"' + str.replace(/"/g, '""') + '"';
         }
-        
+
         return str;
     }
 
@@ -2789,48 +2803,48 @@ function showJwtInspectorDialog() {
         try {
             // Generate CSV content
             const csvContent = generateReportCSV();
-            
+
             // Create blob
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            
+
             // Create download link
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
-            
+
             // Generate filename with timestamp
             const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
             const filename = `analytics-report-${timestamp}.csv`;
-            
+
             link.setAttribute('href', url);
             link.setAttribute('download', filename);
             link.style.visibility = 'hidden';
-            
+
             // Trigger download
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
+
             // Clean up
             URL.revokeObjectURL(url);
-            
+
             // Show success notification
             try {
                 showMessage('success', 'Report exported successfully');
             } catch (e) {
                 console.warn('Failed to show success toast:', e);
             }
-            
+
             return true;
         } catch (error) {
             console.error('Error exporting CSV:', error);
-            
+
             // Show error notification
             try {
                 showMessage('error', 'Failed to export report');
             } catch (e) {
                 console.warn('Failed to show error toast:', e);
             }
-            
+
             return false;
         }
     }
@@ -2841,7 +2855,7 @@ function showJwtInspectorDialog() {
     function bindExportButton() {
         const exportBtn = q('reports-export-btn');
         if (exportBtn && !exportBtn.dataset.bound) {
-            exportBtn.addEventListener('click', function() {
+            exportBtn.addEventListener('click', function () {
                 // Check if data is available
                 if (!ReportsState.users || ReportsState.users.length === 0) {
                     try {
@@ -2851,7 +2865,7 @@ function showJwtInspectorDialog() {
                     }
                     return;
                 }
-                
+
                 // Export to CSV
                 exportReportToCSV();
             });
@@ -2871,21 +2885,21 @@ function showJwtInspectorDialog() {
                 // Use lastUpdated from state, or current time if not set
                 const timestamp = ReportsState.lastUpdated || Date.now();
                 const date = new Date(timestamp);
-                
+
                 // Validate date
                 if (isNaN(date.getTime())) {
                     timestampEl.textContent = 'Last updated: Never';
                     return;
                 }
-                
-                const timeStr = date.toLocaleTimeString(undefined, { 
-                    hour: '2-digit', 
+
+                const timeStr = date.toLocaleTimeString(undefined, {
+                    hour: '2-digit',
                     minute: '2-digit',
                     hour12: true
                 });
-                const dateStr = date.toLocaleDateString(undefined, { 
-                    month: 'short', 
-                    day: 'numeric' 
+                const dateStr = date.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric'
                 });
                 timestampEl.textContent = `Last updated: ${dateStr} ${timeStr}`;
             } catch (e) {
@@ -2903,18 +2917,18 @@ function showJwtInspectorDialog() {
     function refreshReports() {
         const refreshBtn = q('reports-refresh-btn');
         const refreshSpinner = q('reports-refresh-spinner');
-        
+
         // Show loading indicator
         if (refreshBtn) refreshBtn.disabled = true;
         if (refreshSpinner) refreshSpinner.style.display = 'inline-block';
-        
+
         // Set loading state
         ReportsStateManager.setLoading(true);
-        
+
         // Clear error state
         ReportsStateManager.clearError();
         hideErrorBanner();
-        
+
         // Show loading message
         const empty = q('reports-empty');
         if (empty) {
@@ -2922,17 +2936,17 @@ function showJwtInspectorDialog() {
             empty.classList.remove('hidden');
             empty.classList.add('visible');
         }
-        
+
         // Re-fetch all users with forceRefresh=true to bypass cache
         fetchAllUsers(true)
             .then(() => {
                 // Update timestamp immediately after successful fetch
                 ReportsStateManager.setUsers(ReportsState.users); // This updates lastUpdated
                 updateLastUpdatedTimestamp();
-                
+
                 // Re-render the reports
                 render();
-                
+
                 // Show success notification
                 try {
                     showMessage('success', 'Reports refreshed successfully');
@@ -2942,13 +2956,13 @@ function showJwtInspectorDialog() {
             })
             .catch(err => {
                 console.error('Failed to refresh reports:', err);
-                
+
                 // Update timestamp even on error (to show when last attempt was made)
                 updateLastUpdatedTimestamp();
-                
+
                 // Re-render to show error state
                 render();
-                
+
                 // Show error notification
                 try {
                     showMessage('error', ReportsState.error || 'Failed to refresh reports');
@@ -2975,38 +2989,38 @@ function showJwtInspectorDialog() {
         }
     }
 
-    function ensureInitialized(){
+    function ensureInitialized() {
         if (ReportsState.initialized) return;
         const panel = document.getElementById('reports');
         if (!panel) return;
-        
+
         // Show loader message in empty div while fetching
         const empty = q('reports-empty');
-        if (empty) { 
-            empty.textContent = 'Loading report…'; 
-            empty.classList.remove('hidden'); 
-            empty.classList.add('visible'); 
+        if (empty) {
+            empty.textContent = 'Loading report…';
+            empty.classList.remove('hidden');
+            empty.classList.add('visible');
         }
-        
+
         fetchUsers()
-            .then(() => { 
-                bindRange(); 
-                bindThemeReactivity(); 
-                bindExportButton(); 
-                bindRefreshButton(); 
+            .then(() => {
+                bindRange();
+                bindThemeReactivity();
+                bindExportButton();
+                bindRefreshButton();
                 bindResponsiveHandler();
-                render(); 
+                render();
                 updateLastUpdatedTimestamp();
-                ReportsState.initialized = true; 
+                ReportsState.initialized = true;
             })
-            .catch(err => { 
+            .catch(err => {
                 console.warn('Failed to initialize reports', err);
-                
+
                 // Display error message
-                if (empty) { 
-                    empty.textContent = ReportsState.error || 'Failed to load data'; 
+                if (empty) {
+                    empty.textContent = ReportsState.error || 'Failed to load data';
                 }
-                
+
                 // Show error toast
                 try {
                     showMessage('error', ReportsState.error || 'Failed to load report data');
@@ -3020,7 +3034,7 @@ function showJwtInspectorDialog() {
      * Inject responsive CSS styles for Reports tab
      * Ensures KPI grid adapts to mobile screens, charts are responsive and touch-friendly,
      * and time range selector adjusts for mobile
-     * 
+     *
      * STYLING CONSISTENCY:
      * - Uses existing CSS variables for colors (--card-bg, --card-border, --text-color, etc.)
      * - Matches card styles with other dashboard sections (border-radius, padding, shadows)
@@ -3032,15 +3046,15 @@ function showJwtInspectorDialog() {
         if (document.getElementById('reports-responsive-styles')) {
             return;
         }
-        
+
         const style = document.createElement('style');
         style.id = 'reports-responsive-styles';
         style.textContent = `
-            /* Reports Responsive Styles 
+            /* Reports Responsive Styles
              * Note: All colors use CSS variables for theme compatibility
              * Matches existing dashboard card styles for consistency
              */
-            
+
             /* KPI Grid - Responsive adjustments */
             #reports-kpis-container {
                 display: grid;
@@ -3048,42 +3062,42 @@ function showJwtInspectorDialog() {
                 gap: 1rem;
                 margin-bottom: 2rem;
             }
-            
+
             @media (max-width: 768px) {
                 #reports-kpis-container {
                     grid-template-columns: repeat(2, 1fr);
                     gap: 0.75rem;
                 }
             }
-            
+
             @media (max-width: 480px) {
                 #reports-kpis-container {
                     grid-template-columns: 1fr;
                     gap: 0.5rem;
                 }
             }
-            
+
             /* KPI Cards - Mobile adjustments */
             .kpi-card {
                 padding: 1rem;
                 min-height: 100px;
             }
-            
+
             @media (max-width: 768px) {
                 .kpi-card {
                     padding: 0.75rem;
                     min-height: 80px;
                 }
-                
+
                 .kpi-card .kpi-value {
                     font-size: 1.5rem;
                 }
-                
+
                 .kpi-card .kpi-label {
                     font-size: 0.85rem;
                 }
             }
-            
+
             /* Charts - Responsive and touch-friendly */
             .chart-container {
                 position: relative;
@@ -3091,7 +3105,7 @@ function showJwtInspectorDialog() {
                 margin-bottom: 1.5rem;
                 touch-action: pan-y;
             }
-            
+
             #reports-chart,
             #reports-role-chart,
             #reports-active-chart {
@@ -3099,29 +3113,29 @@ function showJwtInspectorDialog() {
                 height: auto !important;
                 touch-action: manipulation;
             }
-            
+
             @media (max-width: 768px) {
                 .chart-container {
                     margin-bottom: 1rem;
                 }
-                
+
                 #reports-chart {
                     min-height: 200px;
                 }
-                
+
                 #reports-role-chart,
                 #reports-active-chart {
                     min-height: 250px;
                 }
             }
-            
+
             /* Charts Grid - Stack on mobile */
             #reports-charts-container {
                 display: grid;
                 grid-template-columns: 1fr;
                 gap: 1.5rem;
             }
-            
+
             @media (min-width: 769px) {
                 #reports-charts-container .charts-row {
                     display: grid;
@@ -3129,7 +3143,7 @@ function showJwtInspectorDialog() {
                     gap: 1.5rem;
                 }
             }
-            
+
             /* Time Range Selector - Mobile adjustments */
             .reports-controls {
                 display: flex;
@@ -3138,21 +3152,21 @@ function showJwtInspectorDialog() {
                 align-items: center;
                 margin-bottom: 1.5rem;
             }
-            
+
             @media (max-width: 768px) {
                 .reports-controls {
                     flex-direction: column;
                     align-items: stretch;
                     gap: 0.75rem;
                 }
-                
+
                 .reports-controls select,
                 .reports-controls input,
                 .reports-controls button {
                     width: 100%;
                 }
             }
-            
+
             /* Custom Date Range Inputs - Mobile */
             #reports-custom-dates {
                 display: flex;
@@ -3160,18 +3174,18 @@ function showJwtInspectorDialog() {
                 align-items: center;
                 flex-wrap: wrap;
             }
-            
+
             @media (max-width: 768px) {
                 #reports-custom-dates {
                     flex-direction: column;
                     width: 100%;
                 }
-                
+
                 #reports-custom-dates input {
                     width: 100%;
                 }
             }
-            
+
             /* Header Section - Mobile */
             .reports-header {
                 display: flex;
@@ -3181,63 +3195,63 @@ function showJwtInspectorDialog() {
                 flex-wrap: wrap;
                 gap: 1rem;
             }
-            
+
             @media (max-width: 768px) {
                 .reports-header {
                     flex-direction: column;
                     align-items: flex-start;
                 }
-                
+
                 .reports-header-actions {
                     width: 100%;
                     display: flex;
                     justify-content: space-between;
                 }
             }
-            
+
             /* Export Button - Mobile */
             #reports-export-btn {
                 min-width: 120px;
             }
-            
+
             @media (max-width: 480px) {
                 #reports-export-btn {
                     width: 100%;
                 }
             }
-            
+
             /* Error Banner - Mobile */
             #reports-error-banner {
                 margin-bottom: 1rem;
             }
-            
+
             @media (max-width: 768px) {
                 #reports-error-banner > div {
                     flex-direction: column;
                     align-items: flex-start !important;
                     gap: 0.75rem;
                 }
-                
+
                 #reports-error-banner button {
                     width: 100%;
                 }
             }
-            
+
             /* Empty State - Mobile */
             #reports-empty {
                 padding: 2rem 1rem;
             }
-            
+
             @media (max-width: 480px) {
                 #reports-empty {
                     padding: 1.5rem 0.75rem;
                 }
-                
+
                 #reports-empty > div {
                     font-size: 0.9rem;
                 }
             }
-            
+
             /* Touch-friendly buttons */
             @media (max-width: 768px) {
                 .btn {
@@ -3245,13 +3259,13 @@ function showJwtInspectorDialog() {
                     padding: 0.75rem 1rem;
                     font-size: 1rem;
                 }
-                
+
                 .pagination-button {
                     min-width: 44px;
                     min-height: 44px;
                 }
             }
-            
+
             /* Improve chart legend readability on mobile */
             @media (max-width: 768px) {
                 .chart-container canvas {
@@ -3259,7 +3273,7 @@ function showJwtInspectorDialog() {
                 }
             }
         `;
-        
+
         document.head.appendChild(style);
     }
 
@@ -3274,7 +3288,7 @@ function showJwtInspectorDialog() {
             console.log('Reports already initialized, skipping re-initialization');
             return;
         }
-        
+
         console.log('Initializing Reports tab...');
         ensureInitialized();
     }
@@ -3288,14 +3302,14 @@ function showJwtInspectorDialog() {
             const timeRange = ReportsState.timeRange;
             const customStart = ReportsState.customStart;
             const customEnd = ReportsState.customEnd;
-            
+
             const persistData = {
                 timeRange,
                 customStart,
                 customEnd,
                 timestamp: Date.now()
             };
-            
+
             sessionStorage.setItem('reports_time_range', JSON.stringify(persistData));
         } catch (e) {
             console.warn('Failed to persist time range:', e);
@@ -3309,40 +3323,40 @@ function showJwtInspectorDialog() {
         try {
             const stored = sessionStorage.getItem('reports_time_range');
             if (!stored) return;
-            
+
             const persistData = JSON.parse(stored);
-            
+
             // Check if data is not too old (max 24 hours)
             const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
             if (Date.now() - persistData.timestamp > maxAge) {
                 sessionStorage.removeItem('reports_time_range');
                 return;
             }
-            
+
             // Restore time range
             if (persistData.timeRange === 'custom' && persistData.customStart && persistData.customEnd) {
                 ReportsStateManager.setCustomRange(persistData.customStart, persistData.customEnd);
-                
+
                 // Update UI
                 const rangeSelect = q('reports-range');
                 if (rangeSelect) rangeSelect.value = 'custom';
-                
+
                 const startInput = q('reports-start-date');
                 const endInput = q('reports-end-date');
                 if (startInput) startInput.value = persistData.customStart;
                 if (endInput) endInput.value = persistData.customEnd;
-                
+
                 // Show custom date inputs
                 const customDateRange = q('custom-date-range');
                 if (customDateRange) customDateRange.style.display = 'flex';
             } else if (persistData.timeRange) {
                 ReportsStateManager.setTimeRange(persistData.timeRange);
-                
+
                 // Update UI
                 const rangeSelect = q('reports-range');
                 if (rangeSelect) rangeSelect.value = persistData.timeRange;
             }
-            
+
             console.log('Restored time range from session:', persistData);
         } catch (e) {
             console.warn('Failed to restore time range:', e);
@@ -3364,39 +3378,39 @@ function showJwtInspectorDialog() {
     }
 
     // Hook into admin init: click on Reports tab should trigger initialization
-    document.addEventListener('DOMContentLoaded', function(){
+    document.addEventListener('DOMContentLoaded', function () {
         try {
             // Inject responsive styles
             injectResponsiveStyles();
-            
+
             // Restore time range from session if available
             restoreTimeRange();
-            
+
             // Bind tab click for lazy loading
             const tab = document.querySelector('.tab[data-tab="reports"]');
             if (tab && !tab.dataset.reportsBound) {
-                tab.addEventListener('click', function() {
+                tab.addEventListener('click', function () {
                     // Initialize Reports tab when clicked (lazy loading)
                     initializeReportsTab();
                 });
                 tab.dataset.reportsBound = 'true';
             }
-            
+
             // If Reports tab is already active on page load, initialize immediately
             const panel = document.getElementById('reports');
             if (panel && panel.classList.contains('active')) {
                 initializeReportsTab();
             }
-            
+
             // Bind logout to clear session
             const logoutBtn = document.getElementById('logout-button');
             if (logoutBtn && !logoutBtn.dataset.reportsClearBound) {
                 logoutBtn.addEventListener('click', clearReportsSession);
                 logoutBtn.dataset.reportsClearBound = 'true';
             }
-        } catch(e) { console.warn('Reports binding failed', e); }
+        } catch (e) { console.warn('Reports binding failed', e); }
     });
-    
+
     // Expose functions for external use
     window.ReportsModule = {
         initialize: initializeReportsTab,
@@ -3408,29 +3422,29 @@ function showJwtInspectorDialog() {
 
 
 // ===== IAM Actions Menu (Users row overflow menu) =====
-function closeAllOverflowMenus(){
+function closeAllOverflowMenus() {
     try {
         document.querySelectorAll('.overflow-menu.open').forEach(menu => {
             menu.classList.remove('open');
             menu.style.display = 'none';
         });
-    } catch (_) {}
+    } catch (_) { }
 }
 
-function ensureGlobalMenuCloseHandler(){
+function ensureGlobalMenuCloseHandler() {
     if (window.__iamMenuCloseInstalled) return;
     try {
-        document.addEventListener('click', function(e){
+        document.addEventListener('click', function (e) {
             const target = e.target;
             if (!target) return closeAllOverflowMenus();
             if (!target.closest) return closeAllOverflowMenus();
             if (!target.closest('.actions-wrapper')) closeAllOverflowMenus();
         });
         window.__iamMenuCloseInstalled = true;
-    } catch (_) {}
+    } catch (_) { }
 }
 
-function createActionsCell(user){
+function createActionsCell(user) {
     const td = document.createElement('td');
     td.className = 'actions-cell';
 
@@ -3492,10 +3506,10 @@ function createActionsCell(user){
         color: 'var(--text-color)',
         cursor: 'pointer'
     });
-    item.addEventListener('mouseenter', function(){ this.style.background = 'var(--card-hover-bg)'; });
-    item.addEventListener('mouseleave', function(){ this.style.background = 'transparent'; });
+    item.addEventListener('mouseenter', function () { this.style.background = 'var(--card-hover-bg)'; });
+    item.addEventListener('mouseleave', function () { this.style.background = 'transparent'; });
 
-    item.addEventListener('click', function(e){
+    item.addEventListener('click', function (e) {
         e.stopPropagation();
         closeAllOverflowMenus();
         try {
@@ -3503,13 +3517,13 @@ function createActionsCell(user){
             showNotificationPanel(email);
         } catch (err) {
             console.error('Failed to open notification panel', err);
-            try { showErrorMessage('Failed to open notification dialog'); } catch(_){}
+            try { showErrorMessage('Failed to open notification dialog'); } catch (_) { }
         }
     });
 
     menu.appendChild(item);
 
-    btn.addEventListener('click', function(e){
+    btn.addEventListener('click', function (e) {
         e.stopPropagation();
 
         // Ripple feedback
@@ -3523,8 +3537,8 @@ function createActionsCell(user){
             ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
             ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
             btn.appendChild(ripple);
-            setTimeout(() => { try { ripple.remove(); } catch(_){} }, 650);
-        } catch(_) {}
+            setTimeout(() => { try { ripple.remove(); } catch (_) { } }, 650);
+        } catch (_) { }
 
         const isOpen = menu.classList.contains('open');
         closeAllOverflowMenus();
@@ -3546,7 +3560,7 @@ function createActionsCell(user){
                     menu.style.bottom = 'auto';
                     menu.style.top = '28px';
                 }
-            } catch(_) {}
+            } catch (_) { }
         } else {
             menu.style.display = 'none';
             menu.classList.remove('open');
@@ -3566,8 +3580,8 @@ function createActionsCell(user){
 
 // ===== Elegant Notification Panel =====
 function showNotificationPanel(email) {
-    try { email = String(email || ''); } catch(_) { email = ''; }
-    
+    try { email = String(email || ''); } catch (_) { email = ''; }
+
     // Remove existing panel/backdrop if any
     const existingPanel = document.getElementById('notification-panel');
     if (existingPanel) {
@@ -3577,12 +3591,12 @@ function showNotificationPanel(email) {
     if (existingBackdrop) {
         existingBackdrop.remove();
     }
-    
+
     // Create panel container
     const panel = document.createElement('div');
     panel.id = 'notification-panel';
     panel.className = 'notification-panel';
-    
+
     // Add styles
     if (!document.getElementById('notification-panel-styles')) {
         const style = document.createElement('style');
@@ -3782,7 +3796,7 @@ function showNotificationPanel(email) {
         `;
         document.head.appendChild(style);
     }
-    
+
     // Panel content
     panel.innerHTML = `
         <div class="notification-panel-header">
@@ -3809,10 +3823,10 @@ function showNotificationPanel(email) {
                     Title
                     <span class="required">*</span>
                 </label>
-                <input 
-                    type="text" 
-                    id="notif-panel-title" 
-                    class="notification-input" 
+                <input
+                    type="text"
+                    id="notif-panel-title"
+                    class="notification-input"
                     placeholder="Enter notification title"
                     autocomplete="off"
                     value="Special Promotion"
@@ -3823,9 +3837,9 @@ function showNotificationPanel(email) {
                     Message
                     <span class="required">*</span>
                 </label>
-                <textarea 
-                    id="notif-panel-body" 
-                    class="notification-input notification-textarea" 
+                <textarea
+                    id="notif-panel-body"
+                    class="notification-input notification-textarea"
                     placeholder="Write your message here..."
                 ></textarea>
             </div>
@@ -3840,9 +3854,9 @@ function showNotificationPanel(email) {
             </button>
         </div>
     `;
-    
+
     document.body.appendChild(panel);
-    
+
     // Add ripple effect function
     function addRipple(e) {
         const button = e.currentTarget;
@@ -3851,16 +3865,16 @@ function showNotificationPanel(email) {
         const size = Math.max(rect.width, rect.height);
         const x = e.clientX - rect.left - size / 2;
         const y = e.clientY - rect.top - size / 2;
-        
+
         ripple.style.width = ripple.style.height = size + 'px';
         ripple.style.left = x + 'px';
         ripple.style.top = y + 'px';
         ripple.className = 'ripple';
-        
+
         button.appendChild(ripple);
         setTimeout(() => ripple.remove(), 600);
     }
-    
+
     // Bind events
     const closeBtn = panel.querySelector('.notification-panel-close');
     const cancelBtn = document.getElementById('notif-panel-cancel');
@@ -3868,7 +3882,7 @@ function showNotificationPanel(email) {
     const titleInput = document.getElementById('notif-panel-title');
     const bodyInput = document.getElementById('notif-panel-body');
     const errorDiv = document.getElementById('notif-panel-error');
-    
+
     function closePanel() {
         const backdropEl = document.getElementById('notification-backdrop');
         if (backdropEl) {
@@ -3878,7 +3892,7 @@ function showNotificationPanel(email) {
         panel.classList.remove('active');
         setTimeout(() => panel.remove(), 300);
     }
-    
+
     function showError(msg) {
         if (errorDiv) {
             errorDiv.textContent = msg || 'An error occurred';
@@ -3886,62 +3900,62 @@ function showNotificationPanel(email) {
             errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     }
-    
+
     function clearError() {
         if (errorDiv) {
             errorDiv.textContent = '';
             errorDiv.classList.remove('show');
         }
     }
-    
+
     // Close handlers
     if (closeBtn) {
-        closeBtn.addEventListener('click', function(e) {
+        closeBtn.addEventListener('click', function (e) {
             addRipple(e);
             setTimeout(closePanel, 100);
         });
     }
-    
+
     if (cancelBtn) {
-        cancelBtn.addEventListener('click', function(e) {
+        cancelBtn.addEventListener('click', function (e) {
             addRipple(e);
             setTimeout(closePanel, 100);
         });
     }
-    
+
     // Send handler
     if (sendBtn) {
-        sendBtn.addEventListener('click', function(e) {
+        sendBtn.addEventListener('click', function (e) {
             addRipple(e);
             clearError();
-            
+
             const title = (titleInput && titleInput.value.trim()) || 'Special Promotion';
             const body = (bodyInput && bodyInput.value.trim()) || '';
-            
+
             // Validation
             if (title.length < 3) {
                 showError('Title must be at least 3 characters');
                 if (titleInput) titleInput.focus();
                 return;
             }
-            
+
             if (!body) {
                 showError('Message is required');
                 if (bodyInput) bodyInput.focus();
                 return;
             }
-            
+
             if (body.length < 10) {
                 showError('Message should be at least 10 characters');
                 if (bodyInput) bodyInput.focus();
                 return;
             }
-            
+
             // Disable and show loading
             sendBtn.disabled = true;
             const originalText = sendBtn.innerHTML;
             sendBtn.innerHTML = '<span>Sending...</span>';
-            
+
             // Send notification
             window.UserRoute.notify(email, { title, body })
                 .then(response => {
@@ -3956,7 +3970,7 @@ function showNotificationPanel(email) {
                     if (data && data.status === true) {
                         try {
                             showMessage('success', `Notification sent to ${escapeHtml(email)}`);
-                        } catch(_) {}
+                        } catch (_) { }
                         setTimeout(closePanel, 300);
                     } else {
                         throw new Error(data.message || 'Failed to send notification');
@@ -3969,34 +3983,34 @@ function showNotificationPanel(email) {
                 });
         });
     }
-    
+
     // Close on escape key
-    const escapeHandler = function(e) {
+    const escapeHandler = function (e) {
         if (e.key === 'Escape' && panel.classList.contains('active')) {
             closePanel();
             document.removeEventListener('keydown', escapeHandler);
         }
     };
     document.addEventListener('keydown', escapeHandler);
-    
+
     // Close on backdrop click
     const backdrop = document.createElement('div');
     backdrop.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.35); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 10000; opacity: 0; transition: opacity 0.3s ease;';
     backdrop.id = 'notification-backdrop';
     backdrop.addEventListener('click', closePanel);
     document.body.appendChild(backdrop);
-    
+
     // Animate in
     requestAnimationFrame(() => {
         panel.classList.add('active');
         backdrop.style.opacity = '1';
     });
-    
+
     // Focus on title input
     setTimeout(() => {
         if (titleInput) titleInput.focus();
     }, 100);
-    
+
 }
 // ===== End Elegant Notification Panel =====
 
@@ -4322,7 +4336,7 @@ function showFinancePanel(title, content, options = {}) {
         document.removeEventListener('keydown', escapeHandler);
     }
 
-    const escapeHandler = function(e) {
+    const escapeHandler = function (e) {
         if (e.key === 'Escape' && panel.classList.contains('active')) {
             closePanel();
         }
@@ -4330,7 +4344,7 @@ function showFinancePanel(title, content, options = {}) {
 
     const closeBtn = panel.querySelector('.finance-panel-close');
     if (closeBtn) {
-        closeBtn.addEventListener('click', function(e) {
+        closeBtn.addEventListener('click', function (e) {
             addRipple(e);
             setTimeout(closePanel, 80);
         });
@@ -4373,7 +4387,7 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 
 
 // ================= Refund Management =================
-(function(){
+(function () {
     /**
      * Open refund modal for a payment
      * @param {string} paymentId - The payment ID to refund
@@ -4445,11 +4459,11 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 
                         <div class="modal-form-group">
                             <label for="refund-amount-input" class="modal-form-label">Refund amount (INR)</label>
-                            <input type="number" 
-                                   id="refund-amount-input" 
-                                   class="modal-form-input" 
-                                   placeholder="Enter amount in rupees" 
-                                   min="1" 
+                            <input type="number"
+                                   id="refund-amount-input"
+                                   class="modal-form-input"
+                                   placeholder="Enter amount in rupees"
+                                   min="1"
                                    max="${amountInRupees}"
                                    step="0.01"
                                    disabled>
@@ -4466,17 +4480,17 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 
                         <div class="modal-form-group">
                             <label for="refund-reason-input" class="modal-form-label">Reason (optional)</label>
-                            <textarea id="refund-reason-input" 
-                                      class="modal-form-textarea" 
-                                      placeholder="Share the reason for the refund (max 500 characters)" 
-                                      maxlength="500" 
+                            <textarea id="refund-reason-input"
+                                      class="modal-form-textarea"
+                                      placeholder="Share the reason for the refund (max 500 characters)"
+                                      maxlength="500"
                                       rows="3"></textarea>
                         </div>
                     </form>
                 </div>
             </div>
         `;
-        
+
         const footer = `
             <button type="button" class="modal-btn modal-btn-secondary" onclick="closeModal()">Cancel</button>
             <button type="button" class="modal-btn modal-btn-primary" onclick="window.RefundModule.submitRefund()">
@@ -4544,7 +4558,7 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
         const submitText = document.getElementById('refund-submit-text');
         const submitSpinner = document.getElementById('refund-submit-spinner');
         const submitBtn = document.querySelector('.btn-primary');
-        
+
         if (submitText) submitText.style.display = 'none';
         if (submitSpinner) submitSpinner.style.display = 'inline';
         if (submitBtn) submitBtn.disabled = true;
@@ -4573,41 +4587,42 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
             headers,
             body: JSON.stringify(requestBody)
         })
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(data => {
-                    throw new Error(data.message || 'Failed to initiate refund');
-                });
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (payload && payload.success) {
-                showMessage('success', `Refund initiated successfully for ${context.userEmail}.`);
-                return null;
-            }
-            throw new Error(payload.message || 'Failed to initiate refund');
-        })
-        .then(() => {
-            closeModal();
-            
-            // Reload financial metrics to reflect refund in total revenue
-            if (typeof loadFinancialMetrics === 'function') {
-                loadFinancialMetrics();
-            }
-            
-            // Clear context
-            window._currentRefundContext = null;
-        })
-        .catch(error => {
-            console.error('Error initiating refund:', error);
-            showErrorMessage(error.message || 'Failed to initiate refund');
-        })
-        .finally(() => {
-            if (submitText) submitText.style.display = 'inline';
-            if (submitSpinner) submitSpinner.style.display = 'none';
-            if (submitBtn) submitBtn.disabled = false;
-        });
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Failed to initiate refund');
+                    });
+                }
+                return response.json();
+            })
+            .then(payload => {
+                if (payload && payload.status === true && payload.data && payload.data.success) {
+                    showMessage('success', `Refund initiated successfully for ${context.userEmail}.`);
+                    return null;
+                }
+                const errorMsg = (payload && payload.data && payload.data.message) || (payload && payload.message) || 'Failed to initiate refund';
+                throw new Error(errorMsg);
+            })
+            .then(() => {
+                closeModal();
+
+                // Reload financial metrics to reflect refund in total revenue
+                if (typeof loadFinancialMetrics === 'function') {
+                    loadFinancialMetrics();
+                }
+
+                // Clear context
+                window._currentRefundContext = null;
+            })
+            .catch(error => {
+                console.error('Error initiating refund:', error);
+                showErrorMessage(error.message || 'Failed to initiate refund');
+            })
+            .finally(() => {
+                if (submitText) submitText.style.display = 'inline';
+                if (submitSpinner) submitSpinner.style.display = 'none';
+                if (submitBtn) submitBtn.disabled = false;
+            });
     }
 
     /**
@@ -4637,23 +4652,23 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
             credentials: 'include',
             headers
         })
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(data => {
-                    throw new Error(data.message || 'Failed to load refund history');
-                });
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (!data || !data.refunds) {
-                throw new Error('Invalid response from server');
-            }
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Failed to load refund history');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data || !data.refunds) {
+                    throw new Error('Invalid response from server');
+                }
 
-            const summary = data;
-            const refunds = summary.refunds || [];
+                const summary = data;
+                const refunds = summary.refunds || [];
 
-            let historyHtml = `
+                let historyHtml = `
                 <div class="refund-history-content">
                     <div class="refund-summary" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
                         <h3 style="margin: 0 0 0.5rem 0; color: var(--card-title); font-size: 1rem;">Payment Summary</h3>
@@ -4669,10 +4684,10 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
                     <h3 style="margin: 0 0 1rem 0; color: var(--card-title); font-size: 1rem;">Refund History</h3>
             `;
 
-            if (refunds.length === 0) {
-                historyHtml += '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">No refunds found for this payment</div>';
-            } else {
-                historyHtml += `
+                if (refunds.length === 0) {
+                    historyHtml += '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">No refunds found for this payment</div>';
+                } else {
+                    historyHtml += `
                     <div class="refund-history-table" style="overflow-x: auto;">
                         <table style="width: 100%; border-collapse: collapse;">
                             <thead>
@@ -4688,11 +4703,11 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
                             <tbody>
                 `;
 
-                refunds.forEach(refund => {
-                    const statusColor = refund.status === 'PROCESSED' ? '#10b981' : 
-                                       refund.status === 'FAILED' ? '#ef4444' : '#f59e0b';
-                    
-                    historyHtml += `
+                    refunds.forEach(refund => {
+                        const statusColor = refund.status === 'PROCESSED' ? '#10b981' :
+                            refund.status === 'FAILED' ? '#ef4444' : '#f59e0b';
+
+                        historyHtml += `
                         <tr style="border-bottom: 1px solid var(--card-border);">
                             <td style="padding: 0.75rem; font-family: monospace; font-size: 0.85rem;">${escapeHtml(refund.refundId)}</td>
                             <td style="padding: 0.75rem;">₹${refund.amount.toFixed(2)}</td>
@@ -4703,32 +4718,32 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
                         </tr>
                     `;
 
-                    if (refund.reason) {
-                        historyHtml += `
+                        if (refund.reason) {
+                            historyHtml += `
                             <tr style="border-bottom: 1px solid var(--card-border);">
                                 <td colspan="6" style="padding: 0.5rem 0.75rem; font-size: 0.85rem; color: var(--text-secondary);">
                                     <strong>Reason:</strong> ${escapeHtml(refund.reason)}
                                 </td>
                             </tr>
                         `;
-                    }
-                });
+                        }
+                    });
 
-                historyHtml += `
+                    historyHtml += `
                             </tbody>
                         </table>
                     </div>
                 `;
-            }
+                }
 
-            historyHtml += '</div>';
+                historyHtml += '</div>';
 
-            showFinancePanel('Refund History', historyHtml);
-        })
-        .catch(error => {
-            console.error('Error loading refund history:', error);
-            showFinancePanel('Refund History', `<div class="modal-status modal-status-error">Error: ${escapeHtml(error.message || 'Failed to load refund history')}</div>`);
-        });
+                showFinancePanel('Refund History', historyHtml);
+            })
+            .catch(error => {
+                console.error('Error loading refund history:', error);
+                showFinancePanel('Refund History', `<div class="modal-status modal-status-error">Error: ${escapeHtml(error.message || 'Failed to load refund history')}</div>`);
+            });
     }
 
     // Expose functions globally
@@ -4744,579 +4759,14 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 
 
 // ================= Finance Tab Management =================
-(function(){
-    const state = {
-        initialized: false,
-        currentPage: 1,
-        pageSize: 50,
-        totalPages: 1,
-        totalCount: 0,
-        statusFilter: '',
-        startDate: '',
-        endDate: ''
-    };
-
-    // Use common q() from admin-utils.js
-    const q = window.q || function(id) { return document.getElementById(id); };
-
-    /**
-     * Load financial metrics from the API
-     */
-    function loadFinanceMetrics() {
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'application/json' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        fetch('/finance/metrics', {
-            method: 'GET',
-            credentials: 'include',
-            headers
-        })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access financial metrics');
-                }
-                throw new Error('Failed to load financial metrics');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading financial metrics');
-            }
-
-            const metrics = payload.data;
-
-            // Update metric cards with formatted currency
-            const totalRevenue = q('total-revenue');
-            const monthlyRevenue = q('monthly-revenue');
-            const totalPayments = q('total-payments');
-
-            if (totalRevenue) {
-                totalRevenue.textContent = formatCurrencyRupees(metrics.totalRevenue || 0);
-            }
-            if (monthlyRevenue) {
-                monthlyRevenue.textContent = formatCurrencyRupees(metrics.monthlyRevenue || 0);
-            }
-            if (totalPayments) {
-                totalPayments.textContent = (metrics.totalPaymentsCount || 0).toLocaleString();
-            }
-
-            // Render revenue chart if data is available
-            if (metrics.monthlyRevenueChart && Array.isArray(metrics.monthlyRevenueChart)) {
-                renderRevenueChart(metrics.monthlyRevenueChart);
-            }
-
-            console.log('Loaded financial metrics:', metrics);
-        })
-        .catch(error => {
-            console.error('Error loading financial metrics:', error);
-            showErrorMessage(error.message || 'Failed to load financial metrics');
-
-            // If error is due to authentication, redirect to login
-            if (error.message.includes('permission') || error.message.includes('authentication')) {
-                setTimeout(() => {
-                    window.location.href = '/login?error=auth_required';
-                }, 2000);
-            }
-        });
-    }
-
-    // Use common formatCurrencyRupees from admin-utils.js for values already in rupees
-    const formatCurrencyRupees = window.AdminUtils?.formatCurrencyRupees || function(value) {
-        if (typeof value !== 'number') value = 0;
-        return '₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-
-    /**
-     * Render revenue chart using Chart.js
-     * @param {Array} monthlyData - Array of monthly revenue data
-     */
-    function renderRevenueChart(monthlyData) {
-        const canvas = q('revenue-chart');
-        if (!canvas) return;
-
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js not available');
-            return;
-        }
-
-        // Destroy existing chart if any
-        if (state.revenueChart) {
-            try {
-                state.revenueChart.destroy();
-                state.revenueChart = null;
-            } catch(e) {
-                console.warn('Failed to destroy previous chart', e);
-            }
-        }
-
-        // Prepare data for chart
-        const labels = monthlyData.map(item => {
-            try {
-                const date = new Date(item.month + '-01');
-                return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-            } catch(e) {
-                return item.month;
-            }
-        });
-
-        const data = monthlyData.map(item => item.revenue || 0);
-
-        const ctx = canvas.getContext('2d');
-
-        // Create gradient fill
-        let gradient;
-        try {
-            gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 260);
-            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.22)');
-            gradient.addColorStop(1, 'rgba(99, 102, 241, 0.02)');
-        } catch(e) {
-            gradient = 'rgba(99, 102, 241, 0.12)';
-        }
-
-        // Get theme colors
-        const lineColor = '#6366f1';
-        const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--card-border').trim() || 'rgba(99,102,241,0.2)';
-        const tickColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#9ca3af';
-
-        state.revenueChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Revenue',
-                    data: data,
-                    borderColor: lineColor,
-                    backgroundColor: gradient,
-                    fill: true,
-                    cubicInterpolationMode: 'monotone',
-                    tension: 0.4,
-                    borderWidth: 2.5,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointBackgroundColor: lineColor,
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 700, easing: 'easeOutCubic' },
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        enabled: true,
-                        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                        titleColor: '#ffffff',
-                        bodyColor: '#ffffff',
-                        displayColors: false,
-                        padding: 10,
-                        callbacks: {
-                            label: function(context) {
-                                return 'Revenue: ' + formatCurrency(context.parsed.y);
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false, drawBorder: false },
-                        ticks: { color: tickColor, maxRotation: 0 }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: gridColor, drawBorder: false },
-                        ticks: {
-                            color: tickColor,
-                            callback: function(value) {
-                                return '₹' + value.toLocaleString('en-IN');
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    /**
-     * Load payment history from the API with pagination and filters
-     * @param {number} page - The page number to load
-     * @param {number} pageSize - The number of payments per page
-     * @param {string} statusFilter - Optional status filter
-     * @param {string} startDate - Optional start date filter
-     * @param {string} endDate - Optional end date filter
-     */
-    function loadPaymentHistory(page, pageSize, statusFilter, startDate, endDate) {
-        page = page || 1;
-        pageSize = pageSize || 50;
-        statusFilter = statusFilter || '';
-        startDate = startDate || '';
-        endDate = endDate || '';
-
-        // Show loader
-        const loader = q('payments-loader');
-        if (loader) loader.style.display = 'block';
-
-        // Build URL with query parameters
-        let url = `/finance/payments?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
-        if (statusFilter) {
-            url += `&status=${encodeURIComponent(statusFilter)}`;
-        }
-        if (startDate) {
-            url += `&startDate=${encodeURIComponent(startDate)}`;
-        }
-        if (endDate) {
-            url += `&endDate=${encodeURIComponent(endDate)}`;
-        }
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = { 'Accept': 'application/json' };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        fetch(url, {
-            method: 'GET',
-            credentials: 'include',
-            headers
-        })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access payment history');
-                }
-                throw new Error('Failed to load payment history');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading payment history');
-            }
-
-            const data = payload.data;
-            const payments = Array.isArray(data.payments) ? data.payments : [];
-
-            // Update state
-            state.currentPage = data.pagination?.page || page;
-            state.pageSize = data.pagination?.pageSize || pageSize;
-            state.totalPages = data.pagination?.totalPages || 1;
-            state.totalCount = data.pagination?.totalCount || 0;
-            state.statusFilter = statusFilter;
-            state.startDate = startDate;
-            state.endDate = endDate;
-
-            // Hide loader
-            if (loader) loader.style.display = 'none';
-
-            // Render payments table
-            renderPaymentsTable(payments);
-
-            // Render pagination
-            renderPaymentsPagination();
-
-            console.log('Loaded payment history:', payments);
-        })
-        .catch(error => {
-            console.error('Error loading payment history:', error);
-            if (loader) loader.style.display = 'none';
-            showErrorMessage(error.message || 'Failed to load payment history');
-
-            // If error is due to authentication, redirect to login
-            if (error.message.includes('permission') || error.message.includes('authentication')) {
-                setTimeout(() => {
-                    window.location.href = '/login?error=auth_required';
-                }, 2000);
-            }
-        });
-    }
-
-    /**
-     * Render the payments table
-     * @param {Array} payments - Array of payment objects
-     */
-    function renderPaymentsTable(payments) {
-        const tableBody = q('payments-table-body');
-        if (!tableBody) return;
-        if (typeof applyFinanceTableStyles === 'function') {
-            applyFinanceTableStyles(tableBody);
-        }
-
-        const fragment = document.createDocumentFragment();
-
-        if (payments.length === 0) {
-            // Use table-utils.js for empty state
-            const emptyRow = typeof createEmptyTableRow === 'function'
-                ? createEmptyTableRow(7, 'No payments found')
-                : (() => {
-                    const row = document.createElement('tr');
-                    const cell = document.createElement('td');
-                    cell.colSpan = 7;
-                    cell.textContent = 'No payments found';
-                    cell.style.textAlign = 'center';
-                    row.appendChild(cell);
-                    return row;
-                })();
-            fragment.appendChild(emptyRow);
-            tableBody.replaceChildren(fragment);
-            return;
-        }
-
-        payments.forEach(payment => {
-            const row = document.createElement('tr');
-
-            // User Email - use table-utils if available
-            const emailCell = typeof createTableCell === 'function'
-                ? createTableCell(payment.userEmail || 'N/A')
-                : (() => {
-                    const cell = document.createElement('td');
-                    cell.textContent = payment.userEmail || 'N/A';
-                    return cell;
-                })();
-            row.appendChild(emailCell);
-
-            // Amount - use table-utils if available
-            const amountText = payment.amount != null ? formatCurrency(payment.amount) : '-';
-            const amountCell = typeof createTableCell === 'function'
-                ? createTableCell(amountText)
-                : (() => {
-                    const cell = document.createElement('td');
-                    cell.textContent = amountText;
-                    return cell;
-                })();
-            row.appendChild(amountCell);
-
-            // Currency - use table-utils if available
-            const currencyCell = typeof createTableCell === 'function'
-                ? createTableCell(payment.currency || 'INR')
-                : (() => {
-                    const cell = document.createElement('td');
-                    cell.textContent = payment.currency || 'INR';
-                    return cell;
-                })();
-            row.appendChild(currencyCell);
-
-            // Payment Method - use table-utils if available
-            const methodCell = typeof createTableCell === 'function'
-                ? createTableCell(payment.paymentMethod || 'N/A')
-                : (() => {
-                    const cell = document.createElement('td');
-                    cell.textContent = payment.paymentMethod || 'N/A';
-                    return cell;
-                })();
-            row.appendChild(methodCell);
-
-            // Status with badge
-            const statusCell = document.createElement('td');
-            const statusBadge = document.createElement('span');
-            statusBadge.className = 'badge';
-            const status = payment.status || 'UNKNOWN';
-
-            // Add status-specific styling
-            if (status === 'SUCCESS') {
-                statusBadge.style.background = '#10b981';
-            } else if (status === 'FAILED') {
-                statusBadge.style.background = '#ef4444';
-            } else if (status === 'PENDING') {
-                statusBadge.style.background = '#f59e0b';
-            } else if (status === 'REFUNDED') {
-                statusBadge.style.background = '#8b5cf6';
-            }
-
-            statusBadge.textContent = status;
-            statusCell.appendChild(statusBadge);
-            row.appendChild(statusCell);
-
-            // Transaction ID
-            const txnCell = document.createElement('td');
-            txnCell.textContent = payment.transactionId || '-';
-            txnCell.style.fontFamily = 'monospace';
-            txnCell.style.fontSize = '0.85em';
-            row.appendChild(txnCell);
-
-            // Date - use table-utils if available
-            const dateCell = typeof createTableCell === 'function'
-                ? createTableCell(formatDate(payment.createdAt))
-                : (() => {
-                    const cell = document.createElement('td');
-                    cell.textContent = formatDate(payment.createdAt);
-                    return cell;
-                })();
-            row.appendChild(dateCell);
-
-            fragment.appendChild(row);
-        });
-
-        tableBody.replaceChildren(fragment);
-    }
-
-    /**
-     * Render pagination controls for payments
-     */
-    function renderPaymentsPagination() {
-        const paginationContainer = q('payments-pagination');
-        if (!paginationContainer) return;
-
-        paginationContainer.innerHTML = '';
-
-        if (state.totalPages <= 1) {
-            return;
-        }
-
-        // Previous button
-        const prevButton = document.createElement('button');
-        prevButton.className = `pagination-button ${state.currentPage === 1 ? 'disabled' : ''}`;
-        prevButton.textContent = 'Previous';
-        prevButton.disabled = state.currentPage === 1;
-        prevButton.addEventListener('click', () => {
-            if (state.currentPage > 1) {
-                loadPaymentHistory(state.currentPage - 1, state.pageSize, state.statusFilter, state.startDate, state.endDate);
-            }
-        });
-        paginationContainer.appendChild(prevButton);
-
-        // Page buttons
-        const maxButtons = 5;
-        const startPage = Math.max(1, state.currentPage - Math.floor(maxButtons / 2));
-        const endPage = Math.min(state.totalPages, startPage + maxButtons - 1);
-
-        for (let i = startPage; i <= endPage; i++) {
-            const pageButton = document.createElement('button');
-            pageButton.className = `pagination-button ${i === state.currentPage ? 'active' : ''}`;
-            pageButton.textContent = i;
-            pageButton.addEventListener('click', () => {
-                if (i !== state.currentPage) {
-                    loadPaymentHistory(i, state.pageSize, state.statusFilter, state.startDate, state.endDate);
-                }
-            });
-            paginationContainer.appendChild(pageButton);
-        }
-
-        // Next button
-        const nextButton = document.createElement('button');
-        nextButton.className = `pagination-button ${state.currentPage === state.totalPages ? 'disabled' : ''}`;
-        nextButton.textContent = 'Next';
-        nextButton.disabled = state.currentPage === state.totalPages;
-        nextButton.addEventListener('click', () => {
-            if (state.currentPage < state.totalPages) {
-                loadPaymentHistory(state.currentPage + 1, state.pageSize, state.statusFilter, state.startDate, state.endDate);
-            }
-        });
-        paginationContainer.appendChild(nextButton);
-    }
-
-    /**
-     * Filter payments based on status and date range
-     */
-    function filterPayments() {
-        const statusFilter = q('payment-status-filter');
-        const dateFrom = q('payment-date-from');
-        const dateTo = q('payment-date-to');
-
-        const status = statusFilter ? statusFilter.value : '';
-        const startDate = dateFrom ? dateFrom.value.trim() : '';
-        const endDate = dateTo ? dateTo.value.trim() : '';
-
-        // Validate date range if both dates are provided
-        if (startDate && endDate) {
-            const dateValidation = ValidationUtils.validateDateRange(startDate, endDate);
-            if (!dateValidation.valid) {
-                showErrorMessage(dateValidation.message);
-                return;
-            }
-        }
-
-        // Validate individual dates if only one is provided
-        if (startDate && !ValidationUtils.isValidDate(startDate)) {
-            showErrorMessage('Invalid start date format. Use YYYY-MM-DD');
-            return;
-        }
-
-        if (endDate && !ValidationUtils.isValidDate(endDate)) {
-            showErrorMessage('Invalid end date format. Use YYYY-MM-DD');
-            return;
-        }
-
-        // Load payment history with filters
-        loadPaymentHistory(1, state.pageSize, status, startDate, endDate);
-    }
-
-    /**
-     * Initialize Finance tab
-     */
-    function ensureInitialized() {
-        if (state.initialized) return;
-        const panel = q('finance');
-        if (!panel) return;
-
-        console.log('[Finance Module] Initializing finance tab...');
-
-        // Load financial metrics
-        loadFinanceMetrics();
-
-        // Load payment history with default pagination
-        loadPaymentHistory(1, 50, '', '', '');
-
-        // Bind status filter
-        const statusFilter = q('payment-status-filter');
-        if (statusFilter && !statusFilter.dataset.bound) {
-            statusFilter.addEventListener('change', filterPayments);
-            statusFilter.dataset.bound = 'true';
-        }
-
-        // Bind date filters
-        const dateFrom = q('payment-date-from');
-        if (dateFrom && !dateFrom.dataset.bound) {
-            dateFrom.addEventListener('change', filterPayments);
-            dateFrom.dataset.bound = 'true';
-        }
-
-        const dateTo = q('payment-date-to');
-        if (dateTo && !dateTo.dataset.bound) {
-            dateTo.addEventListener('change', filterPayments);
-            dateTo.dataset.bound = 'true';
-        }
-
-
-        state.initialized = true;
-        console.log('[Finance Module] Finance tab initialized');
-    }
-
-    // Hook into admin init: click on Finance tab should trigger initialization
-    document.addEventListener('DOMContentLoaded', function(){
-        try {
-            // Bind tab click
-            const tab = document.querySelector('.tab[data-tab="finance"]');
-            if (tab && !tab.dataset.financeBound) {
-                tab.addEventListener('click', ensureInitialized);
-                tab.dataset.financeBound = 'true';
-            }
-            // If already active (unlikely), init immediately
-            const panel = q('finance');
-            if (panel && panel.classList.contains('active')) {
-                ensureInitialized();
-            }
-        } catch(e) { console.warn('Finance tab binding failed', e); }
-    });
-
-    // Expose functions globally for testing/debugging
-    window.FinanceModule = {
-        loadFinanceMetrics,
-        loadPaymentHistory,
-        filterPayments,
-        renderRevenueChart
-    };
-})();
 
 
 
 
 // ================= Financial Export Tool =================
-(function(){
+(function () {
     // Use common q() from admin-utils.js
-    const q = window.q || function(id) { return document.getElementById(id); };
+    const q = window.q || function (id) { return document.getElementById(id); };
 
     /**
      * Show the financial export modal
@@ -5366,14 +4816,14 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
         // Add hover effects to radio labels
         try {
             document.querySelectorAll('.radio-group label').forEach(label => {
-                label.addEventListener('mouseenter', function() {
+                label.addEventListener('mouseenter', function () {
                     this.style.background = 'var(--hover-bg, rgba(99,102,241,0.05))';
                 });
-                label.addEventListener('mouseleave', function() {
+                label.addEventListener('mouseleave', function () {
                     this.style.background = 'transparent';
                 });
             });
-        } catch(e) { console.warn('Failed to bind radio hover effects', e); }
+        } catch (e) { console.warn('Failed to bind radio hover effects', e); }
     }
 
     /**
@@ -5430,74 +4880,74 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
             headers: headers,
             body: JSON.stringify(requestBody)
         })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to export financial data');
+            .then(response => {
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        throw new Error('You do not have permission to export financial data');
+                    }
+                    // Try to parse error message
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'Failed to export financial data');
+                    }).catch(() => {
+                        throw new Error('Failed to export financial data');
+                    });
                 }
-                // Try to parse error message
-                return response.json().then(data => {
-                    throw new Error(data.message || 'Failed to export financial data');
-                }).catch(() => {
-                    throw new Error('Failed to export financial data');
-                });
-            }
 
-            // Check if response is CSV
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('text/csv')) {
-                // Download CSV file
-                return response.blob().then(blob => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
+                // Check if response is CSV
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('text/csv')) {
+                    // Download CSV file
+                    return response.blob().then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
 
-                    // Generate filename with timestamp
-                    const timestamp = new Date().toISOString().slice(0, 10);
-                    a.download = `financial-export-${exportType}-${timestamp}.csv`;
+                        // Generate filename with timestamp
+                        const timestamp = new Date().toISOString().slice(0, 10);
+                        a.download = `financial-export-${exportType}-${timestamp}.csv`;
 
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
 
-                    showMessage('success', 'Financial data exported successfully');
-                    closeModal();
-                });
-            } else {
-                // Unexpected response type
-                throw new Error('Unexpected response format');
-            }
-        })
-        .catch(error => {
-            console.error('Error exporting financial data:', error);
+                        showMessage('success', 'Financial data exported successfully');
+                        closeModal();
+                    });
+                } else {
+                    // Unexpected response type
+                    throw new Error('Unexpected response format');
+                }
+            })
+            .catch(error => {
+                console.error('Error exporting financial data:', error);
 
-            // Provide user-friendly error messages
-            let errorMessage = error.message || 'Failed to export financial data';
+                // Provide user-friendly error messages
+                let errorMessage = error.message || 'Failed to export financial data';
 
-            if (errorMessage.includes('permission')) {
-                errorMessage = 'You do not have permission to export financial data. Please contact an administrator.';
-            } else if (errorMessage.includes('authentication') || errorMessage.includes('auth')) {
-                errorMessage = 'Your session has expired. Please log in again.';
-                setTimeout(() => {
-                    window.location.href = '/login?error=session_expired';
-                }, 2000);
-            } else if (errorMessage.includes('date range')) {
-                errorMessage = 'The selected date range is invalid or too large. Please select a smaller range.';
-            } else if (errorMessage.includes('date format')) {
-                errorMessage = 'Invalid date format. Please select valid dates.';
-            }
+                if (errorMessage.includes('permission')) {
+                    errorMessage = 'You do not have permission to export financial data. Please contact an administrator.';
+                } else if (errorMessage.includes('authentication') || errorMessage.includes('auth')) {
+                    errorMessage = 'Your session has expired. Please log in again.';
+                    setTimeout(() => {
+                        window.location.href = '/login?error=session_expired';
+                    }, 2000);
+                } else if (errorMessage.includes('date range')) {
+                    errorMessage = 'The selected date range is invalid or too large. Please select a smaller range.';
+                } else if (errorMessage.includes('date format')) {
+                    errorMessage = 'Invalid date format. Please select valid dates.';
+                }
 
-            if (errorEl && errorTextEl) {
-                errorTextEl.textContent = errorMessage;
-                errorEl.style.display = 'flex';
-            }
-            showMessage('error', errorMessage);
-        })
-        .finally(() => {
-            if (spinner) spinner.style.display = 'none';
-            if (submitBtn) submitBtn.disabled = false;
-        });
+                if (errorEl && errorTextEl) {
+                    errorTextEl.textContent = errorMessage;
+                    errorEl.style.display = 'flex';
+                }
+                showMessage('error', errorMessage);
+            })
+            .finally(() => {
+                if (spinner) spinner.style.display = 'none';
+                if (submitBtn) submitBtn.disabled = false;
+            });
     }
 
     /**
@@ -5524,7 +4974,7 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
     function initializeExportTool() {
         const exportBtn = q('export-financial-btn');
         if (exportBtn && !exportBtn.dataset.bound) {
-            exportBtn.addEventListener('click', function() {
+            exportBtn.addEventListener('click', function () {
                 showFinancialExportModal();
             });
             exportBtn.dataset.bound = 'true';
@@ -5532,10 +4982,10 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
     }
 
     // Initialize on DOM ready
-    document.addEventListener('DOMContentLoaded', function(){
+    document.addEventListener('DOMContentLoaded', function () {
         try {
             initializeExportTool();
-        } catch(e) {
+        } catch (e) {
             console.warn('Financial export tool binding failed', e);
         }
     });
@@ -5588,11 +5038,11 @@ async function fetchRefundSummary(paymentId) {
         }
 
         const data = await response.json();
-        
+
         if (!data || data.status !== true || !data.data) {
             // Show user-friendly error message
-            const errorMsg = data && data.message 
-                ? data.message 
+            const errorMsg = data && data.message
+                ? data.message
                 : 'The server returned invalid data. Please try again or contact support if the problem persists.';
             showMessage('error', errorMsg);
             return null;
@@ -5609,7 +5059,7 @@ async function fetchRefundSummary(paymentId) {
 }
 
 // Use common formatCurrency from admin-utils.js (handles paise to rupees conversion)
-const formatCurrency = window.formatCurrency || function(amountPaise) {
+const formatCurrency = window.formatCurrency || function (amountPaise) {
     if (typeof amountPaise !== 'number' || isNaN(amountPaise)) {
         return '₹0.00';
     }
@@ -5631,16 +5081,16 @@ async function renderRefundButton(paymentId, container) {
     try {
         // Fetch refund summary for payment
         const summary = await fetchRefundSummary(paymentId);
-        
+
         // Handle null return (error case)
         if (!summary) {
             container.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.875rem;">Refund unavailable</span>';
             return;
         }
-        
+
         // Clear container
         container.innerHTML = '';
-        
+
         if (summary.isFullyRefunded) {
             // Show "Fully Refunded" badge (clickable to view history)
             const badge = document.createElement('span');
@@ -5648,7 +5098,7 @@ async function renderRefundButton(paymentId, container) {
             badge.textContent = `Fully Refunded: ${formatCurrency(summary.totalRefunded)}`;
             badge.style.cursor = 'pointer';
             badge.title = 'Click to view refund history';
-            badge.addEventListener('click', function() {
+            badge.addEventListener('click', function () {
                 viewRefundHistory(paymentId);
             });
             container.appendChild(badge);
@@ -5659,23 +5109,23 @@ async function renderRefundButton(paymentId, container) {
             wrapper.style.gap = '8px';
             wrapper.style.alignItems = 'center';
             wrapper.style.flexWrap = 'wrap';
-            
+
             const badge = document.createElement('span');
             badge.className = 'badge badge-partial-refund';
             badge.textContent = `Partially Refunded: ${formatCurrency(summary.totalRefunded)}`;
             badge.style.cursor = 'pointer';
             badge.title = 'Click to view refund history';
-            badge.addEventListener('click', function() {
+            badge.addEventListener('click', function () {
                 viewRefundHistory(paymentId);
             });
-            
+
             const button = document.createElement('button');
             button.className = 'btn btn-sm btn-refund';
             button.textContent = 'Refund Remaining';
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function () {
                 openRefundModal(paymentId);
             });
-            
+
             wrapper.appendChild(badge);
             wrapper.appendChild(button);
             container.appendChild(wrapper);
@@ -5684,7 +5134,7 @@ async function renderRefundButton(paymentId, container) {
             const button = document.createElement('button');
             button.className = 'btn btn-sm btn-refund';
             button.textContent = 'Refund';
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function () {
                 openRefundModal(paymentId);
             });
             container.appendChild(button);
@@ -5709,13 +5159,13 @@ async function openRefundModal(paymentId) {
     try {
         // Fetch payment and refund details
         const summary = await fetchRefundSummary(paymentId);
-        
+
         // Handle null return (error case)
         if (!summary) {
             showMessage('error', 'Unable to load refund information. Please try again.');
             return;
         }
-        
+
         // Build modal content
         const modalContent = `
             <div class="refund-modal-content">
@@ -5737,31 +5187,31 @@ async function openRefundModal(paymentId) {
                         <span class="value refundable">${formatCurrency(summary.remainingRefundable)}</span>
                     </div>
                 </div>
-                
+
                 <form id="refund-form" class="refund-form">
                     <div class="form-group">
                         <label>Refund Type</label>
                         <div class="radio-group">
                             <label>
-                                <input type="radio" name="refundType" value="full" checked 
+                                <input type="radio" name="refundType" value="full" checked
                                        onchange="togglePartialAmount()">
                                 Full Refund
                             </label>
                             <label>
-                                <input type="radio" name="refundType" value="partial" 
+                                <input type="radio" name="refundType" value="partial"
                                        onchange="togglePartialAmount()">
                                 Partial Refund
                             </label>
                         </div>
                     </div>
-                    
+
                     <div id="partial-amount-group" class="form-group" style="display:none;">
                         <label for="refund-amount">Refund Amount (₹)</label>
-                        <input type="number" id="refund-amount" name="amount" 
-                               min="1" max="${(summary.remainingRefundable / 100).toFixed(2)}" 
+                        <input type="number" id="refund-amount" name="amount"
+                               min="1" max="${(summary.remainingRefundable / 100).toFixed(2)}"
                                step="0.01" placeholder="Enter amount in rupees">
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="refund-speed">Refund Speed</label>
                         <select id="refund-speed" name="speed">
@@ -5769,13 +5219,13 @@ async function openRefundModal(paymentId) {
                             <option value="OPTIMUM">Instant (if available)</option>
                         </select>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="refund-reason">Reason (Optional)</label>
-                        <textarea id="refund-reason" name="reason" rows="3" 
+                        <textarea id="refund-reason" name="reason" rows="3"
                                   placeholder="Enter reason for refund"></textarea>
                     </div>
-                    
+
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" onclick="closeModal()">
                             Cancel
@@ -5787,18 +5237,18 @@ async function openRefundModal(paymentId) {
                 </form>
             </div>
         `;
-        
+
         showModal('Process Refund', modalContent);
-        
+
         // Bind form submission
         const form = document.getElementById('refund-form');
         if (form) {
-            form.addEventListener('submit', function(e) {
+            form.addEventListener('submit', function (e) {
                 e.preventDefault();
                 submitRefund(paymentId, summary.remainingRefundable);
             });
         }
-        
+
     } catch (error) {
         console.error('Failed to open refund modal:', error);
         showMessage('error', error.message || 'Failed to load refund details');
@@ -5811,7 +5261,7 @@ async function openRefundModal(paymentId) {
 function togglePartialAmount() {
     const refundTypeRadios = document.getElementsByName('refundType');
     let refundType = 'full';
-    
+
     // Find selected radio button
     for (const radio of refundTypeRadios) {
         if (radio.checked) {
@@ -5819,10 +5269,10 @@ function togglePartialAmount() {
             break;
         }
     }
-    
+
     const partialGroup = document.getElementById('partial-amount-group');
     const amountInput = document.getElementById('refund-amount');
-    
+
     if (partialGroup) {
         if (refundType === 'partial') {
             partialGroup.style.display = 'block';
@@ -5847,13 +5297,13 @@ async function submitRefund(paymentId, maxRefundable) {
         showMessage('error', 'Refund form not found');
         return;
     }
-    
+
     const formData = new FormData(form);
-    
+
     const refundType = formData.get('refundType');
     const speed = formData.get('speed');
     const reason = formData.get('reason');
-    
+
     // Calculate amount in paise
     let amountPaise = null;
     if (refundType === 'partial') {
@@ -5863,21 +5313,21 @@ async function submitRefund(paymentId, maxRefundable) {
             return;
         }
         amountPaise = Math.round(amountRupees * 100);
-        
+
         if (amountPaise > maxRefundable) {
             showMessage('error', 'Refund amount exceeds refundable amount');
             return;
         }
     }
     // For full refund, amountPaise remains null (backend will use full amount)
-    
+
     const requestBody = {
         paymentId: paymentId,
         amount: amountPaise,
         speed: speed,
         reason: reason || null
     };
-    
+
     try {
         const token = localStorage.getItem('jwt_token');
         if (!token) {
@@ -5885,7 +5335,7 @@ async function submitRefund(paymentId, maxRefundable) {
             showMessage('error', 'Your session has expired. Please refresh the page and login again.');
             return;
         }
-        
+
         const response = await fetch('/refunds/initiate', {
             method: 'POST',
             headers: {
@@ -5896,7 +5346,7 @@ async function submitRefund(paymentId, maxRefundable) {
             credentials: 'include',
             body: JSON.stringify(requestBody)
         });
-        
+
         if (!response.ok) {
             // Handle HTTP errors
             let errorMsg;
@@ -5910,7 +5360,7 @@ async function submitRefund(paymentId, maxRefundable) {
             showMessage('error', errorMsg);
             return;
         }
-        
+
         let data;
         try {
             data = await response.json();
@@ -5919,7 +5369,7 @@ async function submitRefund(paymentId, maxRefundable) {
             showMessage('error', 'The server returned invalid data. Please try again or contact support.');
             return;
         }
-        
+
         if (data.status === true && data.data && data.data.success) {
             showMessage('success', data.data.message || 'Refund processed successfully');
             closeModal();
@@ -5938,7 +5388,7 @@ async function submitRefund(paymentId, maxRefundable) {
  * Render refund status badge for a payment
  * Displays "Fully Refunded" or "Partially Refunded" badge with amounts
  * Makes badges clickable to view refund history
- * 
+ *
  * @param {string} paymentId - The payment ID to check
  * @param {HTMLElement} container - Container element to render into
  */
@@ -5951,16 +5401,16 @@ async function renderRefundStatus(paymentId, container) {
     try {
         // Fetch refund summary for payment
         const summary = await fetchRefundSummary(paymentId);
-        
+
         // Handle null return (error case)
         if (!summary) {
             container.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.875rem;">Refund status unavailable</span>';
             return;
         }
-        
+
         // Clear container
         container.innerHTML = '';
-        
+
         if (summary.isFullyRefunded) {
             // Display "Fully Refunded" badge with amount
             const badge = document.createElement('span');
@@ -5968,7 +5418,7 @@ async function renderRefundStatus(paymentId, container) {
             badge.textContent = `Fully Refunded: ${formatCurrency(summary.totalRefunded)}`;
             badge.style.cursor = 'pointer';
             badge.title = 'Click to view refund history';
-            badge.addEventListener('click', function() {
+            badge.addEventListener('click', function () {
                 viewRefundHistory(paymentId);
             });
             container.appendChild(badge);
@@ -5979,7 +5429,7 @@ async function renderRefundStatus(paymentId, container) {
             badge.textContent = `Partially Refunded: ${formatCurrency(summary.totalRefunded)} / ${formatCurrency(summary.originalAmount)}`;
             badge.style.cursor = 'pointer';
             badge.title = 'Click to view refund history';
-            badge.addEventListener('click', function() {
+            badge.addEventListener('click', function () {
                 viewRefundHistory(paymentId);
             });
             container.appendChild(badge);
@@ -5994,7 +5444,7 @@ async function renderRefundStatus(paymentId, container) {
 /**
  * View refund history for a payment in a modal
  * Fetches refund summary and displays all refunds with details
- * 
+ *
  * @param {string} paymentId - The payment ID
  */
 async function viewRefundHistory(paymentId) {
@@ -6006,16 +5456,16 @@ async function viewRefundHistory(paymentId) {
     try {
         // Show loading modal
         showFinancePanel('Refund History', '<div class="modal-loading"><div class="loading-spinner"></div><div class="loading-text">Loading refund history...</div></div>');
-        
+
         // Fetch refund summary for payment
         const summary = await fetchRefundSummary(paymentId);
-        
+
         // Handle null return (error case)
         if (!summary) {
             showFinancePanel('Refund History', '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Unable to load refund history. Please try again.</div>');
             return;
         }
-        
+
         // Build payment summary section
         const summaryHtml = `
             <div class="summary-section" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
@@ -6040,7 +5490,7 @@ async function viewRefundHistory(paymentId) {
                 </div>
             </div>
         `;
-        
+
         // Build refunds list section
         let refundsHtml;
         if (summary.refunds && summary.refunds.length > 0) {
@@ -6052,11 +5502,10 @@ async function viewRefundHistory(paymentId) {
                             <div class="refund-history-item" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem;">
                                 <div class="refund-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--card-border);">
                                     <span class="refund-id" style="font-family: 'Courier New', monospace; font-size: 0.875rem; color: var(--text-color); font-weight: 600;">${escapeHtml(refund.refundId)}</span>
-                                    <span class="badge badge-${refund.status.toLowerCase()}" style="padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; ${
-                                        refund.status === 'PROCESSED' ? 'background: #d1fae5; color: #065f46;' :
-                                        refund.status === 'FAILED' ? 'background: #fee2e2; color: #991b1b;' :
-                                        'background: #fef3c7; color: #92400e;'
-                                    }">${escapeHtml(refund.status)}</span>
+                                    <span class="badge badge-${refund.status.toLowerCase()}" style="padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; ${refund.status === 'PROCESSED' ? 'background: #d1fae5; color: #065f46;' :
+                    refund.status === 'FAILED' ? 'background: #fee2e2; color: #991b1b;' :
+                        'background: #fef3c7; color: #92400e;'
+                }">${escapeHtml(refund.status)}</span>
                                 </div>
                                 <div class="refund-details" style="display: grid; gap: 0.5rem; font-size: 0.875rem;">
                                     <div style="display: flex; justify-content: space-between;">
@@ -6097,14 +5546,14 @@ async function viewRefundHistory(paymentId) {
                 </div>
             `;
         }
-        
+
         const modalContent = `
             <div class="refund-history-modal">
                 ${summaryHtml}
                 ${refundsHtml}
             </div>
         `;
-        
+
         showFinancePanel('Refund History', modalContent);
     } catch (error) {
         console.error('Failed to load refund history:', error);
@@ -6119,7 +5568,7 @@ async function viewRefundHistory(paymentId) {
 }
 
 // ================= Refund Metrics Module =================
-(function(){
+(function () {
     const state = {
         initialized: false,
         currentPage: 1,
@@ -6133,7 +5582,7 @@ async function viewRefundHistory(paymentId) {
     };
 
     // Use common q() from admin-utils.js
-    const q = window.q || function(id) { return document.getElementById(id); };
+    const q = window.q || function (id) { return document.getElementById(id); };
 
     /**
      * Load refund metrics from the API
@@ -6149,41 +5598,41 @@ async function viewRefundHistory(paymentId) {
             credentials: 'include',
             headers
         })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access refund metrics');
+            .then(response => {
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        throw new Error('You do not have permission to access refund metrics');
+                    }
+                    throw new Error('Failed to load refund metrics');
                 }
-                throw new Error('Failed to load refund metrics');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading refund metrics');
-            }
+                return response.json();
+            })
+            .then(payload => {
+                if (!payload || payload.status !== true || !payload.data) {
+                    throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading refund metrics');
+                }
 
-            const metrics = payload.data;
+                const metrics = payload.data;
 
-            // Call renderRefundMetricsCards with metrics data
-            renderRefundMetricsCards(metrics);
+                // Call renderRefundMetricsCards with metrics data
+                renderRefundMetricsCards(metrics);
 
-            // Note: Refund chart is now in Reports tab, not Finance tab
-            // Chart rendering is handled by reports-charts.js module
+                // Note: Refund chart is now in Reports tab, not Finance tab
+                // Chart rendering is handled by reports-charts.js module
 
-            console.log('Loaded refund metrics:', metrics);
-        })
-        .catch(error => {
-            console.error('Error loading refund metrics:', error);
-            showErrorMessage(error.message || 'Failed to load refund metrics');
+                console.log('Loaded refund metrics:', metrics);
+            })
+            .catch(error => {
+                console.error('Error loading refund metrics:', error);
+                showErrorMessage(error.message || 'Failed to load refund metrics');
 
-            // If error is due to authentication, redirect to login
-            if (error.message.includes('permission') || error.message.includes('authentication')) {
-                setTimeout(() => {
-                    window.location.href = '/login?error=auth_required';
-                }, 2000);
-            }
-        });
+                // If error is due to authentication, redirect to login
+                if (error.message.includes('permission') || error.message.includes('authentication')) {
+                    setTimeout(() => {
+                        window.location.href = '/login?error=auth_required';
+                    }, 2000);
+                }
+            });
     }
 
     /**
@@ -6197,7 +5646,7 @@ async function viewRefundHistory(paymentId) {
         if (totalRefunds) {
             const amount = (metrics.totalRefunds || 0) * 100; // Convert from rupees to paise
             totalRefunds.textContent = formatCurrency(amount);
-            
+
             // Add count subtitle if element exists
             const totalRefundsCard = totalRefunds.closest('.metric-card');
             if (totalRefundsCard) {
@@ -6216,7 +5665,7 @@ async function viewRefundHistory(paymentId) {
         if (monthlyRefunds) {
             const amount = (metrics.monthlyRefunds || 0) * 100; // Convert from rupees to paise
             monthlyRefunds.textContent = formatCurrency(amount);
-            
+
             // Add count subtitle
             const monthlyRefundsCard = monthlyRefunds.closest('.metric-card');
             if (monthlyRefundsCard) {
@@ -6235,7 +5684,7 @@ async function viewRefundHistory(paymentId) {
         if (refundRate) {
             const rate = metrics.refundRate || 0;
             refundRate.textContent = rate.toFixed(2) + '%';
-            
+
             // Add subtitle
             const refundRateCard = refundRate.closest('.metric-card');
             if (refundRateCard) {
@@ -6266,7 +5715,7 @@ async function viewRefundHistory(paymentId) {
         if (avgProcessingTime) {
             const hours = metrics.averageProcessingTimeHours || 0;
             avgProcessingTime.textContent = hours.toFixed(1) + 'h';
-            
+
             // Add subtitle with instant/normal breakdown
             const avgTimeCard = avgProcessingTime.closest('.metric-card');
             if (avgTimeCard) {
@@ -6320,50 +5769,50 @@ async function viewRefundHistory(paymentId) {
             credentials: 'include',
             headers
         })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('You do not have permission to access refund history');
+            .then(response => {
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        throw new Error('You do not have permission to access refund history');
+                    }
+                    throw new Error('Failed to load refund history');
                 }
-                throw new Error('Failed to load refund history');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (loader) loader.style.display = 'none';
+                return response.json();
+            })
+            .then(payload => {
+                if (loader) loader.style.display = 'none';
 
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading refund history');
-            }
+                if (!payload || payload.status !== true || !payload.data) {
+                    throw new Error(payload && payload.message ? payload.message : 'Invalid response while loading refund history');
+                }
 
-            const history = payload.data;
+                const history = payload.data;
 
-            // Update state
-            state.currentPage = history.pagination.page;
-            state.pageSize = history.pagination.pageSize;
-            state.totalPages = history.pagination.totalPages;
-            state.totalCount = history.pagination.totalCount;
+                // Update state
+                state.currentPage = history.pagination.page;
+                state.pageSize = history.pagination.pageSize;
+                state.totalPages = history.pagination.totalPages;
+                state.totalCount = history.pagination.totalCount;
 
-            // Call renderRefundHistoryTable with refunds array
-            renderRefundHistoryTable(history.refunds);
+                // Call renderRefundHistoryTable with refunds array
+                renderRefundHistoryTable(history.refunds);
 
-            // Call renderRefundPagination with pagination info
-            renderRefundPagination(history.pagination);
+                // Call renderRefundPagination with pagination info
+                renderRefundPagination(history.pagination);
 
-            console.log('Loaded refund history:', history);
-        })
-        .catch(error => {
-            if (loader) loader.style.display = 'none';
-            console.error('Error loading refund history:', error);
-            showErrorMessage(error.message || 'Failed to load refund history');
+                console.log('Loaded refund history:', history);
+            })
+            .catch(error => {
+                if (loader) loader.style.display = 'none';
+                console.error('Error loading refund history:', error);
+                showErrorMessage(error.message || 'Failed to load refund history');
 
-            // If error is due to authentication, redirect to login
-            if (error.message.includes('permission') || error.message.includes('authentication')) {
-                setTimeout(() => {
-                    window.location.href = '/login?error=auth_required';
-                }, 2000);
-            }
-        });
+                // If error is due to authentication, redirect to login
+                if (error.message.includes('permission') || error.message.includes('authentication')) {
+                    setTimeout(() => {
+                        window.location.href = '/login?error=auth_required';
+                    }, 2000);
+                }
+            });
     }
 
     /**
@@ -6398,7 +5847,7 @@ async function viewRefundHistory(paymentId) {
         tbody.innerHTML = refunds.map(refund => {
             // Format amounts as currency (convert from rupees to paise)
             const amount = formatCurrency((refund.amount || 0) * 100);
-            
+
             // Add status badges with appropriate colors
             const status = (refund.status || '').toUpperCase();
             let statusBadge;
@@ -6466,10 +5915,10 @@ async function viewRefundHistory(paymentId) {
         // Add previous button
         const prevDisabled = currentPage === 1;
         const nextDisabled = currentPage === totalPages;
-        
+
         html += `
-            <button 
-                class="pagination-button ${prevDisabled ? 'disabled' : ''}" 
+            <button
+                class="pagination-button ${prevDisabled ? 'disabled' : ''}"
                 ${prevDisabled ? 'disabled' : ''}
                 onclick="window.RefundMetricsModule.loadRefundHistory(${currentPage - 1}, ${state.pageSize})">
                 Previous
@@ -6484,7 +5933,7 @@ async function viewRefundHistory(paymentId) {
         for (let i = startPage; i <= endPage; i++) {
             const isActive = i === currentPage;
             html += `
-                <button 
+                <button
                     class="pagination-button ${isActive ? 'active' : ''}"
                     onclick="window.RefundMetricsModule.loadRefundHistory(${i}, ${state.pageSize})">
                     ${i}
@@ -6494,8 +5943,8 @@ async function viewRefundHistory(paymentId) {
 
         // Add next button
         html += `
-            <button 
-                class="pagination-button ${nextDisabled ? 'disabled' : ''}" 
+            <button
+                class="pagination-button ${nextDisabled ? 'disabled' : ''}"
                 ${nextDisabled ? 'disabled' : ''}
                 onclick="window.RefundMetricsModule.loadRefundHistory(${currentPage + 1}, ${state.pageSize})">
                 Next
@@ -6527,40 +5976,40 @@ async function viewRefundHistory(paymentId) {
             credentials: 'include',
             headers
         })
-        .then(response => {
-            if (!response.ok) {
-                // Error is intentionally caught and handled by the calling function
-                throw new Error('Failed to load refund details');
-            }
-            return response.json();
-        })
-        .then(payload => {
-            if (!payload || payload.status !== true || !payload.data) {
-                throw new Error('Invalid response while loading refund details');
-            }
+            .then(response => {
+                if (!response.ok) {
+                    // Error is intentionally caught and handled by the calling function
+                    throw new Error('Failed to load refund details');
+                }
+                return response.json();
+            })
+            .then(payload => {
+                if (!payload || payload.status !== true || !payload.data) {
+                    throw new Error('Invalid response while loading refund details');
+                }
 
-            const refund = payload.data;
-            
-            const statusKey = String(refund.status || '').toUpperCase();
-            const statusValue = escapeHtml(refund.status || 'UNKNOWN');
-            const statusClass = statusKey === 'PROCESSED' ? 'refund-status--success' :
-                statusKey === 'FAILED' ? 'refund-status--error' :
-                statusKey === 'PENDING' ? 'refund-status--warning' : 'refund-status--neutral';
-            const amountValue = Number(refund.amount);
-            const amountFormatted = Number.isFinite(amountValue)
-                ? formatCurrency(Math.round(amountValue * 100))
-                : '₹0.00';
-            const speedRequested = refund.speedRequested ? String(refund.speedRequested).toLowerCase() : '';
-            const speedProcessed = refund.speedProcessed ? String(refund.speedProcessed).toLowerCase() : '';
-            const formatSpeed = (speed) =>
-                speed ? speed.charAt(0).toUpperCase() + speed.slice(1) : 'N/A';
-            const speedLabel = speedProcessed ? formatSpeed(speedProcessed) : formatSpeed(speedRequested);
-            const userEmail = refund.userEmail ? escapeHtml(refund.userEmail) : 'N/A';
-            const processedBy = refund.processedBy ? escapeHtml(refund.processedBy) : 'N/A';
-            const paymentId = refund.paymentId ? escapeHtml(refund.paymentId) : 'N/A';
-            const safeRefundId = refund.refundId ? escapeHtml(refund.refundId) : 'N/A';
+                const refund = payload.data;
 
-            const content = `
+                const statusKey = String(refund.status || '').toUpperCase();
+                const statusValue = escapeHtml(refund.status || 'UNKNOWN');
+                const statusClass = statusKey === 'PROCESSED' ? 'refund-status--success' :
+                    statusKey === 'FAILED' ? 'refund-status--error' :
+                        statusKey === 'PENDING' ? 'refund-status--warning' : 'refund-status--neutral';
+                const amountValue = Number(refund.amount);
+                const amountFormatted = Number.isFinite(amountValue)
+                    ? formatCurrency(Math.round(amountValue * 100))
+                    : '₹0.00';
+                const speedRequested = refund.speedRequested ? String(refund.speedRequested).toLowerCase() : '';
+                const speedProcessed = refund.speedProcessed ? String(refund.speedProcessed).toLowerCase() : '';
+                const formatSpeed = (speed) =>
+                    speed ? speed.charAt(0).toUpperCase() + speed.slice(1) : 'N/A';
+                const speedLabel = speedProcessed ? formatSpeed(speedProcessed) : formatSpeed(speedRequested);
+                const userEmail = refund.userEmail ? escapeHtml(refund.userEmail) : 'N/A';
+                const processedBy = refund.processedBy ? escapeHtml(refund.processedBy) : 'N/A';
+                const paymentId = refund.paymentId ? escapeHtml(refund.paymentId) : 'N/A';
+                const safeRefundId = refund.refundId ? escapeHtml(refund.refundId) : 'N/A';
+
+                const content = `
                 <div class="refund-details-shell">
                     <div class="refund-details-header">
                         <div>
@@ -6658,12 +6107,12 @@ async function viewRefundHistory(paymentId) {
                 </div>
             `;
 
-            showFinancePanel('Refund Details', content);
-        })
-        .catch(error => {
-            console.error('Error loading refund details:', error);
-            showErrorMessage(error.message || 'Failed to load refund details');
-        });
+                showFinancePanel('Refund Details', content);
+            })
+            .catch(error => {
+                console.error('Error loading refund details:', error);
+                showErrorMessage(error.message || 'Failed to load refund details');
+            });
     }
 
     /**
@@ -6742,7 +6191,7 @@ async function viewRefundHistory(paymentId) {
         const dateTo = q('refund-date-to');
 
         let url = '/refunds/export?';
-        
+
         if (dateFrom && dateFrom.value) {
             url += `startDate=${encodeURIComponent(dateFrom.value)}&`;
         }
@@ -6760,8 +6209,10 @@ async function viewRefundHistory(paymentId) {
         showMessage('success', 'Refund export started');
     }
 
-    // Bind initialization to finance tab activation
-    document.addEventListener('DOMContentLoaded', function() {
+    // Bind initialization to finance tab activation - REMOVED to avoid conflict with AdminTabManager
+    // AdminTabManager handles tab switching and initialization of FinanceModule
+    /*
+    document.addEventListener('DOMContentLoaded', function () {
         try {
             const tab = document.querySelector('[data-tab="finance"]');
             if (tab && !tab.dataset.refundMetricsBound) {
@@ -6774,28 +6225,16 @@ async function viewRefundHistory(paymentId) {
             if (panel && panel.classList.contains('active')) {
                 ensureInitialized();
             }
-        } catch(e) {
+        } catch (e) {
             console.warn('[Refund Metrics] Tab binding failed', e);
         }
     });
-
-    // Expose functions globally for external access
-    window.RefundMetricsModule = {
-        loadRefundMetrics,
-        loadRefundHistory,
-        renderRefundMetricsCards,
-        renderRefundChart,
-        renderRefundHistoryTable,
-        renderRefundPagination,
-        viewRefundDetails,
-        applyRefundFilters,
-        exportRefunds,
-        ensureInitialized
-    };
+    */
 
 })();
 
 // ================= End Refund Metrics Module =================
+
 
 
 // ================= Refund Export Functionality =================
@@ -6811,23 +6250,23 @@ function downloadCSV(csvContent, filename) {
     try {
         // Create a Blob from the CSV content
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        
+
         // Create a temporary download link
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
-        
+
         link.setAttribute('href', url);
         link.setAttribute('download', filename);
         link.style.visibility = 'hidden';
-        
+
         // Append to body, click, and remove
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
+
         // Clean up the URL object
         URL.revokeObjectURL(url);
-        
+
         showMessage('success', 'Refunds exported successfully');
     } catch (error) {
         console.error('Failed to download CSV:', error);
@@ -6843,37 +6282,37 @@ async function exportRefunds() {
         // Get date range inputs
         const startDateInput = document.getElementById('refund-export-start-date');
         const endDateInput = document.getElementById('refund-export-end-date');
-        
+
         if (!startDateInput || !endDateInput) {
             showMessage('error', 'Date range inputs not found');
             return;
         }
-        
+
         const startDate = startDateInput.value;
         const endDate = endDateInput.value;
-        
+
         // Validate date range
         const validation = ValidationUtils.validateDateRange(startDate, endDate);
         if (!validation.valid) {
             showMessage('error', validation.message);
             return;
         }
-        
+
         // Show loading state
         const exportBtn = document.getElementById('export-refunds-btn');
         if (exportBtn) {
             exportBtn.disabled = true;
             exportBtn.textContent = 'Exporting...';
         }
-        
+
         // Build API URL with date parameters
         const params = new URLSearchParams({
             startDate: startDate,
             endDate: endDate
         });
-        
+
         const url = `/refunds/export?${params.toString()}`;
-        
+
         // Call export API
         const response = await fetch(url, {
             method: 'GET',
@@ -6882,7 +6321,7 @@ async function exportRefunds() {
                 'Accept': 'text/csv'
             }
         });
-        
+
         if (!response.ok) {
             // Handle HTTP errors and show message, then return early
             let errorMsg;
@@ -6898,7 +6337,7 @@ async function exportRefunds() {
             showMessage('error', errorMsg);
             return;
         }
-        
+
         // Get CSV content from response
         let csvContent;
         try {
@@ -6908,13 +6347,13 @@ async function exportRefunds() {
             showMessage('error', 'Failed to read export data. Please try again or contact support.');
             return;
         }
-        
+
         // Generate filename with date range
         const filename = `refunds_${startDate}_to_${endDate}.csv`;
-        
+
         // Trigger download
         downloadCSV(csvContent, filename);
-        
+
     } catch (error) {
         console.error('Error exporting refunds:', error);
         showMessage('error', error.message || 'Failed to export refunds');
@@ -6938,16 +6377,16 @@ function initializeRefundExport() {
         exportBtn.addEventListener('click', exportRefunds);
         exportBtn.dataset.bound = 'true';
     }
-    
+
     // Set default date range (last 30 days)
     const endDateInput = document.getElementById('refund-export-end-date');
     const startDateInput = document.getElementById('refund-export-start-date');
-    
+
     if (endDateInput && startDateInput) {
         const today = new Date();
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(today.getDate() - 30);
-        
+
         // Format dates as YYYY-MM-DD
         endDateInput.value = today.toISOString().split('T')[0];
         startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
@@ -6960,9 +6399,9 @@ function initializeRefundExport() {
 // ================= Refund Export Initialization Note =================
 /*
  * IMPORTANT: Call initializeRefundExport() when the finance tab is activated
- * 
+ *
  * Example usage:
- * 
+ *
  * // When finance tab is clicked or activated:
  * function onFinanceTabActivated() {
  *     // Load refund metrics and history
@@ -6972,11 +6411,11 @@ function initializeRefundExport() {
  *     if (typeof loadRefundHistory === 'function') {
  *         loadRefundHistory();
  *     }
- *     
+ *
  *     // Initialize export functionality
  *     initializeRefundExport();
  * }
- * 
+ *
  * // Or add to existing tab activation logic:
  * document.querySelector('[data-tab="finance"]').addEventListener('click', function() {
  *     // ... existing tab switching code ...

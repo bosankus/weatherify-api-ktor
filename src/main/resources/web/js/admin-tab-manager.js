@@ -4,7 +4,7 @@
  * Implements lazy loading and intelligent data refresh strategies
  */
 
-(function() {
+(function () {
     'use strict';
 
     /**
@@ -88,7 +88,7 @@
             if (!tab || !tab.loaded || !tab.lastLoaded) {
                 return true;
             }
-            
+
             const age = Date.now() - tab.lastLoaded;
             return age > maxAge;
         }
@@ -147,9 +147,9 @@
     const TAB_CONFIGS = {
         'iam': {
             name: 'IAM',
-            loadFn: async function(forceRefresh = false) {
+            loadFn: async function (forceRefresh = false) {
                 console.log('[Tab] Loading IAM tab', { forceRefresh });
-                
+
                 // Check if already loaded and not forcing refresh
                 const tab = window.AdminTabManager.getTab('iam');
                 if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('iam')) {
@@ -158,13 +158,13 @@
                 }
 
                 window.AdminTabManager.markLoading('iam');
-                
+
                 try {
                     // Use cached API if available
                     if (typeof window.CachedAPI !== 'undefined') {
                         const data = await window.CachedAPI.getUsers(1, 10, forceRefresh);
                         window.AdminTabManager.markLoaded('iam', data);
-                        
+
                         // Render users if loadUsers function exists
                         if (typeof window.loadUsers === 'function') {
                             window.loadUsers(1, 10);
@@ -185,14 +185,14 @@
 
         'reports': {
             name: 'Reports',
-            loadFn: async function(forceRefresh = false) {
+            loadFn: async function (forceRefresh = false) {
                 console.log('[Tab] Loading Reports tab', { forceRefresh });
-                
+
                 const tab = window.AdminTabManager.getTab('reports');
                 if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('reports')) {
                     console.log('[Tab] Reports already loaded, skipping API call');
                     // Still ensure UI is visible
-                    if (typeof window.ReportsModule !== 'undefined' && 
+                    if (typeof window.ReportsModule !== 'undefined' &&
                         typeof window.ReportsModule.initialize === 'function') {
                         window.ReportsModule.initialize();
                     }
@@ -200,10 +200,10 @@
                 }
 
                 window.AdminTabManager.markLoading('reports');
-                
+
                 try {
                     // Initialize reports using ReportsModule - this will fetch and display data
-                    if (typeof window.ReportsModule !== 'undefined' && 
+                    if (typeof window.ReportsModule !== 'undefined' &&
                         typeof window.ReportsModule.initialize === 'function') {
                         window.ReportsModule.initialize();
                         // Wait a bit for data to load
@@ -215,16 +215,16 @@
                             console.warn('[Tab] ReportsModule not available, reports may not load properly');
                         }
                     }
-                    
+
                     // Initialize Reports charts (revenue and refund charts)
-                    if (typeof window.ReportsChartsModule !== 'undefined' && 
+                    if (typeof window.ReportsChartsModule !== 'undefined' &&
                         typeof window.ReportsChartsModule.initialize === 'function') {
                         // Small delay to ensure DOM is ready
                         setTimeout(() => {
                             window.ReportsChartsModule.initialize();
                         }, 200);
                     }
-                    
+
                     window.AdminTabManager.markLoaded('reports');
                 } catch (error) {
                     console.error('[Tab] Error loading Reports:', error);
@@ -237,30 +237,25 @@
 
         'finance': {
             name: 'Finance',
-            loadFn: async function(forceRefresh = false) {
+            loadFn: async function (forceRefresh = false) {
                 console.log('[Tab] Loading Finance tab', { forceRefresh });
 
                 const tab = window.AdminTabManager.getTab('finance');
-                if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('finance', 3 * 60 * 1000)) {
-                    console.log('[Tab] Finance already loaded, skipping API call');
-                    // Ensure UI is initialized even when cached
-                    if (window.FinanceModule && typeof window.FinanceModule.ensureInitialized === 'function') {
-                        window.FinanceModule.ensureInitialized();
-                    } else if (typeof window.initializeFinanceTab === 'function') {
-                        window.initializeFinanceTab();
-                    }
+                if (!forceRefresh && tab && tab.loaded &&
+                    !window.AdminTabManager.needsRefresh('finance', 3 * 60 * 1000)) {
+                    console.log('[Tab] Finance already loaded, skipping');
                     return;
                 }
 
                 window.AdminTabManager.markLoading('finance');
 
                 try {
-                    if (window.FinanceModule && typeof window.FinanceModule.ensureInitialized === 'function') {
-                        window.FinanceModule.ensureInitialized();
-                    } else if (typeof window.initializeFinanceTab === 'function') {
-                        window.initializeFinanceTab();
+                    if (window.FinancialDashboard &&
+                        typeof window.FinancialDashboard.initialize === 'function') {
+                        await window.FinancialDashboard.initialize();
                     } else {
-                        console.warn('[Tab] Finance initialization functions not found');
+                        console.error('[Tab] FinancialDashboard module not found');
+                        throw new Error('FinancialDashboard module not loaded');
                     }
 
                     window.AdminTabManager.markLoaded('finance');
@@ -273,11 +268,12 @@
             refreshInterval: 3 * 60 * 1000 // 3 minutes
         },
 
+
         'payments': {
             name: 'Payments',
-            loadFn: async function(forceRefresh = false) {
+            loadFn: async function (forceRefresh = false) {
                 console.log('[Tab] Loading Payments tab', { forceRefresh });
-                
+
                 const tab = window.AdminTabManager.getTab('payments');
                 if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('payments', 3 * 60 * 1000)) {
                     console.log('[Tab] Payments already loaded, skipping API call');
@@ -285,12 +281,12 @@
                 }
 
                 window.AdminTabManager.markLoading('payments');
-                
+
                 try {
                     if (typeof window.CachedAPI !== 'undefined') {
                         const data = await window.CachedAPI.getPayments(1, 20, {}, forceRefresh);
                         window.AdminTabManager.markLoaded('payments', data);
-                        
+
                         // Render payments if function exists
                         if (typeof window.loadPayments === 'function') {
                             window.loadPayments(1, 20);
@@ -307,9 +303,9 @@
 
         'refunds': {
             name: 'Refunds',
-            loadFn: async function(forceRefresh = false) {
+            loadFn: async function (forceRefresh = false) {
                 console.log('[Tab] Loading Refunds tab', { forceRefresh });
-                
+
                 const tab = window.AdminTabManager.getTab('refunds');
                 if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('refunds', 3 * 60 * 1000)) {
                     console.log('[Tab] Refunds already loaded, skipping API call');
@@ -317,7 +313,7 @@
                 }
 
                 window.AdminTabManager.markLoading('refunds');
-                
+
                 try {
                     if (typeof window.CachedAPI !== 'undefined') {
                         // Load both refunds and metrics in parallel
@@ -325,9 +321,9 @@
                             window.CachedAPI.getRefunds(1, 20, {}, forceRefresh),
                             window.CachedAPI.getRefundMetrics(forceRefresh)
                         ]);
-                        
+
                         window.AdminTabManager.markLoaded('refunds', { refunds: refundsData, metrics: metricsData });
-                        
+
                         // Render refunds if function exists
                         if (typeof window.loadRefunds === 'function') {
                             window.loadRefunds(1, 20);
@@ -347,7 +343,7 @@
 
         'service-catalog': {
             name: 'Service Catalog',
-            loadFn: async function(forceRefresh = false) {
+            loadFn: async function (forceRefresh = false) {
                 console.log('[Tab] Loading Service Catalog tab', { forceRefresh });
 
                 const tab = window.AdminTabManager.getTab('service-catalog');
@@ -379,9 +375,9 @@
 
         'tools': {
             name: 'Tools',
-            loadFn: async function() {
+            loadFn: async function () {
                 console.log('[Tab] Loading Tools tab');
-                
+
                 // Tools tab doesn't need data loading, but ensure buttons are bound and UI is visible
                 // The buttons are already bound in initializeAdmin(), but we can verify
                 try {
@@ -393,26 +389,26 @@
                             window.__adminInitialized = true;
                         }
                     }
-                    
+
                     // Ensure tools panel is visible and has proper styling
                     const toolsPanel = document.getElementById('tools');
                     if (toolsPanel) {
                         toolsPanel.style.display = 'block';
                         toolsPanel.classList.add('active');
-                        
-                    // Ensure tools grid is visible
-                    const toolsGrid = toolsPanel.querySelector('.data-grid');
-                    if (toolsGrid) {
-                        toolsGrid.style.display = 'grid';
-                        toolsGrid.style.visibility = 'visible';
-                    }
+
+                        // Ensure tools grid is visible
+                        const toolsGrid = toolsPanel.querySelector('.data-grid');
+                        if (toolsGrid) {
+                            toolsGrid.style.display = 'grid';
+                            toolsGrid.style.visibility = 'visible';
+                        }
                     } else {
                         console.warn('[Tab] Tools panel not found in DOM');
                     }
                 } catch (error) {
                     console.warn('[Tab] Error ensuring tools initialization:', error);
                 }
-                
+
                 window.AdminTabManager.markLoaded('tools');
             },
             refreshInterval: null // No auto-refresh
@@ -450,13 +446,13 @@
      */
     function setupTabHandlers() {
         const tabButtons = document.querySelectorAll('[data-tab]');
-        
+
         tabButtons.forEach(button => {
             // Remove existing listeners to avoid duplicates
             const newButton = button.cloneNode(true);
             button.parentNode.replaceChild(newButton, button);
-            
-            newButton.addEventListener('click', async function(e) {
+
+            newButton.addEventListener('click', async function (e) {
                 e.preventDefault();
                 e.stopPropagation();
                 const tabId = this.getAttribute('data-tab');
@@ -478,10 +474,10 @@
             const tabId = activeButton.getAttribute('data-tab');
             console.log(`[Tab Manager] Initial active tab: ${tabId}`);
             window.AdminTabManager.setActive(tabId);
-            
+
             // Update visibility first
             updateTabVisibility(tabId);
-            
+
             // Load initial tab data
             activateTab(tabId, false);
         } else {
@@ -501,7 +497,9 @@
      */
     async function activateTab(tabId, forceRefresh = false) {
         console.log(`[Tab Manager] Activating tab: ${tabId}`, { forceRefresh });
-        
+        console.log(`[Tab Manager] Available tabs:`, Object.keys(TAB_CONFIGS));
+        console.log(`[Tab Manager] Config for ${tabId}:`, TAB_CONFIGS[tabId]);
+
         const config = TAB_CONFIGS[tabId];
         if (!config) {
             console.warn(`[Tab Manager] Unknown tab: ${tabId}`);
@@ -528,7 +526,7 @@
         } catch (error) {
             console.error(`[Tab Manager] Error activating tab ${tabId}:`, error);
             hideTabLoading(tabId);
-            
+
             // Show error message
             if (typeof window.showMessage === 'function') {
                 window.showMessage('error', `Failed to load ${config.name} data: ${error.message}`);
@@ -555,11 +553,11 @@
             // Update tab panels - use both class and ensure visibility
             const panels = document.querySelectorAll('.tab-panel');
             let activePanelFound = false;
-            
+
             panels.forEach(panel => {
                 const panelId = panel.id;
                 const isActive = panelId === activeTabId;
-                
+
                 if (isActive) {
                     panel.classList.add('active');
                     panel.style.display = 'block';
@@ -578,20 +576,20 @@
                 if (toolsPanel) {
                     toolsPanel.style.display = 'block';
                     toolsPanel.classList.add('active');
-                    
+
                     // Ensure all tool items are visible
                     const toolList = toolsPanel.querySelector('.tool-list');
                     if (toolList) {
                         toolList.style.display = 'grid';
                         toolList.style.visibility = 'visible';
                     }
-                    
+
                     const toolItems = toolsPanel.querySelectorAll('.tool-item');
                     toolItems.forEach(item => {
                         item.style.display = 'flex';
                         item.style.visibility = 'visible';
                     });
-                    
+
                     const dashboardCard = toolsPanel.querySelector('.dashboard-card');
                     if (dashboardCard) {
                         dashboardCard.style.display = 'block';
@@ -643,7 +641,7 @@
     function invalidateTab(tabId) {
         console.log(`[Tab Manager] Invalidating tab: ${tabId}`);
         window.AdminTabManager.invalidate(tabId);
-        
+
         // If it's the active tab, refresh it
         if (window.AdminTabManager.getActive() === tabId) {
             activateTab(tabId, true);

@@ -14,11 +14,15 @@ import java.time.Instant
 @Serializable
 data class Payment(
     @SerialName("_id")
-    val id: String = ObjectId().toHexString(),
+    @kotlinx.serialization.Contextual
+    val id: ObjectId = ObjectId(),
     val userEmail: String,
-    @SerialName("razorpay_order_id") val orderId: String,
-    @SerialName("razorpay_payment_id") val paymentId: String,
-    @SerialName("razorpay_signature") val signature: String,
+    @SerialName("razorpay_order_id")
+    val orderId: String,
+    @SerialName("razorpay_payment_id")
+    val paymentId: String,
+    @SerialName("razorpay_signature")
+    val signature: String,
     val amount: Int? = null,
     val currency: String? = null,
     val receipt: String? = null,

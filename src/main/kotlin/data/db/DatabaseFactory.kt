@@ -79,12 +79,15 @@ object DatabaseFactory {
     /** Create a query document with a single field */
     private fun createQuery(field: String, value: Any): Document = Document(field, value)
 
+    private val logger = org.slf4j.LoggerFactory.getLogger("DatabaseFactory")
+
     /** Execute a database operation safely, returning false on exception */
     private suspend fun <T> executeDbOperation(operation: suspend () -> T): Boolean {
         return try {
             operation()
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logger.error("Database operation failed", e)
             false
         }
     }

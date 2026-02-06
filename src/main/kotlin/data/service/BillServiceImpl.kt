@@ -55,7 +55,7 @@ class BillServiceImpl(
                 return Result.error("Failed to fetch payments: ${paymentsResult.message}")
             }
             val allPayments = (paymentsResult as Result.Success).data
-            val selectedPayments = allPayments.filter { paymentIds.contains(it.id) }
+            val selectedPayments = allPayments.filter { paymentIds.contains(it.id.toHexString()) }
 
             // Generate invoice number
             val invoiceNumber = generateInvoiceNumber()
@@ -687,7 +687,6 @@ class BillServiceImpl(
      * Builds HTML email content for bill notification
      *
      * @param invoiceNumber The invoice number
-     * @param userEmail The user's email address
      * @return HTML email content
      */
     private fun buildBillEmailHtml(invoiceNumber: String): String {
