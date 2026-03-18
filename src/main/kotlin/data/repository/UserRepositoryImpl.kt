@@ -72,6 +72,7 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
                 ipAddress = doc.getString("ipAddress"),
                 registrationSource = doc.getString("registrationSource"),
                 isPremium = (doc.get("isPremium") as? Boolean) ?: false,
+                premiumExpiresAt = doc.getString("premiumExpiresAt"),
                 fcmToken = doc.getString("fcmToken")
             )
 
@@ -168,6 +169,8 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
             if (user.registrationSource != null && user.registrationSource != existingUser.registrationSource) updates["registrationSource"] =
                 user.registrationSource
             if (user.isPremium != existingUser.isPremium) updates["isPremium"] = user.isPremium
+            if (user.premiumExpiresAt != null && user.premiumExpiresAt != existingUser.premiumExpiresAt)
+                updates["premiumExpiresAt"] = user.premiumExpiresAt
             if (user.fcmToken != null && user.fcmToken != existingUser.fcmToken) updates["fcmToken"] =
                 user.fcmToken
 

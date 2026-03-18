@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
+import domain.repository.UserRepository
 import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
 import java.time.Instant
@@ -86,6 +87,7 @@ private suspend fun fetchRazorpayOrderDetails(
 fun Route.paymentRoute() {
     val billService: BillService by application.inject()
     val notificationService: NotificationService by application.inject()
+    val userRepository: UserRepository by application.inject()
     // POST /create-order -> Create Razorpay order server-side
     post(Constants.Api.CREATE_ORDER_ENDPOINT) {
         call.getAuthenticatedUserOrRespond() ?: return@post
@@ -304,6 +306,18 @@ fun Route.paymentRoute() {
             }
         }
 
+        // Match the payment amount to the correct pricing tier
+        val matchedTier = serviceConfig?.pricingTiers?.let { tiers ->
+            val paymentAmount = orderDetails?.amount
+            if (paymentAmount != null) {
+                tiers.firstOrNull { it.amount == paymentAmount }
+                    ?: tiers.firstOrNull { it.isDefault }
+                    ?: tiers.firstOrNull()
+            } else {
+                tiers.firstOrNull { it.isDefault } ?: tiers.firstOrNull()
+            }
+        }
+
         val payment = Payment(
             userEmail = userEmail,
             orderId = orderId,
@@ -316,6 +330,7 @@ fun Route.paymentRoute() {
             verifiedAt = verifiedAt,
             userId = dbUser.id.toHexString(),
             serviceType = serviceType,
+            pricingTierId = matchedTier?.id,
             requestIp = ip,
             userAgent = ua
         )
@@ -337,6 +352,41 @@ fun Route.paymentRoute() {
                 status = HttpStatusCode.InternalServerError
             )
             return@post
+        }
+
+        // Activate premium and compute expiry from matched pricing tier
+        if (matchedTier != null) {
+            val baseInstant = try {
+                Instant.parse(verifiedAt)
+            } catch (_: Exception) {
+                Instant.now()
+            }
+            val baseDate = ZonedDateTime.ofInstant(baseInstant, ZoneId.of("UTC"))
+            val expiryDate = when (matchedTier.durationType) {
+                DurationType.DAYS -> baseDate.plusDays(matchedTier.duration.toLong())
+                DurationType.MONTHS -> baseDate.plusMonths(matchedTier.duration.toLong())
+                DurationType.YEARS -> baseDate.plusYears(matchedTier.duration.toLong())
+            }
+            val premiumExpiresAt = expiryDate.toInstant().toString()
+
+            val updatedUser = dbUser.copy(
+                isPremium = true,
+                premiumExpiresAt = premiumExpiresAt
+            )
+            try {
+                when (val updateResult = userRepository.updateUser(updatedUser)) {
+                    is Result.Success -> {
+                        paymentLogger.info("Premium activated for $userEmail, expires at $premiumExpiresAt")
+                    }
+                    is Result.Error -> {
+                        paymentLogger.error("Failed to activate premium for $userEmail: ${updateResult.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                paymentLogger.error("Exception while activating premium for $userEmail", e)
+            }
+        } else {
+            paymentLogger.warn("No pricing tier matched for payment $paymentId, premium not auto-activated")
         }
 
         // Run email and notification sending in background to avoid blocking the response

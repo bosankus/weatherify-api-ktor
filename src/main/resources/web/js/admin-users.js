@@ -1133,55 +1133,177 @@
     }
 
     /**
-     * Handle premium change with optimistic UI update
+     * Handle premium change with optimistic UI update.
+     * When enabling premium, shows a dialog to collect the expiry date.
+     * When disabling, calls the API directly.
      */
     async function handlePremiumChange(email, isPremium, checkboxEl) {
         const prevValue = checkboxEl.dataset.prevChecked === 'true';
-        checkboxEl.disabled = true;
 
+        if (isPremium) {
+            // Revert the checkbox until the dialog confirms
+            checkboxEl.checked = false;
+            showPremiumExpiryDialog(email, checkboxEl);
+        } else {
+            // Disabling premium — no expiry needed
+            checkboxEl.disabled = true;
+            await executePremiumUpdate(email, false, null, checkboxEl, prevValue);
+            checkboxEl.disabled = false;
+        }
+    }
+
+    /**
+     * Show dialog to collect premium expiry date when enabling premium
+     */
+    function showPremiumExpiryDialog(email, checkboxEl) {
+        // Default expiry: 30 days from now
+        const defaultDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        const defaultValue = defaultDate.toISOString().slice(0, 16); // yyyy-MM-ddTHH:mm
+
+        const dialog = createUserActionDialog({
+            title: 'Enable Premium',
+            subtitle: `Set premium subscription expiry for ${escapeHtml(email)}`,
+            confirmText: 'Enable Premium',
+            confirmVariant: 'primary',
+            bodyHtml: `
+                <div class="user-action-field">
+                    <label class="user-action-label" for="premium-expiry-input">Expiry date & time (UTC)</label>
+                    <input id="premium-expiry-input" type="datetime-local" class="user-action-input" value="${defaultValue}" step="60">
+                    <div id="premium-expiry-hint" style="font-size: 0.75rem; margin-top: 4px; color: var(--text-secondary);">
+                        Defaults to 30 days from now. The user's premium access will expire at this time.
+                    </div>
+                </div>
+                <div class="user-action-field" style="margin-top: 8px;">
+                    <label class="user-action-label">Quick presets</label>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+                        <button type="button" class="user-action-btn secondary premium-preset-btn" data-days="30" style="padding: 4px 10px; font-size: 0.8rem;">30 Days</button>
+                        <button type="button" class="user-action-btn secondary premium-preset-btn" data-days="90" style="padding: 4px 10px; font-size: 0.8rem;">90 Days</button>
+                        <button type="button" class="user-action-btn secondary premium-preset-btn" data-days="180" style="padding: 4px 10px; font-size: 0.8rem;">6 Months</button>
+                        <button type="button" class="user-action-btn secondary premium-preset-btn" data-days="365" style="padding: 4px 10px; font-size: 0.8rem;">1 Year</button>
+                    </div>
+                </div>
+                <div class="user-action-error" id="premium-expiry-error"></div>
+            `
+        });
+
+        const expiryInput = dialog.container.querySelector('#premium-expiry-input');
+        const errorEl = dialog.container.querySelector('#premium-expiry-error');
+        const hintEl = dialog.container.querySelector('#premium-expiry-hint');
+
+        // Preset buttons
+        dialog.container.querySelectorAll('.premium-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const days = parseInt(btn.dataset.days, 10);
+                const presetDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+                expiryInput.value = presetDate.toISOString().slice(0, 16);
+                updateHint();
+            });
+        });
+
+        function updateHint() {
+            const val = expiryInput.value;
+            if (!val) {
+                hintEl.textContent = 'Please select an expiry date.';
+                hintEl.style.color = '#ef4444';
+                return;
+            }
+            const selectedDate = new Date(val + ':00Z');
+            const now = new Date();
+            if (selectedDate <= now) {
+                hintEl.textContent = 'Expiry date must be in the future.';
+                hintEl.style.color = '#ef4444';
+            } else {
+                const diffMs = selectedDate - now;
+                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                hintEl.textContent = `Premium will be active for ${diffDays} day${diffDays !== 1 ? 's' : ''} and ${diffHours} hour${diffHours !== 1 ? 's' : ''}.`;
+                hintEl.style.color = '#10b981';
+            }
+        }
+
+        expiryInput.addEventListener('input', updateHint);
+        updateHint();
+
+        dialog.onConfirm(async () => {
+            const expiryValue = expiryInput.value;
+
+            if (!expiryValue) {
+                showDialogError(errorEl, 'Please select an expiry date.');
+                expiryInput.focus();
+                return;
+            }
+
+            const expiryDate = new Date(expiryValue + ':00Z');
+            if (expiryDate <= new Date()) {
+                showDialogError(errorEl, 'Expiry date must be in the future.');
+                expiryInput.focus();
+                return;
+            }
+
+            const premiumExpiresAt = expiryDate.toISOString();
+
+            setDialogLoading(dialog, true, 'Enabling...');
+            const success = await executePremiumUpdate(email, true, premiumExpiresAt, checkboxEl, false);
+            if (success) {
+                dialog.close();
+            } else {
+                setDialogLoading(dialog, false, 'Enable Premium');
+            }
+        });
+    }
+
+    /**
+     * Execute the premium update API call
+     */
+    async function executePremiumUpdate(email, isPremium, premiumExpiresAt, checkboxEl, prevValue) {
         try {
-            const response = await window.UserRoute.updatePremium(email, isPremium);
+            const response = await window.UserRoute.updatePremium(email, isPremium, premiumExpiresAt);
 
             if (!response.ok) {
-                // Show user-friendly error message
                 let errorMsg = 'Unable to update premium status. ';
-                if (response.status === 401 || response.status === 403) {
-                    errorMsg += 'Your session has expired. Please refresh the page and login again.';
-                } else if (response.status === 404) {
-                    errorMsg += 'User not found.';
-                } else {
+                try {
+                    const errorData = await response.json();
+                    if (errorData.message) {
+                        errorMsg = errorData.message;
+                    } else if (response.status === 401 || response.status === 403) {
+                        errorMsg += 'Your session has expired. Please refresh the page and login again.';
+                    } else if (response.status === 404) {
+                        errorMsg += 'User not found.';
+                    } else {
+                        errorMsg += `Please try again (Error ${response.status}).`;
+                    }
+                } catch (_) {
                     errorMsg += `Please try again (Error ${response.status}).`;
                 }
                 showMessage('error', errorMsg);
                 checkboxEl.checked = prevValue;
-                return;
+                return false;
             }
 
             const data = await response.json();
 
             if (data.status === true) {
+                checkboxEl.checked = isPremium;
                 checkboxEl.dataset.prevChecked = String(isPremium);
                 const statusText = isPremium ? 'enabled' : 'disabled';
                 showMessage('success', `Premium ${statusText} for ${email}`);
 
-                // Invalidate cache
                 if (window.CachedAPI) {
                     window.CachedAPI.invalidateUsers();
                 }
+                return true;
             } else {
-                // Show user-friendly error message
                 const errorMsg = data.message || 'Unable to update premium status. Please try again.';
                 showMessage('error', errorMsg);
                 checkboxEl.checked = prevValue;
+                return false;
             }
         } catch (error) {
-            // Handle unexpected errors (network errors, etc.)
             console.error('Error updating premium:', error);
             checkboxEl.checked = prevValue;
             const errorMsg = error.message || 'An unexpected error occurred while updating premium status. Please try again.';
             showMessage('error', errorMsg);
-        } finally {
-            checkboxEl.disabled = false;
+            return false;
         }
     }
 

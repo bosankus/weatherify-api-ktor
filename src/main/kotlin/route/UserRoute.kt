@@ -318,6 +318,28 @@ fun Route.userRoute() {
                     return@post
                 }
 
+                if (req.isPremium && req.premiumExpiresAt.isNullOrBlank()) {
+                    call.respondError(
+                        "premiumExpiresAt is required when enabling premium (ISO-8601 UTC format, e.g. 2026-06-18T10:30:00Z)",
+                        Unit,
+                        HttpStatusCode.BadRequest
+                    )
+                    return@post
+                }
+
+                if (req.isPremium && req.premiumExpiresAt != null) {
+                    try {
+                        java.time.Instant.parse(req.premiumExpiresAt)
+                    } catch (_: Exception) {
+                        call.respondError(
+                            "Invalid premiumExpiresAt format. Expected ISO-8601 UTC (e.g. 2026-06-18T10:30:00Z)",
+                            Unit,
+                            HttpStatusCode.BadRequest
+                        )
+                        return@post
+                    }
+                }
+
                 when (val userRes = userRepository.findUserByEmail(email)) {
                     is Result.Success -> {
                         val user = userRes.data
@@ -325,7 +347,10 @@ fun Route.userRoute() {
                             call.respondError("User not found", Unit, HttpStatusCode.NotFound)
                             return@post
                         }
-                        val updated = user.copy(isPremium = req.isPremium)
+                        val updated = user.copy(
+                            isPremium = req.isPremium,
+                            premiumExpiresAt = if (req.isPremium) req.premiumExpiresAt else null
+                        )
                         when (val updRes = userRepository.updateUser(updated)) {
                             is Result.Success -> {
                                 if (updRes.data) {
@@ -333,7 +358,8 @@ fun Route.userRoute() {
                                         if (req.isPremium) "Premium enabled" else "Premium disabled",
                                         PremiumUpdateResponseDTO(
                                             email = email,
-                                            isPremium = req.isPremium
+                                            isPremium = req.isPremium,
+                                            premiumExpiresAt = if (req.isPremium) req.premiumExpiresAt else null
                                         )
                                     )
                                 } else {
@@ -605,12 +631,16 @@ data class ResetPasswordRequest(
 )
 
 @Serializable
-data class PremiumUpdateRequest(val isPremium: Boolean)
+data class PremiumUpdateRequest(
+    val isPremium: Boolean,
+    val premiumExpiresAt: String? = null
+)
 
 @Serializable
 data class PremiumUpdateResponseDTO(
     val email: String,
-    val isPremium: Boolean
+    val isPremium: Boolean,
+    val premiumExpiresAt: String? = null
 )
 
 @Serializable

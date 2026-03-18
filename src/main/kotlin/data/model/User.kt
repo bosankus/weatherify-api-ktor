@@ -32,6 +32,7 @@ data class User(
     val ipAddress: String? = null,
     val registrationSource: String? = null,
     val isPremium: Boolean = false,
+    val premiumExpiresAt: String? = null,
     val fcmToken: String? = null
 )
 
@@ -75,7 +76,8 @@ data class LoginResponse(
     val email: String,
     val role: UserRole?,
     val isActive: Boolean,
-    val isPremium: Boolean
+    val isPremium: Boolean,
+    val premiumExpiresAt: String? = null
 )
 
 /** Token refresh request data */

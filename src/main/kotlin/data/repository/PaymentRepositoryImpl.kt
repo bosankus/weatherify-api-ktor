@@ -236,6 +236,7 @@ class PaymentRepositoryImpl(private val databaseModule: DatabaseModule) : Paymen
                         serviceType = doc.getString("serviceType")?.let {
                             try { ServiceType.valueOf(it) } catch (_: Exception) { null }
                         },
+                        pricingTierId = doc.getString("pricingTierId"),
                         requestIp = doc.getString("requestIp"),
                         userAgent = doc.getString("userAgent")
                     )

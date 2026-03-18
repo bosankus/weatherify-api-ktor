@@ -76,8 +76,12 @@ window.UserRoute = window.UserRoute || {
             body: JSON.stringify({ isActive: !!isActive })
         });
     },
-    updatePremium(email, isPremium) {
+    updatePremium(email, isPremium, premiumExpiresAt) {
         const url = `/admin/users/${encodeURIComponent(email)}/premium`;
+        const body = { isPremium: !!isPremium };
+        if (isPremium && premiumExpiresAt) {
+            body.premiumExpiresAt = premiumExpiresAt;
+        }
         return fetch(url, {
             method: 'POST',
             credentials: 'include',
@@ -85,7 +89,7 @@ window.UserRoute = window.UserRoute || {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
-            body: JSON.stringify({ isPremium: !!isPremium })
+            body: JSON.stringify(body)
         });
     },
     resetPassword(email, newPassword) {

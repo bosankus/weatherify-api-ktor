@@ -14,6 +14,7 @@ import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 import util.Constants
+import java.time.Instant
 
 /**
  * Authentication routes for user registration, login, and token refresh
@@ -163,6 +164,9 @@ fun Route.authRoute() {
                         )
 
                         // Respond like /login
+                        val effectivePremium = user.isPremium &&
+                            user.premiumExpiresAt != null &&
+                            Instant.parse(user.premiumExpiresAt).isAfter(Instant.now())
                         call.respondSuccess(
                             Constants.Messages.LOGIN_SUCCESS,
                             LoginResponse(
@@ -170,7 +174,8 @@ fun Route.authRoute() {
                                 email = user.email,
                                 role = user.role,
                                 isActive = user.isActive,
-                                isPremium = user.isPremium
+                                isPremium = effectivePremium,
+                                premiumExpiresAt = if (effectivePremium) user.premiumExpiresAt else null
                             ),
                             HttpStatusCode.OK
                         )
@@ -388,6 +393,9 @@ fun Route.authRoute() {
                     )
 
                     // Return token and user info in response body
+                    val effectivePremium = user.isPremium &&
+                        user.premiumExpiresAt != null &&
+                        Instant.parse(user.premiumExpiresAt).isAfter(Instant.now())
                     call.respondSuccess(
                         Constants.Messages.LOGIN_SUCCESS,
                         LoginResponse(
@@ -395,7 +403,8 @@ fun Route.authRoute() {
                             email = user.email,
                             role = user.role,
                             isActive = user.isActive,
-                            isPremium = user.isPremium
+                            isPremium = effectivePremium,
+                            premiumExpiresAt = if (effectivePremium) user.premiumExpiresAt else null
                         ),
                         HttpStatusCode.OK
                     )
@@ -589,7 +598,7 @@ fun Route.authRoute() {
                     logger.warn("Token not expired, refresh rejected")
                     call.respondError(
                         Constants.Messages.TOKEN_NOT_EXPIRED,
-                        Unit,
+                        mapOf("errorCode" to "TOKEN_NOT_EXPIRED"),
                         HttpStatusCode.BadRequest
                     )
                 } catch (_: Exception) {
@@ -597,7 +606,7 @@ fun Route.authRoute() {
                     logger.warn("Invalid token provided for refresh")
                     call.respondError(
                         Constants.Messages.TOKEN_INVALID,
-                        Unit,
+                        mapOf("errorCode" to "TOKEN_INVALID"),
                         HttpStatusCode.BadRequest
                     )
                 }
@@ -642,6 +651,9 @@ fun Route.authRoute() {
                     )
 
                     // Return new token and user info in response body
+                    val effectivePremium = user.isPremium &&
+                        user.premiumExpiresAt != null &&
+                        Instant.parse(user.premiumExpiresAt).isAfter(Instant.now())
                     call.respondSuccess(
                         Constants.Messages.TOKEN_REFRESH_SUCCESS,
                         LoginResponse(
@@ -649,7 +661,8 @@ fun Route.authRoute() {
                             email = email,
                             role = user.role,
                             isActive = user.isActive,
-                            isPremium = user.isPremium
+                            isPremium = effectivePremium,
+                            premiumExpiresAt = if (effectivePremium) user.premiumExpiresAt else null
                         ),
                         HttpStatusCode.OK
                     )

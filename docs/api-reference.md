@@ -18,6 +18,13 @@ request parameters, response formats, and authentication requirements.
 - [Authentication Endpoints](#authentication-endpoints)
     - [Register User](#register-user)
     - [Login User](#login-user)
+    - [Refresh Token](#refresh-token)
+    - [Logout](#logout)
+- [Payment Endpoints](#payment-endpoints)
+    - [Create Order](#create-order)
+    - [Verify and Store Payment](#verify-and-store-payment)
+- [Admin User Endpoints](#admin-user-endpoints)
+    - [Update Premium Status](#update-premium-status)
 - [Weather Endpoints](#weather-endpoints)
     - [Get Current Weather](#get-current-weather)
     - [Get Air Pollution](#get-air-pollution)
@@ -97,13 +104,18 @@ Registers a new user with email and password.
 ```
 
 - **Response**:
-    - **Success (201 Created)**:
+    - **Success (200 OK)**:
       ```json
       {
         "status": true,
-        "message": "Registration successful",
+        "message": "Login successful",
         "data": {
-          "_id": "b2d5f3b2-5f9a-4b0f-9f77-123456789abc"
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+          "email": "user@example.com",
+          "role": "USER",
+          "isActive": true,
+          "isPremium": false,
+          "premiumExpiresAt": null
         }
       }
       ```
@@ -114,6 +126,8 @@ Registers a new user with email and password.
     - Email must be a valid email format.
     - Password must be at least 8 characters long and contain at least one digit, one lowercase
       letter, one uppercase letter, and one special character.
+    - On successful registration, a JWT token is returned (same as login response).
+    - A `jwt_token` HTTP-only cookie is also set for browser-based clients.
 
 ### Login User
 
@@ -139,13 +153,229 @@ Authenticates a user and returns a JWT token.
         "message": "Login successful",
         "data": {
           "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-          "email": "user@example.com"
+          "email": "user@example.com",
+          "role": "USER",
+          "isActive": true,
+          "isPremium": true,
+          "premiumExpiresAt": "2026-06-18T10:30:00Z"
         }
       }
       ```
     - **Error (401 Unauthorized)**: Invalid credentials or user not registered
     - **Error (403 Forbidden)**: Account inactive
 
+- **Notes**:
+    - A `jwt_token` HTTP-only cookie is also set for browser-based clients.
+    - `isPremium` reflects the **effective** premium status: `true` only if the user has an active
+      premium subscription that has not expired (i.e., `premiumExpiresAt` is in the future).
+    - `premiumExpiresAt` is an ISO-8601 UTC timestamp. It is `null` when the user is not premium
+      or when the subscription has expired.
+
+### Refresh Token
+
+Refreshes an expired JWT token. The existing token must be expired but otherwise valid (correct signature, audience, issuer).
+
+- **URL**: `/refresh-token`
+- **Method**: `POST`
+- **Authentication**: None
+- **Request Body**:
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+- **Response**:
+    - **Success (200 OK)**:
+      ```json
+      {
+        "status": true,
+        "message": "Token refreshed successfully",
+        "data": {
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+          "email": "user@example.com",
+          "role": "USER",
+          "isActive": true,
+          "isPremium": true,
+          "premiumExpiresAt": "2026-06-18T10:30:00Z"
+        }
+      }
+      ```
+    - **Error (400 Bad Request)**: Token is still valid (not expired), empty token, or invalid Content-Type
+    - **Error (400 Bad Request)**: Token is invalid (wrong signature, audience, or issuer)
+    - **Error (401 Unauthorized)**: User no longer exists
+    - **Error (403 Forbidden)**: Account inactive
+
+- **Notes**:
+    - Content-Type must be `application/json`.
+    - Only expired tokens can be refreshed. If the token is still valid, the request is rejected.
+    - `isPremium` and `premiumExpiresAt` reflect the current effective premium status at refresh time.
+
+### Logout
+
+Logs out the current user by clearing the auth cookie.
+
+- **URL**: `/logout`
+- **Method**: `POST`
+- **Authentication**: None
+
+- **Response**:
+    - **Success (200 OK)**:
+      ```json
+      {
+        "status": true,
+        "message": "Logged out successfully",
+        "data": {}
+      }
+      ```
+
+- **Notes**:
+    - Clears the `jwt_token` HTTP-only cookie.
+    - Since tokens are stateless (JWT-based), the token itself remains valid until expiration.
+      Clients should discard the token on their end.
+
+## Payment Endpoints
+
+### Create Order
+
+Creates a Razorpay order for payment processing.
+
+- **URL**: `/create-order`
+- **Method**: `POST`
+- **Authentication**: Required (JWT)
+- **Request Body**:
+
+```json
+{
+  "amount": 99900,
+  "currency": "INR",
+  "receipt": "receipt_001",
+  "partialPayment": false,
+  "notes": {
+    "description": "Premium subscription"
+  }
+}
+```
+
+- **Response**:
+    - **Success (200 OK)**:
+      ```json
+      {
+        "status": true,
+        "message": "Order created successfully",
+        "data": {
+          "orderId": "order_abc123",
+          "amount": 99900,
+          "currency": "INR",
+          "receipt": "receipt_001",
+          "status": "created",
+          "createdAt": 1627660800
+        }
+      }
+      ```
+    - **Error (400 Bad Request)**: Missing/invalid fields (amount must be > 0)
+    - **Error (401 Unauthorized)**: Missing or invalid JWT token
+    - **Error (500 Internal Server Error)**: Payment not configured or Razorpay API failure
+
+- **Notes**:
+    - `amount` is in the smallest currency unit (paise for INR, e.g., 99900 = ₹999).
+    - The returned `orderId` is used in the client-side Razorpay checkout flow.
+
+### Verify and Store Payment
+
+Verifies a Razorpay payment signature and stores the payment record. On success, automatically
+activates premium for the user with a computed expiry date.
+
+- **URL**: `/store-payment`
+- **Method**: `POST`
+- **Authentication**: Required (JWT)
+- **Request Body**:
+
+```json
+{
+  "razorpay_payment_id": "pay_abc123",
+  "razorpay_order_id": "order_abc123",
+  "razorpay_signature": "d1e2f3..."
+}
+```
+
+- **Response**:
+    - **Success (200 OK)**:
+      ```json
+      {
+        "status": true,
+        "message": "Payment verified and stored",
+        "data": {
+          "verified": true
+        }
+      }
+      ```
+    - **Error (400 Bad Request)**: Missing required fields or signature verification failed
+    - **Error (401 Unauthorized)**: Missing or invalid JWT token
+    - **Error (404 Not Found)**: User not found
+    - **Error (500 Internal Server Error)**: Payment storage failed or payment not configured
+
+- **Notes**:
+    - Verifies the Razorpay signature using HMAC-SHA256.
+    - On successful verification, the payment is stored with a link to the matched `PricingTier`
+      (`pricingTierId`).
+    - **Premium auto-activation**: The server matches the payment amount to the correct pricing
+      tier, computes `premiumExpiresAt = verifiedAt + tier.duration`, and updates the user's
+      `isPremium` to `true` with the computed expiry.
+    - A payment confirmation email and push notification are sent in the background.
+
+## Admin User Endpoints
+
+### Update Premium Status
+
+Manually enables or disables premium for a user. Requires admin authentication.
+
+- **URL**: `/users/{email}/premium`
+- **Method**: `POST`
+- **Authentication**: Required (Admin JWT)
+- **Request Body** (enable premium):
+
+```json
+{
+  "isPremium": true,
+  "premiumExpiresAt": "2026-06-18T10:30:00Z"
+}
+```
+
+- **Request Body** (disable premium):
+
+```json
+{
+  "isPremium": false
+}
+```
+
+- **Response**:
+    - **Success (200 OK)**:
+      ```json
+      {
+        "status": true,
+        "message": "Premium enabled",
+        "data": {
+          "email": "user@example.com",
+          "isPremium": true,
+          "premiumExpiresAt": "2026-06-18T10:30:00Z"
+        }
+      }
+      ```
+    - **Error (400 Bad Request)**: Missing `premiumExpiresAt` when enabling, or invalid ISO-8601 format
+    - **Error (401 Unauthorized)**: Missing or invalid JWT token
+    - **Error (403 Forbidden)**: Admin privileges required
+    - **Error (404 Not Found)**: User not found
+
+- **Notes**:
+    - Only accessible by users with ADMIN role.
+    - `premiumExpiresAt` is **required** when `isPremium` is `true`. Must be a valid ISO-8601 UTC
+      timestamp (e.g., `2026-06-18T10:30:00Z`).
+    - When `isPremium` is `false`, `premiumExpiresAt` is automatically cleared.
+    - This endpoint is useful for backfilling expiry dates on existing premium users or granting
+      complimentary premium access.
 
 ## Weather Endpoints
 

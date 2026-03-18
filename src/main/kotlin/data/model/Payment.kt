@@ -32,6 +32,7 @@ data class Payment(
     val verifiedAt: String? = createdAt,
     val userId: String? = null,
     val serviceType: ServiceType? = null,
+    val pricingTierId: String? = null,
     val requestIp: String? = null,
     val userAgent: String? = null,
 )
