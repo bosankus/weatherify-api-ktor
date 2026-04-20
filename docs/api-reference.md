@@ -99,9 +99,21 @@ Registers a new user with email and password.
 ```json
 {
   "email": "user@example.com",
-  "password": "StrongP@ssw0rd"
+  "password": "StrongP@ssw0rd",
+  "timestampOfRegistration": 1627660800,
+  "deviceModel": "Pixel 7",
+  "operatingSystem": "Android",
+  "osVersion": "14",
+  "appVersion": "1.2.3",
+  "registrationSource": "organic",
+  "firebaseToken": "fcm-token-here"
 }
 ```
+
+> All fields except `email` and `password` are optional.
+
+> **Removed fields**: `ipAddress`, `role`, `isActive`, and `isPremium` are no longer accepted in
+> the request body. These are determined server-side and any client-supplied values are ignored.
 
 - **Response**:
     - **Success (200 OK)**:
@@ -123,11 +135,14 @@ Registers a new user with email and password.
     - **Error (409 Conflict)**: User already exists
 
 - **Notes**:
-    - Email must be a valid email format.
+    - Email is normalized to lowercase and trimmed before processing.
+    - Email must be a valid email format (supports long TLDs such as `.photography`).
     - Password must be at least 8 characters long and contain at least one digit, one lowercase
       letter, one uppercase letter, and one special character.
+    - `role`, `isActive`, `isPremium`, and `ipAddress` are **not accepted from the client** — they
+      are set server-side (`USER`, `true`, `false`) and the IP is extracted from the request headers.
     - On successful registration, a JWT token is returned (same as login response).
-    - A `jwt_token` HTTP-only cookie is also set for browser-based clients.
+    - A `jwt_token` HTTP-only cookie (`SameSite=Strict`) is also set for browser-based clients.
 
 ### Login User
 
@@ -165,7 +180,8 @@ Authenticates a user and returns a JWT token.
     - **Error (403 Forbidden)**: Account inactive
 
 - **Notes**:
-    - A `jwt_token` HTTP-only cookie is also set for browser-based clients.
+    - Email is normalized to lowercase and trimmed server-side before processing.
+    - A `jwt_token` HTTP-only, `SameSite=Strict` cookie is also set for browser-based clients.
     - `isPremium` reflects the **effective** premium status: `true` only if the user has an active
       premium subscription that has not expired (i.e., `premiumExpiresAt` is in the future).
     - `premiumExpiresAt` is an ISO-8601 UTC timestamp. It is `null` when the user is not premium
@@ -187,7 +203,7 @@ Refreshes an expired JWT token. The existing token must be expired but otherwise
 ```
 
 - **Response**:
-    - **Success (200 OK)**:
+    - **Success (200 OK)** — token was expired, new token issued:
       ```json
       {
         "status": true,
@@ -202,14 +218,29 @@ Refreshes an expired JWT token. The existing token must be expired but otherwise
         }
       }
       ```
-    - **Error (400 Bad Request)**: Token is still valid (not expired), empty token, or invalid Content-Type
-    - **Error (400 Bad Request)**: Token is invalid (wrong signature, audience, or issuer)
+    - **Success (200 OK)** — token is still valid, original token returned as-is:
+      ```json
+      {
+        "status": true,
+        "message": "Token not expired",
+        "data": {
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+          "email": "user@example.com",
+          "role": "USER",
+          "isActive": true,
+          "isPremium": false,
+          "premiumExpiresAt": null
+        }
+      }
+      ```
+    - **Error (400 Bad Request)**: Empty token, invalid Content-Type, or token is invalid (wrong signature, audience, or issuer)
     - **Error (401 Unauthorized)**: User no longer exists
     - **Error (403 Forbidden)**: Account inactive
 
 - **Notes**:
     - Content-Type must be `application/json`.
-    - Only expired tokens can be refreshed. If the token is still valid, the request is rejected.
+    - Both expired and still-valid tokens return `200 OK`. The `message` field distinguishes the two cases.
+    - Only tokens with an invalid signature, issuer, or audience return `400 Bad Request`.
     - `isPremium` and `premiumExpiresAt` reflect the current effective premium status at refresh time.
 
 ### Logout
@@ -218,7 +249,7 @@ Logs out the current user by clearing the auth cookie.
 
 - **URL**: `/logout`
 - **Method**: `POST`
-- **Authentication**: None
+- **Authentication**: Required (JWT)
 
 - **Response**:
     - **Success (200 OK)**:
@@ -229,9 +260,11 @@ Logs out the current user by clearing the auth cookie.
         "data": {}
       }
       ```
+    - **Error (401 Unauthorized)**: Missing or invalid JWT token
 
 - **Notes**:
-    - Clears the `jwt_token` HTTP-only cookie.
+    - Requires a valid JWT in the `Authorization: Bearer <token>` header or the `jwt_token` cookie.
+    - Clears the `jwt_token` HTTP-only, `SameSite=Strict` cookie.
     - Since tokens are stateless (JWT-based), the token itself remains valid until expiration.
       Clients should discard the token on their end.
 

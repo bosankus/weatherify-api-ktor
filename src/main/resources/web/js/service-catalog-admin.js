@@ -819,43 +819,6 @@
         const style = document.createElement('style');
         style.id = 'service-panel-styles';
         style.textContent = `
-            /* Backdrop & Panel Animation */
-            .sliding-backdrop {
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 20000;
-                opacity: 0; visibility: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-            .sliding-backdrop.active { opacity: 1; visibility: visible; }
-            
-            .sliding-panel {
-                position: fixed; top: 0; right: 0; width: 640px; max-width: 100vw; height: 100vh;
-                background: var(--card-bg, #ffffff); 
-                border-left: 1px solid var(--card-border, #e2e8f0);
-                box-shadow: -8px 0 32px rgba(0, 0, 0, 0.15); 
-                z-index: 20001;
-                display: flex; flex-direction: column; 
-                transform: translateX(100%);
-                transition: transform 0.35s cubic-bezier(0.2, 0, 0, 1);
-            }
-            .sliding-panel.active { transform: translateX(0); }
-            
-            /* Header */
-            .sliding-panel-header {
-                padding: 1.5rem 2rem; 
-                border-bottom: 1px solid var(--card-border, #e2e8f0);
-                display: flex; align-items: center; justify-content: space-between;
-                background: var(--bg-color, #ffffff);
-                position: sticky; top: 0; z-index: 10;
-            }
-            
-            /* Body */
-            .sliding-panel-body { 
-                flex: 1; 
-                overflow-y: auto; 
-                padding: 2rem;
-                scroll-behavior: smooth;
-            }
-            
             /* Row Layout Design */
             .service-edit-row {
                 display: grid; 
@@ -952,37 +915,25 @@
             }
             
             /* Responsive Utilities */
-            @media (max-width: 1024px) {
-                .sliding-panel { width: 560px; }
-            }
-            
             @media (max-width: 768px) {
-                .sliding-panel { width: 100%; max-width: 100%; border-left: none; }
-                .sliding-panel-header { padding: 1rem 1.5rem; }
-                .sliding-panel-body { padding: 1.5rem; }
-                
-                .service-edit-row { 
-                    grid-template-columns: 1fr; /* Stack vertically */
+                .service-edit-row {
+                    grid-template-columns: 1fr;
                     gap: 0.75rem;
                     padding: 1.25rem 0;
                 }
-                .service-edit-label-col { 
-                    flex-direction: row; 
-                    align-items: baseline; 
+                .service-edit-label-col {
+                    flex-direction: row;
+                    align-items: baseline;
                     justify-content: space-between;
                     flex-wrap: wrap;
                     gap: 0.5rem;
                 }
-                .service-edit-sublabel { display: none; } /* Hide descriptions on mobile to save space, or show below */
-                
+                .service-edit-sublabel { display: none; }
                 .checkbox-grid { grid-template-columns: 1fr 1fr; }
             }
-            
+
             @media (max-width: 480px) {
                 .checkbox-grid { grid-template-columns: 1fr; }
-                .sliding-panel-header { padding: 1rem; }
-                .sliding-panel-body { padding: 1rem; }
-                
                 .btn { padding: 0.5rem 0.85rem; font-size: 0.85rem; }
             }
         `;

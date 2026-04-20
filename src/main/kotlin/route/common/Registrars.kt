@@ -93,3 +93,9 @@ object SavedLocationRoutesRegistrar : RouteRegistrar {
         with(root) { savedLocationRoute(get(SavedLocationService::class.java)) }
     }
 }
+
+object NoteRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { noteRoute() }
+    }
+}

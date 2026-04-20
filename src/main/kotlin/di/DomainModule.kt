@@ -14,6 +14,7 @@ val domainModule = module {
     single<AuthService> { AuthServiceImpl(get()) }
     single<FeedbackService> { FeedbackServiceImpl(get()) }
     single<WeatherService> { WeatherServiceImpl(get()) }
+    single<WeatherAggregatorService> { WeatherAggregatorServiceImpl(get(), get()) }
     single<EmailService> { EmailServiceImpl(get()) }
     single<RefundService> { RefundServiceImpl(get(), get(), get(), get(), get()) }
     single<FinancialService> { FinancialServiceImpl(get(), get(), get()) }
@@ -21,6 +22,7 @@ val domainModule = module {
     single<NotificationService> { NotificationServiceImpl() }
     single<ServiceCatalogService> { ServiceCatalogServiceImpl(get(), get()) }
     single { SavedLocationService(get()) }
+    single { NoteService(get()) }
 
     // Data Services
     single { ServiceCatalogSeedingService(get()) }

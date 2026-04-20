@@ -43,7 +43,6 @@ fun Application.configureRouting() {
                 "/favicon.ico",
                 "/",
                 "/weather",
-                "/air-pollution",
                 "/feedback",
                 "/login",
                 "/register",

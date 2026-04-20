@@ -1,9 +1,12 @@
 package bose.ankush.util
 
 import at.favre.lib.crypto.bcrypt.BCrypt
+import org.slf4j.LoggerFactory
 
 /** Utility for password hashing, verification and validation */
 object PasswordUtil {
+    private val logger = LoggerFactory.getLogger(PasswordUtil::class.java)
+
     // BCrypt cost factor (higher = more secure but slower)
     private const val COST_FACTOR = 12
 
@@ -11,19 +14,15 @@ object PasswordUtil {
     private const val MIN_PASSWORD_LENGTH = 8
     private const val SPECIAL_CHARS = "!@#$%^&*()_-+=<>?/[]{}|"
 
-    // Email validation regex
-    private val EMAIL_REGEX = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$")
+    // Email validation regex — TLD unbounded to support long TLDs (e.g. .photography)
+    private val EMAIL_REGEX = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
 
     /** Hash a password using BCrypt */
     fun hashPassword(password: String): String {
         try {
             return BCrypt.withDefaults().hashToString(COST_FACTOR, password.toCharArray())
         } catch (e: Exception) {
-            // Log the error
-            System.err.println("Error hashing password: ${e.message}")
-            e.printStackTrace()
-
-            // Rethrow as a more specific exception with a clearer message
+            logger.error("Error hashing password: ${e.message}", e)
             throw IllegalArgumentException("Failed to hash password: ${e.message}", e)
         }
     }
@@ -34,11 +33,7 @@ object PasswordUtil {
             val result = BCrypt.verifyer().verify(password.toCharArray(), hash)
             return result.verified
         } catch (e: Exception) {
-            // Log the error
-            System.err.println("Error verifying password: ${e.message}")
-            e.printStackTrace()
-
-            // Rethrow as a more specific exception with a clearer message
+            logger.error("Error verifying password: ${e.message}", e)
             throw IllegalArgumentException("Failed to verify password: ${e.message}", e)
         }
     }

@@ -5,10 +5,13 @@ import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
+import config.TokenRefreshResult
 import domain.model.Result
 import domain.repository.UserRepository
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
@@ -25,9 +28,10 @@ fun Route.authRoute() {
     post(Constants.Api.REGISTER_ENDPOINT) {
         call.handleAuth(logger, "registration") {
             val request = call.receive<UserRegistrationRequest>()
-            logger.info("Registration request received for email: ${request.email}")
+            val email = request.email.lowercase().trim()
+            logger.info("Registration request received for email: $email")
 
-            if (!PasswordUtil.validateEmailFormat(request.email)) {
+            if (!PasswordUtil.validateEmailFormat(email)) {
                 call.respondError(Constants.Auth.INVALID_EMAIL_FORMAT, Unit, HttpStatusCode.BadRequest)
                 return@handleAuth
             }
@@ -36,7 +40,7 @@ fun Route.authRoute() {
                 return@handleAuth
             }
 
-            when (val result = userRepository.findUserByEmail(request.email)) {
+            when (val result = userRepository.findUserByEmail(email)) {
                 is Result.Success -> if (result.data != null) {
                     call.respondError(Constants.Messages.USER_ALREADY_EXISTS, Unit, HttpStatusCode.Conflict)
                     return@handleAuth
@@ -47,19 +51,22 @@ fun Route.authRoute() {
                 }
             }
 
+            val ipAddress = call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+                ?: call.request.local.remoteHost
+
             val user = User(
-                email = request.email,
+                email = email,
                 passwordHash = PasswordUtil.hashPassword(request.password),
                 timestampOfRegistration = request.timestampOfRegistration,
                 deviceModel = request.deviceModel,
                 operatingSystem = request.operatingSystem,
                 osVersion = request.osVersion,
                 appVersion = request.appVersion,
-                ipAddress = request.ipAddress,
+                ipAddress = ipAddress,
                 registrationSource = request.registrationSource,
-                role = request.role,
-                isActive = request.isActive,
-                isPremium = request.isPremium,
+                role = UserRole.USER,
+                isActive = true,
+                isPremium = false,
                 fcmToken = request.firebaseToken
             )
 
@@ -81,9 +88,10 @@ fun Route.authRoute() {
     post(Constants.Api.LOGIN_ENDPOINT) {
         call.handleAuth(logger, "login") {
             val request = call.receive<UserLoginRequest>()
-            logger.info("Login request received for email: ${request.email}")
+            val email = request.email.lowercase().trim()
+            logger.info("Login request received for email: $email")
 
-            val user = userRepository.findUserByEmail(request.email)
+            val user = userRepository.findUserByEmail(email)
                 .requireUser(call, "find user") ?: return@handleAuth
 
             if (!PasswordUtil.verifyPassword(request.password, user.passwordHash)) {
@@ -135,18 +143,8 @@ fun Route.authRoute() {
             }
 
             logger.info("Token refresh request received")
-            val email = JwtConfig.validateExpiredTokenAndExtractEmail(request.token)
-
-            if (email == null) {
-                // Token is either still valid or completely invalid
-                try {
-                    val decodedJwt = JwtConfig.verifier.verify(request.token)
-                    val validEmail = decodedJwt.getClaim("email").asString()
-                    logger.info("Token not expired for user: $validEmail")
-
-                    val user = (userRepository.findUserByEmail(validEmail) as? Result.Success)?.data
-                    call.respondLoginSuccess(Constants.Messages.TOKEN_NOT_EXPIRED, request.token, user)
-                } catch (_: Exception) {
+            when (val refreshResult = JwtConfig.checkTokenForRefresh(request.token)) {
+                is TokenRefreshResult.Invalid -> {
                     logger.warn("Invalid token provided for refresh")
                     call.respondError(
                         Constants.Messages.TOKEN_INVALID,
@@ -154,28 +152,37 @@ fun Route.authRoute() {
                         HttpStatusCode.BadRequest
                     )
                 }
-                return@handleAuth
+                is TokenRefreshResult.StillValid -> {
+                    logger.info("Token not expired for user: ${refreshResult.email}")
+                    val user = (userRepository.findUserByEmail(refreshResult.email) as? Result.Success)?.data
+                    call.respondLoginSuccess(Constants.Messages.TOKEN_NOT_EXPIRED, request.token, user)
+                }
+                is TokenRefreshResult.Expired -> {
+                    val email = refreshResult.email
+                    val user = userRepository.findUserByEmail(email)
+                        .requireUser(call, "find user during token refresh") ?: return@handleAuth
+                    if (!user.isActive) {
+                        call.respondError(Constants.Messages.ACCOUNT_INACTIVE, Unit, HttpStatusCode.Forbidden)
+                        return@handleAuth
+                    }
+                    val newToken = JwtConfig.generateToken(email, user.role)
+                    logger.info("Token refreshed successfully for user: $email")
+                    analytics.event("token_refresh", emptyMap(), email, call.request.headers["User-Agent"])
+                    call.respondLoginSuccess(Constants.Messages.TOKEN_REFRESH_SUCCESS, newToken, user)
+                }
             }
-
-            val user = userRepository.findUserByEmail(email)
-                .requireUser(call, "find user during token refresh") ?: return@handleAuth
-            if (!user.isActive) {
-                call.respondError(Constants.Messages.ACCOUNT_INACTIVE, Unit, HttpStatusCode.Forbidden)
-                return@handleAuth
-            }
-
-            val newToken = JwtConfig.generateToken(email, user.role)
-            logger.info("Token refreshed successfully for user: $email")
-            analytics.event("token_refresh", emptyMap(), email, call.request.headers["User-Agent"])
-            call.respondLoginSuccess(Constants.Messages.TOKEN_REFRESH_SUCCESS, newToken, user)
         }
     }
 
-    post(Constants.Api.LOGOUT_ENDPOINT) {
-        call.handleAuth(logger, "logout") {
-            logger.info("Logout request received")
-            analytics.event("logout", emptyMap(), userAgent = call.request.headers["User-Agent"])
-            call.performLogout()
+    authenticate("jwt-auth") {
+        post(Constants.Api.LOGOUT_ENDPOINT) {
+            call.handleAuth(logger, "logout") {
+                val email = call.principal<JWTPrincipal>()
+                    ?.payload?.getClaim(Constants.Auth.JWT_CLAIM_EMAIL)?.asString()
+                logger.info("Logout request received for user: $email")
+                analytics.event("logout", emptyMap(), email, call.request.headers["User-Agent"])
+                call.performLogout()
+            }
         }
     }
 }
@@ -278,7 +285,15 @@ private fun ApplicationCall.setAuthCookie(token: String, logger: Logger) {
     try {
         val maxAgeSeconds = (config.Environment.getJwtExpiration() / 1000).toInt()
         response.cookies.append(
-            Cookie(name = "jwt_token", value = token, path = "/", httpOnly = true, secure = true, maxAge = maxAgeSeconds)
+            Cookie(
+                name = "jwt_token",
+                value = token,
+                path = "/",
+                httpOnly = true,
+                secure = true,
+                maxAge = maxAgeSeconds,
+                extensions = mapOf("SameSite" to "Strict")
+            )
         )
     } catch (e: Exception) {
         logger.warn("Failed to set auth cookie: ${e.message}")
@@ -292,7 +307,7 @@ private fun classifyError(message: String): String {
         "validation" in msg -> Constants.Messages.VALIDATION_ERROR
         "network" in msg || "connection" in msg -> Constants.Messages.NETWORK_ERROR
         "auth" in msg || "token" in msg -> Constants.Messages.AUTHENTICATION_ERROR
-        else -> Constants.Messages.DATABASE_ERROR
+        else -> Constants.Messages.UNKNOWN_ERROR
     }
 }
 
@@ -308,9 +323,17 @@ private fun classifyException(e: Exception): String {
     }
 }
 
-suspend fun ApplicationCall.performLogout() {
+private suspend fun ApplicationCall.performLogout() {
     response.cookies.append(
-        Cookie(name = "jwt_token", value = "", path = "/", httpOnly = true, secure = true, maxAge = 0)
+        Cookie(
+            name = "jwt_token",
+            value = "",
+            path = "/",
+            httpOnly = true,
+            secure = true,
+            maxAge = 0,
+            extensions = mapOf("SameSite" to "Strict")
+        )
     )
     respondSuccess<Unit>(Constants.Messages.LOGOUT_SUCCESS, Unit, HttpStatusCode.OK)
 }

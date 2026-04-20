@@ -226,6 +226,12 @@ fun Route.paymentRoute() {
         val signature = payload.signature?.trim()?.lowercase()
 
         if (paymentId.isNullOrEmpty() || orderId.isNullOrEmpty() || signature.isNullOrEmpty()) {
+            paymentLogger.warn(
+                "store-payment missing fields — paymentId={} orderId={} signaturePresent={}",
+                paymentId?.ifEmpty { "<empty>" } ?: "<null>",
+                orderId?.ifEmpty { "<empty>" } ?: "<null>",
+                !signature.isNullOrEmpty()
+            )
             call.respondError(
                 message = "Missing required fields: razorpay_payment_id, razorpay_order_id, razorpay_signature",
                 data = Unit,
@@ -250,6 +256,10 @@ fun Route.paymentRoute() {
 
         val matches = SignatureUtil.compare(generated, signature)
         if (!matches) {
+            paymentLogger.warn(
+                "store-payment signature mismatch — orderId={} paymentId={} user={}",
+                orderId, paymentId, user.email
+            )
             call.respondError(
                 message = "Signature verification failed",
                 data = VerifyPaymentResponse(verified = false),

@@ -80,7 +80,6 @@ object WebResources {
     private val themeToggleCss = readResourceFile("/web/css/theme-toggle.css")
     private val adminHeaderCss = readResourceFile("/web/css/admin-header.css")
     private val adminUsersCss = readResourceFile("/web/css/admin-users.css")
-    private val financialDashboardCss = readResourceFile("/web/css/financial-dashboard.css")
     private val headerCss = readResourceFile("/web/css/header.css")
 
     // JavaScript file contents
@@ -95,11 +94,11 @@ object WebResources {
     private val refundAdminJs = readResourceFile("/web/js/refund-admin.js")
     private val serviceCatalogAdminJs = readResourceFile("/web/js/service-catalog-admin.js")
     private val reportsChartsJs = readResourceFile("/web/js/reports-charts.js")
-    private val adminToolsJs = readResourceFile("/web/js/admin-tools.js")
     private val headerJs = readResourceFile("/web/js/header.js")
     private val decodeJs = readResourceFile("/web/js/decode.js")
     private val tableUtilsJs = readResourceFile("/web/js/table-utils.js")
     private val adminUtilsJs = readResourceFile("/web/js/admin-utils.js")
+    private val adminNotesJs = readResourceFile("/web/js/admin-notes.js")
 
     /**
      * Read a file from the resources directory
@@ -134,7 +133,6 @@ object WebResources {
                 raw(themeToggleCss)
                 raw(headerCss)
                 raw(adminUsersCss)
-                raw(financialDashboardCss)
             }
         }
     }
@@ -224,6 +222,32 @@ object WebResources {
      * @param head The HEAD element to add the JavaScript to
      */
     fun includeAdminJs(head: HEAD) {
+        // Load TipTap from esm.sh and expose on window
+        head.script {
+            attributes["type"] = "module"
+            unsafe {
+                raw(
+                    """
+                    window._tiptapReady = (async () => {
+                        const { Editor } = await import('https://esm.sh/@tiptap/core@2');
+                        const { default: StarterKit } = await import('https://esm.sh/@tiptap/starter-kit@2');
+                        const { generateHTML } = await import('https://esm.sh/@tiptap/core@2');
+                        window.TiptapEditor = Editor;
+                        window.TiptapStarterKit = StarterKit;
+                        window.TiptapGenerateHTML = generateHTML;
+                        return { Editor, StarterKit, generateHTML };
+                    })();
+                    """.trimIndent()
+                )
+            }
+        }
+
+        // Load DOMPurify from CDN
+        head.script {
+            attributes["src"] = "https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"
+            attributes["crossorigin"] = "anonymous"
+        }
+
         // Include ECharts from CDN first so it's available to admin.js and reports-charts.js
         head.script {
             attributes["src"] = "https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"
@@ -282,16 +306,16 @@ object WebResources {
                 raw(serviceCatalogAdminJs)
             }
         }
+        // Include notes admin JavaScript
+        head.script {
+            unsafe {
+                raw(adminNotesJs)
+            }
+        }
         // Include reports charts JavaScript
         head.script {
             unsafe {
                 raw(reportsChartsJs)
-            }
-        }
-        // Include admin tools JavaScript
-        head.script {
-            unsafe {
-                raw(adminToolsJs)
             }
         }
         // Ensure admin dashboard initializes after DOM is ready

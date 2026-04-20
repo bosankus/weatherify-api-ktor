@@ -88,13 +88,13 @@ Authenticates a user and returns a JWT token. Requires email and password in req
 POST /logout
 ```
 
-Logs out the current user by clearing the jwt_token cookie on the server and invalidating the
-session. Returns 200 with a JSON ApiResponse.
+Logs out the current user by clearing the jwt_token cookie on the server. Returns 200 with a JSON ApiResponse.
 
 Example request:
 
 ```
 POST /logout
+Authorization: Bearer <your_jwt_token>
 ```
 
 Example success response:
@@ -109,6 +109,7 @@ Example success response:
 
 Notes:
 
+- **Requires authentication** — pass a valid JWT via `Authorization: Bearer` header or `jwt_token` cookie.
 - Works for both admin and regular users.
 - When integrating in the browser, also clear any locally stored JWT (e.g., localStorage) after
   calling this endpoint.

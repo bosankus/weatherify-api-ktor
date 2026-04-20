@@ -19,6 +19,7 @@ object Constants {
         const val PAYMENTS_COLLECTION = "payments"
         const val REFUNDS_COLLECTION = "refunds"
         const val TRIPS_COLLECTION = "trips"
+        const val NOTES_COLLECTION = "notes"
 
         // Field names
         const val ID_FIELD = "_id"
@@ -60,7 +61,6 @@ object Constants {
     object Api {
         // API endpoints
         const val WEATHER_ENDPOINT = "/weather"
-        const val AIR_POLLUTION_ENDPOINT = "/air-pollution"
         const val FEEDBACK_ENDPOINT = "/feedback"
         const val LOGIN_ENDPOINT = "/login"
         const val REGISTER_ENDPOINT = "/register"
@@ -69,6 +69,7 @@ object Constants {
         const val HOME_ENDPOINT = "/"
         const val CREATE_ORDER_ENDPOINT = "/create-order"
         const val STORE_PAYMENT_ENDPOINT = "/store-payment"
+        const val NOTES_ENDPOINT = "/notes"
 
         // API URLs
         const val DEFAULT_WEATHER_URL = "https://api.openweathermap.org/data/3.0/onecall"
@@ -115,11 +116,18 @@ object Constants {
         const val FEEDBACK_REMOVAL_FAILED = "Feedback not found or could not be removed"
         const val FAILED_SAVE_FEEDBACK = "Failed to save feedback"
 
+        // Notes messages
+        const val NOTE_CREATED = "Note created successfully"
+        const val NOTE_UPDATED = "Note updated successfully"
+        const val NOTES_RETRIEVED = "Notes retrieved successfully"
+        const val NOTE_NOT_FOUND = "Note not found"
+        const val NOTE_EMPTY_ERROR = "Note content cannot be empty"
+        const val FAILED_CREATE_NOTE = "Failed to create note"
+        const val FAILED_UPDATE_NOTE = "Failed to update note"
+
         // Weather messages
         const val WEATHER_RETRIEVED = "Weather data retrieved successfully"
         const val FAILED_FETCH_WEATHER = "Failed to fetch weather data"
-        const val AIR_POLLUTION_RETRIEVED = "Air pollution data retrieved successfully"
-        const val FAILED_FETCH_AIR_POLLUTION = "Failed to fetch air pollution data"
         const val MISSING_LOCATION_PARAMS = "Missing mandatory query parameters: lat and lon"
 
         // Error messages

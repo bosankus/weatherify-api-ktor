@@ -373,6 +373,45 @@
             refreshInterval: 5 * 60 * 1000 // 5 minutes
         },
 
+        'notes': {
+            name: 'Notes',
+            loadFn: async function (forceRefresh = false) {
+                console.log('[Tab] Loading Notes tab', { forceRefresh });
+
+                const tab = window.AdminTabManager.getTab('notes');
+                if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('notes', 5 * 60 * 1000)) {
+                    console.log('[Tab] Notes already loaded, skipping API call');
+                    return;
+                }
+
+                window.AdminTabManager.markLoading('notes');
+
+                try {
+                    // Wait for TipTap to be loaded
+                    if (!window._tiptapReady) {
+                        console.warn('[Tab] TipTap not ready, waiting...');
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    if (window._tiptapReady) {
+                        await window._tiptapReady;
+                    }
+
+                    if (window.NotesTab && typeof window.NotesTab.initialize === 'function') {
+                        await window.NotesTab.initialize({ forceRefresh: true });
+                    } else {
+                        console.warn('[Tab] Notes module not available');
+                    }
+
+                    window.AdminTabManager.markLoaded('notes');
+                } catch (error) {
+                    console.error('[Tab] Error loading Notes:', error);
+                    window.AdminTabManager.markError('notes', error.message);
+                    throw error;
+                }
+            },
+            refreshInterval: 5 * 60 * 1000 // 5 minutes
+        },
+
         'tools': {
             name: 'Tools',
             loadFn: async function () {

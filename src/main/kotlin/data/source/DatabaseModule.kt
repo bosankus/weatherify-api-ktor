@@ -164,6 +164,22 @@ class DatabaseModule(
                     )
                 )
 
+                // Create indexes for notes collection
+                val notesCollection = getNotesCollection()
+
+                // Compound index on userEmail + createdAt for paginated listing (newest first)
+                notesCollection.createIndex(
+                    Indexes.compoundIndex(
+                        Indexes.ascending("userEmail"),
+                        Indexes.descending("createdAt")
+                    )
+                )
+
+                // Text index on content for full-text search
+                notesCollection.createIndex(
+                    Indexes.text("content")
+                )
+
             logger.info("Indexes created successfully")
         } catch (e: Exception) {
             logger.error("Failed to create indexes", e)
@@ -267,6 +283,14 @@ class DatabaseModule(
      */
     fun getServiceHistoryCollection(): MongoCollection<ServiceHistory> {
         return getCollection<ServiceHistory>("service_history")
+    }
+
+    /**
+     * Get the notes collection
+     * @return The notes collection
+     */
+    fun getNotesCollection(): MongoCollection<Note> {
+        return getCollection<Note>(Constants.Database.NOTES_COLLECTION)
     }
 
     /**

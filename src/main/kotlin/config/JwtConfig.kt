@@ -12,6 +12,16 @@ import org.slf4j.LoggerFactory
 import util.Constants
 import java.util.Date
 
+/** Result of a token-refresh eligibility check. */
+sealed class TokenRefreshResult {
+    /** Token was expired but otherwise valid; contains the email claim. */
+    data class Expired(val email: String) : TokenRefreshResult()
+    /** Token is still valid and does not need refreshing; contains the email claim. */
+    data class StillValid(val email: String) : TokenRefreshResult()
+    /** Token is malformed, has a bad signature, wrong issuer/audience, or unparseable. */
+    object Invalid : TokenRefreshResult()
+}
+
 /**
  * JWT authentication configuration
  * Handles token generation, validation, and extraction of claims
@@ -23,8 +33,8 @@ object JwtConfig {
     private val jwtSecret = getSecretValue(Constants.Auth.JWT_SECRET_NAME)
     private val algorithm = Algorithm.HMAC256(jwtSecret)
 
-    // JWT verifier for token validation
-    val verifier: JWTVerifier = JWT
+    // JWT verifier for token validation — internal so only the auth plugin uses it directly
+    internal val verifier: JWTVerifier = JWT
         .require(algorithm)
         .withAudience(Environment.getJwtAudience())
         .withIssuer(Environment.getJwtIssuer())
@@ -76,65 +86,46 @@ object JwtConfig {
     }
 
     /**
-     * Validate an expired token and extract the email if valid
-     * @param token The expired JWT token
-     * @return The email from the token if it's valid (except for expiration), null otherwise
+     * Checks whether a token is eligible for refresh.
+     *
+     * - [TokenRefreshResult.StillValid] — token is not yet expired; no refresh needed.
+     * - [TokenRefreshResult.Expired]    — token is expired but otherwise valid; issue a new one.
+     * - [TokenRefreshResult.Invalid]    — token cannot be trusted (bad signature, issuer, etc.).
      */
-    fun validateExpiredTokenAndExtractEmail(token: String): String? {
+    fun checkTokenForRefresh(token: String): TokenRefreshResult {
         return try {
-            // First check if the token is actually expired
-            try {
-                verifier.verify(token)
-                // If we get here, the token is still valid, so we shouldn't refresh it
-                logger.debug("Token is still valid, no need to refresh")
-                return null
-            } catch (_: TokenExpiredException) {
-                // Token is expired, which is what we want for refresh
-                // The fact that we got TokenExpiredException (not another JWTVerificationException)
-                // means the token's signature, algorithm, audience, and issuer were all valid
-                // We just need to decode it to extract the email
-                logger.debug("Token is expired, extracting email from decoded token")
-                try {
-                    val decodedJWT = JWT.decode(token)
-
-                    // Double-check audience and issuer for extra security
-                    val audience = decodedJWT.audience
-                    val issuer = decodedJWT.issuer
-                    val expectedAudience = Environment.getJwtAudience()
-                    val expectedIssuer = Environment.getJwtIssuer()
-
-                    if (audience == null || !audience.contains(expectedAudience)) {
-                        logger.warn("Token audience mismatch: expected $expectedAudience, got $audience")
-                        return null
-                    }
-
-                    if (issuer != expectedIssuer) {
-                        logger.warn("Token issuer mismatch: expected $expectedIssuer, got $issuer")
-                        return null
-                    }
-
-                    // Extract email from the decoded token
-                    val email = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                    if (email.isNullOrBlank()) {
-                        logger.warn("Token does not contain email claim")
-                        return null
-                    }
-
-                    return email
-                } catch (e: Exception) {
-                    // Token decoding failed
-                    logger.warn("Token decoding failed: ${e.message}")
-                    null
-                }
-            } catch (e: JWTVerificationException) {
-                // Token is invalid for some other reason (wrong signature, audience, issuer, etc.)
-                logger.warn("Token verification failed: ${e.message}")
-                null
+            val decoded = verifier.verify(token)
+            val email = decoded.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+            if (email.isNullOrBlank()) {
+                logger.warn("Token missing email claim")
+                TokenRefreshResult.Invalid
+            } else {
+                logger.debug("Token is still valid for user: $email")
+                TokenRefreshResult.StillValid(email)
             }
+        } catch (_: TokenExpiredException) {
+            // Signature, issuer and audience were valid — only expiry failed.
+            // Decode without verification to read the email claim.
+            try {
+                val decoded = JWT.decode(token)
+                val email = decoded.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+                if (email.isNullOrBlank()) {
+                    logger.warn("Expired token missing email claim")
+                    TokenRefreshResult.Invalid
+                } else {
+                    logger.debug("Token is expired, eligible for refresh: $email")
+                    TokenRefreshResult.Expired(email)
+                }
+            } catch (e: Exception) {
+                logger.warn("Failed to decode expired token: ${e.message}")
+                TokenRefreshResult.Invalid
+            }
+        } catch (e: JWTVerificationException) {
+            logger.warn("Token verification failed: ${e.message}")
+            TokenRefreshResult.Invalid
         } catch (e: Exception) {
-            // Any other exception means the token is invalid
-            logger.error("Token validation error: ${e.message}", e)
-            null
+            logger.error("Unexpected token validation error: ${e.message}", e)
+            TokenRefreshResult.Invalid
         }
     }
 }

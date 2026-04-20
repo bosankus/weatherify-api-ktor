@@ -36,7 +36,6 @@ class ConstantsTest {
     fun `test Api constants have expected values`() {
         // Test API constants
         assertEquals("/weather", Constants.Api.WEATHER_ENDPOINT)
-        assertEquals("/air-pollution", Constants.Api.AIR_POLLUTION_ENDPOINT)
         assertEquals("/feedback", Constants.Api.FEEDBACK_ENDPOINT)
         assertEquals("/login", Constants.Api.LOGIN_ENDPOINT)
         assertEquals("/register", Constants.Api.REGISTER_ENDPOINT)
@@ -82,14 +81,6 @@ class ConstantsTest {
         assertEquals("Failed to save feedback", Constants.Messages.FAILED_SAVE_FEEDBACK)
         assertEquals("Weather data retrieved successfully", Constants.Messages.WEATHER_RETRIEVED)
         assertEquals("Failed to fetch weather data", Constants.Messages.FAILED_FETCH_WEATHER)
-        assertEquals(
-            "Air pollution data retrieved successfully",
-            Constants.Messages.AIR_POLLUTION_RETRIEVED
-        )
-        assertEquals(
-            "Failed to fetch air pollution data",
-            Constants.Messages.FAILED_FETCH_AIR_POLLUTION
-        )
         assertEquals(
             "Missing mandatory query parameters: lat and lon",
             Constants.Messages.MISSING_LOCATION_PARAMS

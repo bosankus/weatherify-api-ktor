@@ -2609,6 +2609,13 @@ fun Route.adminAuthRoute() {
                                                     raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>inventory_2</span> Service Catalog")
                                                 }
                                             }
+                                            span {
+                                                classes = setOf("tab")
+                                                attributes["data-tab"] = "notes"
+                                                unsafe {
+                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>notes</span> Notes")
+                                                }
+                                            }
                                         }
 
                                         // Tabs content panels
@@ -3222,6 +3229,52 @@ fun Route.adminAuthRoute() {
 
                                                 }
                                             }
+
+                                            // Notes Panel
+                                            div {
+                                                classes = setOf("tab-panel")
+                                                id = "notes"
+                                                style = "width: 100%; box-sizing: border-box;"
+                                                div {
+                                                    classes = setOf("dashboard-card")
+                                                    div {
+                                                        classes = setOf("dashboard-card-title")
+                                                        unsafe {
+                                                            raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>notes</span> Notes")
+                                                        }
+                                                    }
+                                                    div {
+                                                        classes = setOf("dashboard-card-content")
+                                                        unsafe {
+                                                            raw(
+                                                                """
+                                                            <div id="notes-loader" class="skeleton" style="height:6px;width:100%;display:none;"></div>
+
+                                                            <!-- Search -->
+                                                            <div style="margin-bottom: 1.5rem; display: flex; gap: 0.75rem; align-items: center;">
+                                                                <input
+                                                                    type="text"
+                                                                    id="notes-search"
+                                                                    placeholder="Search notes..."
+                                                                    class="form-control"
+                                                                    style="flex: 1;"
+                                                                />
+                                                                <button id="notes-create-toggle" class="btn btn-primary btn-sm">+ New Note</button>
+                                                            </div>
+
+                                                            <!-- Notes List -->
+                                                            <div id="notes-loader" class="skeleton" style="height:6px;width:100%;display:none;"></div>
+                                                            <div class="data-grid" style="--data-columns: 1fr;">
+                                                                <div id="notes-list" class="data-body"></div>
+                                                            </div>
+                                                            <div id="notes-empty" class="data-empty hidden">No notes yet. Create your first note!</div>
+                                                            <div id="notes-pagination"></div>
+                                                            """
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -3232,6 +3285,55 @@ fun Route.adminAuthRoute() {
                                 id = "refund-panel"
                                 classes = setOf("sliding-panel")
                                 style = "display: none;"
+                            }
+                            // Notes Panel Backdrop
+                            div {
+                                id = "notes-panel-backdrop"
+                                classes = setOf("sliding-backdrop")
+                            }
+                            // Notes Panel (Sliding panel from right)
+                            div {
+                                id = "notes-panel"
+                                classes = setOf("sliding-panel")
+                                div {
+                                    classes = setOf("sliding-panel-header")
+                                    h2 {
+                                        classes = setOf("sliding-panel-title")
+                                        id = "notes-panel-title"
+                                        +"New Note"
+                                    }
+                                    button {
+                                        classes = setOf("sliding-panel-close")
+                                        id = "notes-panel-close"
+                                        type = ButtonType.button
+                                        attributes["aria-label"] = "Close panel"
+                                        unsafe {
+                                            raw("<span class=\"material-icons\">close</span>")
+                                        }
+                                    }
+                                }
+                                div {
+                                    classes = setOf("sliding-panel-body")
+                                    div {
+                                        id = "notes-create-editor"
+                                        classes = setOf("notes-editor-container")
+                                    }
+                                }
+                                div {
+                                    classes = setOf("sliding-panel-footer")
+                                    button {
+                                        classes = setOf("btn", "btn-secondary")
+                                        id = "notes-panel-cancel"
+                                        type = ButtonType.button
+                                        +"Cancel"
+                                    }
+                                    button {
+                                        classes = setOf("btn", "btn-primary")
+                                        id = "notes-panel-save"
+                                        type = ButtonType.button
+                                        +"Save Note"
+                                    }
+                                }
                             }
                             // Footer
                             createFooter(this)
