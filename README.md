@@ -174,11 +174,24 @@ The server will start at http://0.0.0.0:8080
 
 ### Deployment
 
-The application is configured for deployment to Google Cloud Platform App Engine:
+The application is deployed to **Google Cloud Run**.
 
 ```bash
-./gradlew appengineDeploy
+# 1. Build the fat JAR
+./gradlew shadowJar
+
+# 2. Build and push the Docker image via Cloud Build
+gcloud builds submit --tag gcr.io/PROJECT_ID/weatherify-api
+
+# 3. Deploy to Cloud Run
+gcloud run deploy weatherify-api \
+  --image=gcr.io/PROJECT_ID/weatherify-api \
+  --platform=managed \
+  --region=REGION \
+  --allow-unauthenticated
 ```
+
+Replace `PROJECT_ID` with your GCP project ID and `REGION` with your target region (e.g. `asia-south1`).
 
 ## Project Structure
 
@@ -206,7 +219,7 @@ src/
 - **[MongoDB](https://www.mongodb.com/)**: NoSQL database
 - **[kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)**: JSON serialization
 - **[kotlinx.html](https://github.com/Kotlin/kotlinx.html)**: HTML DSL
-- **[Google Cloud Platform](https://cloud.google.com/)**: Hosting platform
+- **[Google Cloud Run](https://cloud.google.com/run)**: Serverless container hosting platform
 
 ## CI/CD
 
@@ -214,20 +227,24 @@ See the full guide: docs/ci-cd.md
 
 Quick start:
 
-- Local build and tests: make build (or ./gradlew clean test jacocoTestReport shadowJar)
-- Run locally: make run (runs build/libs/weatherify-api-all.jar on port 8080)
-- Cloud Build (build only): gcloud builds submit --config=cloudbuild.yaml --substitutions=_DEPLOY="
-  false" .
-- Cloud Build (build + deploy): gcloud builds submit --config=cloudbuild.yaml --substitutions=_
-  DEPLOY="true",_PROMOTE="false",_APP_YAML="src/main/appengine/app.yaml" .
-- GitHub Actions: PRs and pushes run Build and Test workflow automatically; use “Deploy via Cloud
-  Build” workflow manually for deployments.
+- Local build and tests: `./gradlew clean test jacocoTestReport shadowJar`
+- Run locally: `java -jar build/libs/weatherify-api-all.jar` (port 8080)
+- Cloud Build (build only): `gcloud builds submit --config=cloudbuild.yaml --substitutions=_DEPLOY=”false” .`
+- Cloud Build (build + deploy to Cloud Run):
+  ```bash
+  gcloud builds submit --tag gcr.io/PROJECT_ID/weatherify-api
+  gcloud run deploy weatherify-api \
+    --image=gcr.io/PROJECT_ID/weatherify-api \
+    --platform=managed \
+    --region=REGION \
+    --allow-unauthenticated
+  ```
+- GitHub Actions: PRs and pushes run Build and Test workflow automatically; use “Deploy via Cloud Build” workflow manually for deployments.
 
 Notes:
 
-- Deploy workflow uses Workload Identity Federation. Add repository secrets:
-  GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT_EMAIL, GCP_PROJECT_ID.
-- Shadow JAR name is weatherify-api-all.jar, matching src/main/appengine/app.yaml entrypoint.
+- Deploy workflow uses Workload Identity Federation. Add repository secrets: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT_EMAIL`, `GCP_PROJECT_ID`.
+- Shadow JAR name is `weatherify-api-all.jar`, copied into the Docker image via `Dockerfile`.
 
 ## Contributing
 
