@@ -128,28 +128,6 @@ window.UserRoute = window.UserRoute || {
     }
 };
 
-/**
- * Call admin endpoint to clear weather cache
- */
-function clearWeatherCache() {
-    return fetch('/tools/cache/clear', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-            'Accept': 'application/json'
-        }
-    }).then(resp => {
-        if (!resp.ok) {
-            if (resp.status === 403) throw new Error('Access denied');
-            throw new Error('Failed to clear cache');
-        }
-        return resp.json();
-    }).then(payload => {
-        if (payload && payload.status === true) return true;
-        throw new Error((payload && payload.message) || 'Failed to clear cache');
-    });
-}
-
 function runHealthCheck() {
     return fetch('/tools/health', {
         method: 'POST',
@@ -547,29 +525,6 @@ function initializeAdmin() {
             logoutBtn.dataset.bound = 'true';
         }
 
-        // Bind Clear Cache tool
-        const clearBtn = document.getElementById('clear-cache-btn');
-        const spinner = document.getElementById('clear-cache-spinner');
-        if (clearBtn && !clearBtn.dataset.bound) {
-            clearBtn.addEventListener('click', function () {
-                if (spinner) spinner.style.display = 'inline-block';
-                clearBtn.disabled = true;
-                clearWeatherCache()
-                    .then(() => {
-                        showMessage('success', 'Weather cache cleared');
-                    })
-                    .catch(err => {
-                        console.error('Clear cache failed', err);
-                        showMessage('error', err && err.message ? err.message : 'Failed to clear cache');
-                    })
-                    .finally(() => {
-                        if (spinner) spinner.style.display = 'none';
-                        clearBtn.disabled = false;
-                    });
-            });
-            clearBtn.dataset.bound = 'true';
-        }
-
         // Bind Health Check tool
         const healthBtn = document.getElementById('run-health-btn');
         const healthSpinner = document.getElementById('run-health-spinner');
@@ -580,13 +535,8 @@ function initializeAdmin() {
                 runHealthCheck()
                     .then((data) => {
                         try {
-                            if (typeof showFinancePanel === 'function') {
-                                const footer = '<button type="button" class="modal-btn modal-btn-secondary" onclick="closeFinancePanel()">Close</button>';
-                                showFinancePanel('Health Check Results', buildHealthHtml(data), { footer });
-                            } else {
-                                showModal('Health Check Results', buildHealthHtml(data));
-                            }
-                        } catch (e) { console.warn('Failed to show health panel', e); }
+                            showModal('Health Check Results', buildHealthHtml(data));
+                        } catch (e) { console.warn('Failed to show health modal', e); }
                         const overallOk = (data.weatherOk === true) && (data.airOk === true);
                         showMessage(overallOk ? 'success' : 'error', overallOk ? 'Health check passed' : 'Health check has failures');
                     })
@@ -612,13 +562,8 @@ function initializeAdmin() {
                 runWarmup()
                     .then((data) => {
                         try {
-                            if (typeof showFinancePanel === 'function') {
-                                const footer = '<button type="button" class="modal-btn modal-btn-secondary" onclick="closeFinancePanel()">Close</button>';
-                                showFinancePanel('Warmup Results', buildWarmupHtml(data), { footer });
-                            } else {
-                                showModal('Warmup Results', buildWarmupHtml(data));
-                            }
-                        } catch (e) { console.warn('Failed to show warmup panel', e); }
+                            showModal('Warmup Results', buildWarmupHtml(data));
+                        } catch (e) { console.warn('Failed to show warmup modal', e); }
                         showMessage(data.ok ? 'success' : 'error', data.ok ? 'Warmup completed' : 'Warmup completed with failures');
                     })
                     .catch(err => {
@@ -4763,244 +4708,6 @@ window.getFinancePanelLoadingContent = getFinancePanelLoadingContent;
 
 
 // ================= Finance Tab Management =================
-
-
-
-
-// ================= Financial Export Tool =================
-(function () {
-    // Use common q() from admin-utils.js
-    const q = window.q || function (id) { return document.getElementById(id); };
-
-    /**
-     * Show the financial export modal
-     */
-    function showFinancialExportModal() {
-        const content = `
-            <div class="export-form" style="display:grid; gap:16px;">
-                <div class="message info-message">
-                    Export payment records to CSV format for financial reconciliation and reporting.
-                </div>
-
-                <div style="display:grid; gap:8px;">
-                    <label for="export-start-date" style="color:var(--text-secondary);font-weight:600;">Start Date <span style="color:#ef4444;">*</span></label>
-                    <input type="date" id="export-start-date" class="form-control" required
-                           title="Please select a start date" />
-                </div>
-
-                <div style="display:grid; gap:8px;">
-                    <label for="export-end-date" style="color:var(--text-secondary);font-weight:600;">End Date <span style="color:#ef4444;">*</span></label>
-                    <input type="date" id="export-end-date" class="form-control" required
-                           title="Please select an end date" />
-                </div>
-
-                <div id="export-error" class="message error-message" style="display:none;border-left:4px solid #ef4444;padding:12px 16px;align-items:start;gap:12px;">
-                    <span class="material-icons" style="color:#ef4444;font-size:20px;flex-shrink:0;">error</span>
-                    <div style="flex:1;">
-                        <div style="font-weight:600;margin-bottom:4px;color:#ef4444;">Error</div>
-                        <div id="export-error-text" style="color:var(--text-color);font-size:14px;line-height:1.5;"></div>
-                    </div>
-                </div>
-
-                <div style="display:flex;gap:8px;">
-                    <button id="export-submit-btn" class="btn btn-primary" style="flex:1;">
-                        Export to CSV
-                    </button>
-                    <button id="export-cancel-btn" class="btn btn-secondary">
-                        Cancel
-                    </button>
-                </div>
-                <div id="export-spinner" class="loading-spinner" style="display:none;margin:10px auto;"></div>
-            </div>
-        `;
-
-        showFinancePanel('Export Financial Data', content);
-        bindExportModalEvents();
-
-        // Add hover effects to radio labels
-        try {
-            document.querySelectorAll('.radio-group label').forEach(label => {
-                label.addEventListener('mouseenter', function () {
-                    this.style.background = 'var(--hover-bg, rgba(99,102,241,0.05))';
-                });
-                label.addEventListener('mouseleave', function () {
-                    this.style.background = 'transparent';
-                });
-            });
-        } catch (e) { console.warn('Failed to bind radio hover effects', e); }
-    }
-
-    /**
-     * Export financial data to CSV
-     */
-    function exportFinancialData() {
-        const startDateInput = q('export-start-date');
-        const endDateInput = q('export-end-date');
-        const errorEl = q('export-error');
-        const errorTextEl = q('export-error-text');
-        const submitBtn = q('export-submit-btn');
-        const spinner = q('export-spinner');
-
-        // Get selected export type
-        const exportType = 'payments';
-
-        // Get date range
-        const startDate = startDateInput ? startDateInput.value.trim() : '';
-        const endDate = endDateInput ? endDateInput.value.trim() : '';
-
-        // Hide previous errors
-        if (errorEl) errorEl.style.display = 'none';
-
-        // Validate date range using ValidationUtils
-        const dateValidation = ValidationUtils.validateDateRange(startDate, endDate);
-        if (!dateValidation.valid) {
-            if (errorEl && errorTextEl) {
-                errorTextEl.textContent = dateValidation.message;
-                errorEl.style.display = 'flex';
-            }
-            return;
-        }
-
-        // Show spinner and disable button
-        if (spinner) spinner.style.display = 'block';
-        if (submitBtn) submitBtn.disabled = true;
-
-        const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('jwt_token') : null;
-        const headers = {
-            'Accept': 'text/csv, application/json',
-            'Content-Type': 'application/json'
-        };
-        if (token) { headers['Authorization'] = 'Bearer ' + token; }
-
-        const requestBody = {
-            exportType: exportType.toUpperCase(),
-            startDate: startDate,
-            endDate: endDate
-        };
-
-        fetch('/tools/export-financial-data', {
-            method: 'POST',
-            credentials: 'include',
-            headers: headers,
-            body: JSON.stringify(requestBody)
-        })
-            .then(response => {
-                if (!response.ok) {
-                    if (response.status === 403) {
-                        throw new Error('You do not have permission to export financial data');
-                    }
-                    // Try to parse error message
-                    return response.json().then(data => {
-                        throw new Error(data.message || 'Failed to export financial data');
-                    }).catch(() => {
-                        throw new Error('Failed to export financial data');
-                    });
-                }
-
-                // Check if response is CSV
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('text/csv')) {
-                    // Download CSV file
-                    return response.blob().then(blob => {
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-
-                        // Generate filename with timestamp
-                        const timestamp = new Date().toISOString().slice(0, 10);
-                        a.download = `financial-export-${exportType}-${timestamp}.csv`;
-
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        window.URL.revokeObjectURL(url);
-
-                        showMessage('success', 'Financial data exported successfully');
-                        closeModal();
-                    });
-                } else {
-                    // Unexpected response type
-                    throw new Error('Unexpected response format');
-                }
-            })
-            .catch(error => {
-                console.error('Error exporting financial data:', error);
-
-                // Provide user-friendly error messages
-                let errorMessage = error.message || 'Failed to export financial data';
-
-                if (errorMessage.includes('permission')) {
-                    errorMessage = 'You do not have permission to export financial data. Please contact an administrator.';
-                } else if (errorMessage.includes('authentication') || errorMessage.includes('auth')) {
-                    errorMessage = 'Your session has expired. Please log in again.';
-                    setTimeout(() => {
-                        window.location.href = '/login?error=session_expired';
-                    }, 2000);
-                } else if (errorMessage.includes('date range')) {
-                    errorMessage = 'The selected date range is invalid or too large. Please select a smaller range.';
-                } else if (errorMessage.includes('date format')) {
-                    errorMessage = 'Invalid date format. Please select valid dates.';
-                }
-
-                if (errorEl && errorTextEl) {
-                    errorTextEl.textContent = errorMessage;
-                    errorEl.style.display = 'flex';
-                }
-                showMessage('error', errorMessage);
-            })
-            .finally(() => {
-                if (spinner) spinner.style.display = 'none';
-                if (submitBtn) submitBtn.disabled = false;
-            });
-    }
-
-    /**
-     * Bind export modal events
-     */
-    function bindExportModalEvents() {
-        const submitBtn = q('export-submit-btn');
-        const cancelBtn = q('export-cancel-btn');
-
-        // Bind export button
-        if (submitBtn) {
-            submitBtn.addEventListener('click', exportFinancialData);
-        }
-
-        // Bind cancel button
-        if (cancelBtn) {
-            cancelBtn.addEventListener('click', closeModal);
-        }
-    }
-
-    /**
-     * Initialize export tool button binding
-     */
-    function initializeExportTool() {
-        const exportBtn = q('export-financial-btn');
-        if (exportBtn && !exportBtn.dataset.bound) {
-            exportBtn.addEventListener('click', function () {
-                showFinancialExportModal();
-            });
-            exportBtn.dataset.bound = 'true';
-        }
-    }
-
-    // Initialize on DOM ready
-    document.addEventListener('DOMContentLoaded', function () {
-        try {
-            initializeExportTool();
-        } catch (e) {
-            console.warn('Financial export tool binding failed', e);
-        }
-    });
-
-    // Expose functions globally for testing/debugging
-    window.FinancialExportModule = {
-        showFinancialExportModal,
-        exportFinancialData
-    };
-})();
-
 
 // ================= Refund Button Integration =================
 

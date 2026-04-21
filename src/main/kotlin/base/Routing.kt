@@ -54,8 +54,7 @@ fun Application.configureRouting() {
                 "/tools",
                 "/users",
                 "/services",
-                "/refunds",
-                "/cache"
+                "/refunds"
             )
 
             // Check for exact matches first

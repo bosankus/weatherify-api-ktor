@@ -1353,171 +1353,8 @@ fun Route.adminAuthRoute() {
 
         // Admin tools endpoints
         route("/tools") {
-            // POST /admin/tools/export-financial-data - Export financial data to CSV
-            post("/export-financial-data") {
-                val admin = call.getAuthenticatedAdminOrRespond()
-                if (admin == null) {
-                    return@post
-                }
-
-                var exportType = "unknown"
-                try {
-                    val request = call.receive<bose.ankush.data.model.FinancialExportRequest>()
-                    exportType = request.exportType.name
-
-                    // Validate date range
-                    if (request.startDate.isBlank() || request.endDate.isBlank()) {
-                        call.respondError(
-                            "Start date and end date are required",
-                            Unit,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@post
-                    }
-
-                    // Parse dates to validate format and order
-                    val start: LocalDate
-                    val end: LocalDate
-
-                    try {
-                        start = LocalDate.parse(request.startDate)
-                        end = LocalDate.parse(request.endDate)
-                    } catch (_: java.time.format.DateTimeParseException) {
-                        call.respondError(
-                            "Invalid date format. Please use ISO format (YYYY-MM-DD)",
-                            Unit,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@post
-                    } catch (_: Exception) {
-                        call.respondError(
-                            "Invalid date format. Please use ISO format (YYYY-MM-DD)",
-                            Unit,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@post
-                    }
-
-                    // Validate date order
-                    if (start.isAfter(end)) {
-                        call.respondError(
-                            "Start date must be before or equal to end date",
-                            Unit,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@post
-                    }
-
-                    // Validate date range is not too large (max 2 years)
-                    val daysBetween = java.time.temporal.ChronoUnit.DAYS.between(start, end)
-                    if (daysBetween > 730) {
-                        call.respondError(
-                            "Date range is too large. Maximum allowed range is 2 years (730 days)",
-                            Unit,
-                            HttpStatusCode.BadRequest
-                        )
-                        return@post
-                    }
-
-                    // Audit log: Financial export request
-                    val timestamp = java.time.Instant.now().toString()
-                    logger.info("[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Action: EXPORT_FINANCIAL_DATA, ExportType: ${request.exportType}, StartDate: ${request.startDate}, EndDate: ${request.endDate}")
-
-                    val financialService: domain.service.FinancialService by application.inject()
-
-                    // Generate CSV based on export type
-                    when (val csvResult = financialService.exportPayments(request.startDate, request.endDate)) {
-                        is Result.Success -> {
-                            val csvData = csvResult.data
-                            val timestampMillis = System.currentTimeMillis()
-                            val filename =
-                                "financial-export-${request.exportType.name.lowercase()}-$timestampMillis.csv"
-
-                            logger.info("[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Status: SUCCESS, ExportType: ${request.exportType}, FileSize: ${csvData.length} bytes, RecordCount: ${csvData.lines().size - 1}")
-
-                            call.response.header(
-                                HttpHeaders.ContentDisposition,
-                                "attachment; filename=\"$filename\""
-                            )
-                            call.respondText(
-                                csvData,
-                                ContentType.Text.CSV,
-                                HttpStatusCode.OK
-                            )
-                        }
-
-                        is Result.Error -> {
-                            logger.error("[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Status: FAILED, ExportType: ${request.exportType}, Error: ${csvResult.message}")
-                            call.respondError(
-                                csvResult.message,
-                                Unit,
-                                HttpStatusCode.InternalServerError
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    val timestamp = java.time.Instant.now().toString()
-                    logger.error(
-                        "[AUDIT] [$timestamp] Financial Export Request - Admin: ${admin.email}, Status: ERROR, ExportType: $exportType, Exception: ${e.message}",
-                        e
-                    )
-                    call.respondError(
-                        "Failed to export financial data: ${e.message}",
-                        Unit,
-                        HttpStatusCode.InternalServerError
-                    )
-                }
-            }
-        }
-
-        // POST /tools/cache/clear - Clear weather cache
-        post("/cache/clear") {
-            val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
-            logger.info("Admin ${admin.email} clearing weather cache")
-            WeatherCache.clearCache()
-            call.respondSuccess("Weather cache cleared successfully", true)
-        }
-
-        // GET /tools/health - Legacy health endpoint (kept for compatibility)
-        get("/health") {
-            val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
-            logger.info("Admin ${admin.email} running system health check (GET)")
-
-            val databaseHealthy = databaseModule.checkHealth()
-
-            // Probe weather API (simple legacy response)
-            val weatherUrl = WeatherCache.getProbeWeatherUrl()
-            val airUrl = WeatherCache.getProbeAirPollutionUrl()
-
-            val startTime = System.currentTimeMillis()
-            val client = WeatherCache.getWeatherClient()
-
-            val weatherResponse = runCatching { client.get(weatherUrl) }.getOrNull()
-            val weatherLatency = System.currentTimeMillis() - startTime
-
-            val airStartTime = System.currentTimeMillis()
-            val airResponse = runCatching { client.get(airUrl) }.getOrNull()
-            val airLatency = System.currentTimeMillis() - airStartTime
-
-            val healthData = mapOf(
-                "status" to if (databaseHealthy && weatherResponse?.status?.isSuccess() == true) "healthy" else "degraded",
-                "checks" to mapOf(
-                    "database" to if (databaseHealthy) "healthy" else "unhealthy",
-                    "weatherApi" to if (weatherResponse?.status?.isSuccess() == true) "healthy" else "unhealthy",
-                    "airPollutionApi" to if (airResponse?.status?.isSuccess() == true) "healthy" else "unhealthy"
-                ),
-                "metrics" to mapOf(
-                    "weatherLatencyMs" to weatherLatency,
-                    "airLatencyMs" to airLatency
-                ),
-                "timestamp" to System.currentTimeMillis()
-            )
-
-            call.respondSuccess("Health check completed", healthData)
-        }
-
-        // POST /tools/health - Detailed health endpoint used by UI
-        post("/health") {
+            // POST /tools/health - Health check endpoint used by UI
+            post("/health") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
             logger.info("Admin ${admin.email} running system health check (POST)")
 
@@ -1698,6 +1535,7 @@ fun Route.adminAuthRoute() {
             )
 
             call.respondSuccess("Warmup completed", payload)
+        }
         }
     }
 
@@ -2905,19 +2743,6 @@ fun Route.adminAuthRoute() {
                                                             <div class="tools-grid">
                                                                 <div class="tool-card">
                                                                     <div class="tool-card-icon">
-                                                                        <span class="material-icons">cached</span>
-                                                                    </div>
-                                                                    <div class="tool-card-content">
-                                                                        <div class="tool-card-title">Clear Weather Cache</div>
-                                                                        <div class="tool-card-description">Purge cached weather and air quality responses so next requests fetch fresh data.</div>
-                                                                        <div class="tool-card-action">
-                                                                            <button id="clear-cache-btn" class="btn btn-secondary" aria-label="Clear weather cache">Clear Cache</button>
-                                                                            <span id="clear-cache-spinner" class="loading-spinner" style="display:none;"></span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="tool-card">
-                                                                    <div class="tool-card-icon">
                                                                         <span class="material-icons">health_and_safety</span>
                                                                     </div>
                                                                     <div class="tool-card-content">
@@ -2951,19 +2776,6 @@ fun Route.adminAuthRoute() {
                                                                         <div class="tool-card-description">Decode a JWT to inspect header, payload, and expiration.</div>
                                                                         <div class="tool-card-action">
                                                                             <button id="jwt-inspector-btn" class="btn btn-secondary" aria-label="Open JWT Token Inspector">Open</button>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="tool-card">
-                                                                    <div class="tool-card-icon">
-                                                                        <span class="material-icons">file_download</span>
-                                                                    </div>
-                                                                    <div class="tool-card-content">
-                                                                        <div class="tool-card-title">Export Financial Data</div>
-                                                                        <div class="tool-card-description">Export payment records to CSV for reporting.</div>
-                                                                        <div class="tool-card-action">
-                                                                            <button id="export-financial-btn" class="btn btn-secondary" aria-label="Export financial data">Export</button>
-                                                                            <span id="export-financial-spinner" class="loading-spinner" style="display:none;"></span>
                                                                         </div>
                                                                     </div>
                                                                 </div>
