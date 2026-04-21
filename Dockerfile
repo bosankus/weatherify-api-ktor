@@ -22,9 +22,6 @@ WORKDIR /app
 # Copy the built JAR from builder
 COPY --from=builder /app/build/libs/*-all.jar app.jar
 
-# Copy serviceAccountKey.json if it exists
-COPY serviceAccountKey.json ./serviceAccountKey.json 2>/dev/null || true
-
 # Set environment variables
 ENV GCP_PROJECT_ID="1017382896100"
 ENV DB_NAME="weatherify-app-db"

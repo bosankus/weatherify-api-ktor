@@ -32,10 +32,6 @@ env_variables:
   GA_MEASUREMENT_ID: "G-LWRPRSSDRY"
   GA_API_SECRET: ""  # Add your GA4 API secret here if needed
 
-  # Firebase Configuration
-  # Path to Firebase service account key (relative to JAR location)
-  FIREBASE_SERVICE_ACCOUNT_KEY: "./serviceAccountKey.json"
-
   # Subscription Configuration
   GRACE_PERIOD_HOURS: "72"  # 3 days grace period
   SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_MINUTES: "720"  # Check every 12 hours
