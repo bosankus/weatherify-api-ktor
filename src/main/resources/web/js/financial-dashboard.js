@@ -21,68 +21,111 @@
         // Build metrics cards
         const metricsContainer = document.getElementById('finance-metrics');
         if (metricsContainer && !document.getElementById('total-revenue')) {
-            metricsContainer.innerHTML = [
-                { id: 'total-revenue', label: 'Total Revenue', icon: 'account_balance' },
-                { id: 'monthly-revenue', label: 'Monthly Revenue', icon: 'trending_up' },
-                { id: 'active-sub-revenue', label: 'Active Sub Revenue', icon: 'subscriptions' },
-                { id: 'total-payments', label: 'Total Payments', icon: 'receipt_long' },
-                { id: 'total-refunds', label: 'Total Refunds', icon: 'money_off' },
-                { id: 'monthly-refunds', label: 'Monthly Refunds', icon: 'calendar_month' },
-                { id: 'refund-rate', label: 'Refund Rate', icon: 'percent' },
-                { id: 'instant-refunds', label: 'Instant Refunds', icon: 'bolt' },
-                { id: 'normal-refunds', label: 'Normal Refunds', icon: 'hourglass_bottom' },
-                { id: 'avg-processing-time', label: 'Avg Processing', icon: 'timer' }
-            ].map(function(m) {
-                return '<div class="metric-card">' +
-                    '<div class="metric-label"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">' + m.icon + '</span>' + m.label + '</div>' +
-                    '<div class="metric-value" id="' + m.id + '">--</div>' +
-                    '</div>';
-            }).join('');
+            const primaryMetrics = [
+                { id: 'total-revenue',     label: 'Total Revenue',      icon: 'account_balance',  accent: 'indigo' },
+                { id: 'monthly-revenue',   label: 'Monthly Revenue',    icon: 'trending_up',      accent: 'indigo' },
+                { id: 'active-sub-revenue',label: 'Active Sub Revenue', icon: 'subscriptions',    accent: 'violet' },
+                { id: 'total-payments',    label: 'Total Payments',     icon: 'receipt_long',     accent: 'violet' },
+                { id: 'total-refunds',     label: 'Total Refunds',      icon: 'money_off',        accent: 'amber'  },
+                { id: 'monthly-refunds',   label: 'Monthly Refunds',    icon: 'calendar_month',   accent: 'amber'  }
+            ];
+            const secondaryMetrics = [
+                { id: 'refund-rate',          label: 'Refund Rate',        icon: 'percent',          accent: 'rose'   },
+                { id: 'instant-refunds',      label: 'Instant Refunds',    icon: 'bolt',             accent: 'teal'   },
+                { id: 'normal-refunds',       label: 'Normal Refunds',     icon: 'hourglass_bottom', accent: 'teal'   },
+                { id: 'avg-processing-time',  label: 'Avg Processing',     icon: 'timer',            accent: 'sky'    }
+            ];
+
+            metricsContainer.innerHTML =
+                '<div class="fin-kpi-grid fin-kpi-grid--primary">' +
+                primaryMetrics.map(function(m) {
+                    return '<div class="fin-kpi-card fin-kpi-card--' + m.accent + '">' +
+                        '<div class="fin-kpi-card__header">' +
+                        '<span class="material-icons fin-kpi-card__icon">' + m.icon + '</span>' +
+                        '<span class="fin-kpi-card__label">' + m.label + '</span>' +
+                        '</div>' +
+                        '<div class="fin-kpi-card__value" id="' + m.id + '">--</div>' +
+                        '</div>';
+                }).join('') +
+                '</div>' +
+                '<div class="fin-kpi-grid fin-kpi-grid--secondary">' +
+                secondaryMetrics.map(function(m) {
+                    return '<div class="fin-kpi-card fin-kpi-card--sm fin-kpi-card--' + m.accent + '">' +
+                        '<div class="fin-kpi-card__header">' +
+                        '<span class="material-icons fin-kpi-card__icon">' + m.icon + '</span>' +
+                        '<span class="fin-kpi-card__label">' + m.label + '</span>' +
+                        '</div>' +
+                        '<div class="fin-kpi-card__value fin-kpi-card__value--sm" id="' + m.id + '">--</div>' +
+                        '</div>';
+                }).join('') +
+                '</div>';
         }
 
         // Build filter controls
         const filtersContainer = document.getElementById('finance-filters');
         if (filtersContainer && !document.getElementById('payment-status-filter')) {
             filtersContainer.innerHTML =
-                '<select id="payment-status-filter" class="btn btn-secondary" style="min-width:140px;">' +
-                    '<option value="">All Statuses</option>' +
-                    '<option value="PENDING">Pending</option>' +
-                    '<option value="VERIFIED">Verified</option>' +
-                    '<option value="CAPTURED">Captured</option>' +
-                    '<option value="SUCCESS">Success</option>' +
-                    '<option value="FAILED">Failed</option>' +
-                    '<option value="REFUNDED">Refunded</option>' +
-                '</select>' +
-                '<input type="date" id="payment-date-from" class="btn btn-secondary" title="Start Date" />' +
-                '<input type="date" id="payment-date-to" class="btn btn-secondary" title="End Date" />' +
-                '<button id="generate-bill-btn" class="btn btn-secondary">Generate Bill</button>';
+                '<div class="fin-filter-bar">' +
+                    '<div class="fin-filter-bar__group">' +
+                        '<label class="fin-filter-bar__label" for="payment-status-filter">' +
+                            '<span class="material-icons" style="font-size:15px;vertical-align:middle;">filter_list</span> Status' +
+                        '</label>' +
+                        '<select id="payment-status-filter" class="fin-filter-bar__control">' +
+                            '<option value="">All Statuses</option>' +
+                            '<option value="PENDING">Pending</option>' +
+                            '<option value="VERIFIED">Verified</option>' +
+                            '<option value="CAPTURED">Captured</option>' +
+                            '<option value="SUCCESS">Success</option>' +
+                            '<option value="FAILED">Failed</option>' +
+                            '<option value="REFUNDED">Refunded</option>' +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="fin-filter-bar__group">' +
+                        '<label class="fin-filter-bar__label" for="payment-date-from">' +
+                            '<span class="material-icons" style="font-size:15px;vertical-align:middle;">date_range</span> From' +
+                        '</label>' +
+                        '<input type="date" id="payment-date-from" class="fin-filter-bar__control" />' +
+                    '</div>' +
+                    '<div class="fin-filter-bar__group">' +
+                        '<label class="fin-filter-bar__label" for="payment-date-to">To</label>' +
+                        '<input type="date" id="payment-date-to" class="fin-filter-bar__control" />' +
+                    '</div>' +
+                    '<button id="generate-bill-btn" class="btn btn-secondary fin-filter-bar__btn">' +
+                        '<span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">receipt</span>Generate Bill' +
+                    '</button>' +
+                '</div>';
         }
 
         // Build payment table
         const tableContainer = document.getElementById('finance-table-container');
         if (tableContainer && !document.getElementById('payments-table-body')) {
             tableContainer.innerHTML =
-                '<table class="payments-table">' +
-                    '<thead><tr>' +
-                        '<th>Email</th>' +
-                        '<th>Amount</th>' +
-                        '<th>Currency</th>' +
-                        '<th>Method</th>' +
-                        '<th>Status</th>' +
-                        '<th>Transaction ID</th>' +
-                        '<th>Date</th>' +
-                        '<th>Actions</th>' +
-                    '</tr></thead>' +
-                    '<tbody id="payments-table-body">' +
-                        '<tr><td colspan="8" style="text-align:center;padding:2rem;">Loading payments...</td></tr>' +
-                    '</tbody>' +
-                '</table>';
+                '<div class="finance-table-shell">' +
+                    '<div class="finance-table-wrapper">' +
+                        '<table class="finance-table">' +
+                            '<thead><tr>' +
+                                '<th>Email</th>' +
+                                '<th>Amount</th>' +
+                                '<th>Currency</th>' +
+                                '<th>Method</th>' +
+                                '<th>Status</th>' +
+                                '<th>Transaction ID</th>' +
+                                '<th>Date</th>' +
+                                '<th style="text-align:center;">Actions</th>' +
+                            '</tr></thead>' +
+                            '<tbody id="payments-table-body">' +
+                                '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:var(--text-secondary);">Loading payments...</td></tr>' +
+                            '</tbody>' +
+                        '</table>' +
+                    '</div>' +
+                '</div>';
         }
 
         // Set up pagination container
         const paginationContainer = document.getElementById('finance-pagination');
         if (paginationContainer && !document.getElementById('payments-pagination')) {
             paginationContainer.id = 'payments-pagination';
+            paginationContainer.className = 'fin-pagination';
         }
     }
 
@@ -164,7 +207,7 @@
 
         var tbody = document.getElementById('payments-table-body');
         if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;">Loading...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:var(--text-secondary);">Loading...</td></tr>';
         }
 
         fetch('/finance/payments?' + params.toString(), {
@@ -190,9 +233,29 @@
         .catch(function(error) {
             console.error('Error loading payment history:', error);
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--error-color, #ef4444);">' + escapeHtml(error.message) + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:var(--error-color,#ef4444);">' + escapeHtml(error.message) + '</td></tr>';
             }
         });
+    }
+
+    /**
+     * Build a status badge element
+     */
+    function buildStatusBadge(status) {
+        var s = (status || 'PENDING').toLowerCase();
+        var classes = 'fin-status-pill';
+        if (s === 'verified' || s === 'success' || s === 'captured') {
+            classes += ' fin-status-pill--success';
+        } else if (s === 'pending') {
+            classes += ' fin-status-pill--pending';
+        } else if (s === 'failed') {
+            classes += ' fin-status-pill--failed';
+        } else if (s === 'refunded') {
+            classes += ' fin-status-pill--refunded';
+        } else {
+            classes += ' fin-status-pill--neutral';
+        }
+        return '<span class="' + classes + '">' + escapeHtml(status || 'PENDING') + '</span>';
     }
 
     /**
@@ -203,7 +266,7 @@
         if (!tbody) return;
 
         if (payments.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No payments found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:var(--text-secondary);">No payments found</td></tr>';
             return;
         }
 
@@ -213,15 +276,16 @@
             var row = document.createElement('tr');
 
             var emailCell = document.createElement('td');
-            emailCell.textContent = payment.userEmail || 'N/A';
+            emailCell.innerHTML = '<span class="fin-cell-email">' + escapeHtml(payment.userEmail || 'N/A') + '</span>';
             row.appendChild(emailCell);
 
             var amountCell = document.createElement('td');
-            amountCell.textContent = '\u20B9' + Number(payment.amount || 0).toFixed(2);
+            amountCell.innerHTML = '<span class="fin-cell-amount">\u20B9' + Number(payment.amount || 0).toFixed(2) + '</span>';
             row.appendChild(amountCell);
 
             var currencyCell = document.createElement('td');
             currencyCell.textContent = payment.currency || 'INR';
+            currencyCell.style.color = 'var(--text-secondary)';
             row.appendChild(currencyCell);
 
             var methodCell = document.createElement('td');
@@ -229,42 +293,74 @@
             row.appendChild(methodCell);
 
             var statusCell = document.createElement('td');
-            statusCell.textContent = payment.status || 'PENDING';
+            statusCell.innerHTML = buildStatusBadge(payment.status);
             row.appendChild(statusCell);
 
             var txnCell = document.createElement('td');
-            var txnCode = document.createElement('code');
-            txnCode.textContent = payment.transactionId || 'N/A';
-            txnCode.style.fontSize = '0.85rem';
-            txnCell.appendChild(txnCode);
+            txnCell.innerHTML = '<code class="fin-cell-txn">' + escapeHtml(payment.transactionId || 'N/A') + '</code>';
             row.appendChild(txnCell);
 
             var dateCell = document.createElement('td');
             dateCell.textContent = formatDate(payment.createdAt);
-            dateCell.style.fontSize = '0.875rem';
+            dateCell.style.fontSize = '0.8rem';
+            dateCell.style.color = 'var(--text-secondary)';
             row.appendChild(dateCell);
 
             var actionsCell = document.createElement('td');
             actionsCell.className = 'payment-actions';
+            // Always render a Details button immediately so the column is never empty
+            actionsCell.innerHTML = buildInitialActionButtons(payment);
             row.appendChild(actionsCell);
 
             fragment.appendChild(row);
 
+            // Async: check refund status and update actions cell
             if (Number(payment.amount || 0) > 0) {
                 checkAndDisplayRefundStatus(row, payment, actionsCell);
-            } else {
-                if (typeof addRefundButtonToPaymentRow === 'function') {
-                    addRefundButtonToPaymentRow(row, payment, null);
-                }
             }
         });
 
         tbody.innerHTML = '';
         tbody.appendChild(fragment);
+
+        // Bind click handlers for initial Details buttons
+        bindInitialActionButtons(tbody, payments);
     }
 
     /**
-     * Check refund status from Razorpay and display badge if refunded
+     * Build initial action buttons HTML (rendered immediately, before async refund check)
+     */
+    function buildInitialActionButtons(payment) {
+        var status = (payment.status || '').toLowerCase();
+        var amount = Number(payment.amount || 0);
+        if (status === 'verified' || status === 'success' || status === 'captured') {
+            return '<div class="payment-actions-group">' +
+                '<button class="btn-details btn-sm fin-action-details" data-txn="' + escapeHtml(payment.transactionId || '') + '" title="View details">Details</button>' +
+                '</div>';
+        }
+        return '<div class="payment-actions-group">' +
+            '<button class="btn-details btn-sm fin-action-details" data-txn="' + escapeHtml(payment.transactionId || '') + '" title="View details">Details</button>' +
+            '</div>';
+    }
+
+    /**
+     * Bind click handlers for initial Details buttons in the table
+     */
+    function bindInitialActionButtons(tbody, payments) {
+        var buttons = tbody.querySelectorAll('.fin-action-details');
+        buttons.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var txn = this.getAttribute('data-txn');
+                var payment = payments.find(function(p) { return (p.transactionId || '') === txn; });
+                if (payment && typeof showPaymentDetailsModal === 'function') {
+                    showPaymentDetailsModal(payment);
+                }
+            });
+        });
+    }
+
+    /**
+     * Check refund status from Razorpay and update the actions cell
      */
     function checkAndDisplayRefundStatus(row, payment, actionsCell) {
         var token = localStorage.getItem('jwt_token');
@@ -338,13 +434,19 @@
         if (totalPages <= 1) return;
 
         var prevBtn = document.createElement('button');
-        prevBtn.className = 'btn btn-secondary' + (currentPage === 1 ? ' disabled' : '');
-        prevBtn.textContent = 'Previous';
+        prevBtn.className = 'btn btn-secondary fin-pagination__btn' + (currentPage === 1 ? ' disabled' : '');
+        prevBtn.innerHTML = '<span class="material-icons" style="font-size:16px;">chevron_left</span>';
         prevBtn.disabled = currentPage === 1;
+        prevBtn.title = 'Previous page';
         prevBtn.addEventListener('click', function() {
             if (currentPage > 1) loadPaymentHistory(currentPage - 1);
         });
         container.appendChild(prevBtn);
+
+        var pageInfo = document.createElement('span');
+        pageInfo.className = 'fin-pagination__info';
+        pageInfo.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+        container.appendChild(pageInfo);
 
         var maxButtons = 5;
         var startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
@@ -353,7 +455,7 @@
         for (var i = startPage; i <= endPage; i++) {
             (function(pageNum) {
                 var pageBtn = document.createElement('button');
-                pageBtn.className = 'btn btn-secondary' + (pageNum === currentPage ? ' active' : '');
+                pageBtn.className = 'btn btn-secondary fin-pagination__btn' + (pageNum === currentPage ? ' active' : '');
                 pageBtn.textContent = pageNum.toString();
                 pageBtn.addEventListener('click', function() {
                     if (pageNum !== currentPage) loadPaymentHistory(pageNum);
@@ -363,9 +465,10 @@
         }
 
         var nextBtn = document.createElement('button');
-        nextBtn.className = 'btn btn-secondary' + (currentPage === totalPages ? ' disabled' : '');
-        nextBtn.textContent = 'Next';
+        nextBtn.className = 'btn btn-secondary fin-pagination__btn' + (currentPage === totalPages ? ' disabled' : '');
+        nextBtn.innerHTML = '<span class="material-icons" style="font-size:16px;">chevron_right</span>';
         nextBtn.disabled = currentPage === totalPages;
+        nextBtn.title = 'Next page';
         nextBtn.addEventListener('click', function() {
             if (currentPage < totalPages) loadPaymentHistory(currentPage + 1);
         });

@@ -16,7 +16,23 @@ data class SavedLocation(
     val id: ObjectId = ObjectId(),
     val userEmail: String,
     val name: String,
+    val city: String = "",
+    val state: String = "",
+    val country: String = "",
     val lat: Double,
     val lon: Double,
     val createdAt: String = Instant.now().toString()
+)
+
+/**
+ * Filtered place result returned from Nominatim search.
+ */
+@Serializable
+data class PlaceSearchResult(
+    val name: String,
+    val city: String,
+    val state: String,
+    val country: String,
+    val lat: String,
+    val lon: String
 )

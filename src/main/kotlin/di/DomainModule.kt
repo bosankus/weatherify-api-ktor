@@ -3,6 +3,7 @@ package di
 import data.service.*
 import domain.service.*
 import domain.service.impl.*
+import domain.service.NominatimService
 import org.koin.dsl.module
 
 /**
@@ -21,7 +22,8 @@ val domainModule = module {
     single<BillService> { BillServiceImpl(get(), get(), get(), get()) }
     single<NotificationService> { NotificationServiceImpl() }
     single<ServiceCatalogService> { ServiceCatalogServiceImpl(get(), get()) }
-    single { SavedLocationService(get()) }
+    single { NominatimService(get()) }
+    single { SavedLocationService(get(), get(), get()) }
     single { NoteService(get()) }
 
     // Data Services

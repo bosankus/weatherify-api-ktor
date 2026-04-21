@@ -476,10 +476,10 @@ function updatePaymentRowAfterRefund(paymentId) {
                 payment.refundedAmount = totalRefunded;
                 if (isFullyRefunded) {
                     payment.status = 'REFUNDED';
-                    // Update status cell
+                    // Update status cell with badge
                     const statusCell = targetRow.querySelector('td:nth-child(5)');
                     if (statusCell) {
-                        statusCell.textContent = 'REFUNDED';
+                        statusCell.innerHTML = '<span class="fin-status-pill fin-status-pill--refunded">REFUNDED</span>';
                     }
                 }
 
@@ -698,7 +698,8 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
         hasPartialRefund = !isFullyRefunded && refundedAmount > 0;
     } else {
         refundedAmount = payment.refundedAmount || 0;
-        isFullyRefunded = totalAmount > 0 && (payment.status === 'REFUNDED' || refundedAmount >= totalAmount);
+        const statusLc = (payment.status || '').toLowerCase();
+        isFullyRefunded = totalAmount > 0 && (statusLc === 'refunded' || refundedAmount >= totalAmount);
         hasPartialRefund = totalAmount > 0 && refundedAmount > 0 && refundedAmount < totalAmount;
     }
 
@@ -714,12 +715,10 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
 
     // If fully refunded, show ONLY refunded badge (no refund button)
     if (isFullyRefunded) {
-        // Update the status cell to show REFUNDED as plain text
+        // Update the status cell to show REFUNDED badge
         const statusCell = row.querySelector('td:nth-child(5)'); // Status is the 5th column
         if (statusCell) {
-            statusCell.innerHTML = '';
-            statusCell.style.textAlign = 'center';
-            statusCell.textContent = 'REFUNDED';
+            statusCell.innerHTML = '<span class="fin-status-pill fin-status-pill--refunded">REFUNDED</span>';
         }
 
         // Show refunded badge styled like Details button (clickable to view history)
@@ -773,24 +772,34 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
             showRefundModal(payment);
         });
         actionsGroup.appendChild(refundBtn);
-    } else if (payment.status === 'verified' || payment.status === 'SUCCESS') {
-        // Show refund button for successful payments with amount > 0
-        const refundBtn = document.createElement('button');
-        refundBtn.className = 'btn-refund btn-sm';
-        refundBtn.textContent = 'Refund';
-        refundBtn.addEventListener('click', () => {
-            // Add razorpayPaymentId if not present
-            payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
-            showRefundModal(payment);
-        });
-        actionsGroup.appendChild(refundBtn);
     } else {
-        // For other statuses, show details button
-        const detailsBtn = document.createElement('button');
-        detailsBtn.className = 'btn-details btn-sm';
-        detailsBtn.textContent = 'Details';
-        detailsBtn.addEventListener('click', () => showPaymentDetailsModal(payment));
-        actionsGroup.appendChild(detailsBtn);
+        const statusLower = (payment.status || '').toLowerCase();
+        const isRefundable = statusLower === 'verified' || statusLower === 'success' || statusLower === 'captured';
+
+        if (isRefundable) {
+            // Show Details + Refund buttons for successful payments
+            const detailsBtn = document.createElement('button');
+            detailsBtn.className = 'btn-details btn-sm';
+            detailsBtn.textContent = 'Details';
+            detailsBtn.addEventListener('click', () => showPaymentDetailsModal(payment));
+            actionsGroup.appendChild(detailsBtn);
+
+            const refundBtn = document.createElement('button');
+            refundBtn.className = 'btn-refund btn-sm';
+            refundBtn.textContent = 'Refund';
+            refundBtn.addEventListener('click', () => {
+                payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
+                showRefundModal(payment);
+            });
+            actionsGroup.appendChild(refundBtn);
+        } else {
+            // For other statuses, show details button only
+            const detailsBtn = document.createElement('button');
+            detailsBtn.className = 'btn-details btn-sm';
+            detailsBtn.textContent = 'Details';
+            detailsBtn.addEventListener('click', () => showPaymentDetailsModal(payment));
+            actionsGroup.appendChild(detailsBtn);
+        }
     }
 }
 

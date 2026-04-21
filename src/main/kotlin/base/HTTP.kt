@@ -13,6 +13,9 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.contentType
+import io.ktor.server.request.httpMethod
+import io.ktor.server.request.uri
+import io.ktor.server.response.respondText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
 import org.slf4j.LoggerFactory
@@ -67,7 +70,7 @@ fun Application.configureHTTP() {
         })
     }
 
-    // Install StatusPages to handle content transformation errors globally
+    // Install StatusPages to handle exceptions globally
     install(StatusPages) {
         exception<io.ktor.server.plugins.CannotTransformContentToTypeException> { call, cause ->
             logger.warn("Cannot transform request content: ${cause.message}", cause)
@@ -79,6 +82,18 @@ fun Application.configureHTTP() {
                     "contentType" to call.request.contentType().toString()
                 ),
                 status = HttpStatusCode.BadRequest
+            )
+        }
+        // Catch-all: log every unhandled exception with full stack trace so root causes are visible
+        exception<Throwable> { call, cause ->
+            logger.error(
+                "Unhandled exception on ${call.request.httpMethod.value} ${call.request.uri}",
+                cause
+            )
+            call.respondText(
+                text = """{"status":false,"message":"Internal server error: ${cause.message?.replace("\"", "'")}","data":null}""",
+                contentType = io.ktor.http.ContentType.Application.Json,
+                status = HttpStatusCode.InternalServerError
             )
         }
     }

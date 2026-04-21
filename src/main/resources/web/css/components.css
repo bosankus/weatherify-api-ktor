@@ -2644,7 +2644,7 @@
 
 .sliding-panel {
     position: fixed; top: 0; right: 0; width: 640px; max-width: 100vw; height: 100vh;
-    background: var(--card-bg, #ffffff);
+    background: var(--bg-gradient-1, #ffffff);
     border-left: 1px solid var(--card-border, #e2e8f0);
     box-shadow: -8px 0 32px rgba(0, 0, 0, 0.15);
     z-index: 20001;
@@ -2658,28 +2658,28 @@
     padding: 1.5rem 2rem;
     border-bottom: 1px solid var(--card-border, #e2e8f0);
     display: flex; align-items: center; justify-content: space-between;
-    background: var(--bg-color, #ffffff);
+    background: var(--bg-gradient-1, #ffffff);
     position: sticky; top: 0; z-index: 10;
 }
 
 .sliding-panel-title {
     font-size: 1.15rem;
     font-weight: 700;
-    color: var(--heading-color, #0f172a);
+    color: var(--heading-color);
     margin: 0;
 }
 
 .sliding-panel-close {
     background: none; border: none; cursor: pointer;
-    color: var(--text-secondary, #64748b);
+    color: var(--text-secondary);
     padding: 0.25rem;
     border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.2s;
 }
 .sliding-panel-close:hover {
-    background: var(--card-hover-bg, #f1f5f9);
-    color: var(--text-color, #334155);
+    background: var(--card-hover-bg);
+    color: var(--text-color);
 }
 
 .sliding-panel-body {
@@ -2693,7 +2693,7 @@
     padding: 1.25rem 2rem;
     border-top: 1px solid var(--card-border, #e2e8f0);
     display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem;
-    background: var(--bg-color, #ffffff);
+    background: var(--bg-gradient-1, #ffffff);
 }
 
 @media (max-width: 1024px) {
@@ -2715,8 +2715,10 @@
 
 /* Notes Editor Styling */
 .notes-editor-container {
-    min-height: 300px;
-    background: var(--bg-color, #ffffff);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--card-bg, #ffffff);
     color: var(--text-color, #334155);
     border: 1px solid var(--card-border, #cbd5e1);
     border-radius: 8px;
@@ -2731,8 +2733,13 @@
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
+.sliding-panel-body:has(.notes-editor-container) {
+    display: flex;
+    flex-direction: column;
+}
 .notes-editor-container .ProseMirror {
-    min-height: 280px;
+    flex: 1;
+    min-height: 200px;
     outline: none;
 }
 .notes-editor-container .ProseMirror p {
@@ -2741,7 +2748,7 @@
 .notes-editor-container .ProseMirror h1,
 .notes-editor-container .ProseMirror h2,
 .notes-editor-container .ProseMirror h3 {
-    color: var(--heading-color, #0f172a);
+    color: var(--heading-color);
     margin: 1rem 0 0.5rem 0;
 }
 .notes-editor-container .ProseMirror ul,
@@ -2750,14 +2757,327 @@
     margin: 0.5rem 0;
 }
 .notes-editor-container .ProseMirror code {
-    background: var(--card-hover-bg, #f1f5f9);
+    background: var(--card-hover-bg);
     padding: 0.15rem 0.4rem;
     border-radius: 4px;
     font-size: 0.9em;
 }
 .notes-editor-container .ProseMirror pre {
-    background: var(--card-hover-bg, #f1f5f9);
+    background: var(--card-hover-bg);
     padding: 0.75rem 1rem;
     border-radius: 6px;
     overflow-x: auto;
+}
+
+/* =====================================================
+   Finance Dashboard — KPI Cards
+   ===================================================== */
+
+/* Accent colour tokens (mapped from base palette) */
+:root {
+    --fin-indigo-bg:  rgba(99, 102, 241, 0.12);
+    --fin-indigo-fg:  #818cf8;
+    --fin-indigo-bar: #6366f1;
+    --fin-violet-bg:  rgba(139, 92, 246, 0.12);
+    --fin-violet-fg:  #a78bfa;
+    --fin-violet-bar: #8b5cf6;
+    --fin-amber-bg:   rgba(245, 158, 11, 0.12);
+    --fin-amber-fg:   #fbbf24;
+    --fin-amber-bar:  #f59e0b;
+    --fin-rose-bg:    rgba(244, 63, 94, 0.12);
+    --fin-rose-fg:    #fb7185;
+    --fin-rose-bar:   #f43f5e;
+    --fin-teal-bg:    rgba(20, 184, 166, 0.12);
+    --fin-teal-fg:    #2dd4bf;
+    --fin-teal-bar:   #14b8a6;
+    --fin-sky-bg:     rgba(14, 165, 233, 0.12);
+    --fin-sky-fg:     #38bdf8;
+    --fin-sky-bar:    #0ea5e9;
+}
+
+/* Primary grid — 6 cards, 3 per row on wide, 2 on mid, 1 on mobile */
+.fin-kpi-grid {
+    display: grid;
+    gap: 0.875rem;
+    margin-bottom: 0.875rem;
+}
+
+.fin-kpi-grid--primary {
+    grid-template-columns: repeat(6, 1fr);
+}
+
+.fin-kpi-grid--secondary {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+/* Individual card */
+.fin-kpi-card {
+    position: relative;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 1.1rem 1.2rem 1rem;
+    overflow: hidden;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+/* Accent top bar */
+.fin-kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 14px 14px 0 0;
+    background: var(--_fin-bar, #6366f1);
+    opacity: 0.8;
+}
+
+.fin-kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px var(--card-shadow);
+    border-color: var(--card-hover-border);
+}
+
+/* Header row */
+.fin-kpi-card__header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+}
+
+.fin-kpi-card__icon {
+    font-size: 14px !important;
+    color: var(--_fin-fg, var(--text-secondary));
+    opacity: 0.85;
+    flex-shrink: 0;
+}
+
+.fin-kpi-card__label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.055em;
+    color: var(--_fin-fg, var(--text-secondary));
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Value */
+.fin-kpi-card__value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--heading-color);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.fin-kpi-card__value--sm {
+    font-size: 1.25rem;
+}
+
+.fin-kpi-card--sm {
+    padding: 0.875rem 1rem 0.875rem;
+}
+
+/* Accent colour variants */
+.fin-kpi-card--indigo { --_fin-bg: var(--fin-indigo-bg); --_fin-fg: var(--fin-indigo-fg); --_fin-bar: var(--fin-indigo-bar); }
+.fin-kpi-card--violet { --_fin-bg: var(--fin-violet-bg); --_fin-fg: var(--fin-violet-fg); --_fin-bar: var(--fin-violet-bar); }
+.fin-kpi-card--amber  { --_fin-bg: var(--fin-amber-bg);  --_fin-fg: var(--fin-amber-fg);  --_fin-bar: var(--fin-amber-bar);  }
+.fin-kpi-card--rose   { --_fin-bg: var(--fin-rose-bg);   --_fin-fg: var(--fin-rose-fg);   --_fin-bar: var(--fin-rose-bar);   }
+.fin-kpi-card--teal   { --_fin-bg: var(--fin-teal-bg);   --_fin-fg: var(--fin-teal-fg);   --_fin-bar: var(--fin-teal-bar);   }
+.fin-kpi-card--sky    { --_fin-bg: var(--fin-sky-bg);    --_fin-fg: var(--fin-sky-fg);    --_fin-bar: var(--fin-sky-bar);    }
+
+/* =====================================================
+   Finance Dashboard — Filter Bar
+   ===================================================== */
+.fin-filter-bar {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    margin-bottom: 1rem;
+}
+
+.fin-filter-bar__group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.fin-filter-bar__label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.fin-filter-bar__control {
+    padding: 0.45rem 0.8rem;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    background: var(--card-hover-bg);
+    color: var(--text-color);
+    font-size: 0.875rem;
+    font-family: 'Space Grotesk', sans-serif;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    min-width: 130px;
+    cursor: pointer;
+}
+
+.fin-filter-bar__control:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.fin-filter-bar__btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.45rem 1rem;
+    font-size: 0.875rem;
+    border-radius: 8px;
+    align-self: flex-end;
+}
+
+/* =====================================================
+   Finance Dashboard — Table Cells
+   ===================================================== */
+.fin-cell-email {
+    font-size: 0.8rem;
+    color: var(--text-color);
+    word-break: break-all;
+}
+
+.fin-cell-amount {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--heading-color);
+}
+
+.fin-cell-txn {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.75rem;
+    background: var(--card-hover-bg);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
+/* =====================================================
+   Finance Dashboard — Status Pills
+   ===================================================== */
+.fin-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.fin-status-pill--success {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.fin-status-pill--pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.fin-status-pill--failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.fin-status-pill--refunded {
+    background: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.fin-status-pill--neutral {
+    background: var(--card-hover-bg);
+    color: var(--text-secondary);
+    border-color: var(--card-border);
+}
+
+/* =====================================================
+   Finance Dashboard — Pagination
+   ===================================================== */
+.fin-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 1.25rem;
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+}
+
+.fin-pagination__btn {
+    padding: 0.35rem 0.7rem !important;
+    border-radius: 8px !important;
+    min-width: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fin-pagination__btn.active {
+    background: #6366f1 !important;
+    border-color: #6366f1 !important;
+    color: #fff !important;
+}
+
+.fin-pagination__info {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    padding: 0 0.5rem;
+    white-space: nowrap;
+}
+
+/* =====================================================
+   Finance Dashboard — Responsive
+   ===================================================== */
+@media (max-width: 1280px) {
+    .fin-kpi-grid--primary  { grid-template-columns: repeat(3, 1fr); }
+    .fin-kpi-grid--secondary { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (max-width: 900px) {
+    .fin-kpi-grid--primary  { grid-template-columns: repeat(2, 1fr); }
+    .fin-kpi-grid--secondary { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 600px) {
+    .fin-kpi-grid--primary,
+    .fin-kpi-grid--secondary { grid-template-columns: 1fr 1fr; }
+    .fin-kpi-card__value { font-size: 1.2rem; }
+    .fin-filter-bar { gap: 0.5rem; }
+    .fin-filter-bar__control { min-width: 110px; }
+}
+
+@media (max-width: 420px) {
+    .fin-kpi-grid--primary,
+    .fin-kpi-grid--secondary { grid-template-columns: 1fr; }
 }
