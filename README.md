@@ -187,7 +187,7 @@ gcloud builds submit --tag gcr.io/PROJECT_ID/weatherify-api
 gcloud run deploy weatherify-api \
   --image=gcr.io/PROJECT_ID/weatherify-api \
   --platform=managed \
-  --region=REGION \
+  --region=REasia-southeast1GION \
   --allow-unauthenticated
 ```
 
