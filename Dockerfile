@@ -1,10 +1,51 @@
-# Step 1: Build the application
-FROM gradle:7-jdk17 AS build
-COPY --chown=gradle:gradle . /home/gradle/src
-WORKDIR /home/gradle/src
-RUN ./gradlew build --no-daemon
+# Build stage
+FROM gradle:8.5-jdk17 as builder
 
-# Step 2: Create the runtime image
-FROM eclipse-temurin:17-jre-jammy
-COPY --from=build /home/gradle/src/build/libs/*.jar /app.jar
-ENTRYPOINT ["java", "-jar", "/app.jar"]
+WORKDIR /app
+
+# Copy gradle files
+COPY build.gradle.kts .
+COPY settings.gradle.kts .
+COPY gradle/ gradle/
+
+# Copy source code
+COPY src/ src/
+
+# Build the shadow JAR
+RUN gradle shadowJar --no-daemon
+
+# Runtime stage
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+# Copy the built JAR from builder
+COPY --from=builder /app/build/libs/*-all.jar app.jar
+
+# Copy serviceAccountKey.json if it exists
+COPY serviceAccountKey.json ./serviceAccountKey.json 2>/dev/null || true
+
+# Set environment variables
+ENV GCP_PROJECT_ID="1017382896100"
+ENV DB_NAME="weatherify-app-db"
+ENV WEATHER_URL="https://api.openweathermap.org/data/3.0/onecall"
+ENV AIR_POLLUTION_URL="https://api.openweathermap.org/data/2.5/air_pollution"
+ENV JWT_EXPIRATION="3600000"
+ENV JWT_AUDIENCE="jwt-audience"
+ENV JWT_ISSUER="jwt-issuer"
+ENV JWT_REALM="jwt-realm"
+ENV GA_ENABLED="true"
+ENV GA_TRACKING_ID="G-EBVRVNN6JF"
+ENV GA_MEASUREMENT_ID="G-LWRPRSSDRY"
+ENV GA_API_SECRET=""
+ENV FIREBASE_SERVICE_ACCOUNT_KEY="./serviceAccountKey.json"
+ENV GRACE_PERIOD_HOURS="72"
+ENV SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_MINUTES="720"
+ENV FROM_NAME="Androidplay Inc."
+ENV FROM_EMAIL="ankush@androidplay.in"
+ENV REFUND_FEATURE_ENABLED="true"
+ENV INSTANT_REFUND_ENABLED="true"
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
