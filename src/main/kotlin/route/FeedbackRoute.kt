@@ -12,8 +12,11 @@ import io.ktor.http.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.slf4j.LoggerFactory
 import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
+
+private val feedbackLogger = LoggerFactory.getLogger("FeedbackRoute")
 
 /**
  * Routes for feedback functionality
@@ -24,7 +27,7 @@ fun Route.feedbackRoute() {
         get {
             // Authenticate user using unified helper
             val user = call.getAuthenticatedUserOrRespond() ?: return@get
-            println("User with email ${user.email} is accessing feedback data")
+            feedbackLogger.debug("User with email {} is accessing feedback data", user.email)
 
             call.executeRoute(Constants.Messages.FEEDBACK_RETRIEVED) {
                 when (val result = call.getQueryParameter(Constants.Api.PARAM_ID)) {
@@ -48,7 +51,7 @@ fun Route.feedbackRoute() {
         post {
             // Authenticate user using unified helper
             val user = call.getAuthenticatedUserOrRespond() ?: return@post
-            println("User with email ${user.email} is submitting feedback")
+            feedbackLogger.debug("User with email {} is submitting feedback", user.email)
 
             call.executeRoute(Constants.Messages.FEEDBACK_SUBMITTED) {
                 val requiredParams = call.getRequiredParameters(
@@ -72,7 +75,7 @@ fun Route.feedbackRoute() {
                         withContext(Dispatchers.IO) {
                             val success = createOrUpdateFeedback(feedback)
                             if (!success) {
-                                println("${Constants.Messages.FAILED_SAVE_FEEDBACK}: ${feedback.id}")
+                                feedbackLogger.error("{}: {}", Constants.Messages.FAILED_SAVE_FEEDBACK, feedback.id)
                             }
                         }
 
@@ -88,7 +91,7 @@ fun Route.feedbackRoute() {
         delete {
             // Authenticate user using unified helper
             val user = call.getAuthenticatedUserOrRespond() ?: return@delete
-            println("User with email ${user.email} is deleting feedback")
+            feedbackLogger.debug("User with email {} is deleting feedback", user.email)
 
             call.executeRoute(Constants.Messages.FEEDBACK_REMOVED) {
                 when (val result = call.getQueryParameter(Constants.Api.PARAM_ID)) {

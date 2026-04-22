@@ -8,7 +8,6 @@ import io.ktor.server.response.respondText
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
-
 /**
  * Set cache control headers for responses.
  * @param maxAgeSeconds Maximum age in seconds for the cache (default: 300 = 5 minutes)
@@ -57,9 +56,6 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
 
     val body = json.encodeToString(apiResponseSerializer, response)
 
-    // Log the response for debugging
-    System.err.println("Sending success response: status=$status, message=$message")
-
     respondText(text = body, contentType = ContentType.Application.Json, status = status)
 }
 
@@ -89,9 +85,6 @@ suspend inline fun <reified T> ApplicationCall.respondError(
     val apiResponseSerializer = ApiResponse.serializer(payloadSerializer)
 
     val body = json.encodeToString(apiResponseSerializer, response)
-
-    // Log the response for debugging
-    System.err.println("Sending error response: status=$status, message=$message")
 
     respondText(text = body, contentType = ContentType.Application.Json, status = status)
 }

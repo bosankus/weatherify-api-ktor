@@ -2,6 +2,9 @@ package bose.ankush.util
 
 import com.google.cloud.secretmanager.v1.SecretManagerServiceClient
 import com.google.cloud.secretmanager.v1.SecretVersionName
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("GCPUtil")
 
 internal fun getSecretValue(secretName: String): String {
     // Check if we're in a development environment (GCP_PROJECT_ID not set)
@@ -12,10 +15,10 @@ internal fun getSecretValue(secretName: String): String {
             "jwt-secret" -> {
                 val envValue = System.getenv("JWT_SECRET")
                 if (!envValue.isNullOrBlank()) {
-                    println("Using JWT_SECRET environment variable for development")
+                    logger.debug("Using JWT_SECRET environment variable for development")
                     envValue
                 } else {
-                    println("Using default JWT secret for development")
+                    logger.warn("Using default JWT secret for development")
                     "dev_jwt_secret_key_for_local_development_only"
                 }
             }
@@ -23,10 +26,10 @@ internal fun getSecretValue(secretName: String): String {
             "db-connection-string" -> {
                 val envValue = System.getenv("DB_CONNECTION_STRING")
                 if (!envValue.isNullOrBlank()) {
-                    println("Using DB_CONNECTION_STRING environment variable for development")
+                    logger.debug("Using DB_CONNECTION_STRING environment variable for development")
                     envValue
                 } else {
-                    println("Using default MongoDB connection string for development")
+                    logger.warn("Using default MongoDB connection string for development")
                     "mongodb://localhost:27017"
                 }
             }
@@ -34,10 +37,10 @@ internal fun getSecretValue(secretName: String): String {
             "weather-data-secret" -> {
                 val envValue = System.getenv("WEATHER_API_KEY")
                 if (!envValue.isNullOrBlank()) {
-                    println("Using WEATHER_API_KEY environment variable for development")
+                    logger.debug("Using WEATHER_API_KEY environment variable for development")
                     envValue
                 } else {
-                    println("Using dummy weather API key for development")
+                    logger.warn("Using dummy weather API key for development")
                     "dummy_weather_api_key"
                 }
             }
@@ -45,10 +48,10 @@ internal fun getSecretValue(secretName: String): String {
             "razorpay-secret" -> {
                 val envValue = System.getenv("RAZORPAY_SECRET")
                 if (!envValue.isNullOrBlank()) {
-                    println("Using RAZORPAY_SECRET environment variable for development")
+                    logger.debug("Using RAZORPAY_SECRET environment variable for development")
                     envValue
                 } else {
-                    println("Using dummy Razorpay secret for development")
+                    logger.warn("Using dummy Razorpay secret for development")
                     "dummy_razorpay_secret"
                 }
             }
@@ -56,10 +59,10 @@ internal fun getSecretValue(secretName: String): String {
             "razorpay-key-id" -> {
                 val envValue = System.getenv("RAZORPAY_KEY_ID")
                 if (!envValue.isNullOrBlank()) {
-                    println("Using RAZORPAY_KEY_ID environment variable for development")
+                    logger.debug("Using RAZORPAY_KEY_ID environment variable for development")
                     envValue
                 } else {
-                    println("Using dummy Razorpay key id for development")
+                    logger.warn("Using dummy Razorpay key id for development")
                     "dummy_razorpay_key_id"
                 }
             }
@@ -67,10 +70,10 @@ internal fun getSecretValue(secretName: String): String {
             "razorpay-webhook-secret" -> {
                 val envValue = System.getenv("RAZORPAY_WEBHOOK_SECRET")
                 if (!envValue.isNullOrBlank()) {
-                    println("Using RAZORPAY_WEBHOOK_SECRET environment variable for development")
+                    logger.debug("Using RAZORPAY_WEBHOOK_SECRET environment variable for development")
                     envValue
                 } else {
-                    println("Using dummy Razorpay webhook secret for development")
+                    logger.warn("Using dummy Razorpay webhook secret for development")
                     "dummy_razorpay_webhook_secret"
                 }
             }
@@ -78,16 +81,16 @@ internal fun getSecretValue(secretName: String): String {
             "sendgrid-api-key" -> {
                 val envValue = System.getenv("SENDGRID_API_KEY")
                 if (!envValue.isNullOrBlank()) {
-                    println("Using SENDGRID_API_KEY environment variable for development")
+                    logger.debug("Using SENDGRID_API_KEY environment variable for development")
                     envValue
                 } else {
-                    println("WARNING: SendGrid API key not configured. Email functionality will be disabled.")
+                    logger.warn("SendGrid API key not configured. Email functionality will be disabled.")
                     ""
                 }
             }
 
             else -> {
-                println("Using dummy value for unknown secret: $secretName")
+                logger.warn("Using dummy value for unknown secret: {}", secretName)
                 "dummy_value_for_$secretName"
             }
         }
@@ -101,32 +104,28 @@ internal fun getSecretValue(secretName: String): String {
         val secretVersionName = SecretVersionName.of(
             gcpProjectId,
             secretName,
-            "latest" // Use latest version instead of hardcoded "1"
+            "latest"
         )
         val response = client.accessSecretVersion(secretVersionName)
         val secretValue = response.payload.data.toStringUtf8()
 
-        // Validate the secret value
         if (secretValue.isBlank()) {
             throw IllegalStateException("Retrieved secret value is blank for $secretName")
         }
 
         return secretValue
     } catch (e: Exception) {
-        // Log the error with more details
-        System.err.println("Error accessing secret $secretName from Secret Manager: ${e.message}")
-        e.printStackTrace()
+        logger.error("Error accessing secret {} from Secret Manager: {}", secretName, e.message, e)
 
         // Fallback to environment variables if Secret Manager fails
         val fallbackValue = when (secretName) {
             "jwt-secret" -> {
                 val envValue = System.getenv("JWT_SECRET")
                 if (!envValue.isNullOrBlank()) {
-                    System.err.println("Using JWT_SECRET environment variable as fallback")
+                    logger.warn("Using JWT_SECRET environment variable as fallback")
                     envValue
                 } else {
-                    System.err.println("WARNING: Using hardcoded JWT secret as fallback. This is not secure for production!")
-                    // Generate a more secure fallback key
+                    logger.error("Using hardcoded JWT secret as fallback. This is not secure for production!")
                     "fallback_jwt_secret_key_${System.currentTimeMillis()}"
                 }
             }
@@ -134,10 +133,10 @@ internal fun getSecretValue(secretName: String): String {
             "db-connection-string" -> {
                 val envValue = System.getenv("DB_CONNECTION_STRING")
                 if (!envValue.isNullOrBlank()) {
-                    System.err.println("Using DB_CONNECTION_STRING environment variable as fallback")
+                    logger.warn("Using DB_CONNECTION_STRING environment variable as fallback")
                     envValue
                 } else {
-                    System.err.println("WARNING: Using default MongoDB connection string as fallback")
+                    logger.error("Using default MongoDB connection string as fallback")
                     "mongodb://localhost:27017"
                 }
             }
@@ -145,22 +144,21 @@ internal fun getSecretValue(secretName: String): String {
             "weather-data-secret" -> {
                 val envValue = System.getenv("WEATHER_API_KEY")
                 if (!envValue.isNullOrBlank()) {
-                    System.err.println("Using WEATHER_API_KEY environment variable as fallback")
+                    logger.warn("Using WEATHER_API_KEY environment variable as fallback")
                     envValue
                 } else {
-                    System.err.println("WARNING: Using dummy weather API key as fallback")
+                    logger.error("Using dummy weather API key as fallback")
                     "dummy_weather_api_key"
                 }
             }
 
-            // Razorpay secrets explicit handling to avoid calling external API with bad credentials
             "razorpay-secret" -> {
                 val envValue = System.getenv("RAZORPAY_SECRET")
                 if (!envValue.isNullOrBlank()) {
-                    System.err.println("Using RAZORPAY_SECRET environment variable as fallback")
+                    logger.warn("Using RAZORPAY_SECRET environment variable as fallback")
                     envValue
                 } else {
-                    System.err.println("WARNING: Using dummy Razorpay secret as fallback")
+                    logger.error("Using dummy Razorpay secret as fallback")
                     "dummy_razorpay_secret"
                 }
             }
@@ -168,10 +166,10 @@ internal fun getSecretValue(secretName: String): String {
             "razorpay-key-id" -> {
                 val envValue = System.getenv("RAZORPAY_KEY_ID")
                 if (!envValue.isNullOrBlank()) {
-                    System.err.println("Using RAZORPAY_KEY_ID environment variable as fallback")
+                    logger.warn("Using RAZORPAY_KEY_ID environment variable as fallback")
                     envValue
                 } else {
-                    System.err.println("WARNING: Using dummy Razorpay key id as fallback")
+                    logger.error("Using dummy Razorpay key id as fallback")
                     "dummy_razorpay_key_id"
                 }
             }
@@ -179,10 +177,10 @@ internal fun getSecretValue(secretName: String): String {
             "razorpay-webhook-secret" -> {
                 val envValue = System.getenv("RAZORPAY_WEBHOOK_SECRET")
                 if (!envValue.isNullOrBlank()) {
-                    System.err.println("Using RAZORPAY_WEBHOOK_SECRET environment variable as fallback")
+                    logger.warn("Using RAZORPAY_WEBHOOK_SECRET environment variable as fallback")
                     envValue
                 } else {
-                    System.err.println("WARNING: Using dummy Razorpay webhook secret as fallback")
+                    logger.error("Using dummy Razorpay webhook secret as fallback")
                     "dummy_razorpay_webhook_secret"
                 }
             }
@@ -190,16 +188,16 @@ internal fun getSecretValue(secretName: String): String {
             "sendgrid-api-key" -> {
                 val envValue = System.getenv("SENDGRID_API_KEY")
                 if (!envValue.isNullOrBlank()) {
-                    System.err.println("Using SENDGRID_API_KEY environment variable as fallback")
+                    logger.warn("Using SENDGRID_API_KEY environment variable as fallback")
                     envValue
                 } else {
-                    System.err.println("WARNING: SendGrid API key not configured. Email functionality will be disabled.")
+                    logger.error("SendGrid API key not configured. Email functionality will be disabled.")
                     ""
                 }
             }
 
             else -> {
-                System.err.println("WARNING: Using dummy value for unknown secret: $secretName")
+                logger.error("Using dummy value for unknown secret: {}", secretName)
                 "fallback_value_for_$secretName"
             }
         }

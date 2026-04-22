@@ -4,11 +4,14 @@ import kotlinx.html.HEAD
 import kotlinx.html.script
 import kotlinx.html.style
 import kotlinx.html.unsafe
+import org.slf4j.LoggerFactory
 
 /**
  * Helper class for including shared web resources in HTML responses
  */
 object WebResources {
+
+    private val logger = LoggerFactory.getLogger(WebResources::class.java)
 
     /**
      * Include Google tag (gtag.js) immediately after the <head> element
@@ -111,11 +114,11 @@ object WebResources {
             if (resourceUrl != null) {
                 resourceUrl.readText()
             } else {
-                println("Resource not found: $path")
+                logger.warn("Resource not found: {}", path)
                 ""
             }
         } catch (e: Exception) {
-            println("Error reading resource: $path - ${e.message}")
+            logger.error("Error reading resource: {} - {}", path, e.message)
             ""
         }
     }
