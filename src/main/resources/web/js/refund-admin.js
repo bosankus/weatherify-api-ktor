@@ -1094,10 +1094,14 @@ function showPaymentDetailsModal(payment) {
         return;
     }
 
-    const amount = (payment.amount || 0).toFixed(2);
+    const amount = Number(payment.amount || 0).toFixed(2);
     const status = payment.status || 'PENDING';
-    const statusClass = status === 'verified' || status === 'SUCCESS' ? 'status-processed' :
-        status === 'FAILED' ? 'status-failed' : 'status-pending';
+    const statusLower = status.toLowerCase();
+    const isRefundable = statusLower === 'verified' || statusLower === 'success' || statusLower === 'captured';
+    const paymentId = payment.razorpayPaymentId || payment.transactionId;
+
+    const statusClass = isRefundable ? 'status-processed' :
+        statusLower === 'failed' ? 'status-failed' : 'status-pending';
 
     const modalContent = `
         <div class="payment-details-modal">
@@ -1131,14 +1135,38 @@ function showPaymentDetailsModal(payment) {
                     <span class="finance-kv__value">${formatDate(payment.createdAt)}</span>
                 </div>
             </div>
-
-            <div style="text-align: right;">
-                <button class="btn btn-secondary" onclick="closeFinancePanel()">Close</button>
-            </div>
         </div>
     `;
 
-    showFinancePanel('Payment Details', modalContent);
+    // Build footer with refund action buttons
+    let footerHtml = '';
+    if (isRefundable && paymentId) {
+        footerHtml += `<button type="button" class="modal-btn modal-btn-primary" id="details-initiate-refund-btn">Initiate Refund</button>`;
+    }
+    if (paymentId) {
+        footerHtml += `<button type="button" class="modal-btn modal-btn-secondary" id="details-refund-history-btn">Refund Details</button>`;
+    }
+    footerHtml += `<button type="button" class="modal-btn modal-btn-secondary" onclick="closeFinancePanel()">Close</button>`;
+
+    showFinancePanel('Payment Details', modalContent, { footer: footerHtml });
+
+    // Bind footer action buttons after panel is rendered
+    setTimeout(() => {
+        const initiateBtn = document.getElementById('details-initiate-refund-btn');
+        if (initiateBtn) {
+            initiateBtn.addEventListener('click', () => {
+                payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
+                showRefundModal(payment);
+            });
+        }
+
+        const historyBtn = document.getElementById('details-refund-history-btn');
+        if (historyBtn && paymentId) {
+            historyBtn.addEventListener('click', () => {
+                loadAndShowRefundDetails(paymentId);
+            });
+        }
+    }, 50);
 }
 
 // Use common utilities from admin-utils.js

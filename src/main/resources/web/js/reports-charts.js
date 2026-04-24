@@ -8,6 +8,8 @@
 
     // Chart instance
     let salesChartInstance = null;
+    let chartsInitialized = false;
+    let resizeListenerAttached = false;
 
     /**
      * Helper function to get element by ID
@@ -397,12 +399,15 @@
         // Set chart option
         salesChartInstance.setOption(option);
 
-        // Handle window resize
-        window.addEventListener('resize', function () {
-            if (salesChartInstance) {
-                salesChartInstance.resize();
-            }
-        });
+        // Handle window resize - only attach listener once
+        if (!resizeListenerAttached) {
+            window.addEventListener('resize', function () {
+                if (salesChartInstance) {
+                    salesChartInstance.resize();
+                }
+            });
+            resizeListenerAttached = true;
+        }
 
         console.log('Sales chart rendered successfully');
     }
@@ -555,32 +560,22 @@
      * Initialize charts when Reports tab is activated
      */
     function initializeReportsCharts() {
+        // Prevent duplicate initialization
+        if (chartsInitialized) {
+            console.log('Reports charts already initialized, skipping...');
+            return;
+        }
+
         console.log('Initializing Reports charts...');
+        chartsInitialized = true;
         loadSalesChart();
     }
 
-    // Listen for tab changes
+    // Listen for theme changes to update chart
     document.addEventListener('DOMContentLoaded', function () {
-        // Find all tab buttons
-        const tabButtons = document.querySelectorAll('[data-tab]');
+        // Tab switching is handled by admin-tab-manager.js, so we don't need duplicate listeners here
+        // Just listen for theme changes to update chart colors
 
-        tabButtons.forEach(button => {
-            button.addEventListener('click', function () {
-                const tabName = this.getAttribute('data-tab');
-                if (tabName === 'reports') {
-                    // Small delay to ensure DOM is ready
-                    setTimeout(initializeReportsCharts, 100);
-                }
-            });
-        });
-
-        // Also initialize if Reports tab is already active on page load
-        const reportsTab = document.getElementById('reports');
-        if (reportsTab && reportsTab.classList.contains('active')) {
-            setTimeout(initializeReportsCharts, 100);
-        }
-
-        // Listen for theme changes to update chart
         const themeObserver = new MutationObserver(function (mutations) {
             mutations.forEach(function (mutation) {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
@@ -591,6 +586,7 @@
                             const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
                             salesChartInstance.dispose();
                             salesChartInstance = echarts.init(chartContainer, isDark ? 'dark' : null);
+                            chartsInitialized = false; // Reset flag so chart gets re-rendered
                             // Re-fetch and render
                             loadSalesChart();
                         }

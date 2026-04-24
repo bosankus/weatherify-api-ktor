@@ -191,11 +191,6 @@
                 const tab = window.AdminTabManager.getTab('reports');
                 if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('reports')) {
                     console.log('[Tab] Reports already loaded, skipping API call');
-                    // Still ensure UI is visible
-                    if (typeof window.ReportsModule !== 'undefined' &&
-                        typeof window.ReportsModule.initialize === 'function') {
-                        window.ReportsModule.initialize();
-                    }
                     return;
                 }
 
@@ -219,10 +214,7 @@
                     // Initialize Reports charts (revenue and refund charts)
                     if (typeof window.ReportsChartsModule !== 'undefined' &&
                         typeof window.ReportsChartsModule.initialize === 'function') {
-                        // Small delay to ensure DOM is ready
-                        setTimeout(() => {
-                            window.ReportsChartsModule.initialize();
-                        }, 200);
+                        window.ReportsChartsModule.initialize();
                     }
 
                     window.AdminTabManager.markLoaded('reports');
