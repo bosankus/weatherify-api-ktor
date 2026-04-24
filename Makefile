@@ -1,6 +1,6 @@
 # Makefile for Weatherify API
 
-.PHONY: help clean build test coverage shadow run cloudbuild-build cloudbuild-deploy app-deploy
+.PHONY: help clean build test coverage shadow run docker-build docker-run
 
 help:
 	@echo "Common targets:"
@@ -9,9 +9,8 @@ help:
 	@echo "  make coverage           - Generate JaCoCo coverage report"
 	@echo "  make shadow             - Build fat JAR (shadowJar)"
 	@echo "  make run                - Run the fat JAR locally on port 8080"
-	@echo "  make cloudbuild-build   - Cloud Build: build only (no deploy)"
-	@echo "  make cloudbuild-deploy  - Cloud Build: build and deploy to App Engine (PROMOTE=true|false)"
-	@echo "  make app-deploy         - Deploy current workspace to App Engine directly"
+	@echo "  make docker-build       - Build Docker image locally"
+	@echo "  make docker-run         - Run Docker image locally on port 8080"
 
 clean:
 	./gradlew --no-daemon clean
@@ -32,12 +31,8 @@ shadow:
 run: shadow
 	java -jar build/libs/weatherify-api-all.jar
 
-cloudbuild-build:
-	gcloud builds submit --config=cloudbuild.yaml --substitutions=_DEPLOY="false" .
+docker-build:
+	docker build -t weatherify-api .
 
-# Usage: make cloudbuild-deploy PROMOTE=true
-cloudbuild-deploy:
-	gcloud builds submit --config=cloudbuild.yaml --substitutions=_DEPLOY="true",_PROMOTE="${PROMOTE:-false}",_APP_YAML="src/main/appengine/app.yaml" .
-
-app-deploy:
-	gcloud app deploy src/main/appengine/app.yaml --quiet --no-promote
+docker-run: docker-build
+	docker run -p 8080:8080 weatherify-api

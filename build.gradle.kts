@@ -1,11 +1,8 @@
-import com.google.cloud.tools.gradle.appengine.appyaml.AppEngineAppYamlExtension
-
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.ktor)
     alias(libs.plugins.kotlin.plugin.serialization)
     alias(libs.plugins.shadow)
-    alias(libs.plugins.gcloud.appengine)
     jacoco
 }
 
@@ -37,16 +34,6 @@ kotlin {
 
 repositories {
     mavenCentral()
-}
-
-configure<AppEngineAppYamlExtension> {
-    stage {
-        setArtifact("build/libs/${project.name}-all.jar")
-    }
-    deploy {
-        version = "GCLOUD_CONFIG"
-        projectId = "GCLOUD_CONFIG"
-    }
 }
 
 dependencies {

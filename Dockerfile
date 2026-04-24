@@ -44,4 +44,4 @@ ENV INSTANT_REFUND_ENABLED="true"
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "app.ja

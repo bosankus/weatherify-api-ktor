@@ -229,17 +229,16 @@ Quick start:
 
 - Local build and tests: `./gradlew clean test jacocoTestReport shadowJar`
 - Run locally: `java -jar build/libs/weatherify-api-all.jar` (port 8080)
-- Cloud Build (build only): `gcloud builds submit --config=cloudbuild.yaml --substitutions=_DEPLOY=”false” .`
-- Cloud Build (build + deploy to Cloud Run):
+- Deploy to Cloud Run:
   ```bash
   gcloud builds submit --tag gcr.io/PROJECT_ID/weatherify-api
   gcloud run deploy weatherify-api \
     --image=gcr.io/PROJECT_ID/weatherify-api \
     --platform=managed \
-    --region=REGION \
+    --region=asia-southeast1 \
     --allow-unauthenticated
   ```
-- GitHub Actions: PRs and pushes run Build and Test workflow automatically; use “Deploy via Cloud Build” workflow manually for deployments.
+- GitHub Actions: PRs and pushes run Build and Test workflow automatically; pushes to main auto-deploy to Cloud Run.
 
 Notes:
 
