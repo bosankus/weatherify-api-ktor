@@ -372,4 +372,83 @@ class PaymentRepositoryImpl(private val databaseModule: DatabaseModule) : Paymen
             Result.error("Failed to get count: ${e.message}", e)
         }
     }
+
+    override suspend fun getPaymentCountByServiceCode(): Result<Map<String, Long>> {
+        logger.debug("Getting payment count by service code using aggregation")
+        return try {
+            val pipeline = listOf(
+                Aggregates.match(
+                    Filters.and(
+                        Filters.`in`("status", "verified", "captured", "success"),
+                        Filters.ne("serviceType", null)
+                    )
+                ),
+                Aggregates.group(
+                    "\$serviceType",
+                    Accumulators.sum("count", 1)
+                )
+            )
+            val results = getPaymentsCollection().aggregate<Document>(pipeline).toList()
+            val countsByService = results.associate { doc ->
+                val serviceCode = (doc.get("_id") as? String) ?: "unknown"
+                val count = (doc.get("count") as? Number)?.toLong() ?: 0L
+                serviceCode to count
+            }
+            logger.debug("Payment counts by service code: {}", countsByService)
+            Result.success(countsByService)
+        } catch (e: Exception) {
+            logger.error("Failed to get payment count by service code", e)
+            Result.error("Failed to get payment counts by service code: ${e.message}", e)
+        }
+    }
+
+    override suspend fun getServiceAnalyticsAggregate(serviceCode: String): Result<Triple<Long, Long, Map<String, Pair<Long, Long>>>> {
+        logger.debug("Getting service analytics aggregate for: $serviceCode")
+        return try {
+            val pipeline = listOf(
+                Aggregates.match(
+                    Filters.and(
+                        Filters.eq("serviceType", serviceCode),
+                        Filters.`in`("status", "verified", "captured", "success")
+                    )
+                ),
+                Aggregates.project(
+                    Projections.fields(
+                        Projections.include("amount", "createdAt"),
+                        Projections.computed(
+                            "yearMonth",
+                            Document("\$substr", listOf("\$createdAt", 0, 7))
+                        )
+                    )
+                ),
+                Aggregates.group(
+                    "\$yearMonth",
+                    Accumulators.sum("revenue", "\$amount"),
+                    Accumulators.sum("count", 1)
+                ),
+                Aggregates.sort(Sorts.ascending("_id"))
+            )
+
+            val results = getPaymentsCollection().aggregate<Document>(pipeline).toList()
+
+            var totalCount = 0L
+            var totalRevenue = 0L
+            val monthlyData = mutableMapOf<String, Pair<Long, Long>>()
+
+            for (doc in results) {
+                val month = (doc.get("_id") as? String) ?: continue
+                val count = (doc.get("count") as? Number)?.toLong() ?: 0L
+                val revenue = (doc.get("revenue") as? Number)?.toLong() ?: 0L
+                totalCount += count
+                totalRevenue += revenue
+                monthlyData[month] = Pair(count, revenue)
+            }
+
+            logger.debug("Service analytics for $serviceCode: count=$totalCount, revenue=$totalRevenue")
+            Result.success(Triple(totalCount, totalRevenue, monthlyData))
+        } catch (e: Exception) {
+            logger.error("Failed to get service analytics aggregate for: $serviceCode", e)
+            Result.error("Failed to get service analytics: ${e.message}", e)
+        }
+    }
 }

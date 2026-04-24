@@ -29,19 +29,19 @@ interface WeatherApiClient {
      * Get the API key for weather API calls.
      * @return The API key.
      */
-    fun getApiKey(): String
+    suspend fun getApiKey(): String
 
     /**
      * Get the URL for weather API calls.
      * @return The URL.
      */
-    fun getWeatherUrl(): String
+    suspend fun getWeatherUrl(): String
 
     /**
      * Get the URL for air pollution API calls.
      * @return The URL.
      */
-    fun getAirPollutionUrl(): String
+    suspend fun getAirPollutionUrl(): String
 
     /**
      * Close the API client and release resources.

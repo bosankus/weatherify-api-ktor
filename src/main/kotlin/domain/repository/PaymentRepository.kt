@@ -88,4 +88,19 @@ interface PaymentRepository {
      * @return Result containing count of verified payments
      */
     suspend fun getVerifiedPaymentsCount(): Result<Long>
+
+    /**
+     * Get successful payment counts grouped by service code using database aggregation.
+     * Only counts payments with status "verified", "captured", or "success".
+     * @return Result containing map of serviceCode to count
+     */
+    suspend fun getPaymentCountByServiceCode(): Result<Map<String, Long>>
+
+    /**
+     * Get analytics (count + revenue) for a specific service code using database aggregation.
+     * Only counts payments with status "verified", "captured", or "success".
+     * @param serviceCode The service code to filter by
+     * @return Result containing Triple of (totalCount, totalRevenuePaise, monthlyData map of "yyyy-MM" to Pair(count, revenuePaise))
+     */
+    suspend fun getServiceAnalyticsAggregate(serviceCode: String): Result<Triple<Long, Long, Map<String, Pair<Long, Long>>>>
 }

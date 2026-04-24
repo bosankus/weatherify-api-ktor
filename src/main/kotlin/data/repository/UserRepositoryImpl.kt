@@ -126,65 +126,32 @@ class UserRepositoryImpl(private val databaseModule: DatabaseModule) : UserRepos
             return Result.error(errorMessage)
         }
 
-        // Check if user exists
-        val existingUserResult = findUserByEmail(user.email)
-        if (existingUserResult is Result.Error) {
-            return existingUserResult.mapError { msg, ex ->
-                Pair(
-                    "Failed to check if user exists: $msg",
-                    ex
-                )
-            }
-        }
-
-        val existingUser = (existingUserResult as Result.Success).data
-        if (existingUser == null) {
-            val errorMessage = "User not found: ${user.email}"
-            logger.warn(errorMessage)
-            return Result.error(errorMessage)
-        }
-
         return try {
-            // Build partial updates for mutable fields only. Do not replace the whole document
-            // and never include immutable fields like _id or email in updates.
+            // Build updates with all mutable fields from the provided user object.
+            // The caller (route layer) already fetched the user and applied changes,
+            // so we just $set the mutable fields directly — no extra read needed.
             val updates = mutableMapOf<String, Any>()
 
-            if (user.passwordHash != existingUser.passwordHash) updates["passwordHash"] =
-                user.passwordHash
-            if (user.isActive != existingUser.isActive) updates["isActive"] = user.isActive
-            if ((user.role?.name ?: "") != (existingUser.role?.name ?: "")) updates["role"] =
-                user.role?.name ?: "USER"
-            if (user.timestampOfRegistration != null && user.timestampOfRegistration != existingUser.timestampOfRegistration) updates["timestampOfRegistration"] =
-                user.timestampOfRegistration
-            if (user.deviceModel != null && user.deviceModel != existingUser.deviceModel) updates["deviceModel"] =
-                user.deviceModel
-            if (user.operatingSystem != null && user.operatingSystem != existingUser.operatingSystem) updates["operatingSystem"] =
-                user.operatingSystem
-            if (user.osVersion != null && user.osVersion != existingUser.osVersion) updates["osVersion"] =
-                user.osVersion
-            if (user.appVersion != null && user.appVersion != existingUser.appVersion) updates["appVersion"] =
-                user.appVersion
-            if (user.ipAddress != null && user.ipAddress != existingUser.ipAddress) updates["ipAddress"] =
-                user.ipAddress
-            if (user.registrationSource != null && user.registrationSource != existingUser.registrationSource) updates["registrationSource"] =
-                user.registrationSource
-            if (user.isPremium != existingUser.isPremium) updates["isPremium"] = user.isPremium
-            if (user.premiumExpiresAt != null && user.premiumExpiresAt != existingUser.premiumExpiresAt)
-                updates["premiumExpiresAt"] = user.premiumExpiresAt
-            if (user.fcmToken != null && user.fcmToken != existingUser.fcmToken) updates["fcmToken"] =
-                user.fcmToken
-
-            if (updates.isEmpty()) {
-                logger.info("No changes detected for user: ${user.email}")
-                return Result.success(true)
-            }
+            updates["passwordHash"] = user.passwordHash
+            updates["isActive"] = user.isActive
+            updates["role"] = user.role?.name ?: "USER"
+            updates["isPremium"] = user.isPremium
+            user.timestampOfRegistration?.let { updates["timestampOfRegistration"] = it }
+            user.deviceModel?.let { updates["deviceModel"] = it }
+            user.operatingSystem?.let { updates["operatingSystem"] = it }
+            user.osVersion?.let { updates["osVersion"] = it }
+            user.appVersion?.let { updates["appVersion"] = it }
+            user.ipAddress?.let { updates["ipAddress"] = it }
+            user.registrationSource?.let { updates["registrationSource"] = it }
+            user.premiumExpiresAt?.let { updates["premiumExpiresAt"] = it }
+            user.fcmToken?.let { updates["fcmToken"] = it }
 
             val filter = databaseModule.createFilter(Constants.Database.EMAIL_FIELD, user.email)
             val updateBson = databaseModule.createSetUpdates(updates)
             val result = databaseModule.getUsersCollection().updateOne(filter, updateBson)
 
             if (result.matchedCount == 0L) {
-                val msg = "User not found during update: ${user.email}"
+                val msg = "User not found: ${user.email}"
                 logger.warn(msg)
                 return Result.error(msg)
             }

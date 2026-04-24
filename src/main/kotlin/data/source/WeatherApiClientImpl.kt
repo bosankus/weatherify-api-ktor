@@ -58,19 +58,19 @@ class WeatherApiClientImpl : WeatherApiClient {
      * Get the API key for weather API calls.
      * @return The API key.
      */
-    override fun getApiKey(): String = WeatherCache.getApiKey()
+    override suspend fun getApiKey(): String = WeatherCache.getApiKey()
 
     /**
      * Get the URL for weather API calls.
      * @return The URL.
      */
-    override fun getWeatherUrl(): String = WeatherCache.getWeatherUrl()
+    override suspend fun getWeatherUrl(): String = WeatherCache.getWeatherUrl()
 
     /**
      * Get the URL for air pollution API calls.
      * @return The URL.
      */
-    override fun getAirPollutionUrl(): String = WeatherCache.getAirPollutionUrl()
+    override suspend fun getAirPollutionUrl(): String = WeatherCache.getAirPollutionUrl()
 
     /**
      * Close the API client and release resources.

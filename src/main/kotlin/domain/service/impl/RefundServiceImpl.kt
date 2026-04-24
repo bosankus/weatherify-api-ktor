@@ -743,11 +743,27 @@ class RefundServiceImpl(
         logger.debug("Exporting refunds from $startDate to $endDate")
 
         return try {
-            // Get all refunds within date range (use large page size to get all)
+            // Check count first to enforce a cap and avoid loading too much into memory
+            val countResult = refundRepository.getAllRefunds(
+                page = 1,
+                pageSize = 1,
+                status = null,
+                startDate = startDate,
+                endDate = endDate
+            )
+            if (countResult is Result.Error) {
+                return Result.error("Failed to get refund count for export: ${countResult.message}")
+            }
+            val totalCount = (countResult as Result.Success).data.second
+
+            if (totalCount > 10000) {
+                return Result.error("Export exceeds 10,000 records limit. Please narrow your date range.")
+            }
+
             val refundsResult =
                 refundRepository.getAllRefunds(
                     page = 1,
-                    pageSize = 100000, // Large number to get all refunds
+                    pageSize = totalCount.toInt(),
                     status = null,
                     startDate = startDate,
                     endDate = endDate

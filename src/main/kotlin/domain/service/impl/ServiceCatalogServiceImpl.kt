@@ -10,6 +10,7 @@ import java.time.Instant
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
+
 /**
  * Implementation of ServiceCatalogService that handles service catalog business logic.
  */
@@ -25,13 +26,6 @@ class ServiceCatalogServiceImpl(
         private const val MAX_DESCRIPTION_LENGTH = 500
     }
 
-    /**
-     * Internal data class for tracking monthly data
-     */
-    private data class MonthlyData(
-        var count: Long = 0L,
-        var revenue: Double = 0.0
-    )
 
     /**
      * Create a new service in the catalog.
@@ -204,16 +198,10 @@ class ServiceCatalogServiceImpl(
 
             val (services, totalCount) = (servicesResult as Result.Success).data
 
-            // 2. Compute service summaries with purchase counts
-            val paymentsResult = paymentRepository.getAllPayments(1, Int.MAX_VALUE)
-            val paymentCountsByService = if (paymentsResult is Result.Success) {
-                val successfulStatuses = setOf("verified", "captured")
-                paymentsResult.data.first
-                    .filter { payment ->
-                        payment.serviceType != null && payment.status?.lowercase() in successfulStatuses
-                    }
-                    .groupingBy { it.serviceType?.name }
-                    .eachCount()
+            // 2. Compute service summaries with purchase counts (using DB aggregation)
+            val countsByServiceResult = paymentRepository.getPaymentCountByServiceCode()
+            val paymentCountsByService = if (countsByServiceResult is Result.Success) {
+                countsByServiceResult.data
             } else {
                 emptyMap()
             }
@@ -526,35 +514,13 @@ class ServiceCatalogServiceImpl(
         logger.debug("Getting analytics for service: $serviceCode")
 
         return try {
-            val paymentsResult = paymentRepository.getAllPayments(1, Int.MAX_VALUE)
-            if (paymentsResult is Result.Error) {
-                return Result.error("Failed to get payments: ${paymentsResult.message}")
+            val aggregateResult = paymentRepository.getServiceAnalyticsAggregate(serviceCode)
+            if (aggregateResult is Result.Error) {
+                return Result.error("Failed to get payments: ${aggregateResult.message}")
             }
 
-            val (payments, _) = (paymentsResult as Result.Success).data
-            val successfulStatuses = setOf("verified", "captured")
-            val servicePayments = payments.filter { payment ->
-                payment.serviceType?.name == serviceCode &&
-                    payment.status?.lowercase() in successfulStatuses
-            }
-
-            val totalPurchases = servicePayments.size.toLong()
-            val totalRevenue = servicePayments.mapNotNull { it.amount }.sum().toDouble() / 100.0
-
-            val monthlyData = mutableMapOf<String, MonthlyData>()
-            for (payment in servicePayments) {
-                try {
-                    val paymentDate = Instant.parse(payment.createdAt)
-                    val month = YearMonth.from(paymentDate.atZone(java.time.ZoneId.systemDefault()))
-                        .format(DateTimeFormatter.ofPattern("yyyy-MM"))
-
-                    val monthData = monthlyData.getOrPut(month) { MonthlyData() }
-                    monthData.count += 1
-                    monthData.revenue += (payment.amount ?: 0).toDouble() / 100.0
-                } catch (e: Exception) {
-                    logger.warn("Failed to parse payment date", e)
-                }
-            }
+            val (totalPurchases, totalRevenuePaise, monthlyData) = (aggregateResult as Result.Success).data
+            val totalRevenue = totalRevenuePaise.toDouble() / 100.0
 
             val now = YearMonth.now()
             val monthlyTrend = (0..11).map { i ->
@@ -564,8 +530,8 @@ class ServiceCatalogServiceImpl(
 
                 MonthlyPurchaseData(
                     month = monthKey,
-                    count = data?.count ?: 0L,
-                    revenue = data?.revenue ?: 0.0
+                    count = data?.first ?: 0L,
+                    revenue = (data?.second ?: 0L).toDouble() / 100.0
                 )
             }.reversed()
 

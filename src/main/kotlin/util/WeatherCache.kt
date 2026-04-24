@@ -7,15 +7,20 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 
 /**
  * Cache for weather-related resources with 10-minute expiration.
  * Provides cached access to HttpClient, API key, and URLs.
+ * Uses coroutine-safe Mutex instead of @Synchronized to avoid blocking coroutine threads.
  */
 object WeatherCache {
     // Cache expiration time in milliseconds (10 minutes)
     private const val CACHE_EXPIRATION_TIME = 600000L
+
+    private val mutex = Mutex()
 
     // Cache for HttpClient
     private var cachedWeatherClient: HttpClient? = null
@@ -31,8 +36,7 @@ object WeatherCache {
     private var cachedAirPollutionUrl: String? = null
     private var airPollutionUrlExpiration: Long = 0
 
-    @Synchronized
-    fun getWeatherClient(): HttpClient {
+    suspend fun getWeatherClient(): HttpClient = mutex.withLock {
         val currentTime = System.currentTimeMillis()
 
         if (cachedWeatherClient == null || currentTime > weatherClientExpiration) {
@@ -57,10 +61,10 @@ object WeatherCache {
             weatherClientExpiration = currentTime + CACHE_EXPIRATION_TIME
         }
 
-        return cachedWeatherClient!!
+        cachedWeatherClient!!
     }
 
-    fun getApiKey(): String {
+    suspend fun getApiKey(): String = mutex.withLock {
         val currentTime = System.currentTimeMillis()
 
         if (cachedApiKey == null || currentTime > apiKeyExpiration) {
@@ -68,10 +72,10 @@ object WeatherCache {
             apiKeyExpiration = currentTime + CACHE_EXPIRATION_TIME
         }
 
-        return cachedApiKey!!
+        cachedApiKey!!
     }
 
-    fun getWeatherUrl(): String {
+    suspend fun getWeatherUrl(): String = mutex.withLock {
         val currentTime = System.currentTimeMillis()
 
         if (cachedWeatherUrl == null || currentTime > weatherUrlExpiration) {
@@ -79,10 +83,10 @@ object WeatherCache {
             weatherUrlExpiration = currentTime + CACHE_EXPIRATION_TIME
         }
 
-        return cachedWeatherUrl!!
+        cachedWeatherUrl!!
     }
 
-    fun getAirPollutionUrl(): String {
+    suspend fun getAirPollutionUrl(): String = mutex.withLock {
         val currentTime = System.currentTimeMillis()
 
         if (cachedAirPollutionUrl == null || currentTime > airPollutionUrlExpiration) {
@@ -90,14 +94,13 @@ object WeatherCache {
             airPollutionUrlExpiration = currentTime + CACHE_EXPIRATION_TIME
         }
 
-        return cachedAirPollutionUrl!!
+        cachedAirPollutionUrl!!
     }
 
     /**
      * Clear all cached weather resources. Closes the HttpClient and resets cached values.
      */
-    @Synchronized
-    fun clearCache() {
+    suspend fun clearCache() = mutex.withLock {
         try {
             cachedWeatherClient?.close()
         } catch (_: Exception) {
@@ -119,7 +122,7 @@ object WeatherCache {
      * Build a probe URL for weather endpoint including sample lat/lon and API key.
      * Uses exclude=minutely for a lighter response when supported (OWM OneCall).
      */
-    fun getProbeWeatherUrl(): String {
+    suspend fun getProbeWeatherUrl(): String {
         val base = getWeatherUrl()
         val apiKey = getApiKey()
         val sep = if (base.contains("?")) "&" else "?"
@@ -130,7 +133,7 @@ object WeatherCache {
     /**
      * Build a probe URL for air pollution endpoint including sample lat/lon and API key.
      */
-    fun getProbeAirPollutionUrl(): String {
+    suspend fun getProbeAirPollutionUrl(): String {
         val base = getAirPollutionUrl()
         val apiKey = getApiKey()
         val sep = if (base.contains("?")) "&" else "?"

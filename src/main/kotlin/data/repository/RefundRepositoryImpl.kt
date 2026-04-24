@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import org.bson.Document
 import org.slf4j.LoggerFactory
-import java.time.Duration
 import java.time.Instant
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -254,42 +253,49 @@ class RefundRepositoryImpl(private val databaseModule: DatabaseModule) : RefundR
     }
 
     override suspend fun getAverageProcessingTime(): Result<Double> {
-        logger.debug("Calculating average processing time")
+        logger.debug("Calculating average processing time using aggregation")
         return try {
-            val query = Filters.and(
-                Filters.eq("status", RefundStatus.PROCESSED.name),
-                Filters.ne("processedAt", null)
+            // createdAt and processedAt are ISO-8601 strings (e.g. "2025-01-15T10:30:00Z").
+            // MongoDB $dateFromString can parse them, then $dateDiff computes the difference.
+            val pipeline = listOf(
+                Aggregates.match(
+                    Filters.and(
+                        Filters.eq("status", RefundStatus.PROCESSED.name),
+                        Filters.ne("processedAt", null)
+                    )
+                ),
+                Aggregates.project(
+                    Document().apply {
+                        append(
+                            "durationHours",
+                            Document(
+                                "\$divide", listOf(
+                                    Document(
+                                        "\$dateDiff", Document().apply {
+                                            append("startDate", Document("\$dateFromString", Document("dateString", "\$createdAt")))
+                                            append("endDate", Document("\$dateFromString", Document("dateString", "\$processedAt")))
+                                            append("unit", "second")
+                                        }
+                                    ),
+                                    3600.0
+                                )
+                            )
+                        )
+                    }
+                ),
+                Aggregates.group(
+                    null,
+                    Accumulators.avg("avgHours", "\$durationHours")
+                )
             )
 
-            val refunds = getRefundsCollection()
-                .find(query)
-                .toList()
+            val result = getRefundsCollection()
+                .aggregate<Document>(pipeline)
+                .firstOrNull()
 
-            if (refunds.isEmpty()) {
-                logger.debug("No processed refunds found")
-                return Result.success(0.0)
-            }
-
-            val totalHours = refunds.mapNotNull { refund ->
-                try {
-                    val createdAt = Instant.parse(refund.createdAt)
-                    val processedAt = refund.processedAt?.let { Instant.parse(it) }
-
-                    if (processedAt != null) {
-                        val duration = Duration.between(createdAt, processedAt)
-                        duration.toHours().toDouble()
-                    } else {
-                        null
-                    }
-                } catch (e: Exception) {
-                    logger.warn("Failed to parse timestamps for refund: ${refund.refundId}", e)
-                    null
-                }
-            }.sum()
-
-            val averageHours = totalHours / refunds.size
-            logger.debug("Average processing time: $averageHours hours")
-            Result.success(averageHours)
+            val avgHours = (result?.get("avgHours") as? Number)?.toDouble() ?: 0.0
+            logger.debug("Average processing time: $avgHours hours")
+            Result.success(avgHours)
         } catch (e: Exception) {
             logger.error("Failed to calculate average processing time", e)
             Result.error("Failed to calculate average processing time: ${e.message}", e)
@@ -300,42 +306,55 @@ class RefundRepositoryImpl(private val databaseModule: DatabaseModule) : RefundR
         logger.debug("Getting monthly refund data for last $months months")
         return try {
             val now = YearMonth.now()
-            val monthlyData = mutableListOf<MonthlyRefundData>()
+            val startMonth = now.minusMonths((months - 1).toLong())
+            val startDate = startMonth.atDay(1).atStartOfDay().toString()
+            val endDate = now.atEndOfMonth().atTime(23, 59, 59).toString()
 
-            for (i in (months - 1) downTo 0) {
-                val targetMonth = now.minusMonths(i.toLong())
+            // Single aggregation: filter date range, extract yearMonth, group by it
+            val pipeline = listOf(
+                Aggregates.match(
+                    Filters.and(
+                        Filters.eq("status", RefundStatus.PROCESSED.name),
+                        Filters.gte("createdAt", startDate),
+                        Filters.lte("createdAt", endDate)
+                    )
+                ),
+                Aggregates.project(
+                    org.bson.Document().apply {
+                        append("amount", 1)
+                        append("yearMonth", Document("\$substr", listOf("\$createdAt", 0, 7)))
+                    }
+                ),
+                Aggregates.group(
+                    "\$yearMonth",
+                    Accumulators.sum("totalAmount", "\$amount"),
+                    Accumulators.sum("count", 1)
+                ),
+                Aggregates.sort(Sorts.ascending("_id"))
+            )
+
+            val results = getRefundsCollection()
+                .aggregate<Document>(pipeline)
+                .toList()
+
+            // Build a lookup map from the aggregation results
+            val resultsByMonth = results.associate { doc ->
+                val month = (doc.get("_id") as? String) ?: ""
+                val totalAmount = (doc.get("totalAmount") as? Number)?.toDouble() ?: 0.0
+                val count = (doc.get("count") as? Number)?.toInt() ?: 0
+                month to Pair(totalAmount, count)
+            }
+
+            // Fill the full month range, inserting zeros for months with no data
+            val monthlyData = (0 until months).map { i ->
+                val targetMonth = startMonth.plusMonths(i.toLong())
                 val monthStr = targetMonth.format(DateTimeFormatter.ofPattern("yyyy-MM"))
-                val startDate = targetMonth.atDay(1).atStartOfDay().toString()
-                val endDate = targetMonth.atEndOfMonth().atTime(23, 59, 59).toString()
+                val data = resultsByMonth[monthStr]
 
-                val pipeline = listOf(
-                    Aggregates.match(
-                        Filters.and(
-                            Filters.eq("status", RefundStatus.PROCESSED.name),
-                            Filters.gte("createdAt", startDate),
-                            Filters.lte("createdAt", endDate)
-                        )
-                    ),
-                    Aggregates.group(
-                        null,
-                        Accumulators.sum("totalAmount", "\$amount"),
-                        Accumulators.sum("count", 1)
-                    )
-                )
-
-                val result = getRefundsCollection()
-                    .aggregate<Document>(pipeline)
-                    .firstOrNull()
-
-                val totalAmount = result?.getInteger("totalAmount")?.toDouble() ?: 0.0
-                val count = result?.getInteger("count") ?: 0
-
-                monthlyData.add(
-                    MonthlyRefundData(
-                        month = monthStr,
-                        refundAmount = totalAmount / 100.0, // Convert paise to rupees
-                        refundCount = count
-                    )
+                MonthlyRefundData(
+                    month = monthStr,
+                    refundAmount = (data?.first ?: 0.0) / 100.0,
+                    refundCount = data?.second ?: 0
                 )
             }
 

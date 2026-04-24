@@ -748,6 +748,31 @@ private class MockPaymentRepository : PaymentRepository {
             Result.success(payments.count { it.status == "verified" }.toLong())
         }
     }
+
+    override suspend fun getPaymentCountByServiceCode(): Result<Map<String, Long>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val successStatuses = setOf("verified", "captured", "success")
+            val counts = payments
+                .filter { it.serviceType != null && it.status in successStatuses }
+                .groupingBy { it.serviceType!!.name }
+                .eachCount()
+            Result.success(counts.mapValues { it.value.toLong() })
+        }
+    }
+
+    override suspend fun getServiceAnalyticsAggregate(serviceCode: String): Result<Triple<Long, Long, Map<String, Pair<Long, Long>>>> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val successStatuses = setOf("verified", "captured", "success")
+            val filtered = payments.filter { it.serviceType?.name == serviceCode && it.status in successStatuses }
+            val totalCount = filtered.size.toLong()
+            val totalRevenue = filtered.mapNotNull { it.amount }.sumOf { it.toLong() }
+            Result.success(Triple(totalCount, totalRevenue, emptyMap()))
+        }
+    }
 }
 
 // Mock RefundService for testing
