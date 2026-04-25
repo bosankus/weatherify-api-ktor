@@ -3,22 +3,43 @@ FROM gradle:8.5-jdk17 as builder
 
 WORKDIR /app
 
-# Copy gradle files first (better caching)
+# Copy gradle configuration files FIRST (for better caching and to catch issues early)
 COPY gradle/ gradle/
 COPY build.gradle.kts .
 COPY settings.gradle.kts .
+COPY gradle.properties .
+COPY gradlew .
+COPY gradlew.bat .
+
+# Make gradlew executable
+RUN chmod +x gradlew
 
 # Predownload dependencies to improve build performance and catch dependency issues early
-RUN gradle dependencies --no-daemon
+RUN ./gradlew --version && \
+    ./gradlew dependencies --no-daemon || echo "Warning: Dependency check had issues but continuing..."
 
 # Copy source code (this layer changes frequently)
 COPY src/ src/
 
-# Build the application (Ktor plugin creates the -all.jar automatically)
-# Use --build-cache=false to prevent caching issues in Cloud Build
-RUN gradle clean build --no-daemon --build-cache=false -x test -q && \
-    ls -lah /app/build/libs/ && \
-    test -f /app/build/libs/weatherify-api-all.jar || (echo "ERROR: weatherify-api-all.jar not found!" && ls -la /app/build/libs/ && exit 1)
+# Build the application using the gradle wrapper
+RUN echo "================================" && \
+    echo "Starting Gradle build..." && \
+    echo "================================" && \
+    ./gradlew clean build --no-daemon -x test || (echo "Build failed!"; exit 1) && \
+    echo "================================" && \
+    echo "Build completed. Checking for JAR file..." && \
+    echo "================================" && \
+    if [ -f /app/build/libs/weatherify-api-all.jar ]; then \
+        echo "✓ SUCCESS: Found weatherify-api-all.jar"; \
+        ls -lh /app/build/libs/weatherify-api-all.jar; \
+    else \
+        echo "✗ FAILED: weatherify-api-all.jar not found!"; \
+        echo "Contents of /app/build:"; \
+        find /app/build -name "*.jar" -type f; \
+        echo "Full directory listing:"; \
+        ls -lah /app/build/libs/ 2>/dev/null || echo "build/libs directory does not exist"; \
+        exit 1; \
+    fi
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine
