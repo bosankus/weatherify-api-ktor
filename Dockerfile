@@ -3,24 +3,33 @@ FROM gradle:8.5-jdk17 as builder
 
 WORKDIR /app
 
-# Copy gradle files
+# Copy gradle files first (better caching)
+COPY gradle/ gradle/
 COPY build.gradle.kts .
 COPY settings.gradle.kts .
-COPY gradle/ gradle/
 
-# Copy source code
+# Predownload dependencies to improve build performance and catch dependency issues early
+RUN gradle dependencies --no-daemon
+
+# Copy source code (this layer changes frequently)
 COPY src/ src/
 
-# Build the fat JAR using Ktor plugin
-RUN gradle build --no-daemon -x test
+# Build the application (Ktor plugin creates the -all.jar automatically)
+# Use --build-cache=false to prevent caching issues in Cloud Build
+RUN gradle clean build --no-daemon --build-cache=false -x test -q && \
+    ls -lah /app/build/libs/ && \
+    test -f /app/build/libs/weatherify-api-all.jar || (echo "ERROR: weatherify-api-all.jar not found!" && ls -la /app/build/libs/ && exit 1)
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# Copy the built JAR from builder (Ktor plugin builds to build/libs/)
-COPY --from=builder /app/build/libs/weatherify-api-all.jar app.jar
+# Copy the built fat JAR from builder
+COPY --from=builder /app/build/libs/weatherify-api-all.jar ./app.jar
+
+# Verify JAR is present and not corrupted
+RUN test -f app.jar && jar tf app.jar > /dev/null || (echo "JAR verification failed!" && exit 1)
 
 # Set environment variables
 ENV GCP_PROJECT_ID="1017382896100"
