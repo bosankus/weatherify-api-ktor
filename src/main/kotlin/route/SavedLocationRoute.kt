@@ -59,7 +59,10 @@ fun Route.savedLocationRoute(service: SavedLocationService) {
                 email, request.name, request.city, request.state, request.country, request.lat, request.lon
             )) {
                 is Result.Success -> call.respond(HttpStatusCode.Created, ApiResponse(true, "Location saved successfully", null))
-                is Result.Error -> call.respond(HttpStatusCode.InternalServerError, ApiResponse(false, result.message, null))
+                is Result.Error -> {
+                    val status = if (result.message.contains("already been saved")) HttpStatusCode.Conflict else HttpStatusCode.InternalServerError
+                    call.respond(status, ApiResponse(false, result.message, null))
+                }
             }
         }
 

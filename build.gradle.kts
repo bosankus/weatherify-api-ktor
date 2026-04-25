@@ -53,7 +53,7 @@ dependencies {
     implementation(libs.ktor.server.compression)
     implementation(libs.bcrypt)
     implementation(libs.ktor.server.html)
-    implementation(libs.gcp.secret.manager)
+
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
@@ -63,14 +63,20 @@ dependencies {
     implementation(libs.koin.ktor)
     implementation(libs.koin.logger.slf4j)
 
+    // Redis client (Lettuce — async, coroutine-friendly)
+    implementation("io.lettuce:lettuce-core:6.3.2.RELEASE")
+
     // Firebase Admin SDK for push notifications
-    implementation(libs.firebase.admin)
+    implementation(libs.firebase.admin) {
+        // Exclude GCP storage and Firestore — not used, just push notifications
+        exclude(group = "com.google.cloud", module = "google-cloud-storage")
+        exclude(group = "com.google.cloud", module = "google-cloud-firestore")
+        // Exclude duplicate Guava (pulled by multiple GCP libs — Ktor's HttpClient handles HTTP)
+        exclude(group = "com.google.guava", module = "listenablefuture")
+    }
 
     // PDF Generation
     implementation("com.itextpdf:itext7-core:8.0.4")
-
-    // Google Cloud Vertex AI SDK
-    implementation(libs.gcp.vertexai)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)

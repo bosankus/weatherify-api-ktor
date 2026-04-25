@@ -20,7 +20,8 @@ import java.time.format.DateTimeFormatter
 class FinancialServiceImpl(
     private val paymentRepository: PaymentRepository,
     private val userRepository: UserRepository,
-    private val refundService: domain.service.RefundService
+    private val refundService: domain.service.RefundService,
+    private val analyticsCache: PaymentAnalyticsCache
 ) : FinancialService {
     private val logger = LoggerFactory.getLogger(FinancialServiceImpl::class.java)
 
@@ -35,12 +36,12 @@ class FinancialServiceImpl(
 
             // Execute independent queries in parallel for better performance
             coroutineScope {
-                val aggregateDeferred = async { paymentRepository.getVerifiedPaymentsAggregate() }
+                val aggregateDeferred = async { analyticsCache.getVerifiedPaymentsAggregate() }
                 val currentMonthRevenueDeferred = async {
-                    paymentRepository.getMonthlyRevenue(monthStart.toString(), monthEnd.toString())
+                    analyticsCache.getMonthlyRevenue(monthStart.toString(), monthEnd.toString())
                 }
                 val last12MonthsRevenueDeferred = async {
-                    paymentRepository.getMonthlyRevenue(last12MonthsStart.toString(), now.toString())
+                    analyticsCache.getMonthlyRevenue(last12MonthsStart.toString(), now.toString())
                 }
                 val refundMetricsDeferred = async { refundService.getRefundMetrics() }
 

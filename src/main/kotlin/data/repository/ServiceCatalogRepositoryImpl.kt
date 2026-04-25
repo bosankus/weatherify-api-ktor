@@ -227,6 +227,12 @@ class ServiceCatalogRepositoryImpl(private val databaseModule: DatabaseModule) :
                 val msg = "Service not found: $id"
                 logger.warn(msg)
                 Result.error(msg)
+            } else if (result.modifiedCount == 0L) {
+                // Document was found but the replacement was rejected (e.g. _id type mismatch
+                // between the stored BSON document and the replacement, or no-op replace).
+                val msg = "Service update had no effect for id: $id (matched but not modified)"
+                logger.error(msg)
+                Result.error(msg)
             } else {
                 logger.info("Service updated successfully: $id")
                 Result.success(updatedService)

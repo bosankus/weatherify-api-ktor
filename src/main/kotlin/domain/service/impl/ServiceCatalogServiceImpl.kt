@@ -217,11 +217,18 @@ class ServiceCatalogServiceImpl(
                     id = service.id,
                     serviceCode = service.serviceCode,
                     displayName = service.displayName,
+                    description = service.description,
+                    pricingTiers = service.pricingTiers,
+                    features = service.features,
+                    limits = service.limits,
                     status = service.status,
+                    availabilityStart = service.availabilityStart,
+                    availabilityEnd = service.availabilityEnd,
                     totalPurchases = totalPurchases,
                     lowestPrice = lowestPrice,
                     currency = currency,
-                    createdAt = service.createdAt
+                    createdAt = service.createdAt,
+                    updatedAt = service.updatedAt
                 )
             }
 

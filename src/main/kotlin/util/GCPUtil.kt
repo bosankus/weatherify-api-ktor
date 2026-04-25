@@ -1,22 +1,24 @@
 package bose.ankush.util
 
-import com.google.cloud.secretmanager.v1.SecretManagerServiceClient
-import com.google.cloud.secretmanager.v1.SecretVersionName
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("GCPUtil")
 
 /**
- * Retrieves a secret value from environment variables or Google Cloud Secret Manager.
+ * Retrieves a secret value from environment variables or Google Cloud Secret Manager REST API.
  *
  * Order of priority:
  * 1. Environment Variables (Best for Cloud Run and local dev)
- * 2. Google Cloud Secret Manager (If GCP_PROJECT_ID is set)
+ * 2. Google Cloud Secret Manager REST API (If GCP_PROJECT_ID is set)
  * 3. Local hardcoded fallbacks (For local development only)
  */
 internal fun getSecretValue(secretName: String): String {
     // 1. Check Environment Variables first (Recommended for Cloud Run)
-    // Map secret-name to SECRET_NAME or specific overrides
     val envKey = when (secretName) {
         "weather-data-secret" -> "WEATHER_API_KEY"
         "db-connection-string" -> "DB_CONNECTION_STRING"
@@ -25,6 +27,7 @@ internal fun getSecretValue(secretName: String): String {
         "razorpay-key-id" -> "RAZORPAY_KEY_ID"
         "razorpay-webhook-secret" -> "RAZORPAY_WEBHOOK_SECRET"
         "sendgrid-api-key" -> "SENDGRID_API_KEY"
+        "redis-url" -> "REDIS_URL"
         else -> secretName.uppercase().replace("-", "_")
     }
 
@@ -34,18 +37,14 @@ internal fun getSecretValue(secretName: String): String {
         return envValue
     }
 
-    // 2. Try GCP Secret Manager if we are in a GCP environment
+    // 2. Try GCP Secret Manager via REST API (no gRPC SDK needed)
     val gcpProjectId = System.getenv("GCP_PROJECT_ID") ?: System.getenv("GOOGLE_CLOUD_PROJECT")
     if (!gcpProjectId.isNullOrEmpty()) {
         try {
-            SecretManagerServiceClient.create().use { client ->
-                val secretVersionName = SecretVersionName.of(gcpProjectId, secretName, "latest")
-                val response = client.accessSecretVersion(secretVersionName)
-                val secretValue = response.payload.data.toStringUtf8()
-                if (secretValue.isNotBlank()) {
-                    logger.info("Successfully retrieved secret {} from Secret Manager", secretName)
-                    return secretValue
-                }
+            val value = fetchSecretFromRestApi(gcpProjectId, secretName)
+            if (!value.isNullOrBlank()) {
+                logger.info("Successfully retrieved secret {} from Secret Manager", secretName)
+                return value
             }
         } catch (e: Exception) {
             logger.warn("Could not fetch secret {} from Secret Manager: {}. Falling back to defaults.", secretName, e.message)
@@ -54,6 +53,40 @@ internal fun getSecretValue(secretName: String): String {
 
     // 3. Fallback to hardcoded defaults for local development
     return getLocalFallback(secretName)
+}
+
+/**
+ * Fetches a secret from GCP Secret Manager using the REST API and the Cloud Run metadata server
+ * for authentication — no gRPC SDK required.
+ */
+private fun fetchSecretFromRestApi(projectId: String, secretName: String): String? {
+    return runBlocking {
+        HttpClient(CIO).use { client ->
+            // Get access token from the Cloud Run metadata server
+            val tokenResponse = client.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token") {
+                header("Metadata-Flavor", "Google")
+            }
+            val tokenJson = tokenResponse.bodyAsText()
+            // Simple parse — token is in {"access_token":"...","expires_in":...,"token_type":"Bearer"}
+            val accessToken = tokenJson
+                .substringAfter("\"access_token\":\"")
+                .substringBefore("\"")
+
+            // Call Secret Manager REST API
+            val secretUrl = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
+            val secretResponse = client.get(secretUrl) {
+                header("Authorization", "Bearer $accessToken")
+            }
+            val secretJson = secretResponse.bodyAsText()
+            // Payload data is base64-encoded in {"payload":{"data":"BASE64..."}}
+            val base64Data = secretJson
+                .substringAfter("\"data\":\"")
+                .substringBefore("\"")
+            if (base64Data.isNotBlank()) {
+                java.util.Base64.getDecoder().decode(base64Data).toString(Charsets.UTF_8)
+            } else null
+        }
+    }
 }
 
 private fun getLocalFallback(secretName: String): String {
@@ -66,6 +99,7 @@ private fun getLocalFallback(secretName: String): String {
         "razorpay-key-id" -> "dummy_razorpay_key_id"
         "razorpay-webhook-secret" -> "dummy_razorpay_webhook_secret"
         "sendgrid-api-key" -> ""
+        "redis-url" -> "" // Disabled by default for local dev without Redis
         else -> "dummy_value_for_$secretName"
     }
 }

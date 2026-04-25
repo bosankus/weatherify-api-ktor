@@ -23,7 +23,7 @@ class SavedLocationRepositoryImpl(private val databaseModule: DatabaseModule) : 
 
     override suspend fun getLocationsByUser(email: String): Result<List<SavedLocation>> {
         return try {
-            val query = databaseModule.createQuery(Constants.Database.EMAIL_FIELD, email)
+            val query = databaseModule.createQuery("userEmail", email)
             val locations = databaseModule.getSavedLocationsCollection().find(query).toList()
             Result.success(locations)
         } catch (e: Exception) {
@@ -36,13 +36,31 @@ class SavedLocationRepositoryImpl(private val databaseModule: DatabaseModule) : 
             val query = databaseModule.createQuery(
                 mapOf(
                     Constants.Database.ID_FIELD to org.bson.types.ObjectId(id),
-                    Constants.Database.EMAIL_FIELD to email
+                    "userEmail" to email
                 )
             )
             val result = databaseModule.getSavedLocationsCollection().deleteOne(query)
             Result.success(result.wasAcknowledged() && result.deletedCount > 0)
         } catch (e: Exception) {
             Result.error("Failed to delete location: ${e.message}", e)
+        }
+    }
+
+    override suspend fun locationExists(email: String, name: String, city: String, state: String, country: String): Result<Boolean> {
+        return try {
+            val query = databaseModule.createQuery(
+                mapOf(
+                    "userEmail" to email,
+                    "name" to name,
+                    "city" to city,
+                    "state" to state,
+                    "country" to country
+                )
+            )
+            val count = databaseModule.getSavedLocationsCollection().countDocuments(query)
+            Result.success(count > 0)
+        } catch (e: Exception) {
+            Result.error("Failed to check location existence: ${e.message}", e)
         }
     }
 }

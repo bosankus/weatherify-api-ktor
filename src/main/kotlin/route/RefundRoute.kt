@@ -25,6 +25,7 @@ private val refundLogger = LoggerFactory.getLogger("RefundRoute")
  */
 fun Route.refundRoute() {
     val refundService: RefundService by application.inject()
+    val analyticsCache: data.service.PaymentAnalyticsCache by application.inject()
 
     // Admin refund routes - require admin authentication
     route("/refunds") {
@@ -71,6 +72,7 @@ fun Route.refundRoute() {
             when (val result = refundService.initiateRefund(admin.email, request)) {
                 is Result.Success -> {
                     refundLogger.info("Refund initiated successfully: ${result.data.refund?.refundId}")
+                    analyticsCache.invalidateAll()
                     call.respondSuccess(
                         message = result.data.message,
                         data = result.data,

@@ -77,8 +77,7 @@ fun Route.serviceCatalogRoute() {
             when (val result = serviceCatalogService.listServices(page, pageSize, status, searchQuery)) {
                 is Result.Success -> {
                     serviceCatalogLogger.info("Services listed successfully: ${result.data.totalCount} total")
-                    // Cache service catalog listings for 15 minutes (services change infrequently)
-                    call.setCacheHeaders(maxAgeSeconds = 900, isPublic = false, mustRevalidate = true)
+                    // No caching — admin users must always see the latest data after edits.
                     call.respondSuccess(
                         message = "Services retrieved successfully",
                         data = result.data,

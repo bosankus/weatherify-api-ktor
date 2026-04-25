@@ -84,6 +84,7 @@ object WebResources {
     private val adminHeaderCss = readResourceFile("/web/css/admin-header.css")
     private val adminUsersCss = readResourceFile("/web/css/admin-users.css")
     private val headerCss = readResourceFile("/web/css/header.css")
+    private val redisHealthCheckCss = readResourceFile("/web/css/redis-health-check.css")
 
     // JavaScript file contents
     private val themeJs = readResourceFile("/web/js/theme.js")
@@ -102,6 +103,7 @@ object WebResources {
     private val tableUtilsJs = readResourceFile("/web/js/table-utils.js")
     private val adminUtilsJs = readResourceFile("/web/js/admin-utils.js")
     private val adminNotesJs = readResourceFile("/web/js/admin-notes.js")
+    private val redisHealthCheckJs = readResourceFile("/web/js/redis-health-check.js")
 
     /**
      * Read a file from the resources directory
@@ -136,6 +138,7 @@ object WebResources {
                 raw(themeToggleCss)
                 raw(headerCss)
                 raw(adminUsersCss)
+                raw(redisHealthCheckCss)
             }
         }
     }
@@ -319,6 +322,12 @@ object WebResources {
         head.script {
             unsafe {
                 raw(reportsChartsJs)
+            }
+        }
+        // Include Redis health check JavaScript
+        head.script {
+            unsafe {
+                raw(redisHealthCheckJs)
             }
         }
         // Ensure admin dashboard initializes after DOM is ready

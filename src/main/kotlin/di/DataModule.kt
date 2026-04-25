@@ -12,6 +12,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
+import util.RedisCache
 
 /**
  * Koin module for data layer dependencies.
@@ -53,6 +54,9 @@ val dataModule = module {
 
     // API Clients
     single<WeatherApiClient> { WeatherApiClientImpl() }
+
+    // Redis cache (shared across all callers; no-ops gracefully if REDIS_URL is unset)
+    single { RedisCache() }
 
     // Analytics
     single<util.Analytics> { util.GoogleAnalyticsClient.fromEnv() }

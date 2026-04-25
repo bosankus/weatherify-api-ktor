@@ -88,6 +88,7 @@ fun Route.paymentRoute() {
     val billService: BillService by application.inject()
     val notificationService: NotificationService by application.inject()
     val userRepository: UserRepository by application.inject()
+    val analyticsCache: data.service.PaymentAnalyticsCache by application.inject()
     // POST /create-order -> Create Razorpay order server-side
     post(Constants.Api.CREATE_ORDER_ENDPOINT) {
         call.getAuthenticatedUserOrRespond() ?: return@post
@@ -363,6 +364,9 @@ fun Route.paymentRoute() {
             )
             return@post
         }
+
+        // Invalidate payment analytics cache so admin dashboard reflects the new payment
+        analyticsCache.invalidateAll()
 
         // Activate premium and compute expiry from matched pricing tier
         if (matchedTier != null) {

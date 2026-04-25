@@ -30,6 +30,11 @@ class SavedLocationService(
         lat: Double,
         lon: Double
     ): Result<Boolean> {
+        val exists = repository.locationExists(email, name, city, state, country).getOrNull() ?: false
+        if (exists) {
+            return Result.error("This location has already been saved")
+        }
+
         val location = SavedLocation(
             userEmail = email,
             name = name,

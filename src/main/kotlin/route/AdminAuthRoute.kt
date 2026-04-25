@@ -1415,26 +1415,26 @@ fun Route.adminAuthRoute() {
                 }
             }
 
-            val data = mapOf(
-                "weatherUrl" to baseWeatherUrl,
-                "probeWeatherUrl" to probeWeatherUrl,
-                "weatherOk" to weatherOk,
-                "weatherStatusCode" to (weatherStatusCode ?: 0),
-                "weatherStatusText" to (weatherStatusText ?: ""),
-                "weatherLatencyMs" to weatherLatencyMs,
-                "weatherContentType" to (weatherContentType ?: ""),
-                "weatherBytes" to (weatherBytes ?: 0L),
-                "weatherError" to (weatherError ?: ""),
-                "airUrl" to baseAirUrl,
-                "probeAirUrl" to probeAirUrl,
-                "airOk" to airOk,
-                "airStatusCode" to (airStatusCode ?: 0),
-                "airStatusText" to (airStatusText ?: ""),
-                "airLatencyMs" to airLatencyMs,
-                "airContentType" to (airContentType ?: ""),
-                "airBytes" to (airBytes ?: 0L),
-                "airError" to (airError ?: ""),
-                "timestamp" to System.currentTimeMillis()
+            val data = bose.ankush.data.model.HealthCheckResult(
+                weatherUrl = baseWeatherUrl,
+                probeWeatherUrl = probeWeatherUrl,
+                weatherOk = weatherOk,
+                weatherStatusCode = weatherStatusCode ?: 0,
+                weatherStatusText = weatherStatusText ?: "",
+                weatherLatencyMs = weatherLatencyMs,
+                weatherContentType = weatherContentType ?: "",
+                weatherBytes = weatherBytes ?: 0L,
+                weatherError = weatherError ?: "",
+                airUrl = baseAirUrl,
+                probeAirUrl = probeAirUrl,
+                airOk = airOk,
+                airStatusCode = airStatusCode ?: 0,
+                airStatusText = airStatusText ?: "",
+                airLatencyMs = airLatencyMs,
+                airContentType = airContentType ?: "",
+                airBytes = airBytes ?: 0L,
+                airError = airError ?: "",
+                timestamp = System.currentTimeMillis()
             )
 
             call.respondSuccess("Health check completed", data)
@@ -1459,7 +1459,7 @@ fun Route.adminAuthRoute() {
             val airUrl = WeatherCache.getAirPollutionUrl()
             val apiKey = WeatherCache.getApiKey()
 
-            val results = mutableListOf<Map<String, Any>>()
+            val results = mutableListOf<bose.ankush.data.model.WarmupCityResult>()
             var overallOk = true
 
             for (city in targets) {
@@ -1513,28 +1513,72 @@ fun Route.adminAuthRoute() {
 
                 overallOk = overallOk && weatherOk && airOk
 
-                results += mapOf(
-                    "name" to city.name,
-                    "lat" to city.lat,
-                    "lon" to city.lon,
-                    "weatherOk" to weatherOk,
-                    "weatherStatusCode" to weatherStatusCode,
-                    "weatherLatencyMs" to weatherLatencyMs,
-                    "weatherError" to weatherError,
-                    "airOk" to airOk,
-                    "airStatusCode" to airStatusCode,
-                    "airLatencyMs" to airLatencyMs,
-                    "airError" to airError
+                results += bose.ankush.data.model.WarmupCityResult(
+                    name = city.name,
+                    lat = city.lat,
+                    lon = city.lon,
+                    weatherOk = weatherOk,
+                    weatherStatusCode = weatherStatusCode,
+                    weatherLatencyMs = weatherLatencyMs,
+                    weatherError = weatherError,
+                    airOk = airOk,
+                    airStatusCode = airStatusCode,
+                    airLatencyMs = airLatencyMs,
+                    airError = airError
                 )
             }
 
-            val payload = mapOf(
-                "ok" to overallOk,
-                "timestamp" to System.currentTimeMillis(),
-                "results" to results
+            val payload = bose.ankush.data.model.WarmupResult(
+                ok = overallOk,
+                timestamp = System.currentTimeMillis(),
+                results = results
             )
 
             call.respondSuccess("Warmup completed", payload)
+        }
+
+        // POST /tools/redis-health - Redis connection health check
+        post("/redis-health") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
+            logger.info("Admin ${admin.email} checking Redis health")
+
+            val redisCache: util.RedisCache by inject()
+
+            val t0 = System.currentTimeMillis()
+            try {
+                // Test set and get operations
+                val testKey = "redis_health_check_${System.currentTimeMillis()}"
+                val testValue = "ok"
+                redisCache.set(testKey, testValue, 10)
+                val retrieved = redisCache.get(testKey)
+                val latencyMs = System.currentTimeMillis() - t0
+
+                val isHealthy = retrieved == testValue
+                val status = if (isHealthy) "connected" else "error"
+                val message = if (isHealthy) "Redis is healthy and responding" else "Redis returned unexpected value"
+
+                val data = mapOf(
+                    "status" to status,
+                    "message" to message,
+                    "latencyMs" to latencyMs,
+                    "timestamp" to System.currentTimeMillis()
+                )
+
+                call.respondSuccess(message, data)
+            } catch (e: Exception) {
+                val latencyMs = System.currentTimeMillis() - t0
+                logger.warn("Redis health check failed: {}", e.message)
+
+                val data = mapOf(
+                    "status" to "error",
+                    "message" to "Redis connection failed",
+                    "error" to (e.message ?: "Unknown error"),
+                    "latencyMs" to latencyMs,
+                    "timestamp" to System.currentTimeMillis()
+                )
+
+                call.respondSuccess("Redis health check completed with errors", data)
+            }
         }
         }
     }
@@ -2741,6 +2785,19 @@ fun Route.adminAuthRoute() {
                                                             raw(
                                                                 """
                                                             <div class="tools-grid">
+                                                                <div class="tool-card">
+                                                                    <div class="tool-card-icon">
+                                                                        <span class="material-icons">storage</span>
+                                                                    </div>
+                                                                    <div class="tool-card-content">
+                                                                        <div class="tool-card-title">Redis Health Check</div>
+                                                                        <div class="tool-card-description">Test Redis cache connection and performance from Upstash.</div>
+                                                                        <div class="tool-card-action">
+                                                                            <button id="redis-health-btn" class="btn btn-secondary" aria-label="Check Redis health">Check</button>
+                                                                            <span id="redis-health-spinner" class="loading-spinner" style="display:none;"></span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                                 <div class="tool-card">
                                                                     <div class="tool-card-icon">
                                                                         <span class="material-icons">health_and_safety</span>

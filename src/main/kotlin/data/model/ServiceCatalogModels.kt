@@ -159,18 +159,29 @@ data class UpdateServiceRequest(
 )
 
 /**
- * Service summary for list view
+ * Service summary for list view — includes full service details so API consumers
+ * do not need a separate detail call to access pricing tiers, features, or limits.
+ * `lowestPrice` is the minimum value from [pricingTiers] expressed in the smallest
+ * currency unit (e.g. paise for INR, cents for USD).
  */
 @Serializable
 data class ServiceSummary(
     val id: String,
     val serviceCode: String,
     val displayName: String,
+    val description: String,
+    val pricingTiers: List<PricingTier>,
+    val features: List<ServiceFeature>,
+    val limits: Map<String, ServiceLimit> = emptyMap(),
     val status: ServiceStatus,
+    val availabilityStart: String? = null,
+    val availabilityEnd: String? = null,
     val totalPurchases: Long,
+    /** Minimum amount across all pricing tiers, in the smallest currency unit (e.g. paise for INR). */
     val lowestPrice: Int,
     val currency: String,
-    val createdAt: String
+    val createdAt: String,
+    val updatedAt: String
 )
 
 /**

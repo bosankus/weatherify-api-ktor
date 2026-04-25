@@ -130,3 +130,57 @@ data class UserTransactionsResponse(
     val userName: String?,
     val payments: List<PaymentDto>
 )
+
+/**
+ * Per-city result for the warmup endpoint
+ */
+@Serializable
+data class WarmupCityResult(
+    val name: String,
+    val lat: Double,
+    val lon: Double,
+    val weatherOk: Boolean,
+    val weatherStatusCode: Int,
+    val weatherLatencyMs: Long,
+    val weatherError: String,
+    val airOk: Boolean,
+    val airStatusCode: Int,
+    val airLatencyMs: Long,
+    val airError: String
+)
+
+/**
+ * Response payload for POST /tools/warmup
+ */
+@Serializable
+data class WarmupResult(
+    val ok: Boolean,
+    val timestamp: Long,
+    val results: List<WarmupCityResult>
+)
+
+/**
+ * Response payload for POST /tools/health
+ */
+@Serializable
+data class HealthCheckResult(
+    val weatherUrl: String,
+    val probeWeatherUrl: String,
+    val weatherOk: Boolean,
+    val weatherStatusCode: Int,
+    val weatherStatusText: String,
+    val weatherLatencyMs: Long,
+    val weatherContentType: String,
+    val weatherBytes: Long,
+    val weatherError: String,
+    val airUrl: String,
+    val probeAirUrl: String,
+    val airOk: Boolean,
+    val airStatusCode: Int,
+    val airStatusText: String,
+    val airLatencyMs: Long,
+    val airContentType: String,
+    val airBytes: Long,
+    val airError: String,
+    val timestamp: Long
+)

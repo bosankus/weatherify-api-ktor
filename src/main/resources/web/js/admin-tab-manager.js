@@ -465,6 +465,11 @@
         // Set up tab click handlers
         setupTabHandlers();
 
+        // Save scroll position before the page unloads so we can restore it after reload
+        window.addEventListener('beforeunload', function() {
+            try { sessionStorage.setItem('adminScrollY', String(window.scrollY)); } catch (_) {}
+        });
+
         // Detect initial active tab
         detectInitialTab();
 
@@ -496,30 +501,44 @@
     }
 
     /**
-     * Detect and load initial active tab
+     * Detect and load initial active tab.
+     * Priority: sessionStorage saved tab → DOM .active class → first tab in DOM.
      */
     function detectInitialTab() {
-        // Find active tab button
-        const activeButton = document.querySelector('[data-tab].active');
-        if (activeButton) {
-            const tabId = activeButton.getAttribute('data-tab');
-            console.log(`[Tab Manager] Initial active tab: ${tabId}`);
-            window.AdminTabManager.setActive(tabId);
+        let tabId = null;
 
-            // Update visibility first
-            updateTabVisibility(tabId);
+        // 1. Restore from sessionStorage (survives F5 / Cmd+R reload)
+        try {
+            const saved = sessionStorage.getItem('adminActiveTab');
+            if (saved && TAB_CONFIGS[saved]) {
+                tabId = saved;
+                console.log(`[Tab Manager] Restoring tab from session: ${tabId}`);
+            }
+        } catch (_) {}
 
-            // Load initial tab data
-            activateTab(tabId, false);
-        } else {
-            // No active tab found, default to first tab or 'iam'
+        // 2. Fall back to whichever tab the server rendered as active
+        if (!tabId) {
+            const activeButton = document.querySelector('[data-tab].active');
+            if (activeButton) {
+                tabId = activeButton.getAttribute('data-tab');
+                console.log(`[Tab Manager] Initial active tab from DOM: ${tabId}`);
+            }
+        }
+
+        // 3. Last resort: first tab in DOM
+        if (!tabId) {
             const firstTab = document.querySelector('[data-tab]');
             if (firstTab) {
-                const tabId = firstTab.getAttribute('data-tab');
-                console.log(`[Tab Manager] No active tab found, defaulting to: ${tabId}`);
-                updateTabVisibility(tabId);
-                activateTab(tabId, false);
+                tabId = firstTab.getAttribute('data-tab');
+                console.log(`[Tab Manager] No saved/active tab found, defaulting to: ${tabId}`);
             }
+        }
+
+        if (tabId) {
+            // Signal that scroll should be restored once this tab's data finishes loading
+            _restoreScrollAfterLoad = true;
+            updateTabVisibility(tabId);
+            activateTab(tabId, false);
         }
     }
 
@@ -540,6 +559,9 @@
         // Update active tab
         window.AdminTabManager.setActive(tabId);
 
+        // Persist active tab so it survives a page reload
+        try { sessionStorage.setItem('adminActiveTab', tabId); } catch (_) {}
+
         // Show/hide tab panels and update tab buttons
         updateTabVisibility(tabId);
 
@@ -554,6 +576,17 @@
 
             // Hide loading indicator
             hideTabLoading(tabId);
+
+            // Restore saved scroll position (only on initial page load, not on manual tab switch)
+            if (_restoreScrollAfterLoad) {
+                _restoreScrollAfterLoad = false;
+                try {
+                    const savedY = sessionStorage.getItem('adminScrollY');
+                    if (savedY !== null) {
+                        setTimeout(function() { window.scrollTo(0, parseInt(savedY, 10) || 0); }, 50);
+                    }
+                } catch (_) {}
+            }
         } catch (error) {
             console.error(`[Tab Manager] Error activating tab ${tabId}:`, error);
             hideTabLoading(tabId);
@@ -564,6 +597,9 @@
             }
         }
     }
+
+    // Flag: restore scroll position after the initial page-load tab activates
+    let _restoreScrollAfterLoad = false;
 
     /**
      * Update tab visibility - show active tab panel and hide others

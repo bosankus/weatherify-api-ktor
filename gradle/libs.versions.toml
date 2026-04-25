@@ -3,11 +3,10 @@ kotlin-version = "2.0.0"
 ktor-version = "3.2.2"
 logback-version = "1.5.25"
 kotlin-mongo-driver-version = "5.5.1"
-gcp-secret-manager-version = "2.81.0"
+
 bcrypt-version = "0.10.2"
 koin-version = "4.0.3"
 firebase-admin-version = "9.2.0"
-gcp-vertexai-version = "1.7.0"
 
 [libraries]
 ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor-version" }
@@ -31,12 +30,11 @@ ktor-server-resources = { module = "io.ktor:ktor-server-resources", version.ref 
 ktor-server-compression = { module = "io.ktor:ktor-server-compression", version.ref = "ktor-version" }
 ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor-version" }
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt-version" }
-gcp-secret-manager = { module = "com.google.cloud:google-cloud-secretmanager", version.ref = "gcp-secret-manager-version" }
+
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin-version" }
 koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin-version" }
 koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin-version" }
 firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebase-admin-version" }
-gcp-vertexai = { module = "com.google.cloud:google-cloud-vertexai", version.ref = "gcp-vertexai-version" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin-version" }

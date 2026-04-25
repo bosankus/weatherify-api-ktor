@@ -308,8 +308,21 @@
 
             var actionsCell = document.createElement('td');
             actionsCell.className = 'payment-actions';
-            // Always render a Details button immediately so the column is never empty
-            actionsCell.innerHTML = buildInitialActionButtons(payment);
+            // Create initial Details button with direct event listener (no data-txn lookup needed)
+            var initialGroup = document.createElement('div');
+            initialGroup.className = 'payment-actions-group';
+            var initialBtn = document.createElement('button');
+            initialBtn.className = 'btn-details btn-sm';
+            initialBtn.textContent = 'Details';
+            (function(p) {
+                initialBtn.addEventListener('click', function() {
+                    if (typeof showPaymentDetailsModal === 'function') {
+                        showPaymentDetailsModal(p);
+                    }
+                });
+            })(payment);
+            initialGroup.appendChild(initialBtn);
+            actionsCell.appendChild(initialGroup);
             row.appendChild(actionsCell);
 
             fragment.appendChild(row);
@@ -322,41 +335,6 @@
 
         tbody.innerHTML = '';
         tbody.appendChild(fragment);
-
-        // Bind click handlers for initial Details buttons
-        bindInitialActionButtons(tbody, payments);
-    }
-
-    /**
-     * Build initial action buttons HTML (rendered immediately, before async refund check)
-     */
-    function buildInitialActionButtons(payment) {
-        var status = (payment.status || '').toLowerCase();
-        var amount = Number(payment.amount || 0);
-        if (status === 'verified' || status === 'success' || status === 'captured') {
-            return '<div class="payment-actions-group">' +
-                '<button class="btn-details btn-sm fin-action-details" data-txn="' + escapeHtml(payment.transactionId || '') + '" title="View details">Details</button>' +
-                '</div>';
-        }
-        return '<div class="payment-actions-group">' +
-            '<button class="btn-details btn-sm fin-action-details" data-txn="' + escapeHtml(payment.transactionId || '') + '" title="View details">Details</button>' +
-            '</div>';
-    }
-
-    /**
-     * Bind click handlers for initial Details buttons in the table
-     */
-    function bindInitialActionButtons(tbody, payments) {
-        var buttons = tbody.querySelectorAll('.fin-action-details');
-        buttons.forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var txn = this.getAttribute('data-txn');
-                var payment = payments.find(function(p) { return (p.transactionId || '') === txn; });
-                if (payment && typeof showPaymentDetailsModal === 'function') {
-                    showPaymentDetailsModal(payment);
-                }
-            });
-        });
     }
 
     /**
