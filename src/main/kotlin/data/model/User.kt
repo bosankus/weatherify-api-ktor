@@ -2,6 +2,7 @@ package bose.ankush.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Contextual
 import org.bson.types.ObjectId
 import java.time.Instant
 
@@ -17,7 +18,7 @@ enum class ServiceType {
 @Serializable
 data class User(
     @SerialName("_id")
-    @kotlinx.serialization.Serializable(with = FlexibleObjectIdSerializer::class)
+    @Contextual
     val id: ObjectId = ObjectId(),
     val email: String,
     val passwordHash: String,

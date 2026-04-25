@@ -2,6 +2,7 @@ package bose.ankush.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Contextual
 import org.bson.types.ObjectId
 import java.time.Instant
 
@@ -11,7 +12,7 @@ import java.time.Instant
 @Serializable
 data class Note(
     @SerialName("_id")
-    @Serializable(with = FlexibleObjectIdSerializer::class)
+    @Contextual
     val id: ObjectId = ObjectId(),
     val userEmail: String,
     val content: String,

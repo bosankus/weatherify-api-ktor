@@ -1,13 +1,17 @@
 package bose.ankush.route.common
 
 import bose.ankush.data.model.ApiResponse
+import bose.ankush.data.model.FlexibleObjectIdSerializer
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondText
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.contextual
 import kotlinx.serialization.serializer
+import org.bson.types.ObjectId
 /**
  * Set cache control headers for responses.
  * @param maxAgeSeconds Maximum age in seconds for the cache (default: 300 = 5 minutes)
@@ -39,7 +43,7 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
 
     val response: ApiResponse<T?> = ApiResponse(status = true, message = message, data = actualData)
 
-    // Build a Json instance consistent with HTTP configuration
+    // Build a Json instance consistent with HTTP configuration with ObjectId serializer
     val json = Json {
         prettyPrint = true
         encodeDefaults = true
@@ -48,6 +52,9 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
         coerceInputValues = true
         allowSpecialFloatingPointValues = true
         useArrayPolymorphism = false
+        serializersModule = SerializersModule {
+            contextual(ObjectId::class, FlexibleObjectIdSerializer)
+        }
     }
 
     // Obtain serializers for the generic payload and the ApiResponse
@@ -57,6 +64,23 @@ suspend inline fun <reified T> ApplicationCall.respondSuccess(
     val body = json.encodeToString(apiResponseSerializer, response)
 
     respondText(text = body, contentType = ContentType.Application.Json, status = status)
+}
+
+/**
+ * Create a Json instance with proper serializers module for ObjectId and other types
+ * Use this function whenever you need to serialize/deserialize data models with ObjectId
+ */
+fun createJsonWithSerializers(ignoreUnknownKeys: Boolean = true): Json = Json {
+    prettyPrint = true
+    encodeDefaults = true
+    isLenient = true
+    this.ignoreUnknownKeys = ignoreUnknownKeys
+    coerceInputValues = true
+    allowSpecialFloatingPointValues = true
+    useArrayPolymorphism = false
+    serializersModule = SerializersModule {
+        contextual(ObjectId::class, FlexibleObjectIdSerializer)
+    }
 }
 
 /** Responds with an error message */
@@ -79,6 +103,9 @@ suspend inline fun <reified T> ApplicationCall.respondError(
         coerceInputValues = true
         allowSpecialFloatingPointValues = true
         useArrayPolymorphism = false
+        serializersModule = SerializersModule {
+            contextual(ObjectId::class, FlexibleObjectIdSerializer)
+        }
     }
 
     val payloadSerializer: KSerializer<T?> = serializer()
