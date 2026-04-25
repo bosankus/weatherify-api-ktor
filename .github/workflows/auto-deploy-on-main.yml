@@ -40,4 +40,12 @@ jobs:
             --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/weatherify-api" \
             --platform managed \
             --region asia-southeast1 \
-            --allow-unauthenticated
+            --allow-unauthenticated \
+            --update-secrets=DB_CONNECTION_STRING=db-connection-string:latest \
+            --update-secrets=JWT_SECRET=jwt-secret:latest \
+            --update-secrets=WEATHER_API_KEY=weather-data-secret:latest \
+            --update-secrets=RAZORPAY_KEY_ID=razorpay-key-id:latest \
+            --update-secrets=RAZORPAY_SECRET=razorpay-secret:latest \
+            --update-secrets=RAZORPAY_WEBHOOK_SECRET=razorpay-webhook-secret:latest \
+            --update-secrets=SENDGRID_API_KEY=sendgrid-api-key:latest \
+            --update-secrets=REDIS_URL=redis-url:latest
