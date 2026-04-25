@@ -1,6 +1,5 @@
 package bose.ankush.data.model
 
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.bson.types.ObjectId
@@ -12,7 +11,7 @@ import java.time.Instant
 @Serializable
 data class SavedLocation(
     @SerialName("_id")
-    @Contextual
+    @Serializable(with = FlexibleObjectIdSerializer::class)
     val id: ObjectId = ObjectId(),
     val userEmail: String,
     val name: String,

@@ -1140,6 +1140,9 @@ function showPaymentDetailsModal(payment) {
 
     // Build footer with refund action buttons
     let footerHtml = '';
+    if (paymentId) {
+        footerHtml += `<button type="button" class="modal-btn modal-btn-primary" id="details-generate-bill-btn">Generate Bill</button>`;
+    }
     if (isRefundable && paymentId) {
         footerHtml += `<button type="button" class="modal-btn modal-btn-primary" id="details-initiate-refund-btn">Initiate Refund</button>`;
     }
@@ -1152,6 +1155,13 @@ function showPaymentDetailsModal(payment) {
 
     // Bind footer action buttons after panel is rendered
     setTimeout(() => {
+        const generateBillBtn = document.getElementById('details-generate-bill-btn');
+        if (generateBillBtn && paymentId) {
+            generateBillBtn.addEventListener('click', () => {
+                generatePaymentBill(payment);
+            });
+        }
+
         const initiateBtn = document.getElementById('details-initiate-refund-btn');
         if (initiateBtn) {
             initiateBtn.addEventListener('click', () => {
@@ -1167,6 +1177,76 @@ function showPaymentDetailsModal(payment) {
             });
         }
     }, 50);
+}
+
+/**
+ * Generate a bill for a payment including paid amount, refunds, and refund reasons
+ * @param {Object} payment - Payment object containing payment details
+ */
+function generatePaymentBill(payment) {
+    if (!payment || !payment.transactionId) {
+        showMessage('error', 'Invalid payment data');
+        return;
+    }
+
+    const paymentId = payment.transactionId || payment.razorpayPaymentId;
+    const userEmail = payment.userEmail;
+
+    if (!userEmail) {
+        showMessage('error', 'User email not found in payment data');
+        return;
+    }
+
+    showMessage('info', 'Generating bill...');
+
+    const token = localStorage.getItem('jwt_token');
+    const request = {
+        userEmail: userEmail,
+        paymentIds: [paymentId],
+        sendViaEmail: false
+    };
+
+    fetch('/admin/finance/generate-bill', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/octet-stream',
+            'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(request)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || `Failed to generate bill (${response.status})`);
+            });
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create a temporary URL for the blob
+        const url = window.URL.createObjectURL(blob);
+
+        // Create a download link
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `bill_${paymentId}_${new Date().getTime()}.pdf`;
+
+        // Trigger download
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Clean up the URL
+        window.URL.revokeObjectURL(url);
+
+        showMessage('success', 'Bill downloaded successfully');
+    })
+    .catch(error => {
+        console.error('Error generating bill:', error);
+        showMessage('error', error.message || 'Failed to generate bill. Please try again.');
+    });
 }
 
 // Use common utilities from admin-utils.js

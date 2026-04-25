@@ -162,10 +162,18 @@
     }
 
     /**
-     * Display Redis result in a modal
+     * Display Redis result in a modal (uses unified tool result system if available)
      */
     function showRedisResultModal(data) {
-        // Check if modal already exists
+        // Use unified tool result system if available
+        if (typeof window.showToolResult === 'function') {
+            window.showToolResult('Redis Health Check Result', data, 'redis', {
+                subtitle: 'Cache connection status and metrics'
+            });
+            return;
+        }
+
+        // Fallback to legacy modal implementation
         let modal = document.getElementById('redis-result-modal');
 
         if (!modal) {

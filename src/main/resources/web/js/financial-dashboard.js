@@ -90,9 +90,6 @@
                         '<label class="fin-filter-bar__label" for="payment-date-to">To</label>' +
                         '<input type="date" id="payment-date-to" class="fin-filter-bar__control" />' +
                     '</div>' +
-                    '<button id="generate-bill-btn" class="btn btn-secondary fin-filter-bar__btn">' +
-                        '<span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">receipt</span>Generate Bill' +
-                    '</button>' +
                 '</div>';
         }
 
@@ -507,16 +504,6 @@
                 }
             });
             dateTo.dataset.bound = 'true';
-        }
-
-        var generateBillBtn = document.getElementById('generate-bill-btn');
-        if (generateBillBtn && !generateBillBtn.dataset.bound) {
-            generateBillBtn.addEventListener('click', function() {
-                if (typeof showMessage === 'function') {
-                    showMessage('info', 'Bill generation feature coming soon');
-                }
-            });
-            generateBillBtn.dataset.bound = 'true';
         }
     }
 

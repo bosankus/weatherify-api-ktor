@@ -11,16 +11,16 @@ COPY gradle/ gradle/
 # Copy source code
 COPY src/ src/
 
-# Build the shadow JAR
-RUN gradle shadowJar --no-daemon
+# Build the fat JAR using Ktor plugin
+RUN gradle build --no-daemon -x test
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# Copy the built JAR from builder
-COPY --from=builder /app/build/libs/*-all.jar app.jar
+# Copy the built JAR from builder (Ktor plugin builds to build/libs/)
+COPY --from=builder /app/build/libs/weatherify-api-all.jar app.jar
 
 # Set environment variables
 ENV GCP_PROJECT_ID="1017382896100"

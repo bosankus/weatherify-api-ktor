@@ -2,10 +2,13 @@ package bose.ankush.util
 
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
+import kotlin.time.Duration.Companion.seconds
 
 private val logger = LoggerFactory.getLogger("GCPUtil")
 
@@ -60,32 +63,49 @@ internal fun getSecretValue(secretName: String): String {
  * for authentication — no gRPC SDK required.
  */
 private fun fetchSecretFromRestApi(projectId: String, secretName: String): String? {
-    return runBlocking {
-        HttpClient(CIO).use { client ->
-            // Get access token from the Cloud Run metadata server
-            val tokenResponse = client.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token") {
-                header("Metadata-Flavor", "Google")
-            }
-            val tokenJson = tokenResponse.bodyAsText()
-            // Simple parse — token is in {"access_token":"...","expires_in":...,"token_type":"Bearer"}
-            val accessToken = tokenJson
-                .substringAfter("\"access_token\":\"")
-                .substringBefore("\"")
+    return try {
+        runBlocking {
+            // Wrap entire operation in timeout
+            withTimeoutOrNull(10.seconds) {
+                HttpClient(CIO) {
+                    install(HttpTimeout) {
+                        connectTimeoutMillis = 5000
+                        requestTimeoutMillis = 10000
+                        socketTimeoutMillis = 5000
+                    }
+                }.use { client ->
+                    // Get access token from the Cloud Run metadata server
+                    val tokenResponse = client.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token") {
+                        header("Metadata-Flavor", "Google")
+                    }
+                    val tokenJson = tokenResponse.bodyAsText()
+                    // Simple parse — token is in {"access_token":"...","expires_in":...,"token_type":"Bearer"}
+                    val accessToken = tokenJson
+                        .substringAfter("\"access_token\":\"")
+                        .substringBefore("\"")
 
-            // Call Secret Manager REST API
-            val secretUrl = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
-            val secretResponse = client.get(secretUrl) {
-                header("Authorization", "Bearer $accessToken")
+                    // Call Secret Manager REST API
+                    val secretUrl = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
+                    val secretResponse = client.get(secretUrl) {
+                        header("Authorization", "Bearer $accessToken")
+                    }
+                    val secretJson = secretResponse.bodyAsText()
+                    // Payload data is base64-encoded in {"payload":{"data":"BASE64..."}}
+                    val base64Data = secretJson
+                        .substringAfter("\"data\":\"")
+                        .substringBefore("\"")
+                    if (base64Data.isNotBlank()) {
+                        java.util.Base64.getDecoder().decode(base64Data).toString(Charsets.UTF_8)
+                    } else null
+                }
+            } ?: run {
+                logger.warn("Secret Manager request timed out for {}", secretName)
+                null
             }
-            val secretJson = secretResponse.bodyAsText()
-            // Payload data is base64-encoded in {"payload":{"data":"BASE64..."}}
-            val base64Data = secretJson
-                .substringAfter("\"data\":\"")
-                .substringBefore("\"")
-            if (base64Data.isNotBlank()) {
-                java.util.Base64.getDecoder().decode(base64Data).toString(Charsets.UTF_8)
-            } else null
         }
+    } catch (e: Exception) {
+        logger.warn("Secret Manager request failed for {}: {}", secretName, e.message)
+        null
     }
 }
 

@@ -294,16 +294,16 @@ object WebResources {
                 raw(adminJs)
             }
         }
+        // Include refund admin JavaScript (before financial dashboard to ensure showPaymentDetailsModal is available)
+        head.script {
+            unsafe {
+                raw(refundAdminJs)
+            }
+        }
         // Include financial dashboard JavaScript
         head.script {
             unsafe {
                 raw(financialDashboardJs)
-            }
-        }
-        // Include refund admin JavaScript
-        head.script {
-            unsafe {
-                raw(refundAdminJs)
             }
         }
         // Include service catalog admin JavaScript

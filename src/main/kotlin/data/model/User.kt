@@ -17,7 +17,7 @@ enum class ServiceType {
 @Serializable
 data class User(
     @SerialName("_id")
-    @kotlinx.serialization.Contextual
+    @kotlinx.serialization.Serializable(with = FlexibleObjectIdSerializer::class)
     val id: ObjectId = ObjectId(),
     val email: String,
     val passwordHash: String,

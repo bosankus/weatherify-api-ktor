@@ -499,6 +499,92 @@ function buildWarmupHtml(data) {
 }
 
 /**
+ * Build enhanced result HTML with error section for tools
+ * @param {Object} data - Result data from tool
+ * @param {string} type - Tool type: 'health', 'warmup', 'redis'
+ */
+function buildToolResultHtml(data, type) {
+    const badge = (b) => b ? '<span style="color:#10b981;font-weight:600;">✓ OK</span>' : '<span style="color:#ef4444;font-weight:600;">✗ FAIL</span>';
+    const errorSection = (errorMsg) => {
+        if (!errorMsg) return '';
+        return `<div style="margin-top:12px;padding:10px;background:#fee;border-left:3px solid #ef4444;border-radius:6px;">
+            <div style="font-weight:700;color:#c33;font-size:0.9rem;margin-bottom:4px;">⚠ Error Details</div>
+            <div style="color:#a22;font-size:0.85rem;font-family:monospace;word-break:break-word;white-space:pre-wrap;">${escapeHtml(String(errorMsg))}</div>
+        </div>`;
+    };
+    const section = (title, body) => `<div style="border:1px solid var(--card-border);background:var(--card-bg);border-radius:8px;padding:12px;margin-top:10px;"><div style="font-weight:700;color:var(--card-title);margin-bottom:6px;">${title}</div>${body}</div>`;
+
+    let resultHtml = '';
+
+    if (type === 'redis' && data.status !== undefined) {
+        // Redis health check result
+        const statusIcon = data.status === 'connected' ? '✓' : '✗';
+        const statusColor = data.status === 'connected' ? '#10b981' : '#ef4444';
+        resultHtml = `
+            <div style="padding:12px;border-left:4px solid ${statusColor};background:var(--card-bg);border-radius:6px;margin-bottom:10px;">
+                <div style="display:flex;gap:10px;align-items:start;">
+                    <span style="color:${statusColor};font-size:1.5rem;font-weight:bold;">${statusIcon}</span>
+                    <div style="flex:1;">
+                        <div style="font-weight:700;color:var(--card-title);">${data.message || 'Redis Check'}</div>
+                        <div style="color:var(--text-secondary);font-size:0.9rem;margin-top:4px;">Status: ${badge(data.status === 'connected')}</div>
+                    </div>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;">
+                <div style="padding:8px;background:var(--card-bg);border-radius:6px;border:1px solid var(--card-border);">
+                    <div style="font-size:0.75rem;color:var(--text-secondary);font-weight:600;margin-bottom:4px;">Latency</div>
+                    <div style="font-weight:700;color:var(--card-title);">${data.latencyMs || 0}ms</div>
+                </div>
+                <div style="padding:8px;background:var(--card-bg);border-radius:6px;border:1px solid var(--card-border);">
+                    <div style="font-size:0.75rem;color:var(--text-secondary);font-weight:600;margin-bottom:4px;">Status</div>
+                    <div style="font-weight:700;color:${data.status === 'connected' ? '#10b981' : '#ef4444'}">${data.status === 'connected' ? 'Ready' : 'Failed'}</div>
+                </div>
+                <div style="padding:8px;background:var(--card-bg);border-radius:6px;border:1px solid var(--card-border);">
+                    <div style="font-size:0.75rem;color:var(--text-secondary);font-weight:600;margin-bottom:4px;">Checked At</div>
+                    <div style="font-weight:700;color:var(--card-title);">${new Date(data.timestamp || Date.now()).toLocaleTimeString()}</div>
+                </div>
+            </div>
+        `;
+
+        if (data.error) {
+            resultHtml += errorSection(data.error);
+        }
+    } else if (type === 'health') {
+        // Health check with error section
+        resultHtml = buildHealthHtml(data);
+        // Add error section if present at top level
+        if (data.error || data.weatherError || data.airError) {
+            const allErrors = [data.error, data.weatherError, data.airError].filter(e => e).join('\n');
+            resultHtml += errorSection(allErrors);
+        }
+    } else if (type === 'warmup') {
+        // Warmup with error section
+        resultHtml = buildWarmupHtml(data);
+        // Add error section if present at top level
+        if (data.error) {
+            resultHtml += errorSection(data.error);
+        }
+    }
+
+    return resultHtml;
+}
+
+/**
+ * Show tool result modal with proper error handling
+ * @param {string} title - Modal title
+ * @param {Object} data - Result data
+ * @param {string} type - Tool type
+ * @param {Object} options - Additional options
+ */
+function showToolResult(title, data, type, options = {}) {
+    const html = buildToolResultHtml(data, type);
+    showModal(title, html, {
+        size: options.size || 'large',
+        subtitle: options.subtitle || ''
+    });
+}
+
+/**
  * Initialize the admin dashboard
  */
 function initializeAdmin() {
@@ -535,14 +621,28 @@ function initializeAdmin() {
                 runHealthCheck()
                     .then((data) => {
                         try {
-                            showModal('Health Check Results', buildHealthHtml(data));
+                            showToolResult('Health Check Results', data, 'health', {
+                                subtitle: 'External API connectivity and latency metrics'
+                            });
                         } catch (e) { console.warn('Failed to show health modal', e); }
                         const overallOk = (data.weatherOk === true) && (data.airOk === true);
                         showMessage(overallOk ? 'success' : 'error', overallOk ? 'Health check passed' : 'Health check has failures');
                     })
                     .catch(err => {
                         console.error('Health check failed', err);
-                        showMessage('error', err && err.message ? err.message : 'Health check failed');
+                        // Show error in both message and detailed modal
+                        const errorMsg = err && err.message ? err.message : 'Health check failed';
+                        showMessage('error', errorMsg);
+                        // Show detailed error modal
+                        showToolResult('Health Check Failed', {
+                            weatherOk: false,
+                            airOk: false,
+                            weatherError: errorMsg,
+                            airError: 'Check failed, see weather error',
+                            timestamp: Date.now()
+                        }, 'health', {
+                            subtitle: 'An error occurred during health check'
+                        });
                     })
                     .finally(() => {
                         if (healthSpinner) healthSpinner.style.display = 'none';
@@ -562,13 +662,26 @@ function initializeAdmin() {
                 runWarmup()
                     .then((data) => {
                         try {
-                            showModal('Warmup Results', buildWarmupHtml(data));
+                            showToolResult('Warmup Results', data, 'warmup', {
+                                subtitle: 'Cache warming for popular locations'
+                            });
                         } catch (e) { console.warn('Failed to show warmup modal', e); }
                         showMessage(data.ok ? 'success' : 'error', data.ok ? 'Warmup completed' : 'Warmup completed with failures');
                     })
                     .catch(err => {
                         console.error('Warmup failed', err);
-                        showMessage('error', err && err.message ? err.message : 'Warmup failed');
+                        // Show error in both message and detailed modal
+                        const errorMsg = err && err.message ? err.message : 'Warmup failed';
+                        showMessage('error', errorMsg);
+                        // Show detailed error modal with error details
+                        showToolResult('Warmup Failed', {
+                            ok: false,
+                            results: [],
+                            error: errorMsg,
+                            timestamp: Date.now()
+                        }, 'warmup', {
+                            subtitle: 'An error occurred during warmup'
+                        });
                     })
                     .finally(() => {
                         if (warmSpinner) warmSpinner.style.display = 'none';

@@ -14,7 +14,7 @@ import java.time.Instant
 @Serializable
 data class Payment(
     @SerialName("_id")
-    @kotlinx.serialization.Contextual
+    @kotlinx.serialization.Serializable(with = FlexibleObjectIdSerializer::class)
     val id: ObjectId = ObjectId(),
     val userEmail: String,
     @SerialName("razorpay_order_id")
