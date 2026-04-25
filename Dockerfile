@@ -32,6 +32,7 @@ RUN echo "================================" && \
     if [ -f /app/build/libs/weatherify-api-all.jar ]; then \
         echo "✓ SUCCESS: Found weatherify-api-all.jar"; \
         ls -lh /app/build/libs/weatherify-api-all.jar; \
+        jar tf /app/build/libs/weatherify-api-all.jar > /dev/null && echo "✓ JAR integrity verified"; \
     else \
         echo "✗ FAILED: weatherify-api-all.jar not found!"; \
         echo "Contents of /app/build:"; \
@@ -48,9 +49,6 @@ WORKDIR /app
 
 # Copy the built fat JAR from builder
 COPY --from=builder /app/build/libs/weatherify-api-all.jar ./app.jar
-
-# Verify JAR is present and not corrupted
-RUN test -f app.jar && jar tf app.jar > /dev/null || (echo "JAR verification failed!" && exit 1)
 
 # Set environment variables
 ENV GCP_PROJECT_ID="1017382896100"
