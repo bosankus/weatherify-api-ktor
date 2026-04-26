@@ -7,6 +7,9 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.seconds
 
@@ -131,18 +134,23 @@ private fun fetchSecretFromRestApi(projectId: String, secretName: String): Strin
                         return@withTimeoutOrNull null
                     }
 
-                    // Payload data is base64-encoded in {"payload":{"data":"BASE64..."}}
-                    val base64Data = secretJson
-                        .substringAfter("\"data\":\"")
-                        .substringBefore("\"")
+                    // Parse JSON response: {"payload":{"data":"BASE64..."}}
+                    try {
+                        val jsonResponse = Json.parseToJsonElement(secretJson).jsonObject
+                        val payloadObj = jsonResponse["payload"]?.jsonObject
+                        val base64Data = payloadObj?.get("data")?.jsonPrimitive?.content
 
-                    if (base64Data.isBlank()) {
-                        logger.error("Failed to extract base64 data from Secret Manager response: {}", secretJson)
-                        return@withTimeoutOrNull null
+                        if (base64Data.isNullOrBlank()) {
+                            logger.error("Failed to extract base64 data from Secret Manager response: {}", secretJson)
+                            return@withTimeoutOrNull null
+                        }
+
+                        logger.debug("Successfully extracted base64 data for secret: {}", secretName)
+                        java.util.Base64.getDecoder().decode(base64Data).toString(Charsets.UTF_8)
+                    } catch (e: Exception) {
+                        logger.error("Failed to parse Secret Manager JSON response for {}: {}", secretName, secretJson)
+                        throw e
                     }
-
-                    logger.debug("Successfully extracted base64 data for secret: {}", secretName)
-                    java.util.Base64.getDecoder().decode(base64Data).toString(Charsets.UTF_8)
                 }
             } ?: run {
                 logger.warn("Secret Manager request timed out for {}", secretName)
