@@ -29,7 +29,13 @@ internal fun getSecretValue(secretName: String): String {
     }
 
     // Try GCP Secret Manager via REST API (no gRPC SDK needed)
-    val gcpProjectId = System.getenv("GCP_PROJECT_ID") ?: System.getenv("GOOGLE_CLOUD_PROJECT")
+    var gcpProjectId = System.getenv("GCP_PROJECT_ID") ?: System.getenv("GOOGLE_CLOUD_PROJECT")
+
+    // If project ID not in env vars, try fetching from Cloud Run metadata server
+    if (gcpProjectId.isNullOrEmpty()) {
+        gcpProjectId = getProjectIdFromMetadata()
+    }
+
     if (!gcpProjectId.isNullOrEmpty()) {
         try {
             val value = fetchSecretFromRestApi(gcpProjectId, secretName)
@@ -40,10 +46,39 @@ internal fun getSecretValue(secretName: String): String {
         } catch (e: Exception) {
             logger.warn("Could not fetch secret {} from Secret Manager: {}. Falling back to defaults.", secretName, e.message)
         }
+    } else {
+        logger.warn("No GCP_PROJECT_ID found. Skipping Secret Manager fetch for {}.", secretName)
     }
 
     // Fallback to hardcoded defaults for local development
     return getLocalFallback(secretName)
+}
+
+/**
+ * Fetches the GCP project ID from the Cloud Run metadata server.
+ */
+private fun getProjectIdFromMetadata(): String? {
+    return try {
+        runBlocking {
+            withTimeoutOrNull(5.seconds) {
+                HttpClient(CIO) {
+                    install(HttpTimeout) {
+                        connectTimeoutMillis = 2000
+                        requestTimeoutMillis = 5000
+                        socketTimeoutMillis = 2000
+                    }
+                }.use { client ->
+                    val response = client.get("http://metadata.google.internal/computeMetadata/v1/project/project-id") {
+                        header("Metadata-Flavor", "Google")
+                    }
+                    response.bodyAsText().trim().takeIf { it.isNotBlank() }
+                }
+            }
+        }
+    } catch (e: Exception) {
+        logger.debug("Could not fetch project ID from metadata server: {}", e.message)
+        null
+    }
 }
 
 /**
@@ -62,6 +97,7 @@ private fun fetchSecretFromRestApi(projectId: String, secretName: String): Strin
                         socketTimeoutMillis = 5000
                     }
                 }.use { client ->
+                    logger.debug("Fetching token from metadata server for secret: {}", secretName)
                     // Get access token from the Cloud Run metadata server
                     val tokenResponse = client.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token") {
                         header("Metadata-Flavor", "Google")
@@ -72,19 +108,41 @@ private fun fetchSecretFromRestApi(projectId: String, secretName: String): Strin
                         .substringAfter("\"access_token\":\"")
                         .substringBefore("\"")
 
+                    if (accessToken.isBlank()) {
+                        logger.error("Failed to extract access token from metadata server response: {}", tokenJson)
+                        return@withTimeoutOrNull null
+                    }
+
+                    logger.debug("Successfully obtained access token, fetching secret from: {}", secretName)
+
                     // Call Secret Manager REST API
                     val secretUrl = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
+                    logger.debug("Calling Secret Manager API at: {}", secretUrl)
+
                     val secretResponse = client.get(secretUrl) {
                         header("Authorization", "Bearer $accessToken")
                     }
+
+                    val statusCode = secretResponse.status.value
                     val secretJson = secretResponse.bodyAsText()
+
+                    if (statusCode != 200) {
+                        logger.error("Secret Manager API returned status {}: {}", statusCode, secretJson)
+                        return@withTimeoutOrNull null
+                    }
+
                     // Payload data is base64-encoded in {"payload":{"data":"BASE64..."}}
                     val base64Data = secretJson
                         .substringAfter("\"data\":\"")
                         .substringBefore("\"")
-                    if (base64Data.isNotBlank()) {
-                        java.util.Base64.getDecoder().decode(base64Data).toString(Charsets.UTF_8)
-                    } else null
+
+                    if (base64Data.isBlank()) {
+                        logger.error("Failed to extract base64 data from Secret Manager response: {}", secretJson)
+                        return@withTimeoutOrNull null
+                    }
+
+                    logger.debug("Successfully extracted base64 data for secret: {}", secretName)
+                    java.util.Base64.getDecoder().decode(base64Data).toString(Charsets.UTF_8)
                 }
             } ?: run {
                 logger.warn("Secret Manager request timed out for {}", secretName)
@@ -92,7 +150,8 @@ private fun fetchSecretFromRestApi(projectId: String, secretName: String): Strin
             }
         }
     } catch (e: Exception) {
-        logger.warn("Secret Manager request failed for {}: {}", secretName, e.message)
+        logger.error("Secret Manager request failed for {}: {} - {}", secretName, e.message, e.javaClass.simpleName)
+        e.printStackTrace()
         null
     }
 }
