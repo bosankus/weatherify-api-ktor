@@ -19,13 +19,15 @@ class FinancialServiceImplTest {
     private lateinit var mockPaymentRepository: MockPaymentRepository
     private lateinit var mockRefundService: MockRefundService
     private lateinit var financialService: FinancialServiceImpl
+    private lateinit var paymentAnalyticsCache: PaymentAnalyticsCache
 
     @BeforeTest
     fun setup() {
         mockUserRepository = MockUserRepository()
         mockPaymentRepository = MockPaymentRepository()
         mockRefundService = MockRefundService()
-        financialService = FinancialServiceImpl(mockPaymentRepository, mockUserRepository, mockRefundService)
+        paymentAnalyticsCache = MockPaymentAnalyticsCache(mockPaymentRepository)
+        financialService = FinancialServiceImpl(mockPaymentRepository, mockUserRepository, mockRefundService, paymentAnalyticsCache)
     }
 
     // Test: Financial metrics calculation
@@ -774,6 +776,12 @@ private class MockPaymentRepository : PaymentRepository {
         }
     }
 }
+
+// Mock PaymentAnalyticsCache — bypasses Redis (no URL configured = no-op cache) and
+// delegates directly to the supplied MockPaymentRepository.
+private class MockPaymentAnalyticsCache(
+    repo: MockPaymentRepository
+) : PaymentAnalyticsCache(repo, util.RedisCache())
 
 // Mock RefundService for testing
 private class MockRefundService : RefundService {

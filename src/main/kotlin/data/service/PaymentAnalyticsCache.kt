@@ -19,7 +19,7 @@ import util.RedisCache
  * times per hour in normal operation, and the admin dashboard should not
  * hammer MongoDB aggregations on every page load.
  */
-class PaymentAnalyticsCache(
+open class PaymentAnalyticsCache(
     private val paymentRepository: PaymentRepository,
     private val redis: RedisCache
 ) {

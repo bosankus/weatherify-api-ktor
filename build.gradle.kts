@@ -73,9 +73,17 @@ dependencies {
         // Exclude duplicate Guava (pulled by multiple GCP libs — Ktor's HttpClient handles HTTP)
         exclude(group = "com.google.guava", module = "listenablefuture")
     }
+    // firebase-admin's ApiClientUtils.getDefaultJsonFactory() calls JacksonFactory directly.
+    // Previously pulled in transitively via google-cloud-storage / google-cloud-firestore (now excluded),
+    // so it must be declared explicitly or FirebaseOptions.build() throws NoClassDefFoundError at startup.
+    implementation("com.google.http-client:google-http-client-jackson2:1.43.3")
 
-    // PDF Generation
-    implementation("com.itextpdf:itext7-core:8.0.4")
+    // PDF Generation — only the modules actually used (kernel, layout, barcodes).
+    // Avoids pulling in itext7-core which brings font-asian (2.7M), hyph (964K),
+    // styled-xml-parser, svg, pdfa, pdfua, sign, forms — none of which are used.
+    implementation("com.itextpdf:kernel:8.0.4")
+    implementation("com.itextpdf:layout:8.0.4")
+    implementation("com.itextpdf:barcodes:8.0.4")
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
