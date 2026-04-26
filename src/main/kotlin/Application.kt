@@ -8,7 +8,13 @@ import kotlinx.coroutines.launch
 import org.koin.ktor.ext.inject
 
 fun main() {
-    embeddedServer(factory = Netty, port = 8080, module = Application::module).start(wait = true)
+    val serverPort = System.getenv("PORT")?.toInt() ?: 8080
+    embeddedServer(
+        factory = Netty,
+        port = serverPort,
+        host = "0.0.0.0",
+        module = Application::module
+    ).start(wait = true)
 }
 
 fun Application.module() {

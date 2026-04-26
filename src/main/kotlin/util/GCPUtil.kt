@@ -15,6 +15,16 @@ import kotlin.time.Duration.Companion.seconds
 
 private val logger = LoggerFactory.getLogger("GCPUtil")
 
+private val sharedClient by lazy {
+    HttpClient(CIO) {
+        install(HttpTimeout) {
+            connectTimeoutMillis = 2000
+            requestTimeoutMillis = 5000
+            socketTimeoutMillis = 2000
+        }
+    }
+}
+
 /**
  * Retrieves a secret value from environment variables or Google Cloud Secret Manager REST API.
  *
@@ -64,18 +74,10 @@ private fun getProjectIdFromMetadata(): String? {
     return try {
         runBlocking {
             withTimeoutOrNull(5.seconds) {
-                HttpClient(CIO) {
-                    install(HttpTimeout) {
-                        connectTimeoutMillis = 2000
-                        requestTimeoutMillis = 5000
-                        socketTimeoutMillis = 2000
-                    }
-                }.use { client ->
-                    val response = client.get("http://metadata.google.internal/computeMetadata/v1/project/project-id") {
-                        header("Metadata-Flavor", "Google")
-                    }
-                    response.bodyAsText().trim().takeIf { it.isNotBlank() }
+                val response = sharedClient.get("http://metadata.google.internal/computeMetadata/v1/project/project-id") {
+                    header("Metadata-Flavor", "Google")
                 }
+                response.bodyAsText().trim().takeIf { it.isNotBlank() }
             }
         }
     } catch (e: Exception) {
@@ -93,65 +95,34 @@ private fun fetchSecretFromRestApi(projectId: String, secretName: String): Strin
         runBlocking {
             // Wrap entire operation in timeout
             withTimeoutOrNull(10.seconds) {
-                HttpClient(CIO) {
-                    install(HttpTimeout) {
-                        connectTimeoutMillis = 5000
-                        requestTimeoutMillis = 10000
-                        socketTimeoutMillis = 5000
-                    }
-                }.use { client ->
-                    logger.debug("Fetching token from metadata server for secret: {}", secretName)
-                    // Get access token from the Cloud Run metadata server
-                    val tokenResponse = client.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token") {
-                        header("Metadata-Flavor", "Google")
-                    }
-                    val tokenJson = tokenResponse.bodyAsText()
-                    // Simple parse — token is in {"access_token":"...","expires_in":...,"token_type":"Bearer"}
-                    val accessToken = tokenJson
-                        .substringAfter("\"access_token\":\"")
-                        .substringBefore("\"")
-
-                    if (accessToken.isBlank()) {
-                        logger.error("Failed to extract access token from metadata server response: {}", tokenJson)
-                        return@withTimeoutOrNull null
-                    }
-
-                    logger.debug("Successfully obtained access token, fetching secret from: {}", secretName)
-
-                    // Call Secret Manager REST API
-                    val secretUrl = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
-                    logger.debug("Calling Secret Manager API at: {}", secretUrl)
-
-                    val secretResponse = client.get(secretUrl) {
-                        header("Authorization", "Bearer $accessToken")
-                    }
-
-                    val statusCode = secretResponse.status.value
-                    val secretJson = secretResponse.bodyAsText()
-
-                    if (statusCode != 200) {
-                        logger.error("Secret Manager API returned status {}: {}", statusCode, secretJson)
-                        return@withTimeoutOrNull null
-                    }
-
-                    // Parse JSON response: {"payload":{"data":"BASE64..."}}
-                    try {
-                        val jsonResponse = Json.parseToJsonElement(secretJson).jsonObject
-                        val payloadObj = jsonResponse["payload"]?.jsonObject
-                        val base64Data = payloadObj?.get("data")?.jsonPrimitive?.content
-
-                        if (base64Data.isNullOrBlank()) {
-                            logger.error("Failed to extract base64 data from Secret Manager response: {}", secretJson)
-                            return@withTimeoutOrNull null
-                        }
-
-                        logger.debug("Successfully extracted base64 data for secret: {}", secretName)
-                        java.util.Base64.getDecoder().decode(base64Data).toString(Charsets.UTF_8)
-                    } catch (e: Exception) {
-                        logger.error("Failed to parse Secret Manager JSON response for {}: {}", secretName, secretJson)
-                        throw e
-                    }
+                logger.debug("Fetching token from metadata server for secret: {}", secretName)
+                // Get access token from the Cloud Run metadata server
+                val tokenResponse = sharedClient.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token") {
+                    header("Metadata-Flavor", "Google")
                 }
+                val tokenJson = tokenResponse.bodyAsText()
+                val accessToken = tokenJson
+                    .substringAfter("\"access_token\":\"")
+                    .substringBefore("\"")
+
+                if (accessToken.isBlank()) {
+                    logger.error("Failed to extract access token from metadata server response: {}", tokenJson)
+                    return@withTimeoutOrNull null
+                }
+
+                // Call Secret Manager REST API
+                val secretUrl = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
+                val secretResponse = sharedClient.get(secretUrl) {
+                    header("Authorization", "Bearer $accessToken")
+                }
+
+                val secretJson = secretResponse.bodyAsText()
+                if (secretResponse.status.value != 200) return@withTimeoutOrNull null
+
+                val jsonResponse = Json.parseToJsonElement(secretJson).jsonObject
+                val base64Data = jsonResponse["payload"]?.jsonObject?.get("data")?.jsonPrimitive?.content
+                
+                base64Data?.let { java.util.Base64.getDecoder().decode(it).toString(Charsets.UTF_8) }
             } ?: run {
                 logger.warn("Secret Manager request timed out for {}", secretName)
                 null
