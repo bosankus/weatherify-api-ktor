@@ -23,6 +23,8 @@ request parameters, response formats, and authentication requirements.
 - [Payment Endpoints](#payment-endpoints)
     - [Create Order](#create-order)
     - [Verify and Store Payment](#verify-and-store-payment)
+- [Service Catalog Endpoints](#service-catalog-endpoints)
+    - [List Public Services](#list-public-services)
 - [Admin User Endpoints](#admin-user-endpoints)
     - [Update Premium Status](#update-premium-status)
 - [Weather Endpoints](#weather-endpoints)
@@ -357,6 +359,34 @@ activates premium for the user with a computed expiry date.
       tier, computes `premiumExpiresAt = verifiedAt + tier.duration`, and updates the user's
       `isPremium` to `true` with the computed expiry.
     - A payment confirmation email and push notification are sent in the background.
+
+## Service Catalog Endpoints
+
+### List Public Services
+
+Returns active services (pricing, features, limits) for end-user clients (e.g. KMP app)
+to render the catalog before initiating a subscription payment. No authentication required.
+
+- **URL**: `/services/public`
+- **Method**: `GET`
+- **Authentication**: None
+- **Query Parameters**:
+    - `page` (optional, default `1`) — page number, must be ≥ 1
+    - `pageSize` (optional, default `20`) — between 1 and 100
+    - `search` (optional) — substring match on `serviceCode` or `displayName`
+
+- **Response**:
+    - **Success (200 OK)**: `data` is a `ServiceListResponse` (paginated list of services).
+      Status is forced to `ACTIVE` server-side, so `INACTIVE`/`ARCHIVED` services are
+      never returned by this endpoint.
+    - **Error (400 Bad Request)**: Invalid `page` or `pageSize`
+    - **Error (500 Internal Server Error)**: Underlying service failure
+
+- **Notes**:
+    - This is the only public service-catalog endpoint. Create / update / clone /
+      get-by-id / analytics all remain admin-only under `/services/*`.
+    - Implemented in `ServiceCatalogRoute.kt` by calling
+      `serviceCatalogService.listServices(page, pageSize, ServiceStatus.ACTIVE, searchQuery)`.
 
 ## Admin User Endpoints
 

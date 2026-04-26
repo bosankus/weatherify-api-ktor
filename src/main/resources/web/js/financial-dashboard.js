@@ -256,6 +256,36 @@
     }
 
     /**
+     * Bind a single delegated click listener on the payments tbody so action
+     * buttons keep working after async refund-status re-renders rebuild rows.
+     */
+    function ensurePaymentTableDelegation(tbody) {
+        if (!tbody || tbody._delegationBound) return;
+        tbody._delegationBound = true;
+        tbody.addEventListener('click', function(e) {
+            var btn = e.target && e.target.closest ? e.target.closest('button[data-action]') : null;
+            if (!btn || !tbody.contains(btn)) return;
+            var action = btn.getAttribute('data-action');
+            var txn = btn.getAttribute('data-txn') || '';
+            if (!txn) {
+                var rowEl = btn.closest('tr');
+                if (rowEl && rowEl.dataset && rowEl.dataset.txn) txn = rowEl.dataset.txn;
+            }
+            var payment = (tbody._paymentMap || {})[txn];
+            if (!payment) return;
+            if (action === 'details' && typeof showPaymentDetailsModal === 'function') {
+                showPaymentDetailsModal(payment);
+            } else if (action === 'refund' && typeof showRefundModal === 'function') {
+                payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
+                showRefundModal(payment);
+            } else if (action === 'view-refund' && typeof loadAndShowRefundDetails === 'function') {
+                var paymentId = payment.razorpayPaymentId || payment.transactionId;
+                if (paymentId) loadAndShowRefundDetails(paymentId);
+            }
+        });
+    }
+
+    /**
      * Render payment history table
      */
     function renderPaymentHistory(payments) {
@@ -266,6 +296,16 @@
             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2.5rem;color:var(--text-secondary);">No payments found</td></tr>';
             return;
         }
+
+        // Store payments by transactionId so delegated clicks can resolve them
+        // even after async refund-status re-renders rebuild the row's actions cell.
+        var paymentMap = {};
+        payments.forEach(function(p) {
+            var key = p.transactionId || p.razorpayPaymentId || '';
+            if (key) paymentMap[key] = p;
+        });
+        tbody._paymentMap = paymentMap;
+        ensurePaymentTableDelegation(tbody);
 
         var fragment = document.createDocumentFragment();
 
@@ -305,21 +345,12 @@
 
             var actionsCell = document.createElement('td');
             actionsCell.className = 'payment-actions';
-            // Create initial Details button with direct event listener (no data-txn lookup needed)
-            var initialGroup = document.createElement('div');
-            initialGroup.className = 'payment-actions-group';
-            var initialBtn = document.createElement('button');
-            initialBtn.className = 'btn-details btn-sm';
-            initialBtn.textContent = 'Details';
-            (function(p) {
-                initialBtn.addEventListener('click', function() {
-                    if (typeof showPaymentDetailsModal === 'function') {
-                        showPaymentDetailsModal(p);
-                    }
-                });
-            })(payment);
-            initialGroup.appendChild(initialBtn);
-            actionsCell.appendChild(initialGroup);
+            var txnKey = payment.transactionId || payment.razorpayPaymentId || '';
+            if (txnKey) row.dataset.txn = txnKey;
+            // Initial Details button — clicks resolved via tbody-level delegation
+            actionsCell.innerHTML = '<div class="payment-actions-group">' +
+                '<button type="button" class="btn-details btn-sm" data-action="details" data-txn="' + escapeHtml(txnKey) + '">Details</button>' +
+                '</div>';
             row.appendChild(actionsCell);
 
             fragment.appendChild(row);

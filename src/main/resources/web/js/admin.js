@@ -578,6 +578,23 @@ function buildToolResultHtml(data, type) {
  */
 function showToolResult(title, data, type, options = {}) {
     const html = buildToolResultHtml(data, type);
+
+    // Use the same dialog component as the JWT Token Inspector for visual consistency.
+    if (typeof window.createUserActionDialog === 'function') {
+        const dialog = window.createUserActionDialog({
+            title: title || 'Tool Result',
+            subtitle: options.subtitle || '',
+            bodyHtml: html,
+            infoOnly: true,
+            closeText: 'Close'
+        });
+        if (dialog && dialog.container) {
+            dialog.container.classList.add('tool-result-dialog');
+        }
+        return;
+    }
+
+    // Fallback: legacy modal if dialog component is unavailable
     showModal(title, html, {
         size: options.size || 'large',
         subtitle: options.subtitle || ''

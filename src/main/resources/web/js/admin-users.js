@@ -1563,6 +1563,11 @@
         dialog.id = 'user-action-dialog';
         dialog.className = 'user-action-dialog';
 
+        const footerHtml = options.infoOnly
+            ? `<button type="button" class="user-action-btn secondary" data-action="cancel">${options.closeText || 'Close'}</button>`
+            : `<button type="button" class="user-action-btn secondary" data-action="cancel">${options.cancelText || 'Cancel'}</button>
+               <button type="button" class="user-action-btn ${options.confirmVariant || 'primary'}" data-action="confirm">${options.confirmText || 'Confirm'}</button>`;
+
         dialog.innerHTML = `
             <div class="user-action-header">
                 <div>
@@ -1575,8 +1580,7 @@
                 ${options.bodyHtml || ''}
             </div>
             <div class="user-action-footer">
-                <button type="button" class="user-action-btn secondary" data-action="cancel">Cancel</button>
-                <button type="button" class="user-action-btn ${options.confirmVariant || 'primary'}" data-action="confirm">${options.confirmText || 'Confirm'}</button>
+                ${footerHtml}
             </div>
         `;
 

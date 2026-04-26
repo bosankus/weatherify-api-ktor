@@ -92,6 +92,48 @@ fun Route.serviceCatalogRoute() {
             }
         }
 
+        // GET /services/public - Public listing of ACTIVE services for end-user clients (e.g. KMP app).
+        // No admin auth; status is forced to ACTIVE so inactive/archived services are never exposed.
+        get("/public") {
+            val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
+            val pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 20
+            val searchQuery = call.request.queryParameters["search"]
+
+            if (page < 1) {
+                call.respondError(
+                    message = "Page number must be greater than 0",
+                    data = Unit,
+                    status = HttpStatusCode.BadRequest
+                )
+                return@get
+            }
+
+            if (pageSize < 1 || pageSize > 100) {
+                call.respondError(
+                    message = "Page size must be between 1 and 100",
+                    data = Unit,
+                    status = HttpStatusCode.BadRequest
+                )
+                return@get
+            }
+
+            when (val result = serviceCatalogService.listServices(page, pageSize, ServiceStatus.ACTIVE, searchQuery)) {
+                is Result.Success -> {
+                    serviceCatalogLogger.info("Public services listed: ${result.data.totalCount} total")
+                    call.respondSuccess(
+                        message = "Services retrieved successfully",
+                        data = result.data,
+                        status = HttpStatusCode.OK
+                    )
+                }
+
+                is Result.Error -> {
+                    serviceCatalogLogger.warn("Failed to list public services: ${result.message}")
+                    call.respondError(result.message, Unit, HttpStatusCode.InternalServerError)
+                }
+            }
+        }
+
         // POST /services - Create a new service
         post {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@post

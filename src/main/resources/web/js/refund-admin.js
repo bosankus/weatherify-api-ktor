@@ -681,6 +681,9 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
     actionsCell.style.whiteSpace = 'normal';
     actionsCell.style.textAlign = 'center';
 
+    const txnKey = payment.transactionId || payment.razorpayPaymentId || '';
+    if (txnKey && row.dataset) row.dataset.txn = txnKey;
+
     const actionsGroup = document.createElement('div');
     actionsGroup.className = 'payment-actions-group';
     actionsCell.appendChild(actionsGroup);
@@ -708,6 +711,8 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
         const detailsBtn = document.createElement('button');
         detailsBtn.className = 'btn-details btn-sm';
         detailsBtn.textContent = 'Details';
+        detailsBtn.dataset.action = 'details';
+        if (txnKey) detailsBtn.dataset.txn = txnKey;
         detailsBtn.addEventListener('click', () => showPaymentDetailsModal(payment));
         actionsGroup.appendChild(detailsBtn);
         return;
@@ -726,6 +731,8 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
         badge.className = 'btn-details btn-sm';
         badge.textContent = 'View Refund';
         badge.title = 'Click to view refund history';
+        badge.dataset.action = 'view-refund';
+        if (txnKey) badge.dataset.txn = txnKey;
         badge.addEventListener('click', () => {
             const paymentId = payment.razorpayPaymentId || payment.transactionId;
             if (paymentId) {
@@ -750,6 +757,8 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
         viewBtn.className = 'btn-details btn-sm';
         viewBtn.textContent = 'View refund';
         viewBtn.title = 'Click to view refund history';
+        viewBtn.dataset.action = 'view-refund';
+        if (txnKey) viewBtn.dataset.txn = txnKey;
         viewBtn.addEventListener('click', () => {
             const paymentId = payment.razorpayPaymentId || payment.transactionId;
             if (paymentId) {
@@ -763,6 +772,8 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
         const refundBtn = document.createElement('button');
         refundBtn.className = 'btn-refund btn-sm';
         refundBtn.textContent = 'Refund More';
+        refundBtn.dataset.action = 'refund';
+        if (txnKey) refundBtn.dataset.txn = txnKey;
         refundBtn.addEventListener('click', () => {
             // Update payment object with refund data
             payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
@@ -781,12 +792,16 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
             const detailsBtn = document.createElement('button');
             detailsBtn.className = 'btn-details btn-sm';
             detailsBtn.textContent = 'Details';
+            detailsBtn.dataset.action = 'details';
+            if (txnKey) detailsBtn.dataset.txn = txnKey;
             detailsBtn.addEventListener('click', () => showPaymentDetailsModal(payment));
             actionsGroup.appendChild(detailsBtn);
 
             const refundBtn = document.createElement('button');
             refundBtn.className = 'btn-refund btn-sm';
             refundBtn.textContent = 'Refund';
+            refundBtn.dataset.action = 'refund';
+            if (txnKey) refundBtn.dataset.txn = txnKey;
             refundBtn.addEventListener('click', () => {
                 payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
                 showRefundModal(payment);
@@ -797,6 +812,8 @@ function addRefundButtonToPaymentRow(row, payment, refundData) {
             const detailsBtn = document.createElement('button');
             detailsBtn.className = 'btn-details btn-sm';
             detailsBtn.textContent = 'Details';
+            detailsBtn.dataset.action = 'details';
+            if (txnKey) detailsBtn.dataset.txn = txnKey;
             detailsBtn.addEventListener('click', () => showPaymentDetailsModal(payment));
             actionsGroup.appendChild(detailsBtn);
         }

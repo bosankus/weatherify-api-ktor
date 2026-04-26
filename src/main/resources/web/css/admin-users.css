@@ -831,6 +831,17 @@ html.light-theme {
     overflow-y: auto;
 }
 
+/* Reuse the same wider layout for tool result popups (Redis, Health, Warmup) */
+.user-action-dialog.tool-result-dialog {
+    width: min(720px, 95vw);
+    max-height: 90vh;
+}
+
+.user-action-dialog.tool-result-dialog .user-action-body {
+    max-height: calc(90vh - 180px);
+    overflow-y: auto;
+}
+
 /* ============= Loading States ============= */
 
 .skeleton-row td {
