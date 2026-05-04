@@ -1542,7 +1542,7 @@ fun Route.adminAuthRoute() {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
             logger.info("Admin ${admin.email} checking Redis health")
 
-            val redisCache: util.RedisCache by inject()
+            val redisCache: util.RedisCache by application.inject()
 
             val t0 = System.currentTimeMillis()
             try {

@@ -1287,4 +1287,10 @@ const escapeHtml = window.escapeHtml || function (str) {
         .replace(/'/g, '&#039;');
 };
 
+// Explicit window exports — implicit global hoisting from inline scripts is unreliable
+window.showPaymentDetailsModal = showPaymentDetailsModal;
+window.showRefundModal = showRefundModal;
+window.loadAndShowRefundDetails = loadAndShowRefundDetails;
+window.addRefundButtonToPaymentRow = addRefundButtonToPaymentRow;
+
 console.log('Refund admin module loaded');

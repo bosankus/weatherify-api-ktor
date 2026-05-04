@@ -256,8 +256,31 @@
     }
 
     /**
-     * Bind a single delegated click listener on the payments tbody so action
-     * buttons keep working after async refund-status re-renders rebuild rows.
+     * Resolve the global handlers from refund-admin.js. Looked up at call time
+     * so script-load order races can't bake in stale references.
+     */
+    function callDetailsModal(payment) {
+        var fn = window.showPaymentDetailsModal;
+        if (typeof fn === 'function') fn(payment);
+        else console.warn('[FinancialDashboard] showPaymentDetailsModal not loaded');
+    }
+    function callRefundModal(payment) {
+        payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
+        var fn = window.showRefundModal;
+        if (typeof fn === 'function') fn(payment);
+        else console.warn('[FinancialDashboard] showRefundModal not loaded');
+    }
+    function callViewRefund(payment) {
+        var paymentId = payment.razorpayPaymentId || payment.transactionId;
+        if (!paymentId) return;
+        var fn = window.loadAndShowRefundDetails;
+        if (typeof fn === 'function') fn(paymentId);
+        else console.warn('[FinancialDashboard] loadAndShowRefundDetails not loaded');
+    }
+
+    /**
+     * Tbody-level click delegation — survives async re-renders that rebuild
+     * the row's actions cell (e.g. addRefundButtonToPaymentRow).
      */
     function ensurePaymentTableDelegation(tbody) {
         if (!tbody || tbody._delegationBound) return;
@@ -273,15 +296,9 @@
             }
             var payment = (tbody._paymentMap || {})[txn];
             if (!payment) return;
-            if (action === 'details' && typeof showPaymentDetailsModal === 'function') {
-                showPaymentDetailsModal(payment);
-            } else if (action === 'refund' && typeof showRefundModal === 'function') {
-                payment.razorpayPaymentId = payment.razorpayPaymentId || payment.transactionId;
-                showRefundModal(payment);
-            } else if (action === 'view-refund' && typeof loadAndShowRefundDetails === 'function') {
-                var paymentId = payment.razorpayPaymentId || payment.transactionId;
-                if (paymentId) loadAndShowRefundDetails(paymentId);
-            }
+            if (action === 'details') callDetailsModal(payment);
+            else if (action === 'refund') callRefundModal(payment);
+            else if (action === 'view-refund') callViewRefund(payment);
         });
     }
 
@@ -347,10 +364,21 @@
             actionsCell.className = 'payment-actions';
             var txnKey = payment.transactionId || payment.razorpayPaymentId || '';
             if (txnKey) row.dataset.txn = txnKey;
-            // Initial Details button — clicks resolved via tbody-level delegation
-            actionsCell.innerHTML = '<div class="payment-actions-group">' +
-                '<button type="button" class="btn-details btn-sm" data-action="details" data-txn="' + escapeHtml(txnKey) + '">Details</button>' +
-                '</div>';
+            // Initial Details button — direct listener AND data-action attrs so
+            // either path fires the modal (delegation is a safety net).
+            var actionsGroup = document.createElement('div');
+            actionsGroup.className = 'payment-actions-group';
+            var detailsBtn = document.createElement('button');
+            detailsBtn.type = 'button';
+            detailsBtn.className = 'btn-details btn-sm';
+            detailsBtn.textContent = 'Details';
+            detailsBtn.dataset.action = 'details';
+            if (txnKey) detailsBtn.dataset.txn = txnKey;
+            (function(p) {
+                detailsBtn.addEventListener('click', function() { callDetailsModal(p); });
+            })(payment);
+            actionsGroup.appendChild(detailsBtn);
+            actionsCell.appendChild(actionsGroup);
             row.appendChild(actionsCell);
 
             fragment.appendChild(row);

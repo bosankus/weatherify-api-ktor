@@ -4447,6 +4447,7 @@ function showFinancePanel(title, content, options = {}) {
 
     window.closeFinancePanel = closePanel;
 }
+window.showFinancePanel = showFinancePanel;
 // ===== End Finance Sliding Panel =====
 
 function getFinancePanelLoadingContent(message) {

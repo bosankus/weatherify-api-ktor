@@ -1,6 +1,8 @@
 package bose.ankush.base
 
+import bose.ankush.data.model.FlexibleObjectIdSerializer
 import bose.ankush.data.model.UnitSerializer
+import org.bson.types.ObjectId
 import bose.ankush.route.common.respondError
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -48,6 +50,7 @@ fun Application.configureHTTP() {
     // Create a serializers module with the UnitSerializer
     val module = SerializersModule {
         contextual(Unit::class, UnitSerializer)
+        contextual(ObjectId::class, FlexibleObjectIdSerializer)
     }
 
     // Check if we're in development mode
