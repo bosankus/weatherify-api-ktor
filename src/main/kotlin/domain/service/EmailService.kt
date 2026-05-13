@@ -1,6 +1,6 @@
 package domain.service
 
-import domain.model.Result
+import com.androidplay.core.common.Result
 
 /**
  * Service for sending email notifications to users

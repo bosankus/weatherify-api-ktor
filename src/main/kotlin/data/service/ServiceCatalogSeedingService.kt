@@ -1,8 +1,8 @@
 package data.service
 
-import bose.ankush.data.model.*
-import domain.model.Result
-import domain.repository.ServiceCatalogRepository
+import com.androidplay.weatherify.domain.*
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.ServiceCatalogRepository
 import org.slf4j.LoggerFactory
 import java.time.Instant
 

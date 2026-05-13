@@ -2,8 +2,8 @@ package domain.service.impl
 
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
-import domain.model.Result
-import domain.repository.UserRepository
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.UserRepository
 import domain.service.AuthService
 import util.Constants
 import java.util.regex.Pattern

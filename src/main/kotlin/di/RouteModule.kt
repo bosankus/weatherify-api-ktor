@@ -4,12 +4,7 @@ import bose.ankush.route.common.*
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
-/**
- * Provides ordered route registrars so features can register routes decoupled from the central router.
- * The order preserves existing behavior.
- */
 val routeModule = module {
-    // Bind each registrar with a qualifier
     single<RouteRegistrar>(named("weather")) { WeatherRoutesRegistrar }
     single<RouteRegistrar>(named("feedback")) { FeedbackRoutesRegistrar }
     single<RouteRegistrar>(named("auth")) { AuthRoutesRegistrar }
@@ -26,7 +21,6 @@ val routeModule = module {
     single<RouteRegistrar>(named("locations")) { SavedLocationRoutesRegistrar }
     single<RouteRegistrar>(named("notes")) { NoteRoutesRegistrar }
 
-    // Provide ordered list
     single<List<RouteRegistrar>> {
         listOf(
             get(named("weather")),

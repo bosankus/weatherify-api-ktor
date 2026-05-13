@@ -1,0 +1,23 @@
+# Build outputs
+build/
+out/
+
+# Gradle
+.gradle/
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Node / frontend
+node_modules/
+
+# Keys & secrets
+server.pem
+*.pem
+*.key
+serviceAccountKey.json
+
+# Gemini
+.gemini/

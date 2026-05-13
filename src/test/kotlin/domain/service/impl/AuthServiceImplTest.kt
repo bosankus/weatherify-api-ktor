@@ -1,6 +1,7 @@
 package domain.service.impl
 
-import domain.repository.UserRepository
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.UserRepository
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -12,17 +13,17 @@ class AuthServiceImplTest {
         override suspend fun findUserByEmail(email: String) =
             throw NotImplementedError("Not needed for these tests")
 
-        override suspend fun createUser(user: bose.ankush.data.model.User) =
+        override suspend fun createUser(user: com.androidplay.weatherify.domain.User) =
             throw NotImplementedError("Not needed for these tests")
 
-        override suspend fun updateUser(user: bose.ankush.data.model.User) =
+        override suspend fun updateUser(user: com.androidplay.weatherify.domain.User) =
             throw NotImplementedError("Not needed for these tests")
 
-        override suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): domain.model.Result<Boolean> =
-            domain.model.Result.Success(true)
+        override suspend fun updateFcmTokenByEmail(email: String, fcmToken: String): Result<Boolean> =
+            com.androidplay.core.common.Result.Success(true)
 
-        override suspend fun clearFcmTokenByEmail(email: String): domain.model.Result<Boolean> =
-            domain.model.Result.Success(true)
+        override suspend fun clearFcmTokenByEmail(email: String): Result<Boolean> =
+            com.androidplay.core.common.Result.Success(true)
 
         override suspend fun getAllUsers(
             filter: Map<String, Any>?,
@@ -30,11 +31,11 @@ class AuthServiceImplTest {
             sortOrder: Int?,
             page: Int?,
             pageSize: Int?
-        ): domain.model.Result<Pair<List<bose.ankush.data.model.User>, Long>> =
+        ): Result<Pair<List<com.androidplay.weatherify.domain.User>, Long>> =
             throw NotImplementedError("Not needed for these tests")
 
-        override suspend fun deleteUserByEmail(email: String): domain.model.Result<Boolean> =
-            domain.model.Result.Success(true)
+        override suspend fun deleteUserByEmail(email: String): Result<Boolean> =
+            com.androidplay.core.common.Result.Success(true)
     }
 
     // Create an instance of AuthServiceImpl with the mock repository

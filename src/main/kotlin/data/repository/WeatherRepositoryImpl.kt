@@ -3,7 +3,7 @@ package data.repository
 import bose.ankush.data.model.AirQuality
 import bose.ankush.data.model.Weather
 import data.source.WeatherApiClient
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.repository.WeatherRepository
 
 /**

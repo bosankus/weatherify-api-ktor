@@ -1,6 +1,6 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.*
+import com.androidplay.weatherify.domain.*
 import bose.ankush.module
 import config.JwtConfig
 import io.ktor.client.request.*

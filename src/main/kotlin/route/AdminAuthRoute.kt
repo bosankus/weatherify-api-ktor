@@ -1,15 +1,15 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.BillType
-import bose.ankush.data.model.PaymentBillRequest
-import bose.ankush.data.model.UserRole
+import com.androidplay.weatherify.domain.BillType
+import com.androidplay.weatherify.domain.PaymentBillRequest
+import com.androidplay.weatherify.domain.UserRole
 import bose.ankush.route.common.WebResources
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.WeatherCache
 import config.Environment
 import config.JwtConfig
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.service.AuthService
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -676,7 +676,7 @@ private suspend fun serveLoginPage(
 fun Route.adminAuthRoute() {
 
     val authService: AuthService by application.inject()
-    val databaseModule: data.source.DatabaseModule by application.inject()
+    val databaseModule: com.androidplay.weatherify.db.WeatherifyDb by application.inject()
     val logger = LoggerFactory.getLogger("AdminAuthRoute")
     val pageName = "Admin Authentication - Androidplay Weather API"
 
@@ -1116,7 +1116,7 @@ fun Route.adminAuthRoute() {
                     }
 
                     // Validate email format
-                    if (!util.ValidationUtils.isValidEmail(userEmail)) {
+                    if (!com.androidplay.weatherify.util.ValidationUtils.isValidEmail(userEmail)) {
                         call.respondError(
                             "Invalid email format",
                             Unit,
@@ -1165,7 +1165,7 @@ fun Route.adminAuthRoute() {
 
                 var targetUserEmail = "unknown"
                 try {
-                    val request = call.receive<bose.ankush.data.model.BillGenerationRequest>()
+                    val request = call.receive<com.androidplay.weatherify.domain.BillGenerationRequest>()
                     targetUserEmail = request.userEmail
 
                     // Validate request
@@ -1179,7 +1179,7 @@ fun Route.adminAuthRoute() {
                     }
 
                     // Validate email format using ValidationUtils
-                    if (!util.ValidationUtils.isValidEmail(request.userEmail)) {
+                    if (!com.androidplay.weatherify.util.ValidationUtils.isValidEmail(request.userEmail)) {
                         call.respondError(
                             "Invalid email format. Please provide a valid email address",
                             Unit,
@@ -1415,7 +1415,7 @@ fun Route.adminAuthRoute() {
                 }
             }
 
-            val data = bose.ankush.data.model.HealthCheckResult(
+            val data = com.androidplay.weatherify.domain.HealthCheckResult(
                 weatherUrl = baseWeatherUrl,
                 probeWeatherUrl = probeWeatherUrl,
                 weatherOk = weatherOk,
@@ -1459,7 +1459,7 @@ fun Route.adminAuthRoute() {
             val airUrl = WeatherCache.getAirPollutionUrl()
             val apiKey = WeatherCache.getApiKey()
 
-            val results = mutableListOf<bose.ankush.data.model.WarmupCityResult>()
+            val results = mutableListOf<com.androidplay.weatherify.domain.WarmupCityResult>()
             var overallOk = true
 
             for (city in targets) {
@@ -1513,7 +1513,7 @@ fun Route.adminAuthRoute() {
 
                 overallOk = overallOk && weatherOk && airOk
 
-                results += bose.ankush.data.model.WarmupCityResult(
+                results += com.androidplay.weatherify.domain.WarmupCityResult(
                     name = city.name,
                     lat = city.lat,
                     lon = city.lon,
@@ -1528,7 +1528,7 @@ fun Route.adminAuthRoute() {
                 )
             }
 
-            val payload = bose.ankush.data.model.WarmupResult(
+            val payload = com.androidplay.weatherify.domain.WarmupResult(
                 ok = overallOk,
                 timestamp = System.currentTimeMillis(),
                 results = results
@@ -1542,7 +1542,7 @@ fun Route.adminAuthRoute() {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@post
             logger.info("Admin ${admin.email} checking Redis health")
 
-            val redisCache: util.RedisCache by application.inject()
+            val redisCache: com.androidplay.core.cache.CacheRepository by application.inject()
 
             val t0 = System.currentTimeMillis()
             try {

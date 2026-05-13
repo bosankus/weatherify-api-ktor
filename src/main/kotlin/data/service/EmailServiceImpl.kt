@@ -1,7 +1,7 @@
 package data.service
 
-import bose.ankush.util.getSecretValue
-import domain.model.Result
+import com.androidplay.core.secrets.getSecretValue
+import com.androidplay.core.common.Result
 import domain.service.EmailService
 import io.ktor.client.*
 import io.ktor.client.request.*

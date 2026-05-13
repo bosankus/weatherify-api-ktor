@@ -1,9 +1,9 @@
 package domain.service.impl
 
-import bose.ankush.data.model.*
-import domain.model.Result
-import domain.repository.ServiceCatalogRepository
-import domain.repository.PaymentRepository
+import com.androidplay.weatherify.domain.*
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.ServiceCatalogRepository
+import com.androidplay.weatherify.repository.PaymentRepository
 import domain.service.ServiceCatalogService
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -208,19 +208,22 @@ class ServiceCatalogServiceImpl(
 
             val summaries = services.map { service ->
                 val totalPurchases = paymentCountsByService[service.serviceCode]?.toLong() ?: 0L
+                val tiers = service.pricingTiers ?: emptyList()
+                val desc = service.description ?: ""
+                val feats = service.features ?: emptyList()
 
                 // Find lowest price from pricing tiers
-                val lowestPrice = service.pricingTiers.minOfOrNull { it.amount } ?: 0
-                val currency = service.pricingTiers.firstOrNull()?.currency ?: "INR"
+                val lowestPrice = tiers.minOfOrNull { it.amount } ?: 0
+                val currency = tiers.firstOrNull()?.currency ?: "INR"
 
                 ServiceSummary(
                     id = service.id,
                     serviceCode = service.serviceCode,
                     displayName = service.displayName,
-                    description = service.description,
-                    pricingTiers = service.pricingTiers,
-                    features = service.features,
-                    limits = service.limits,
+                    description = desc,
+                    pricingTiers = tiers,
+                    features = feats,
+                    limits = service.limits ?: emptyMap(),
                     status = service.status,
                     availabilityStart = service.availabilityStart,
                     availabilityEnd = service.availabilityEnd,
@@ -269,79 +272,94 @@ class ServiceCatalogServiceImpl(
                 return Result.error("Service not found: $id")
             }
 
+            val existingPricingTiers = existingService.pricingTiers ?: emptyList()
+            val existingFeatures = existingService.features ?: emptyList()
+            val existingLimits = existingService.limits ?: emptyMap()
+            val existingDescription = existingService.description ?: ""
+
+            // Extract nullable request fields to local vars to avoid cross-module smart cast failures
+            val reqPricingTiers = request.pricingTiers
+            val reqFeatures = request.features
+            val reqDescription = request.description
+            val reqDisplayName = request.displayName
+            val reqLimits = request.limits
+            val reqAvailabilityStart = request.availabilityStart
+            val reqAvailabilityEnd = request.availabilityEnd
+
             // 2. Validate update request
-            if (request.pricingTiers != null && request.pricingTiers.isEmpty()) {
+            if (reqPricingTiers != null && reqPricingTiers.isEmpty()) {
                 return Result.error("Service must have at least one pricing tier")
             }
 
-            if (request.features != null) {
-                for (feature in request.features) {
+            if (reqFeatures != null) {
+                for (feature in reqFeatures) {
                     if (feature.description.length > MAX_FEATURE_DESCRIPTION_LENGTH) {
                         return Result.error("Feature description must not exceed $MAX_FEATURE_DESCRIPTION_LENGTH characters")
                     }
                 }
             }
 
-            if (request.description != null && request.description.length > MAX_DESCRIPTION_LENGTH) {
+            if (reqDescription != null && reqDescription.length > MAX_DESCRIPTION_LENGTH) {
                 return Result.error("Service description must not exceed $MAX_DESCRIPTION_LENGTH characters")
             }
 
             // 3. Create diff of changes for history
             val changes = mutableMapOf<String, ChangeDetail>()
+            val existingDisplayName = existingService.displayName
 
-            if (request.displayName != null && request.displayName != existingService.displayName) {
+            if (reqDisplayName != null && reqDisplayName != existingDisplayName) {
                 changes["displayName"] = ChangeDetail(
                     field = "displayName",
-                    oldValue = existingService.displayName,
-                    newValue = request.displayName
+                    oldValue = existingDisplayName,
+                    newValue = reqDisplayName
                 )
             }
 
-            if (request.description != null && request.description != existingService.description) {
+            if (reqDescription != null && reqDescription != existingDescription) {
                 changes["description"] = ChangeDetail(
                     field = "description",
-                    oldValue = existingService.description,
-                    newValue = request.description
+                    oldValue = existingDescription,
+                    newValue = reqDescription
                 )
             }
 
-            if (request.pricingTiers != null && request.pricingTiers != existingService.pricingTiers) {
+            if (reqPricingTiers != null && reqPricingTiers != existingPricingTiers) {
                 changes["pricingTiers"] = ChangeDetail(
                     field = "pricingTiers",
-                    oldValue = "${existingService.pricingTiers.size} tiers",
-                    newValue = "${request.pricingTiers.size} tiers"
+                    oldValue = "${existingPricingTiers.size} tiers",
+                    newValue = "${reqPricingTiers!!.size} tiers"
                 )
             }
 
-            if (request.features != null && request.features != existingService.features) {
+            if (reqFeatures != null && reqFeatures != existingFeatures) {
                 changes["features"] = ChangeDetail(
                     field = "features",
-                    oldValue = "${existingService.features.size} features",
-                    newValue = "${request.features.size} features"
+                    oldValue = "${existingFeatures.size} features",
+                    newValue = "${reqFeatures!!.size} features"
                 )
             }
 
-            if (request.limits != null && request.limits != existingService.limits) {
+            if (reqLimits != null && reqLimits != existingLimits) {
                 changes["limits"] = ChangeDetail(
                     field = "limits",
-                    oldValue = "${existingService.limits.size} limits",
-                    newValue = "${request.limits.size} limits"
+                    oldValue = "${existingLimits.size} limits",
+                    newValue = "${reqLimits!!.size} limits"
                 )
             }
 
-            if (request.availabilityStart != null && request.availabilityStart != existingService.availabilityStart) {
+            if (reqAvailabilityStart != null && reqAvailabilityStart != existingService.availabilityStart) {
                 changes["availabilityStart"] = ChangeDetail(
                     field = "availabilityStart",
                     oldValue = existingService.availabilityStart,
-                    newValue = request.availabilityStart
+                    newValue = reqAvailabilityStart
                 )
             }
 
-            if (request.availabilityEnd != null && request.availabilityEnd != existingService.availabilityEnd) {
+            if (reqAvailabilityEnd != null && reqAvailabilityEnd != existingService.availabilityEnd) {
                 changes["availabilityEnd"] = ChangeDetail(
                     field = "availabilityEnd",
                     oldValue = existingService.availabilityEnd,
-                    newValue = request.availabilityEnd
+                    newValue = reqAvailabilityEnd
                 )
             }
 
@@ -350,11 +368,11 @@ class ServiceCatalogServiceImpl(
             val updatedService = existingService.copy(
                 displayName = request.displayName ?: existingService.displayName,
                 description = request.description ?: existingService.description,
-                pricingTiers = request.pricingTiers ?: existingService.pricingTiers,
-                features = request.features ?: existingService.features,
-                limits = if (request.limits != null) request.limits else existingService.limits,
-                availabilityStart = if (request.availabilityStart != null) request.availabilityStart else existingService.availabilityStart,
-                availabilityEnd = if (request.availabilityEnd != null) request.availabilityEnd else existingService.availabilityEnd,
+                pricingTiers = reqPricingTiers ?: existingPricingTiers,
+                features = reqFeatures ?: existingFeatures,
+                limits = reqLimits ?: existingLimits,
+                availabilityStart = reqAvailabilityStart ?: existingService.availabilityStart,
+                availabilityEnd = reqAvailabilityEnd ?: existingService.availabilityEnd,
                 updatedAt = now,
                 updatedBy = adminEmail
             )

@@ -11,6 +11,11 @@ COPY gradle.properties .
 COPY gradlew .
 COPY gradlew.bat .
 
+# Copy submodule build files before dependency download so Gradle can resolve all projects
+COPY core/build.gradle.kts core/build.gradle.kts
+COPY weatherify/build.gradle.kts weatherify/build.gradle.kts
+COPY transloom/build.gradle.kts transloom/build.gradle.kts
+
 # Make gradlew executable
 RUN chmod +x gradlew
 
@@ -18,8 +23,11 @@ RUN chmod +x gradlew
 RUN ./gradlew --version && \
     ./gradlew dependencies --no-daemon || echo "Warning: Dependency check had issues but continuing..."
 
-# Copy source code (this layer changes frequently)
+# Copy all source code (this layer changes frequently)
 COPY src/ src/
+COPY core/src/ core/src/
+COPY weatherify/src/ weatherify/src/
+COPY transloom/src/ transloom/src/
 
 # Build the application using the gradle wrapper
 RUN echo "================================" && \
@@ -51,7 +59,6 @@ WORKDIR /app
 COPY --from=builder /app/build/libs/weatherify-api-all.jar ./app.jar
 
 # Set environment variables
-ENV GCP_PROJECT_ID="1017382896100"
 ENV DB_NAME="weatherify-app-db"
 ENV WEATHER_URL="https://api.openweathermap.org/data/3.0/onecall"
 ENV AIR_POLLUTION_URL="https://api.openweathermap.org/data/2.5/air_pollution"

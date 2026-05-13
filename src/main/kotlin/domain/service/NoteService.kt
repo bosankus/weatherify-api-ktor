@@ -1,8 +1,8 @@
 package domain.service
 
-import bose.ankush.data.model.Note
-import domain.model.Result
-import domain.repository.NoteRepository
+import com.androidplay.weatherify.domain.Note
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.NoteRepository
 
 /**
  * Service class for managing admin notes.

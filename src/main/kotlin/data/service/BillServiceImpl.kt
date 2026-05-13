@@ -1,6 +1,6 @@
 package data.service
 
-import bose.ankush.data.model.*
+import com.androidplay.weatherify.domain.*
 import com.itextpdf.barcodes.BarcodeQRCode
 import com.itextpdf.kernel.colors.ColorConstants
 import com.itextpdf.kernel.pdf.PdfDocument
@@ -13,9 +13,9 @@ import com.itextpdf.layout.element.Table
 import com.itextpdf.layout.properties.HorizontalAlignment
 import com.itextpdf.layout.properties.TextAlignment
 import com.itextpdf.layout.properties.UnitValue
-import domain.model.Result
-import domain.repository.PaymentRepository
-import domain.repository.UserRepository
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.PaymentRepository
+import com.androidplay.weatherify.repository.UserRepository
 import domain.service.BillService
 import domain.service.EmailService
 import domain.service.RefundService
@@ -195,9 +195,7 @@ class BillServiceImpl(
      * @return Unique invoice number string
      */
     private fun generateInvoiceNumber(): String {
-        val timestamp = System.currentTimeMillis()
-        val random = Random().nextInt(1000)
-        return "INV-${timestamp}-${random}"
+        return "INV-${java.util.UUID.randomUUID().toString().replace("-", "").take(16).uppercase()}"
     }
 
     /**
@@ -253,7 +251,7 @@ class BillServiceImpl(
             // Calculate invoice and due dates
             val now = Instant.now()
             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-                .withZone(ZoneId.systemDefault())
+                .withZone(ZoneId.of("UTC"))
             val invoiceDate = formatter.format(now)
             val dueDate = formatter.format(now.plusSeconds(30L * 24 * 60 * 60)) // 30 days from now
 
@@ -630,7 +628,7 @@ class BillServiceImpl(
         return try {
             val instant = Instant.parse(dateString)
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-                .withZone(ZoneId.systemDefault())
+                .withZone(ZoneId.of("UTC"))
                 .format(instant)
         } catch (_: Exception) {
             dateString
@@ -675,7 +673,7 @@ class BillServiceImpl(
         return try {
             val instant = Instant.parse(dateString)
             val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy")
-                .withZone(ZoneId.systemDefault())
+                .withZone(ZoneId.of("UTC"))
             formatter.format(instant)
         } catch (_: Exception) {
             // Return original string if parsing fails

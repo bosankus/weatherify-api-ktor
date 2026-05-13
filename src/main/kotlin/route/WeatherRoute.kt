@@ -2,7 +2,7 @@ package bose.ankush.route
 
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.service.WeatherAggregatorService
 import io.ktor.http.*
 import io.ktor.server.application.*

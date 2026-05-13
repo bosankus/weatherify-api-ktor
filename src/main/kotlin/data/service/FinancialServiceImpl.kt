@@ -1,9 +1,9 @@
 package data.service
 
-import bose.ankush.data.model.*
-import domain.model.Result
-import domain.repository.PaymentRepository
-import domain.repository.UserRepository
+import com.androidplay.weatherify.domain.*
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.PaymentRepository
+import com.androidplay.weatherify.repository.UserRepository
 import domain.service.FinancialService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -29,9 +29,9 @@ class FinancialServiceImpl(
         logger.debug("Calculating financial metrics using database aggregations")
         return try {
             val now = Instant.now()
-            val currentMonth = YearMonth.from(now.atZone(ZoneId.systemDefault()))
-            val monthStart = currentMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val monthEnd = currentMonth.atEndOfMonth().atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
+            val currentMonth = YearMonth.from(now.atZone(ZoneId.of("UTC")))
+            val monthStart = currentMonth.atDay(1).atStartOfDay(ZoneId.of("UTC")).toInstant()
+            val monthEnd = currentMonth.atEndOfMonth().atTime(23, 59, 59).atZone(ZoneId.of("UTC")).toInstant()
             val last12MonthsStart = now.minus(java.time.Duration.ofDays(365))
 
             // Execute independent queries in parallel for better performance
@@ -70,7 +70,7 @@ class FinancialServiceImpl(
                 val monthlyRevenueChart = if (last12MonthsRevenueResult is Result.Success) {
                     // Fill in missing months with zero revenue
                     val chartData = last12MonthsRevenueResult.data.associateBy { it.month }
-                    val nowZoned = now.atZone(ZoneId.systemDefault())
+                    val nowZoned = now.atZone(ZoneId.of("UTC"))
                     val last12Months = (0..11).map { monthsAgo ->
                         nowZoned.minusMonths(monthsAgo.toLong()).let { YearMonth.from(it) }
                             .format(DateTimeFormatter.ofPattern("yyyy-MM"))
@@ -133,7 +133,7 @@ class FinancialServiceImpl(
      * @return List of MonthlyRevenue objects with zero revenue for last 12 months
      */
     private fun calculateMonthlyRevenueChartFallback(): List<MonthlyRevenue> {
-        val now = Instant.now().atZone(ZoneId.systemDefault())
+        val now = Instant.now().atZone(ZoneId.of("UTC"))
         val last12Months = (0..11).map { monthsAgo ->
             now.minusMonths(monthsAgo.toLong()).let { YearMonth.from(it) }
         }.reversed()

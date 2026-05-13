@@ -1,7 +1,7 @@
-package route
+package bose.ankush.route
 
 import bose.ankush.data.model.ApiResponse
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.service.SavedLocationService
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -84,7 +84,10 @@ fun Route.savedLocationRoute(service: SavedLocationService) {
                 ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiResponse(false, "Missing location id", null))
 
             when (val result = service.deleteSavedLocation(id, email)) {
-                is Result.Success -> call.respond(HttpStatusCode.OK, ApiResponse(true, "Location deleted successfully", null))
+                is Result.Success -> {
+                    if (result.data) call.respond(HttpStatusCode.OK, ApiResponse(true, "Location deleted successfully", null))
+                    else call.respond(HttpStatusCode.NotFound, ApiResponse(false, "Location not found", null))
+                }
                 is Result.Error -> call.respond(HttpStatusCode.InternalServerError, ApiResponse(false, result.message, null))
             }
         }

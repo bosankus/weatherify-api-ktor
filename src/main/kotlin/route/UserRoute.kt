@@ -1,11 +1,11 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.UserRole
+import com.androidplay.weatherify.domain.UserRole
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
-import domain.model.Result
-import domain.repository.UserRepository
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.UserRepository
 import domain.service.NotificationService
 import domain.service.UnregisteredFcmTokenException
 import io.ktor.http.*

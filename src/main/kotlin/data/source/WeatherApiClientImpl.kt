@@ -3,7 +3,7 @@ package data.source
 import bose.ankush.data.model.AirQuality
 import bose.ankush.data.model.Weather
 import bose.ankush.util.WeatherCache
-import domain.model.Result
+import com.androidplay.core.common.Result
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter

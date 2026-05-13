@@ -36,6 +36,9 @@ repositories {
 }
 
 dependencies {
+    implementation(project(":core"))
+    implementation(project(":weatherify"))
+
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.default.headers)
     implementation(libs.ktor.server.content.negotiation)
@@ -43,13 +46,12 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.server.netty)
     implementation(libs.logback.classic)
-    implementation(libs.kotlin.mongo.driver)
-    implementation(libs.kotlin.mongo.bson)
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.ktor.server.resources)
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.compression)
+    implementation(libs.ktor.server.rate.limit)
     implementation(libs.bcrypt)
     implementation(libs.ktor.server.html)
 
@@ -61,9 +63,6 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.koin.ktor)
     implementation(libs.koin.logger.slf4j)
-
-    // Redis client (Lettuce — async, coroutine-friendly)
-    implementation("io.lettuce:lettuce-core:6.3.2.RELEASE")
 
     // Firebase Admin SDK for push notifications
     implementation(libs.firebase.admin) {

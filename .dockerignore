@@ -1,0 +1,33 @@
+# Build outputs
+build/
+*/build/
+out/
+
+# Gradle caches
+.gradle/
+*/.gradle/
+
+# Local dev config
+local.properties
+local_data/
+
+# Credentials — never bake into image
+serviceAccountKey.json
+*.pem
+*.key
+
+# IDE
+.idea/
+*.iml
+
+# Frontend source (not needed in backend image)
+frontend/
+
+# Git history
+.git/
+
+# Claude worktrees
+**/.claude/
+
+# Docs
+docs/

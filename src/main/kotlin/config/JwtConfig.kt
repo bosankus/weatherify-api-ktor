@@ -1,7 +1,7 @@
 package config
 
-import bose.ankush.data.model.UserRole
-import bose.ankush.util.getSecretValue
+import com.androidplay.weatherify.domain.UserRole
+import com.androidplay.core.secrets.getSecretValue
 import com.auth0.jwt.JWT
 import com.auth0.jwt.JWTVerifier
 import com.auth0.jwt.algorithms.Algorithm

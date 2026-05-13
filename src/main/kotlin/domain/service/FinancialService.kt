@@ -1,7 +1,7 @@
 package domain.service
 
-import bose.ankush.data.model.*
-import domain.model.Result
+import com.androidplay.weatherify.domain.*
+import com.androidplay.core.common.Result
 
 /**
  * Service interface for financial operations.

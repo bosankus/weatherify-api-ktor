@@ -7,6 +7,11 @@ kotlin-mongo-driver-version = "5.5.1"
 bcrypt-version = "0.10.2"
 koin-version = "4.0.3"
 firebase-admin-version = "9.2.0"
+yamlkt-version = "0.13.0"
+kotlinx-datetime-version = "0.6.0"
+kotlinx-serialization-version = "1.7.3"
+auth0-jwt-version = "4.4.0"
+stripe-version = "25.3.0"
 
 [libraries]
 ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor-version" }
@@ -29,12 +34,19 @@ ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = 
 ktor-server-resources = { module = "io.ktor:ktor-server-resources", version.ref = "ktor-version" }
 ktor-server-compression = { module = "io.ktor:ktor-server-compression", version.ref = "ktor-version" }
 ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor-version" }
+ktor-server-rate-limit = { module = "io.ktor:ktor-server-rate-limit", version.ref = "ktor-version" }
+ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor-version" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-version" }
+auth0-jwt = { module = "com.auth0:java-jwt", version.ref = "auth0-jwt-version" }
+stripe-java = { module = "com.stripe:stripe-java", version.ref = "stripe-version" }
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt-version" }
 
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin-version" }
 koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin-version" }
 koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin-version" }
 firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebase-admin-version" }
+yamlkt = { module = "net.mamoe.yamlkt:yamlkt", version.ref = "yamlkt-version" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime-version" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin-version" }

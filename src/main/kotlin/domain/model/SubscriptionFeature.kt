@@ -1,6 +1,6 @@
 package domain.model
 
-import bose.ankush.data.model.User
+import com.androidplay.weatherify.domain.User
 import java.time.Instant
 
 enum class SubscriptionFeature {

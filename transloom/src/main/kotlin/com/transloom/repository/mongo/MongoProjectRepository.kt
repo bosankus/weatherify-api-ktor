@@ -1,0 +1,175 @@
+package com.transloom.repository.mongo
+
+import com.mongodb.client.model.Filters.and
+import com.mongodb.client.model.Filters.eq
+import com.mongodb.client.model.Filters.`in`
+import com.mongodb.client.model.Sorts
+import com.mongodb.client.model.Updates
+import com.mongodb.kotlin.client.coroutine.MongoDatabase
+import com.transloom.domain.CreateProjectInput
+import com.transloom.domain.Project
+import com.transloom.domain.TargetConfig
+import com.transloom.repository.ProjectRepository
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.toList
+import kotlinx.datetime.Clock
+import org.bson.Document
+import java.util.UUID
+
+class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
+
+    private val projects = db.getCollection<Document>("projects")
+    private val strings = db.getCollection<Document>("strings")
+    private val translations = db.getCollection<Document>("translations")
+    private val glossary = db.getCollection<Document>("glossary")
+
+    override suspend fun create(ownerId: String, input: CreateProjectInput): Project {
+        val id = UUID.randomUUID().toString()
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        val targetsDocuments = input.targets.map { it.toDocument() }
+
+        val doc = Document().apply {
+            put("_id", id)
+            put("ownerId", ownerId)
+            put("name", input.name)
+            put("githubRepo", input.githubRepo)
+            put("watchBranch", input.watchBranch)
+            put("sourceFilePath", input.sourceFilePath)
+            put("category", input.category)
+            put("tone", input.tone)
+            put("targets", targetsDocuments)
+            put("createdAt", now)
+            put("updatedAt", now)
+        }
+
+        projects.insertOne(doc)
+
+        return Project(
+            id = id,
+            ownerId = ownerId,
+            name = input.name,
+            githubRepo = input.githubRepo,
+            watchBranch = input.watchBranch,
+            sourceFilePath = input.sourceFilePath,
+            category = input.category,
+            tone = input.tone,
+            targets = input.targets
+        )
+    }
+
+    override suspend fun listForUser(ownerId: String): List<Project> {
+        return projects
+            .find(eq("ownerId", ownerId))
+            .sort(Sorts.descending("createdAt"))
+            .toList()
+            .map { it.toProject() }
+    }
+
+    override suspend fun findById(projectId: String): Project? {
+        return projects.find(eq("_id", projectId)).firstOrNull()?.toProject()
+    }
+
+    override suspend fun findByGithubRepo(githubRepo: String): Project? {
+        return projects.find(eq("githubRepo", githubRepo)).firstOrNull()?.toProject()
+    }
+
+    override suspend fun countForUser(ownerId: String): Int {
+        return projects.countDocuments(eq("ownerId", ownerId)).toInt()
+    }
+
+    override suspend fun update(
+        projectId: String,
+        name: String?,
+        tone: String?,
+        category: String?,
+        watchBranch: String?,
+        sourceFilePath: String?,
+        targets: List<TargetConfig>?
+    ): Boolean {
+        val updates = mutableListOf<org.bson.conversions.Bson>()
+
+        name?.let { updates.add(Updates.set("name", it)) }
+        tone?.let { updates.add(Updates.set("tone", it)) }
+        category?.let { updates.add(Updates.set("category", it)) }
+        watchBranch?.let { updates.add(Updates.set("watchBranch", it)) }
+        sourceFilePath?.let { updates.add(Updates.set("sourceFilePath", it)) }
+        targets?.let { updates.add(Updates.set("targets", it.map { t -> t.toDocument() })) }
+
+        if (updates.isEmpty()) return false
+
+        updates.add(Updates.set("updatedAt", Clock.System.now().toEpochMilliseconds()))
+
+        val result = projects.updateOne(eq("_id", projectId), Updates.combine(updates))
+        return result.matchedCount > 0
+    }
+
+    override suspend fun delete(projectId: String) {
+        // 1. Collect all string IDs for this project
+        val stringIds = strings
+            .find(eq("projectId", projectId))
+            .toList()
+            .map { it.getString("_id") }
+
+        // 2. Delete translations for those strings (only if there are any)
+        if (stringIds.isNotEmpty()) {
+            translations.deleteMany(`in`("stringId", stringIds))
+        }
+
+        // 3. Delete all strings for this project
+        strings.deleteMany(eq("projectId", projectId))
+
+        // 4. Delete all glossary entries for this project
+        glossary.deleteMany(eq("projectId", projectId))
+
+        // 5. Delete the project itself
+        projects.deleteOne(eq("_id", projectId))
+    }
+
+    override suspend fun getGlossary(projectId: String): Map<String, Map<String, String>> {
+        val entries = glossary
+            .find(and(eq("projectId", projectId), eq("isActive", true)))
+            .toList()
+
+        return entries
+            .groupBy { it.getString("languageCode") }
+            .mapValues { (_, docs) ->
+                docs.associate { doc ->
+                    doc.getString("sourceTerm") to doc.getString("targetTerm")
+                }
+            }
+    }
+
+    // --- Mapping helpers ---
+
+    private fun TargetConfig.toDocument(): Document = Document().apply {
+        put("code", code)
+        put("name", name)
+        put("region", region)
+        put("file", file)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun Document.toProject(): Project {
+        val rawTargets = get("targets") as? List<*> ?: emptyList<Any>()
+        val targets = rawTargets.mapNotNull { it as? Document }.map { t ->
+            TargetConfig(
+                code = t.getString("code") ?: "",
+                name = t.getString("name") ?: "",
+                region = t.getString("region"),
+                file = t.getString("file") ?: ""
+            )
+        }
+        return Project(
+            id = getString("_id"),
+            ownerId = getString("ownerId") ?: "",
+            name = getString("name") ?: "",
+            githubRepo = getString("githubRepo") ?: "",
+            watchBranch = getString("watchBranch") ?: "",
+            sourceFilePath = getString("sourceFilePath") ?: "",
+            category = getString("category") ?: "",
+            tone = getString("tone") ?: "",
+            targets = targets
+        )
+    }
+}

@@ -1,0 +1,33 @@
+package com.transloom.domain
+
+import kotlinx.serialization.Serializable
+
+data class Project(
+    val id: String,
+    val ownerId: String,
+    val name: String,
+    val githubRepo: String,
+    val watchBranch: String,
+    val sourceFilePath: String,
+    val category: String,
+    val tone: String,
+    val targets: List<TargetConfig> = emptyList()
+)
+
+@Serializable
+data class TargetConfig(
+    val code: String,
+    val name: String,
+    val region: String? = null,
+    val file: String
+)
+
+data class CreateProjectInput(
+    val name: String,
+    val githubRepo: String,
+    val watchBranch: String = "main",
+    val sourceFilePath: String = "values/strings.xml",
+    val category: String,
+    val tone: String,
+    val targets: List<TargetConfig>
+)

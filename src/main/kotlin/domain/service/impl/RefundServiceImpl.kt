@@ -1,11 +1,11 @@
 package domain.service.impl
 
-import bose.ankush.data.model.*
-import bose.ankush.util.getSecretValue
-import domain.model.Result
-import domain.repository.PaymentRepository
-import domain.repository.RefundRepository
-import domain.repository.UserRepository
+import com.androidplay.weatherify.domain.*
+import com.androidplay.core.secrets.getSecretValue
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.PaymentRepository
+import com.androidplay.weatherify.repository.RefundRepository
+import com.androidplay.weatherify.repository.UserRepository
 import domain.service.EmailService
 import domain.service.RefundService
 import io.ktor.client.*
@@ -91,127 +91,78 @@ class RefundServiceImpl(
             // 1. Validate payment exists
             val paymentResult = paymentRepository.getPaymentByTransactionId(request.paymentId)
             if (paymentResult is Result.Error) {
-                return Result.success(
-                    RefundResponse(
-                        success = false,
-                        message = "Failed to find payment: ${paymentResult.message}"
-                    )
-                )
+                return Result.error("Failed to find payment: ${paymentResult.message}")
             }
 
             val payment = (paymentResult as Result.Success).data
-            if (payment == null) {
-                return Result.success(
-                    RefundResponse(
-                        success = false,
-                        message = "Payment not found: ${request.paymentId}"
-                    )
-                )
-            }
+                ?: return Result.error("Payment not found: ${request.paymentId}")
 
             // 2. Check refundable amount
-            val paymentAmount =
-                payment.amount
-                    ?: return Result.success(
-                        RefundResponse(
-                            success = false,
-                            message = "Payment amount is not available"
-                        )
-                    )
+            val paymentAmount = payment.amount
+                ?: return Result.error("Payment amount is not available for payment ${request.paymentId}")
 
             val totalRefundedResult = refundRepository.getTotalRefundedForPayment(request.paymentId)
-            val totalRefunded =
-                if (totalRefundedResult is Result.Success) {
-                    totalRefundedResult.data
-                } else {
-                    0
-                }
+            val totalRefunded = if (totalRefundedResult is Result.Success) totalRefundedResult.data else 0
 
             val remainingRefundable = paymentAmount - totalRefunded
 
             if (remainingRefundable <= 0) {
-                return Result.success(
-                    RefundResponse(
-                        success = false,
-                        message = "This payment has already been fully refunded"
-                    )
-                )
+                return Result.error("This payment has already been fully refunded")
             }
 
             val refundAmount = request.amount ?: paymentAmount
 
             if (refundAmount > remainingRefundable) {
-                return Result.success(
-                    RefundResponse(
-                        success = false,
-                        message =
-                            "Refund amount cannot exceed remaining refundable amount. Requested: ${refundAmount / 100.0}, Available: ${remainingRefundable / 100.0}"
-                    )
+                return Result.error(
+                    "Refund amount cannot exceed remaining refundable amount. " +
+                    "Requested: ${refundAmount / 100.0}, Available: ${remainingRefundable / 100.0}"
                 )
             }
 
             if (refundAmount <= 0) {
-                return Result.success(
-                    RefundResponse(
-                        success = false,
-                        message = "Refund amount must be greater than zero"
-                    )
-                )
+                return Result.error("Refund amount must be greater than zero")
             }
 
             // 3. Call Razorpay API
-            // Razorpay requires amount to be specified (in paise), even for full refunds
-            val razorpayRequest =
-                RazorpayRefundRequest(
-                    amount = refundAmount,  // Always send the amount in paise
-                    speed =
-                        when (request.speed) {
-                            RefundSpeed.OPTIMUM -> "optimum"
-                            RefundSpeed.NORMAL -> "normal"
-                        },
-                    notes = if (request.notes.isNullOrBlank()) null else mapOf("comment" to request.notes),
-                    receipt = request.receipt
-                )
+            val razorpayRequest = RazorpayRefundRequest(
+                amount = refundAmount,
+                speed = when (request.speed) {
+                    RefundSpeed.OPTIMUM -> "optimum"
+                    RefundSpeed.NORMAL -> "normal"
+                },
+                notes = if (request.notes.isNullOrBlank()) null else mapOf("comment" to request.notes!!),
+                receipt = request.receipt
+            )
 
             logger.info("Initiating refund for payment ${request.paymentId}, amount=${refundAmount / 100.0} (${refundAmount} paise)")
             val razorpayResponse = callRazorpayRefundAPI(request.paymentId, razorpayRequest)
 
             // 4. Map response to internal model
-            val refund =
-                mapRazorpayResponseToRefund(
-                    response = razorpayResponse,
-                    adminEmail = adminEmail,
-                    userEmail = payment.userEmail,
-                    userId = payment.userId,
-                    reason = request.reason
-                )
+            val refund = mapRazorpayResponseToRefund(
+                response = razorpayResponse,
+                adminEmail = adminEmail,
+                userEmail = payment.userEmail,
+                userId = payment.userId,
+                reason = request.reason
+            )
 
             // 5. Store refund record
             val createResult = refundRepository.createRefund(refund)
             if (createResult is Result.Error) {
-                logger.error("Failed to store refund record: ${createResult.message}")
-                return Result.success(
-                    RefundResponse(
-                        success = false,
-                        message =
-                            "Refund initiated but failed to store record: ${createResult.message}"
-                    )
-                )
+                logger.error("Failed to store refund record after Razorpay success: ${createResult.message}")
+                return Result.error("Refund was processed by Razorpay but failed to store record: ${createResult.message}")
             }
 
-            // 6. Send notification email and push notification (don't fail if notifications fail)
+            // 6. Send notifications — failure here does not fail the refund
             try {
-                // Send email notification
                 emailService.sendRefundNotification(
                     userEmail = payment.userEmail,
                     refundId = refund.refundId,
-                    amount = refund.amount / 100.0, // Convert paise to rupees
+                    amount = refund.amount / 100.0,
                     paymentId = refund.paymentId,
                     status = "initiated"
                 )
                 logger.info("Refund notification email sent to ${payment.userEmail}")
-
-                // Send push notification
                 sendRefundPushNotification(
                     userEmail = payment.userEmail,
                     amount = refund.amount / 100.0,
@@ -221,33 +172,14 @@ class RefundServiceImpl(
                 logger.warn("Failed to send refund notifications", e)
             }
 
-            val responseMessage = "Refund initiated successfully"
             logger.info("Refund initiated successfully: ${refund.refundId}")
-
-            Result.success(
-                RefundResponse(
-                    success = true,
-                    message = responseMessage,
-                    refund = mapRefundToDto(refund)
-                )
-            )
+            Result.success(RefundResponse(success = true, message = "Refund initiated successfully", refund = mapRefundToDto(refund)))
         } catch (e: RazorpayApiException) {
-            // Handle Razorpay-specific errors with user-friendly messages
             logger.error("Razorpay API error during refund initiation: ${e.message}")
-            Result.success(
-                RefundResponse(
-                    success = false,
-                    message = e.message ?: "Razorpay API error"
-                )
-            )
+            Result.error(e.message ?: "Razorpay API error")
         } catch (e: Exception) {
             logger.error("Failed to initiate refund", e)
-            Result.success(
-                RefundResponse(
-                    success = false,
-                    message = "Failed to initiate refund: ${e.message}"
-                )
-            )
+            Result.error("Failed to initiate refund: ${e.message}")
         }
     }
 
@@ -873,8 +805,9 @@ class RefundServiceImpl(
 
             // 4. Check if this is a duplicate webhook (status hasn't changed)
             val existingRefund = refundRepository.getRefundById(refundId)
-            if (existingRefund is Result.Success && existingRefund.data != null) {
-                val currentStatus = existingRefund.data.status
+            val existingData = existingRefund.getOrNull()
+            if (existingData != null) {
+                val currentStatus = existingData.status
                 if (currentStatus == newStatus) {
                     logger.info("Duplicate webhook received for refund $refundId with status $newStatus, skipping update")
                     return Result.success(true)
@@ -909,8 +842,8 @@ class RefundServiceImpl(
             try {
                 logger.debug("Fetching refund details to send notifications")
                 val refundResult = refundRepository.getRefundById(refundId)
-                if (refundResult is Result.Success && refundResult.data != null) {
-                    val refund = refundResult.data
+                val refund = refundResult.getOrNull()
+                if (refund != null) {
 
                     when (newStatus) {
                         RefundStatus.PROCESSED -> {
@@ -1020,8 +953,9 @@ class RefundServiceImpl(
 
             // Get user's FCM token
             val userResult = userRepository.findUserByEmail(userEmail)
-            if (userResult is Result.Success && userResult.data != null) {
-                val user = userResult.data
+            val userData = userResult.getOrNull()
+                    if (userData != null) {
+                val user = userData
                 val fcmToken = user.fcmToken
 
                 if (fcmToken.isNullOrBlank()) {

@@ -1,10 +1,9 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.*
+import com.androidplay.weatherify.domain.*
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
-import bose.ankush.route.common.setCacheHeaders
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.service.ServiceCatalogService
 import io.ktor.http.*
 import io.ktor.server.request.*

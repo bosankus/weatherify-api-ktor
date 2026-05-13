@@ -2,10 +2,10 @@ package domain.service.impl
 
 import bose.ankush.data.model.ResponseEntitlements
 import bose.ankush.data.model.UnifiedWeatherResponse
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.model.SubscriptionFeature
 import domain.model.SubscriptionFeatureResolver
-import domain.repository.UserRepository
+import com.androidplay.weatherify.repository.UserRepository
 import domain.service.WeatherAggregatorService
 import domain.service.WeatherService
 import kotlinx.coroutines.async

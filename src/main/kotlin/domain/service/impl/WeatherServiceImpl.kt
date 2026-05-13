@@ -2,7 +2,7 @@ package domain.service.impl
 
 import bose.ankush.data.model.AirQuality
 import bose.ankush.data.model.Weather
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.repository.WeatherRepository
 import domain.service.WeatherService
 

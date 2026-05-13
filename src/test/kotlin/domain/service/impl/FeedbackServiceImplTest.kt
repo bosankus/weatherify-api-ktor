@@ -1,8 +1,8 @@
 package domain.service.impl
 
-import bose.ankush.data.model.Feedback
-import domain.model.Result
-import domain.repository.FeedbackRepository
+import com.androidplay.weatherify.domain.Feedback
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.FeedbackRepository
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals

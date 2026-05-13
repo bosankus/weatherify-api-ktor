@@ -8,8 +8,14 @@ indent_size = 4
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-[*.{yml,yaml}]
+# Web files, configs, and JSON generally use 2 spaces
+[*.{yml,yaml,json,js,css,html}]
 indent_size = 2
 
-[*.kt]
+# Kotlin and Kotlin Script (Gradle) files
+[*.{kt,kts}]
 ij_continuation_indent_size = 4
+
+# Markdown files often use trailing spaces for hard line breaks
+[*.md]
+trim_trailing_whitespace = false

@@ -1,9 +1,10 @@
 package data.service
 
-import bose.ankush.data.model.*
-import domain.model.Result
-import domain.repository.PaymentRepository
-import domain.repository.UserRepository
+import com.androidplay.weatherify.domain.*
+import com.androidplay.core.cache.UpstashCacheRepository
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.PaymentRepository
+import com.androidplay.weatherify.repository.UserRepository
 import domain.service.RefundService
 import kotlinx.coroutines.runBlocking
 import org.bson.types.ObjectId
@@ -775,13 +776,18 @@ private class MockPaymentRepository : PaymentRepository {
             Result.success(Triple(totalCount, totalRevenue, emptyMap()))
         }
     }
+
+    override suspend fun savePayment(payment: Payment): Result<Boolean> {
+        return if (shouldReturnError) Result.error(errorMessage)
+        else { payments.add(payment); Result.success(true) }
+    }
 }
 
 // Mock PaymentAnalyticsCache — bypasses Redis (no URL configured = no-op cache) and
 // delegates directly to the supplied MockPaymentRepository.
 private class MockPaymentAnalyticsCache(
     repo: MockPaymentRepository
-) : PaymentAnalyticsCache(repo, util.RedisCache())
+) : PaymentAnalyticsCache(repo, UpstashCacheRepository(""))
 
 // Mock RefundService for testing
 private class MockRefundService : RefundService {

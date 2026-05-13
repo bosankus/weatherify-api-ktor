@@ -19,9 +19,6 @@ import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import util.Constants
 
-/**
- * Configure authentication for the application
- */
 fun Application.configureAuthentication() {
     val logger = LoggerFactory.getLogger("Authentication")
 
@@ -30,28 +27,18 @@ fun Application.configureAuthentication() {
             realm = Environment.getJwtRealm()
             verifier(JwtConfig.verifier)
 
-            // Accept token from Authorization header or fallback to jwt_token cookie
             authHeader { call ->
-                // Prefer standard Authorization header if present
                 val header = call.request.parseAuthorizationHeader()
-                if (header != null) {
-                    return@authHeader header
-                }
-                // Fallback to cookie-based auth for browser navigations
+                if (header != null) return@authHeader header
                 val tokenFromCookie: String? = call.request.cookies["jwt_token"]
-                if (tokenFromCookie.isNullOrBlank()) {
-                    return@authHeader null
-                }
+                if (tokenFromCookie.isNullOrBlank()) return@authHeader null
                 HttpAuthHeader.Single("Bearer", tokenFromCookie)
             }
 
             validate { credential ->
                 try {
-                    // Extract email from JWT token using the constant
-                    val email =
-                        credential.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+                    val email = credential.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
                     if (email.isNotEmpty()) {
-                        // Create a JWTPrincipal with the token's payload
                         logger.debug("Authentication successful for user: $email")
                         JWTPrincipal(credential.payload)
                     } else {
@@ -59,21 +46,16 @@ fun Application.configureAuthentication() {
                         null
                     }
                 } catch (e: Exception) {
-                    // Log the exception
                     logger.error("Authentication failed: ${e.message}")
                     null
                 }
             }
 
             challenge { defaultScheme, realm ->
-                // Log the authentication challenge
                 logger.warn("Authentication challenge triggered - JWT authentication failed")
-
-                // Set the response status to 401 Unauthorized
                 call.response.status(HttpStatusCode.Unauthorized)
                 call.response.header(HttpHeaders.WWWAuthenticate, "$defaultScheme realm=\"$realm\"")
 
-                // Create an ApiResponse with an error message that includes refresh token info
                 val apiResponse = ApiResponse(
                     status = false,
                     message = "Authentication failed: Invalid or expired token. If your token is expired, you can get a new one at the /refresh-token endpoint.",
@@ -83,15 +65,7 @@ fun Application.configureAuthentication() {
                         "requestFormat" to "{ \"token\": \"your-expired-token\" }"
                     )
                 )
-
-                // Log the response details
-                logger.debug("Sending 401 Unauthorized response with refresh token info")
-
-                // Respond with the JSON-encoded ApiResponse
-                call.respondText(
-                    Json.encodeToString(apiResponse),
-                    ContentType.Application.Json
-                )
+                call.respondText(Json.encodeToString(apiResponse), ContentType.Application.Json)
             }
         }
     }

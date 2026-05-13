@@ -1,9 +1,9 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.Note
+import com.androidplay.weatherify.domain.Note
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.service.NoteService
 import io.ktor.http.*
 import io.ktor.server.request.*
@@ -85,6 +85,11 @@ fun Route.noteRoute() {
                     Unit,
                     HttpStatusCode.BadRequest
                 )
+                return@post
+            }
+
+            if (request.content.length > 500_000) {
+                call.respondError("Note content exceeds maximum allowed size of 500KB", Unit, HttpStatusCode.BadRequest)
                 return@post
             }
 
@@ -190,10 +195,16 @@ fun Route.noteRoute() {
                 return@patch
             }
 
+            if (request.content.length > 500_000) {
+                call.respondError("Note content exceeds maximum allowed size of 500KB", Unit, HttpStatusCode.BadRequest)
+                return@patch
+            }
+
             when (val result = noteService.updateNote(id, admin.email, request.content, request.contentFormat)) {
                 is Result.Success -> {
-                    if (result.data != null) {
-                        call.respondSuccess(Constants.Messages.NOTE_UPDATED, result.data.toDTO())
+                    val note = result.data
+                    if (note != null) {
+                        call.respondSuccess(Constants.Messages.NOTE_UPDATED, note.toDTO())
                     } else {
                         call.respondError(
                             Constants.Messages.NOTE_NOT_FOUND,

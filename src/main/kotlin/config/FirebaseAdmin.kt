@@ -1,6 +1,6 @@
 package config
 
-import bose.ankush.util.getSecretValue
+import com.androidplay.core.secrets.getSecretValue
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -15,7 +15,7 @@ import java.io.FileInputStream
  */
 object FirebaseAdmin {
     private val logger = LoggerFactory.getLogger(FirebaseAdmin::class.java)
-    private var initialized = false
+    @Volatile private var initialized = false
 
     /**
      * Initialize Firebase Admin SDK.
@@ -29,6 +29,7 @@ object FirebaseAdmin {
      * If the service account key is not found, initialization will be skipped
      * and notifications will not be sent.
      */
+    @Synchronized
     fun initialize() {
         if (initialized) {
             logger.info("Firebase Admin SDK already initialized")
@@ -61,14 +62,20 @@ object FirebaseAdmin {
                 val serviceAccountFile = java.io.File(serviceAccountPath)
 
                 if (!serviceAccountFile.exists()) {
-                    logger.warn(
-                        "Firebase service account key not found at: $serviceAccountPath. " +
-                            "Push notifications will be disabled. " +
-                            "Configure firebase-service-account-key in Secret Manager or " +
-                            "set FIREBASE_SERVICE_ACCOUNT_KEY environment variable or " +
-                            "place serviceAccountKey.json in the root directory."
-                    )
-                    return
+                    // On GCP (Cloud Run), fall back to Application Default Credentials.
+                    // The service account attached to the Cloud Run instance must have
+                    // the "Firebase Admin SDK Administrator Service Agent" role.
+                    logger.info("Service account file not found — attempting Application Default Credentials")
+                    return try {
+                        val options = FirebaseOptions.builder()
+                            .setCredentials(GoogleCredentials.getApplicationDefault())
+                            .build()
+                        FirebaseApp.initializeApp(options)
+                        initialized = true
+                        logger.info("Firebase initialized via Application Default Credentials")
+                    } catch (e: Exception) {
+                        logger.warn("ADC also unavailable — push notifications disabled: ${e.message}")
+                    }
                 }
 
                 logger.info("Loading Firebase credentials from file: $serviceAccountPath")

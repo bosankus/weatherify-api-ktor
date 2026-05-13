@@ -1,11 +1,11 @@
 package domain.service
 
-import bose.ankush.data.model.PlaceSearchResult
-import bose.ankush.data.model.SavedLocation
-import domain.model.Result
+import com.androidplay.weatherify.domain.PlaceSearchResult
+import com.androidplay.weatherify.domain.SavedLocation
+import com.androidplay.core.common.Result
 import domain.model.SubscriptionFeatureResolver
-import domain.repository.SavedLocationRepository
-import domain.repository.UserRepository
+import com.androidplay.weatherify.repository.SavedLocationRepository
+import com.androidplay.weatherify.repository.UserRepository
 
 class SavedLocationService(
     private val repository: SavedLocationRepository,

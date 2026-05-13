@@ -1,57 +1,45 @@
 package bose.ankush.route
 
-import bose.ankush.data.db.DatabaseFactory.createOrUpdateFeedback
-import bose.ankush.data.db.DatabaseFactory.deleteFeedbackById
-import bose.ankush.data.db.DatabaseFactory.getFeedbackById
-import bose.ankush.data.model.Feedback
 import bose.ankush.route.common.RouteResult
 import bose.ankush.route.common.executeRoute
 import bose.ankush.route.common.getQueryParameter
 import bose.ankush.route.common.getRequiredParameters
+import com.androidplay.core.common.Result
+import domain.service.FeedbackService
 import io.ktor.http.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
 
 private val feedbackLogger = LoggerFactory.getLogger("FeedbackRoute")
 
-/**
- * Routes for feedback functionality
- */
 fun Route.feedbackRoute() {
+    val feedbackService: FeedbackService by inject()
+
     route(Constants.Api.FEEDBACK_ENDPOINT) {
-        // Get feedback by ID
         get {
-            // Authenticate user using unified helper
             val user = call.getAuthenticatedUserOrRespond() ?: return@get
-            feedbackLogger.debug("User with email {} is accessing feedback data", user.email)
+            feedbackLogger.debug("User {} accessing feedback data", user.email)
 
             call.executeRoute(Constants.Messages.FEEDBACK_RETRIEVED) {
                 when (val result = call.getQueryParameter(Constants.Api.PARAM_ID)) {
                     is RouteResult.Success -> {
-                        val feedbackId = result.data
-                        val feedback = getFeedbackById(feedbackId)
-                            ?: return@executeRoute RouteResult.error(
-                                Constants.Messages.FEEDBACK_NOT_FOUND,
-                                HttpStatusCode.NotFound
-                            )
-
-                        RouteResult.success(feedback)
+                        val feedbackResult = feedbackService.getFeedbackById(result.data)
+                        when (feedbackResult) {
+                            is Result.Success -> RouteResult.success(feedbackResult.data)
+                            is Result.Error -> RouteResult.error(Constants.Messages.FEEDBACK_NOT_FOUND, HttpStatusCode.NotFound)
+                        }
                     }
-
                     is RouteResult.Error -> result
                 }
             }
         }
 
-        // Add new feedback
         post {
-            // Authenticate user using unified helper
             val user = call.getAuthenticatedUserOrRespond() ?: return@post
-            feedbackLogger.debug("User with email {} is submitting feedback", user.email)
+            feedbackLogger.debug("User {} submitting feedback", user.email)
 
             call.executeRoute(Constants.Messages.FEEDBACK_SUBMITTED) {
                 val requiredParams = call.getRequiredParameters(
@@ -64,51 +52,35 @@ fun Route.feedbackRoute() {
                 when (requiredParams) {
                     is RouteResult.Success -> {
                         val params = requiredParams.data
-                        val feedback = Feedback(
+                        val submitResult = feedbackService.submitFeedback(
                             deviceId = params[Constants.Api.PARAM_DEVICE_ID]!!,
                             deviceOs = params[Constants.Api.PARAM_DEVICE_OS]!!,
-                            feedbackTitle = params[Constants.Api.PARAM_FEEDBACK_TITLE]!!,
-                            feedbackDescription = params[Constants.Api.PARAM_FEEDBACK_DESCRIPTION]!!
+                            title = params[Constants.Api.PARAM_FEEDBACK_TITLE]!!,
+                            description = params[Constants.Api.PARAM_FEEDBACK_DESCRIPTION]!!
                         )
-                        // Return the feedback ID immediately and process database operation asynchronously
-                        // This improves performance by not blocking the request thread
-                        withContext(Dispatchers.IO) {
-                            val success = createOrUpdateFeedback(feedback)
-                            if (!success) {
-                                feedbackLogger.error("{}: {}", Constants.Messages.FAILED_SAVE_FEEDBACK, feedback.id)
-                            }
+                        when (submitResult) {
+                            is Result.Success -> RouteResult.success(submitResult.data)
+                            is Result.Error -> RouteResult.error(Constants.Messages.FAILED_SAVE_FEEDBACK, HttpStatusCode.InternalServerError)
                         }
-
-                        RouteResult.success(feedback.id)
                     }
-
                     is RouteResult.Error -> requiredParams
                 }
             }
         }
 
-        // Delete feedback
         delete {
-            // Authenticate user using unified helper
             val user = call.getAuthenticatedUserOrRespond() ?: return@delete
-            feedbackLogger.debug("User with email {} is deleting feedback", user.email)
+            feedbackLogger.debug("User {} deleting feedback", user.email)
 
             call.executeRoute(Constants.Messages.FEEDBACK_REMOVED) {
                 when (val result = call.getQueryParameter(Constants.Api.PARAM_ID)) {
                     is RouteResult.Success -> {
-                        val feedbackId = result.data
-                        val deleted = deleteFeedbackById(feedbackId)
-
-                        if (deleted) {
-                            RouteResult.success(Unit)
-                        } else {
-                            RouteResult.error(
-                                Constants.Messages.FEEDBACK_REMOVAL_FAILED,
-                                HttpStatusCode.NotFound
-                            )
+                        val deleteResult = feedbackService.deleteFeedback(result.data)
+                        when (deleteResult) {
+                            is Result.Success -> RouteResult.success(Unit)
+                            is Result.Error -> RouteResult.error(Constants.Messages.FEEDBACK_REMOVAL_FAILED, HttpStatusCode.NotFound)
                         }
                     }
-
                     is RouteResult.Error -> result
                 }
             }

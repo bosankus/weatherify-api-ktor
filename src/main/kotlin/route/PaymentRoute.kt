@@ -1,12 +1,12 @@
 package bose.ankush.route
 
-import bose.ankush.data.db.DatabaseFactory
 import bose.ankush.data.model.*
+import com.androidplay.weatherify.domain.*
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.SignatureUtil
-import bose.ankush.util.getSecretValue
-import domain.model.Result
+import com.androidplay.core.secrets.getSecretValue
+import com.androidplay.core.common.Result
 import domain.service.BillService
 import domain.service.NotificationService
 import io.ktor.client.*
@@ -18,13 +18,13 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
-import domain.repository.UserRepository
+import com.androidplay.weatherify.repository.PaymentRepository
+import com.androidplay.weatherify.repository.UserRepository
 import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
 import java.time.Instant
@@ -88,6 +88,7 @@ fun Route.paymentRoute() {
     val billService: BillService by application.inject()
     val notificationService: NotificationService by application.inject()
     val userRepository: UserRepository by application.inject()
+    val paymentRepository: PaymentRepository by application.inject()
     val analyticsCache: data.service.PaymentAnalyticsCache by application.inject()
     // POST /create-order -> Create Razorpay order server-side
     post(Constants.Api.CREATE_ORDER_ENDPOINT) {
@@ -120,10 +121,11 @@ fun Route.paymentRoute() {
             return@post
         }
 
-        // Basic validation
-        if (req.amount <= 0 || req.currency.isBlank() || req.receipt.isBlank()) {
+        // Basic validation — max 10,000 INR (1,000,000 paise) to prevent accidental large orders
+        val maxAmountPaise = 1_000_000
+        if (req.amount <= 0 || req.amount > maxAmountPaise || req.currency.isBlank() || req.receipt.isBlank()) {
             call.respondError(
-                message = "Missing/invalid fields: amount (>0), currency, receipt",
+                message = "Missing/invalid fields: amount (1–${maxAmountPaise} paise), currency, receipt",
                 data = Unit,
                 status = HttpStatusCode.BadRequest
             )
@@ -281,11 +283,12 @@ fun Route.paymentRoute() {
         }
 
         // Persist payment and link to user
-        val dbUser = try {
-            DatabaseFactory.findUserByEmail(userEmail)
-        } catch (e: Exception) {
-            paymentLogger.error("Failed to fetch user by email for payment storing: $userEmail", e)
-            null
+        val dbUser = when (val r = userRepository.findUserByEmail(userEmail)) {
+            is Result.Success -> r.data
+            is Result.Error -> {
+                paymentLogger.error("Failed to fetch user by email for payment storing: $userEmail - ${r.message}")
+                null
+            }
         }
 
         if (dbUser == null) {
@@ -346,14 +349,12 @@ fun Route.paymentRoute() {
             userAgent = ua
         )
 
-        val saved = try {
-            DatabaseFactory.savePayment(payment)
-        } catch (e: Exception) {
-            paymentLogger.error(
-                "Failed to save verified payment for user=$userEmail order=$orderId",
-                e
-            )
-            false
+        val saved = when (val r = paymentRepository.savePayment(payment)) {
+            is Result.Success -> r.data
+            is Result.Error -> {
+                paymentLogger.error("Failed to save verified payment for user=$userEmail order=$orderId: ${r.message}")
+                false
+            }
         }
 
         if (!saved) {
@@ -403,8 +404,9 @@ fun Route.paymentRoute() {
             paymentLogger.warn("No pricing tier matched for payment $paymentId, premium not auto-activated")
         }
 
-        // Run email and notification sending in background to avoid blocking the response
-        CoroutineScope(Dispatchers.IO).launch {
+        // Run email and notification sending in background to avoid blocking the response.
+        // Tied to the application lifecycle so Cloud Run SIGTERM cancels it gracefully.
+        call.application.launch(Dispatchers.IO) {
             try {
                 when (val emailResult = billService.sendPaymentBillEmail(userEmail, paymentId)) {
                     is Result.Success -> {
@@ -434,7 +436,7 @@ fun Route.paymentRoute() {
                             } catch (_: Exception) {
                                 Instant.now()
                             }
-                            val baseDate = ZonedDateTime.ofInstant(baseInstant, ZoneId.systemDefault())
+                            val baseDate = ZonedDateTime.ofInstant(baseInstant, ZoneId.of("UTC"))
                             val expiryDate = when (tier.durationType) {
                                 DurationType.DAYS -> baseDate.plusDays(tier.duration.toLong())
                                 DurationType.MONTHS -> baseDate.plusMonths(tier.duration.toLong())

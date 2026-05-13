@@ -26,25 +26,14 @@ fun Application.module() {
     configureFirebase()
     configureServiceCatalogSeeding()
     configureServiceTypeResolver()
-    configureDatabaseIndexes()
 }
 
-/**
- * Configure Firebase Admin SDK for push notifications.
- * This function initializes Firebase during application startup.
- */
 fun configureFirebase() {
     config.FirebaseAdmin.initialize()
 }
 
-/**
- * Configure service catalog seeding.
- * This function seeds the database with initial service catalog data on application startup.
- */
 fun Application.configureServiceCatalogSeeding() {
     val seedingService by inject<data.service.ServiceCatalogSeedingService>()
-
-    // Run seeding asynchronously on application startup (non-blocking)
     monitor.subscribe(ApplicationStarted) {
         this.launch {
             seedingService.seedInitialServices()
@@ -52,28 +41,8 @@ fun Application.configureServiceCatalogSeeding() {
     }
 }
 
-/**
- * Configure ServiceTypeResolver for backward compatibility.
- * This function initializes the resolver with the ServiceCatalogRepository.
- */
 fun Application.configureServiceTypeResolver() {
-    val serviceCatalogRepository by inject<domain.repository.ServiceCatalogRepository>()
-
-    // Initialize the resolver after DI is configured
+    val serviceCatalogRepository by inject<com.androidplay.weatherify.repository.ServiceCatalogRepository>()
     util.ServiceTypeResolver.initialize(serviceCatalogRepository)
 }
 
-/**
- * Configure database indexes asynchronously during application startup.
- * This replaces runBlocking in init blocks for better startup performance.
- */
-fun Application.configureDatabaseIndexes() {
-    val databaseModule by inject<data.source.DatabaseModule>()
-
-    // Create indexes asynchronously on application startup
-    monitor.subscribe(ApplicationStarted) {
-        this.launch {
-            databaseModule.createIndexes()
-        }
-    }
-}

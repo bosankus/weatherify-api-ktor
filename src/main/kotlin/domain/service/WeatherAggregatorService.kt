@@ -1,7 +1,7 @@
 package domain.service
 
 import bose.ankush.data.model.UnifiedWeatherResponse
-import domain.model.Result
+import com.androidplay.core.common.Result
 
 interface WeatherAggregatorService {
 

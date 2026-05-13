@@ -4,12 +4,7 @@ import bose.ankush.route.*
 import domain.service.SavedLocationService
 import io.ktor.server.routing.*
 import org.koin.java.KoinJavaComponent.get
-import route.savedLocationRoute
 
-/**
- * Registrar implementations that simply delegate to existing route extension functions.
- * This keeps behavior unchanged while enabling modular registration.
- */
 object WeatherRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         with(root) { weatherRoute() }

@@ -1,19 +1,21 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.*
+import com.androidplay.weatherify.domain.*
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
 import config.TokenRefreshResult
-import domain.model.Result
-import domain.repository.UserRepository
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.UserRepository
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
+import bose.ankush.base.AUTH_RATE_LIMIT
 import org.koin.ktor.ext.inject
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -24,6 +26,8 @@ fun Route.authRoute() {
     val userRepository: UserRepository by application.inject()
     val analytics: util.Analytics by application.inject()
     val logger = LoggerFactory.getLogger("AuthRoute")
+
+    rateLimit(AUTH_RATE_LIMIT) {
 
     post(Constants.Api.REGISTER_ENDPOINT) {
         call.handleAuth(logger, "registration") {
@@ -173,6 +177,8 @@ fun Route.authRoute() {
             }
         }
     }
+
+    } // end rateLimit(AUTH_RATE_LIMIT)
 
     authenticate("jwt-auth") {
         post(Constants.Api.LOGOUT_ENDPOINT) {

@@ -1,9 +1,9 @@
 package bose.ankush.route
 
-import bose.ankush.data.model.*
+import com.androidplay.weatherify.domain.*
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
-import domain.model.Result
+import com.androidplay.core.common.Result
 import domain.service.RefundService
 import io.ktor.http.*
 import io.ktor.server.request.*
@@ -60,7 +60,8 @@ fun Route.refundRoute() {
                 return@post
             }
 
-            if (request.amount != null && request.amount <= 0) {
+            val reqAmount = request.amount
+            if (reqAmount != null && reqAmount <= 0) {
                 call.respondError(
                     message = "Refund amount must be greater than zero (amount is in paise)",
                     data = Unit,

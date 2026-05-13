@@ -1,7 +1,7 @@
 package domain.service
 
-import bose.ankush.data.model.BillGenerationResponse
-import domain.model.Result
+import com.androidplay.weatherify.domain.BillGenerationResponse
+import com.androidplay.core.common.Result
 
 /**
  * Service interface for bill generation operations.

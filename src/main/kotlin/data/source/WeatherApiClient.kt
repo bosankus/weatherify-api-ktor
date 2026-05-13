@@ -2,7 +2,7 @@ package data.source
 
 import bose.ankush.data.model.AirQuality
 import bose.ankush.data.model.Weather
-import domain.model.Result
+import com.androidplay.core.common.Result
 
 /**
  * Interface for weather API client.

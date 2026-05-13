@@ -2,7 +2,7 @@ package domain.repository
 
 import bose.ankush.data.model.AirQuality
 import bose.ankush.data.model.Weather
-import domain.model.Result
+import com.androidplay.core.common.Result
 
 /**
  * Repository interface for Weather-related operations.

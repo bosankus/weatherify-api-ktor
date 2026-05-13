@@ -1,12 +1,12 @@
 package data.service
 
-import bose.ankush.data.model.MonthlyRevenue
-import domain.model.Result
-import domain.repository.PaymentRepository
+import com.androidplay.weatherify.domain.MonthlyRevenue
+import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.PaymentRepository
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import util.RedisCache
+import com.androidplay.core.cache.CacheRepository
 
 /**
  * Caching layer over PaymentRepository for expensive aggregation queries.
@@ -21,7 +21,7 @@ import util.RedisCache
  */
 open class PaymentAnalyticsCache(
     private val paymentRepository: PaymentRepository,
-    private val redis: RedisCache
+    private val redis: CacheRepository
 ) {
     private val logger = LoggerFactory.getLogger(PaymentAnalyticsCache::class.java)
     private val json = Json { ignoreUnknownKeys = true }

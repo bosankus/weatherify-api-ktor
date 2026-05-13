@@ -1,7 +1,7 @@
 package domain.service
 
-import bose.ankush.data.model.PlaceSearchResult
-import domain.model.Result
+import com.androidplay.weatherify.domain.PlaceSearchResult
+import com.androidplay.core.common.Result
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*

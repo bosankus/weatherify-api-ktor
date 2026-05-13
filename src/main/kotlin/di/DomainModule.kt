@@ -6,12 +6,7 @@ import domain.service.impl.*
 import domain.service.NominatimService
 import org.koin.dsl.module
 
-/**
- * Koin module for domain layer dependencies.
- * This module provides service implementations.
- */
 val domainModule = module {
-    // Services
     single<AuthService> { AuthServiceImpl(get()) }
     single<FeedbackService> { FeedbackServiceImpl(get()) }
     single<WeatherService> { WeatherServiceImpl(get()) }
@@ -26,7 +21,6 @@ val domainModule = module {
     single { SavedLocationService(get(), get(), get()) }
     single { NoteService(get()) }
 
-    // Data Services
     single { ServiceCatalogSeedingService(get()) }
     single { ServiceCatalogCache(get(), cacheDurationMinutes = 15) }
     single { data.service.PaymentAnalyticsCache(get(), get()) }

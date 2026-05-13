@@ -1,7 +1,7 @@
 package domain.service
 
-import bose.ankush.data.model.Feedback
-import domain.model.Result
+import com.androidplay.weatherify.domain.Feedback
+import com.androidplay.core.common.Result
 
 /**
  * Service interface for feedback-related operations.
