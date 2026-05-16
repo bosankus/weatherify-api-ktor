@@ -38,6 +38,7 @@ repositories {
 dependencies {
     implementation(project(":core"))
     implementation(project(":weatherify"))
+    implementation(project(":transloom"))
 
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.default.headers)

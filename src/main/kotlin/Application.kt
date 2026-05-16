@@ -23,6 +23,7 @@ fun Application.module() {
     configureHTTP()
     configureAuthentication()
     configureRouting()
+    configureTransloom()
     configureFirebase()
     configureServiceCatalogSeeding()
     configureServiceTypeResolver()

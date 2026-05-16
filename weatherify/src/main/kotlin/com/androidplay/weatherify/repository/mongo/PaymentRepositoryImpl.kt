@@ -30,12 +30,50 @@ class PaymentRepositoryImpl(private val databaseModule: WeatherifyDb) : PaymentR
 
     private fun getPaymentsCollection() = databaseModule.getPaymentsCollection()
 
+    private fun getPaymentsRawCollection() = databaseModule.getPaymentsRawCollection()
+
+    private fun documentToPayment(doc: Document): Payment? {
+        return try {
+            val id = when (val idValue = doc.get("_id")) {
+                is String -> try { ObjectId(idValue) } catch (_: Exception) { ObjectId() }
+                is ObjectId -> idValue
+                else -> ObjectId()
+            }
+            Payment(
+                id = id,
+                userEmail = doc.getString("userEmail") ?: "",
+                orderId = doc.getString("razorpay_order_id") ?: "",
+                paymentId = doc.getString("razorpay_payment_id") ?: "",
+                signature = doc.getString("razorpay_signature") ?: "",
+                amount = doc.getInteger("amount"),
+                currency = doc.getString("currency"),
+                receipt = doc.getString("receipt"),
+                status = doc.getString("status"),
+                notes = doc.get("notes")?.let {
+                    @Suppress("UNCHECKED_CAST")
+                    it as? Map<String, String>
+                },
+                createdAt = doc.getString("createdAt") ?: Instant.now().toString(),
+                verifiedAt = doc.getString("verifiedAt"),
+                userId = doc.getString("userId"),
+                serviceType = doc.getString("serviceType")?.let {
+                    try { ServiceType.valueOf(it) } catch (_: Exception) { null }
+                },
+                pricingTierId = doc.getString("pricingTierId"),
+                requestIp = doc.getString("requestIp"),
+                userAgent = doc.getString("userAgent")
+            )
+        } catch (e: Exception) {
+            logger.error("Failed to map payment document: ${e.message}", e)
+            null
+        }
+    }
+
     override suspend fun getPaymentByTransactionId(transactionId: String): Result<Payment?> {
         logger.debug("Finding payment by transaction ID: $transactionId")
         return try {
-            // Use the actual MongoDB field name (razorpay_payment_id) not the Kotlin property name
             val query = Document("razorpay_payment_id", transactionId)
-            val payment = getPaymentsCollection().find(query).firstOrNull()
+            val payment = getPaymentsRawCollection().find(query).firstOrNull()?.let { documentToPayment(it) }
             logger.debug("Payment found: ${payment != null}")
             Result.success(payment)
         } catch (e: Exception) {
@@ -48,7 +86,7 @@ class PaymentRepositoryImpl(private val databaseModule: WeatherifyDb) : PaymentR
         logger.debug("Finding payments by user ID: $userId")
         return try {
             val query = Document("userId", userId)
-            val payments = getPaymentsCollection().find(query).toList()
+            val payments = getPaymentsRawCollection().find(query).toList().mapNotNull { documentToPayment(it) }
             logger.debug("Found ${payments.size} payments for user ID: $userId")
             Result.success(payments)
         } catch (e: Exception) {
@@ -61,7 +99,7 @@ class PaymentRepositoryImpl(private val databaseModule: WeatherifyDb) : PaymentR
         logger.debug("Finding payments by user email: $userEmail")
         return try {
             val query = Document("userEmail", userEmail)
-            val payments = getPaymentsCollection().find(query).toList()
+            val payments = getPaymentsRawCollection().find(query).toList().mapNotNull { documentToPayment(it) }
             logger.debug("Found ${payments.size} payments for user email: $userEmail")
             Result.success(payments)
         } catch (e: Exception) {
@@ -74,13 +112,14 @@ class PaymentRepositoryImpl(private val databaseModule: WeatherifyDb) : PaymentR
         logger.debug("Getting all payments with page: $page, pageSize: $pageSize")
         return try {
             val skip = (page - 1) * pageSize
-            val totalCount = getPaymentsCollection().countDocuments()
-            val payments = getPaymentsCollection()
+            val totalCount = getPaymentsRawCollection().countDocuments()
+            val payments = getPaymentsRawCollection()
                 .find()
                 .sort(Document("createdAt", -1))
                 .skip(skip)
                 .limit(pageSize)
                 .toList()
+                .mapNotNull { documentToPayment(it) }
             logger.debug("Retrieved ${payments.size} payments out of $totalCount total")
             Result.success(Pair(payments, totalCount))
         } catch (e: Exception) {
@@ -186,65 +225,14 @@ class PaymentRepositoryImpl(private val databaseModule: WeatherifyDb) : PaymentR
             // Count total matching documents
             val totalCount = getPaymentsCollection().countDocuments(filter)
 
-            // Apply pagination and retrieve as Documents to handle mixed _id types
             val skip = (page - 1) * pageSize
-            val paymentDocs = getPaymentsCollection()
-                .find(filter, Document::class.java)
+            val payments = getPaymentsRawCollection()
+                .find(filter)
                 .sort(Sorts.descending("createdAt"))
                 .skip(skip)
                 .limit(pageSize)
                 .toList()
-
-            // Manually map Documents to Payment objects, handling both STRING and ObjectId _id
-            val payments = paymentDocs.mapNotNull { doc ->
-                try {
-                    // Handle _id field - can be either String or ObjectId
-                    val id = when (val idValue = doc.get("_id")) {
-                        is String -> {
-                            // Try to parse string as ObjectId, or create new one if invalid
-                            try {
-                                ObjectId(idValue)
-                            } catch (_: Exception) {
-                                logger.warn("Invalid ObjectId string: $idValue, creating new ObjectId")
-                                ObjectId()
-                            }
-                        }
-                        is ObjectId -> idValue
-                        else -> {
-                            logger.warn("Unexpected _id type: ${idValue?.javaClass?.name}, creating new ObjectId")
-                            ObjectId()
-                        }
-                    }
-
-                    Payment(
-                        id = id,
-                        userEmail = doc.getString("userEmail") ?: "",
-                        orderId = doc.getString("razorpay_order_id") ?: "",
-                        paymentId = doc.getString("razorpay_payment_id") ?: "",
-                        signature = doc.getString("razorpay_signature") ?: "",
-                        amount = doc.getInteger("amount"),
-                        currency = doc.getString("currency"),
-                        receipt = doc.getString("receipt"),
-                        status = doc.getString("status"),
-                        notes = doc.get("notes")?.let { 
-                            @Suppress("UNCHECKED_CAST")
-                            it as Map<String, String> 
-                        },
-                        createdAt = doc.getString("createdAt") ?: Instant.now().toString(),
-                        verifiedAt = doc.getString("verifiedAt"),
-                        userId = doc.getString("userId"),
-                        serviceType = doc.getString("serviceType")?.let {
-                            try { ServiceType.valueOf(it) } catch (_: Exception) { null }
-                        },
-                        pricingTierId = doc.getString("pricingTierId"),
-                        requestIp = doc.getString("requestIp"),
-                        userAgent = doc.getString("userAgent")
-                    )
-                } catch (e: Exception) {
-                    logger.error("Failed to map payment document: ${e.message}", e)
-                    null
-                }
-            }
+                .mapNotNull { documentToPayment(it) }
 
             logger.debug("Retrieved ${payments.size} payments out of $totalCount total")
             Result.success(Pair(payments, totalCount))

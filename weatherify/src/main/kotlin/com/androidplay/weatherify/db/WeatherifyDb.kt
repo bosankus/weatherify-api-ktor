@@ -36,6 +36,7 @@ class WeatherifyDb(private val database: MongoDatabase) {
     }
 
     fun getUsersCollection(): MongoCollection<User> = getCollection("users")
+    fun getPaymentsRawCollection(): MongoCollection<Document> = getCollection("payments")
     fun getFeedbackCollection(): MongoCollection<Feedback> = getCollection("feedback")
     fun getSavedLocationsCollection(): MongoCollection<SavedLocation> = getCollection("saved_locations")
     fun getPaymentsCollection(): MongoCollection<Payment> = getCollection("payments")

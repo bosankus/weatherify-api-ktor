@@ -1,6 +1,9 @@
 package bose.ankush.base
 
 import bose.ankush.data.model.ApiResponse
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
+import com.androidplay.core.secrets.getSecretValue
 import config.Environment
 import config.JwtConfig
 import io.ktor.http.ContentType
@@ -14,6 +17,7 @@ import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.auth.parseAuthorizationHeader
 import io.ktor.server.response.header
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -21,6 +25,7 @@ import util.Constants
 
 fun Application.configureAuthentication() {
     val logger = LoggerFactory.getLogger("Authentication")
+    val transloomJwtSecret = getSecretValue("jwt-secret")
 
     install(Authentication) {
         jwt("jwt-auth") {
@@ -66,6 +71,24 @@ fun Application.configureAuthentication() {
                     )
                 )
                 call.respondText(Json.encodeToString(apiResponse), ContentType.Application.Json)
+            }
+        }
+
+        jwt("auth-jwt") {
+            realm = "Transloom API"
+            verifier(
+                JWT.require(Algorithm.HMAC256(transloomJwtSecret))
+                    .withAudience("transloom-app")
+                    .withIssuer("transloom-backend")
+                    .build()
+            )
+            validate { credential ->
+                val hasUserId = credential.payload.getClaim("userId")?.asString() != null
+                val hasGithubId = credential.payload.getClaim("githubId")?.asLong() != null
+                if (hasUserId && hasGithubId) JWTPrincipal(credential.payload) else null
+            }
+            challenge { _, _ ->
+                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Token is not valid or has expired"))
             }
         }
     }

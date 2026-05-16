@@ -1223,7 +1223,7 @@ function generatePaymentBill(payment) {
         sendViaEmail: false
     };
 
-    fetch('/admin/finance/generate-bill', {
+    fetch('/finance/generate-bill', {
         method: 'POST',
         credentials: 'include',
         headers: {
