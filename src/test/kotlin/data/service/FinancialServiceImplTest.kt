@@ -783,11 +783,11 @@ private class MockPaymentRepository : PaymentRepository {
     }
 }
 
-// Mock PaymentAnalyticsCache — bypasses Redis (no URL configured = no-op cache) and
+// Mock PaymentAnalyticsCache — bypasses Redis (no pool = no-op cache) and
 // delegates directly to the supplied MockPaymentRepository.
 private class MockPaymentAnalyticsCache(
     repo: MockPaymentRepository
-) : PaymentAnalyticsCache(repo, UpstashCacheRepository(""))
+) : PaymentAnalyticsCache(repo, UpstashCacheRepository(null))
 
 // Mock RefundService for testing
 private class MockRefundService : RefundService {
