@@ -35,6 +35,11 @@ class StripeService(private val billingRepository: BillingRepository) {
                 .setMode(SessionCreateParams.Mode.SUBSCRIPTION)
                 .setSuccessUrl("$appUrl/transloom/app?billing=success&session_id={CHECKOUT_SESSION_ID}")
                 .setCancelUrl("$appUrl/transloom/app?billing=cancelled")
+                .setSubscriptionData(
+                    SessionCreateParams.SubscriptionData.builder()
+                        .setTrialPeriodDays(60)
+                        .build()
+                )
                 .apply { if (userEmail != null) setCustomerEmail(userEmail) }
                 .addLineItem(
                     SessionCreateParams.LineItem.builder()

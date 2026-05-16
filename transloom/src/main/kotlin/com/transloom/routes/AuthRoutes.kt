@@ -12,6 +12,7 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -46,7 +47,9 @@ data class GitHubUser(
 
 fun Route.configureAuthRoutes(jwtSecret: String, userRepository: UserRepository) {
     val httpClient = HttpClient(CIO) {
-        install(ContentNegotiation) { json() }
+        install(ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true })
+        }
     }
     application.monitor.subscribe(ApplicationStopped) { httpClient.close() }
 
@@ -58,6 +61,7 @@ fun Route.configureAuthRoutes(jwtSecret: String, userRepository: UserRepository)
     route("/transloom/auth") {
 
         get("/github") {
+            val plan = call.request.queryParameters["plan"]
             val state = UUID.randomUUID().toString()
             call.response.cookies.append(
                 Cookie(
@@ -70,6 +74,19 @@ fun Route.configureAuthRoutes(jwtSecret: String, userRepository: UserRepository)
                     extensions = mapOf("SameSite" to "Lax")
                 )
             )
+            if (!plan.isNullOrBlank()) {
+                call.response.cookies.append(
+                    Cookie(
+                        name = "oauth_plan",
+                        value = plan.uppercase(),
+                        path = "/transloom/auth",
+                        maxAge = 600,
+                        httpOnly = true,
+                        secure = true,
+                        extensions = mapOf("SameSite" to "Lax")
+                    )
+                )
+            }
             val url = "https://github.com/login/oauth/authorize" +
                     "?client_id=$clientId" +
                     "&redirect_uri=$redirectUri" +
@@ -90,6 +107,12 @@ fun Route.configureAuthRoutes(jwtSecret: String, userRepository: UserRepository)
                 Cookie("oauth_state", "", path = "/transloom/auth",
                     expires = io.ktor.util.date.GMTDate.START, maxAge = 0)
             )
+            val selectedPlan = call.request.cookies["oauth_plan"]?.uppercase()
+            call.response.cookies.append(
+                Cookie("oauth_plan", "", path = "/transloom/auth",
+                    expires = io.ktor.util.date.GMTDate.START, maxAge = 0)
+            )
+            val planSuffix = if (!selectedPlan.isNullOrBlank() && selectedPlan != "FREE") "&plan=$selectedPlan" else ""
 
             val code = call.request.queryParameters["code"]
             if (code == null) {
@@ -114,7 +137,7 @@ fun Route.configureAuthRoutes(jwtSecret: String, userRepository: UserRepository)
                     .withClaim("username", "mock-developer")
                     .withExpiresAt(Date(System.currentTimeMillis() + 604800000))
                     .sign(Algorithm.HMAC256(jwtSecret))
-                call.respondRedirect(frontendRedirectUrl + mockToken)
+                call.respondRedirect(frontendRedirectUrl + mockToken + planSuffix)
                 return@get
             }
 
@@ -156,7 +179,7 @@ fun Route.configureAuthRoutes(jwtSecret: String, userRepository: UserRepository)
                 .withExpiresAt(Date(System.currentTimeMillis() + 604800000))
                 .sign(Algorithm.HMAC256(jwtSecret))
 
-            call.respondRedirect(frontendRedirectUrl + jwtToken)
+            call.respondRedirect(frontendRedirectUrl + jwtToken + planSuffix)
         }
     }
 }

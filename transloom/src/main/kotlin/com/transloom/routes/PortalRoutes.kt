@@ -13,6 +13,23 @@ fun Route.configurePortalRoutes() {
     }
 }
 
+// ─── Shared logo ──────────────────────────────────────────────────────────────
+
+private const val LOGO_SVG = """
+<svg class="brand-mark" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="tlmGrad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00F5B0"/>
+      <stop offset="100%" stop-color="#00A87A"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="32" height="32" rx="8" fill="url(#tlmGrad)"/>
+  <path d="M8.5 10.5 H23.5" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M16 10.5 V23" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M10 18.5 Q13 16.5 16 18.5 T22 18.5" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.55"/>
+</svg>
+"""
+
 // ─── Shared CSS ───────────────────────────────────────────────────────────────
 
 private const val SHARED_CSS = """
@@ -26,12 +43,18 @@ private const val SHARED_CSS = """
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
 a{color:var(--accent);text-decoration:none}
-button,.btn{cursor:pointer;border:none;font-family:inherit;font-size:14px;font-weight:500;border-radius:var(--radius-sm);transition:all .15s}
-.btn-primary{background:var(--accent);color:#000;padding:10px 20px}
-.btn-primary:hover{background:#00c98d;transform:translateY(-1px)}
+button,.btn{cursor:pointer;border:none;font-family:inherit;font-size:14px;font-weight:500;border-radius:var(--radius-sm);transition:background-color .2s ease,color .2s ease,transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.btn-primary{background:var(--accent);color:#000;padding:10px 20px;box-shadow:0 1px 0 rgba(0,0,0,.06),0 0 0 0 rgba(0,229,160,.0)}
+.btn-primary:hover{background:#00c98d;transform:translateY(-1px);box-shadow:0 8px 24px -8px rgba(0,229,160,.45)}
 .btn-ghost{background:transparent;color:var(--text-muted);padding:10px 20px;border:1px solid var(--border)}
-.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}
+.brand{display:inline-flex;align-items:center;gap:10px;font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.2px}
+.brand-mark{flex-shrink:0;display:block;filter:drop-shadow(0 2px 8px rgba(0,229,160,.18))}
+.fade-up{opacity:0;transform:translateY(18px);transition:opacity .65s cubic-bezier(.2,.7,.2,1),transform .65s cubic-bezier(.2,.7,.2,1)}
+.fade-up.in-view{opacity:1;transform:translateY(0)}
+.fade-up.d1{transition-delay:.08s}.fade-up.d2{transition-delay:.16s}.fade-up.d3{transition-delay:.24s}.fade-up.d4{transition-delay:.32s}
+@media (prefers-reduced-motion:reduce){.fade-up{opacity:1;transform:none;transition:none}*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 .badge{display:inline-block;background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,229,160,.3);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;letter-spacing:.5px}
 input,select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:14px;padding:9px 12px;width:100%;outline:none;transition:border-color .15s}
 input:focus,select:focus,textarea:focus{border-color:var(--accent)}
@@ -44,8 +67,8 @@ label{display:block;font-size:13px;color:var(--text-dim);margin-bottom:5px}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-private fun FlowContent.stepCard(num: String, title: String, desc: String) {
-    div("step") {
+private fun FlowContent.stepCard(num: String, title: String, desc: String, extra: String = "") {
+    div("step ${extra}".trim()) {
         div("step-num") { +num }
         div("step-body") {
             h3 { +title }
@@ -54,9 +77,9 @@ private fun FlowContent.stepCard(num: String, title: String, desc: String) {
     }
 }
 
-private fun FlowContent.featureCard(icon: String, title: String, desc: String) {
-    div("feature-card card") {
-        div("feature-icon") { +icon }
+private fun FlowContent.featureCard(icon: String, title: String, desc: String, extra: String = "") {
+    div("feature-card card ${extra}".trim()) {
+        div("feature-icon") { unsafe { +icon } }
         h3 { +title }
         p { +desc }
     }
@@ -87,17 +110,19 @@ private fun FlowContent.statCard(statId: String, label: String, value: String, y
 
 private fun HTML.landingPage() {
     head {
-        title { +"Transloom — i18n on autopilot" }
+        title { +"Transloom — Automated app localization for developers" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        meta(name = "description", content = "Push a commit. Transloom translates your new strings into every target language and opens a pull request — automatically.")
         style { unsafe { +"$SHARED_CSS$LANDING_CSS" } }
     }
     body {
         nav {
             div("nav-inner") {
-                div("logo") { span { +"●" }; +" Transloom" }
+                div("brand") { unsafe { +LOGO_SVG }; span { +"Transloom" } }
                 div("nav-links") {
-                    a("/transloom") { +"How it works" }
+                    a("#how") { +"How it works" }
                     a("/transloom#features") { +"Features" }
+                    a("#pricing") { +"Pricing" }
                     a("/transloom/auth/github") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Connect GitHub" }
                 }
             }
@@ -106,21 +131,93 @@ private fun HTML.landingPage() {
         section("hero") {
             div("hero-glow") {}
             div("hero-inner") {
-                span("badge") { +"Now in Beta · Free to start" }
-                h1("hero-title") {
+                span("badge fade-up") { +"Now in Beta · Free to start" }
+                h1("hero-title fade-up d1") {
                     +"Developer adds "; span("accent") { +"one string" }; +". We handle"; br {}; +"the rest."
                 }
-                p("hero-sub") {
+                p("hero-sub fade-up d2") {
                     +"Push to GitHub. Transloom detects new strings, translates them with Gemini AI,"; br {}
                     +"respects your glossary, and opens a pull request — automatically."
                 }
-                div("hero-actions") {
+                div("hero-actions fade-up d3") {
                     a("/transloom/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Connect with GitHub" }
                     a("/transloom#how") { classes = setOf("btn", "btn-ghost"); +"See how it works →" }
                 }
-                div("hero-lang-strip") {
+                div("hero-lang-strip fade-up d4") {
                     listOf("🇪🇸 ES","🇫🇷 FR","🇩🇪 DE","🇯🇵 JA","🇰🇷 KO","🇨🇳 ZH","🇮🇳 HI","🇧🇷 PT","🇮🇹 IT","🇸🇦 AR")
                         .forEach { span("lang-chip") { +it } }
+                }
+            }
+        }
+
+        section("demo-section") {
+            div("demo-inner") {
+                p("section-label fade-up") { +"FROM COMMIT TO PR" }
+                h2("demo-title fade-up d1") { +"See it work in seconds." }
+                div("demo-grid fade-up d2") {
+                    div("demo-card demo-before") {
+                        div("demo-card-head") {
+                            span("demo-dot dot-r") {}; span("demo-dot dot-y") {}; span("demo-dot dot-g") {}
+                            span("demo-file") { +"values/strings.xml" }
+                        }
+                        div("demo-card-body") {
+                            div("code-line ln-context") { span("ln") { +"12" }; span("code") { +"  <string name=\"greeting\">Hello</string>" } }
+                            div("code-line ln-add") { span("ln") { +"13" }; span("code") { +"+ <string name=\"welcome\">Welcome back!</string>" } }
+                            div("code-line ln-context") { span("ln") { +"14" }; span("code") { +"  <string name=\"settings\">Settings</string>" } }
+                            div("demo-cta-row") {
+                                span("git-prompt") { +"$ git push" }
+                            }
+                        }
+                    }
+                    div("demo-arrow") {
+                        unsafe { +"""<svg viewBox="0 0 64 16" width="56" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 8h58M52 2l10 6-10 6"/></svg>""" }
+                        span("demo-arrow-label") { +"~60s" }
+                    }
+                    div("demo-card demo-after") {
+                        div("demo-card-head") {
+                            span("pr-badge") { +"PR #128" }
+                            span("demo-file") { +"auto-translated by Transloom" }
+                        }
+                        div("demo-card-body") {
+                            listOf(
+                                "🇪🇸" to "¡Bienvenido de nuevo!",
+                                "🇫🇷" to "Bon retour !",
+                                "🇩🇪" to "Willkommen zurück!",
+                                "🇯🇵" to "おかえりなさい！",
+                                "🇮🇳" to "वापसी पर स्वागत है!"
+                            ).forEachIndexed { i, (flag, txt) ->
+                                div("tr-row") {
+                                    span("tr-flag") { +flag }
+                                    span("tr-text") { +"\"$txt\"" }
+                                    span("tr-check") { +"✓" }
+                                }
+                            }
+                            div("demo-cta-row demo-cta-pass") {
+                                span("check-pill") { +"✓ All checks passed" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        section("stats-band") {
+            div("stats-band-inner") {
+                div("stat-tile fade-up") {
+                    p("stat-num") { +"10+" }
+                    p("stat-cap") { +"languages out of the box" }
+                }
+                div("stat-tile fade-up d1") {
+                    p("stat-num") { +"<60s" }
+                    p("stat-cap") { +"from commit to pull request" }
+                }
+                div("stat-tile fade-up d2") {
+                    p("stat-num") { +"0" }
+                    p("stat-cap") { +"config files to write" }
+                }
+                div("stat-tile fade-up d3") {
+                    p("stat-num") { +"100%" }
+                    p("stat-cap") { +"placeholders preserved" }
                 }
             }
         }
@@ -128,13 +225,17 @@ private fun HTML.landingPage() {
         section("how-section") {
             id = "how"
             div("section-inner") {
-                p("section-label") { +"HOW IT WORKS" }
-                h2 { +"Zero config. Zero friction." }
+                p("section-label fade-up") { +"HOW IT WORKS" }
+                h2("fade-up d1") { +"Zero config. Zero friction." }
                 div("steps") {
-                    stepCard("01","Push a commit","Add a new string key to strings.xml or Localizable.strings and push.")
-                    stepCard("02","Transloom detects it","Our webhook picks up the diff, extracts new keys, and validates placeholder integrity.")
-                    stepCard("03","AI translates","Gemini 2.5 Flash translates with your app tone, category, and custom glossary applied.")
-                    stepCard("04","PR lands in your repo","A ready-to-merge pull request appears with all target languages — auto-approved or queued for review.")
+                    listOf(
+                        Triple("01","Push a commit","Add a new string key to strings.xml or Localizable.strings and push."),
+                        Triple("02","Transloom detects it","Our webhook picks up the diff, extracts new keys, and validates placeholder integrity."),
+                        Triple("03","AI translates","Gemini 2.5 Flash translates with your app tone, category, and custom glossary applied."),
+                        Triple("04","PR lands in your repo","A ready-to-merge pull request appears with all target languages — auto-approved or queued for review.")
+                    ).forEachIndexed { i, (num, title, desc) ->
+                        stepCard(num, title, desc, extra = "fade-up d${i.coerceAtMost(4)}")
+                    }
                 }
             }
         }
@@ -142,49 +243,109 @@ private fun HTML.landingPage() {
         section("features-section") {
             id = "features"
             div("section-inner") {
-                p("section-label") { +"FEATURES" }
-                h2 { +"Everything i18n. Nothing extra." }
+                p("section-label fade-up") { +"FEATURES" }
+                h2("fade-up d1") { +"Everything you need to ship globally. Nothing you don't." }
                 div("features-grid") {
-                    featureCard("🧠","Context-aware AI","Gemini 2.5 Flash understands your app category and tone, producing natural-sounding translations.")
-                    featureCard("🛡️","Placeholder guard","Automatic detection of %1\$s, %d, %@, &#8211; — bad translations are blocked before they ship.")
-                    featureCard("📖","Glossary enforcement","Define brand terms once per language. Applied consistently across every string, every time.")
-                    featureCard("🔍","Review portal","Flag anomalous translations for human review before they hit your main branch.")
-                    featureCard("⚡","Translation memory","Identical strings reuse cached translations — faster throughput, lower API cost.")
-                    featureCard("🌐","Android + iOS","Native support for strings.xml and Localizable.strings file formats out of the box.")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M9 2v2M15 20v2M9 20v2M2 15h2M2 9h2M20 15h2M20 9h2"/></svg>""","Context-aware AI","Gemini 2.5 Flash understands your app category and tone, producing natural-sounding translations.","fade-up")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""","Placeholder guard","Automatic detection of %1\$s, %d, %@, &#8211; — bad translations are blocked before they ship.","fade-up d1")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>""","Glossary enforcement","Define brand terms once per language. Applied consistently across every string, every time.","fade-up d2")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>""","Review portal","Flag anomalous translations for human review before they hit your main branch.","fade-up d3")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""","Translation memory","Identical strings reuse cached translations — faster throughput, lower API cost.","fade-up d4")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""","Android + iOS","Native support for strings.xml and Localizable.strings file formats out of the box.","fade-up d4")
                 }
+            }
+        }
+
+        section("pricing-section") {
+            id = "pricing"
+            div("section-inner") {
+                p("section-label fade-up") { +"PRICING" }
+                h2("fade-up d1") { +"Simple, transparent pricing." }
+                div("pricing-grid") {
+                    div("pricing-card fade-up") {
+                        p("pricing-name") { +"Free" }
+                        p("pricing-price") { +"$0"; span("price-mo") { +"/mo" } }
+                        p("pricing-period") { +"Forever · No credit card needed" }
+                        ul("pricing-features") {
+                            li { +"500 strings / month" }
+                            li { +"1 project" }
+                            li { +"3 target languages" }
+                            li { +"GitHub webhook" }
+                            li { +"AI translation" }
+                        }
+                        a("/transloom/auth/github") { classes = setOf("pricing-cta", "outline"); +"Get started free" }
+                    }
+                    div("pricing-card recommended fade-up d1") {
+                        span("rec-badge") { +"Best for Solo Developers" }
+                        span("trial-badge") { +"60-day free trial" }
+                        p("pricing-name") { +"Solo" }
+                        p("pricing-price") { +"$4.99"; span("price-mo") { +"/mo" } }
+                        p("pricing-period") { +"after trial · Cancel anytime" }
+                        ul("pricing-features") {
+                            li { +"5,000 strings / month" }
+                            li { +"3 projects" }
+                            li { +"All target languages" }
+                            li { +"Glossary enforcement" }
+                            li { +"Translation memory" }
+                            li { +"Review portal" }
+                        }
+                        a("/transloom/auth/github?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 60-day free trial" }
+                    }
+                    div("pricing-card fade-up d2") {
+                        span("trial-badge") { +"60-day free trial" }
+                        p("pricing-name") { +"Team" }
+                        p("pricing-price") { +"$19.99"; span("price-mo") { +"/mo" } }
+                        p("pricing-period") { +"after trial · Cancel anytime" }
+                        ul("pricing-features") {
+                            li { +"Unlimited strings" }
+                            li { +"10 projects" }
+                            li { +"All target languages" }
+                            li { +"Everything in Solo" }
+                            li { +"Priority support" }
+                        }
+                        a("/transloom/auth/github?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 60-day free trial" }
+                    }
+                }
+                p("pricing-note") { +"All paid plans include a 60-day free trial. No charge until the trial ends — cancel any time." }
             }
         }
 
         section("cta-section") {
             div("cta-inner") {
-                h2 { +"Ready to ship in every language?" }
-                p { +"Free tier includes 500 strings/month across 1 project." }
-                a("/transloom/auth/github") { classes = setOf("btn","btn-primary","cta-btn"); +"Get started free" }
+                h2("fade-up") { +"Ready to ship in every language?" }
+                p("fade-up d1") { +"Free tier includes 500 strings/month across 1 project." }
+                a("/transloom/auth/github") { classes = setOf("btn","btn-primary","cta-btn","fade-up","d2"); +"Get started free" }
             }
         }
 
         footer {
             div("footer-inner") {
-                span { +"© 2026 Transloom" }
-                span("text-muted") { +"Built for developers who ship globally." }
+                div("brand") { unsafe { +LOGO_SVG }; span { +"Transloom" } }
+                span("text-muted") { +"© 2026 · Built for developers who ship globally." }
             }
         }
 
-        script { unsafe { +"const t=localStorage.getItem('transloom_token');if(t)window.location.href='/transloom/app';" } }
+        script { unsafe { +"""
+            const t=localStorage.getItem('transloom_token');if(t){window.location.href='/transloom/app';}
+            const io=new IntersectionObserver((entries)=>{
+                entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in-view');io.unobserve(e.target);}});
+            },{threshold:0.12,rootMargin:'0px 0px -40px 0px'});
+            document.querySelectorAll('.fade-up').forEach(el=>io.observe(el));
+        """ } }
     }
 }
 
 private const val LANDING_CSS = """
-nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
-.nav-inner{max-width:1100px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
-.logo{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:700;color:var(--text)}
-.logo span{color:var(--accent)}
+@keyframes heroDrift{0%,100%{transform:translate(-50%,0) scale(1)}50%{transform:translate(-50%,30px) scale(1.08)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1100px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
 .nav-links{display:flex;align-items:center;gap:24px}
-.nav-links a:not(.btn){color:var(--text-muted);font-size:14px;transition:color .15s}
+.nav-links a:not(.btn){color:var(--text-muted);font-size:14px;transition:color .2s ease}
 .nav-links a:not(.btn):hover{color:var(--text)}
 .nav-cta{padding:8px 16px!important;font-size:13px!important}
-.hero{position:relative;overflow:hidden;padding:100px 24px 80px;text-align:center}
-.hero-glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:600px;height:600px;background:radial-gradient(circle,rgba(0,229,160,.12) 0%,transparent 70%);pointer-events:none}
+.hero{position:relative;overflow:hidden;padding:96px 24px 60px;text-align:center}
+.hero-glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:680px;height:680px;background:radial-gradient(circle,rgba(0,229,160,.14) 0%,transparent 70%);pointer-events:none;animation:heroDrift 12s ease-in-out infinite}
 .hero-inner{max-width:760px;margin:0 auto;position:relative}
 .hero-title{font-size:clamp(36px,6vw,62px);font-weight:800;line-height:1.1;letter-spacing:-1.5px;margin:20px 0}
 .accent{color:var(--accent)}
@@ -192,20 +353,57 @@ nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.85);backdrop-filter
 .hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
 .hero-btn{padding:13px 24px;font-size:15px}
 .hero-lang-strip{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
-.lang-chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:13px;color:var(--text-dim)}
+.lang-chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:13px;color:var(--text-dim);transition:border-color .2s ease,color .2s ease,transform .2s ease}
+.lang-chip:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+.demo-section{padding:72px 24px;background:linear-gradient(180deg,var(--bg) 0%,var(--surface2) 100%);border-top:1px solid var(--border)}
+.demo-inner{max-width:1100px;margin:0 auto;text-align:center}
+.demo-title{margin-bottom:36px!important}
+.demo-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;text-align:left}
+.demo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 12px 40px -16px rgba(0,0,0,.6);transition:transform .3s ease,border-color .3s ease}
+.demo-card:hover{transform:translateY(-2px);border-color:rgba(0,229,160,.3)}
+.demo-card-head{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.demo-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dot-r{background:#ff5f56}.dot-y{background:#ffbd2e}.dot-g{background:#27c93f}
+.demo-file{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:var(--text-muted);margin-left:6px}
+.pr-badge{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,229,160,.3);font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px}
+.demo-card-body{padding:14px 14px 16px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;line-height:1.7;min-height:200px;display:flex;flex-direction:column;gap:2px}
+.code-line{display:flex;gap:10px;align-items:flex-start;border-radius:4px;padding:1px 4px}
+.code-line .ln{color:var(--text-muted);opacity:.5;min-width:18px;text-align:right;user-select:none}
+.code-line .code{color:var(--text-dim);white-space:pre-wrap;word-break:break-all}
+.ln-add{background:rgba(0,229,160,.08)}
+.ln-add .code{color:var(--accent)}
+.ln-context .code{opacity:.55}
+.demo-cta-row{margin-top:auto;padding-top:14px;border-top:1px dashed var(--border)}
+.git-prompt{font-size:12px;color:var(--accent);font-weight:500}
+.demo-cta-pass{display:flex;justify-content:flex-end;border-top:1px dashed rgba(0,229,160,.25)}
+.check-pill{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,229,160,.3);font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px}
+.tr-row{display:flex;align-items:center;gap:10px;padding:5px 4px;border-radius:4px}
+.tr-flag{font-size:14px;flex-shrink:0}
+.tr-text{flex:1;color:var(--text);font-size:12.5px}
+.tr-check{color:var(--accent);font-weight:700;font-size:13px}
+.demo-arrow{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--accent);opacity:.7}
+.demo-arrow-label{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:var(--text-muted)}
+.stats-band{padding:56px 24px;background:var(--surface2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.stats-band-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:24px;text-align:center}
+.stat-tile{padding:8px 16px}
+.stat-num{font-size:clamp(32px,4.5vw,42px);font-weight:800;background:linear-gradient(135deg,#00F5B0 0%,#00B894 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-1.5px;line-height:1;margin-bottom:8px}
+.stat-cap{font-size:13px;color:var(--text-muted);letter-spacing:.2px}
 section{padding:80px 24px}
 .section-inner{max-width:1100px;margin:0 auto}
 .section-label{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px}
 h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bottom:48px}
 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px}
-.step{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;display:flex;gap:16px}
-.step-num{font-size:28px;font-weight:800;color:var(--accent);opacity:.3;line-height:1;min-width:36px}
+.step{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;display:flex;gap:16px;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}
+.step:hover{border-color:rgba(0,229,160,.3);transform:translateY(-2px);box-shadow:0 12px 32px -16px rgba(0,229,160,.18)}
+.step-num{font-size:28px;font-weight:800;color:var(--accent);opacity:.3;line-height:1;min-width:36px;transition:opacity .25s ease}
+.step:hover .step-num{opacity:.7}
 .step-body h3{font-size:15px;font-weight:600;margin-bottom:6px}
 .step-body p{font-size:13px;color:var(--text-muted);line-height:1.6}
 .features-section{background:var(--surface2)}
 .features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
 .feature-card{padding:24px}
-.feature-icon{font-size:28px;margin-bottom:12px}
+.feature-card:hover{border-color:rgba(0,229,160,.3);transform:translateY(-2px);box-shadow:0 12px 32px -16px rgba(0,229,160,.18)}
+.feature-icon{font-size:28px;margin-bottom:12px;color:var(--accent);line-height:0}
 .feature-card h3{font-size:15px;font-weight:600;margin-bottom:8px}
 .feature-card p{font-size:13px;color:var(--text-muted);line-height:1.6}
 .cta-section{background:var(--accent-dim2);border-top:1px solid rgba(0,229,160,.15);border-bottom:1px solid rgba(0,229,160,.15);text-align:center}
@@ -213,9 +411,31 @@ h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bo
 .cta-section h2{margin-bottom:12px}
 .cta-section p{color:var(--text-muted);margin-bottom:32px}
 .cta-btn{padding:14px 28px;font-size:16px}
-footer{padding:32px 24px;border-top:1px solid var(--border)}
-.footer-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted)}
+footer{padding:28px 24px;border-top:1px solid var(--border)}
+.footer-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
 .text-muted{color:var(--text-muted)}
+.pricing-section{background:var(--bg);border-top:1px solid var(--border)}
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:20px;padding-top:4px}
+.pricing-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;display:flex;flex-direction:column;position:relative;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}
+.pricing-card:hover{transform:translateY(-3px);box-shadow:0 18px 40px -20px rgba(0,0,0,.7)}
+.pricing-card.recommended{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 40px rgba(0,229,160,.06)}
+.pricing-card.recommended:hover{box-shadow:0 0 0 1px var(--accent),0 18px 50px -16px rgba(0,229,160,.32)}
+@media(max-width:760px){.demo-grid{grid-template-columns:1fr;gap:14px}.demo-arrow{transform:rotate(90deg);padding:6px 0}}
+.rec-badge{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--accent);color:#000;font-size:10px;font-weight:700;letter-spacing:.8px;padding:3px 14px;border-radius:20px;white-space:nowrap;text-transform:uppercase}
+.trial-badge{display:inline-block;background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,229,160,.25);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600;margin-bottom:14px}
+.pricing-name{font-size:13px;font-weight:700;letter-spacing:.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:10px}
+.pricing-price{font-size:42px;font-weight:800;letter-spacing:-2px;line-height:1;color:var(--text);margin-bottom:4px}
+.price-mo{font-size:16px;font-weight:400;letter-spacing:0;color:var(--text-muted)}
+.pricing-period{font-size:12px;color:var(--text-muted);margin-bottom:24px;min-height:16px}
+.pricing-features{list-style:none;display:flex;flex-direction:column;gap:9px;flex:1;margin-bottom:24px}
+.pricing-features li{font-size:13px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
+.pricing-features li::before{content:"✓";color:var(--accent);font-weight:700;font-size:12px;flex-shrink:0}
+.pricing-cta{display:block;text-align:center;padding:11px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;transition:all .15s;cursor:pointer;text-decoration:none}
+.pricing-cta.accent{background:var(--accent);color:#000}
+.pricing-cta.accent:hover{background:#00c98d;transform:translateY(-1px)}
+.pricing-cta.outline{background:transparent;color:var(--text);border:1px solid var(--border)}
+.pricing-cta.outline:hover{border-color:var(--accent);color:var(--accent)}
+.pricing-note{text-align:center;margin-top:28px;font-size:12px;color:var(--text-muted)}
 """
 
 // ─── Dashboard App ────────────────────────────────────────────────────────────
@@ -229,7 +449,7 @@ private fun HTML.dashboardApp() {
     body {
         div("app-layout") {
             aside("sidebar") {
-                div("sidebar-logo") { span { +"●" }; +" Transloom" }
+                div("sidebar-logo brand") { unsafe { +LOGO_SVG }; span { +"Transloom" } }
                 nav("sidebar-nav") {
                     a("/transloom/app") { classes = setOf("nav-item","active"); +"⬡ Dashboard" }
                     a("#") { attributes["onclick"] = "document.getElementById('projects').scrollIntoView({behavior:'smooth'});return false;"; classes = setOf("nav-item"); +"◻ Projects" }
@@ -448,8 +668,8 @@ private fun HTML.dashboardApp() {
 private const val DASHBOARD_CSS = """
 .app-layout{display:flex;height:100vh;overflow:hidden}
 .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 0}
-.sidebar-logo{font-size:17px;font-weight:700;padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:12px;color:var(--text)}
-.sidebar-logo span{color:var(--accent)}
+.sidebar-logo{font-size:16px;font-weight:700;padding:2px 20px 18px;border-bottom:1px solid var(--border);margin-bottom:12px;color:var(--text);gap:10px!important}
+.sidebar-logo span{color:var(--text)}
 .sidebar-nav{flex:1;display:flex;flex-direction:column;gap:2px;padding:0 10px}
 .nav-item{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:var(--radius-sm);color:var(--text-muted);font-size:13px;transition:all .12s}
 .nav-item:hover{background:var(--surface2);color:var(--text)}
@@ -544,8 +764,10 @@ const BASE='/transloom/api';
 let token=localStorage.getItem('transloom_token');
 const urlParams=new URLSearchParams(window.location.search);
 const urlToken=urlParams.get('token');
+const planFromUrl=urlParams.get('plan');
 if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;history.replaceState({},'','/transloom/app');}
 if(!token){window.location.href='/transloom';}
+if(planFromUrl&&planFromUrl!=='FREE'){setTimeout(()=>checkout(planFromUrl),600);}
 
 // Show billing success/cancel toasts
 if(urlParams.get('billing')==='success')setTimeout(()=>toast('Subscription activated! 🎉'),300);

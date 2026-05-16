@@ -25,4 +25,7 @@ dependencies {
     // Used by SecretManager to reach GCP metadata server and Secret Manager REST API
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
+
+    // TCP Redis client — used by job queue for direct rediss:// connections
+    implementation(libs.jedis)
 }
