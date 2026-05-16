@@ -52,7 +52,7 @@ fun Route.configureAuthRoutes(jwtSecret: String, userRepository: UserRepository)
 
     val clientId = getSecretValue("github-client-id")
     val clientSecret = getSecretValue("github-client-secret")
-    val redirectUri = getSecretValue("auth-callback-uri")
+    val redirectUri = "https://data.androidplay.in/transloom/auth/github/callback"
     val frontendRedirectUrl = getSecretValue("frontend-url")
 
     route("/transloom/auth") {
@@ -66,7 +66,7 @@ fun Route.configureAuthRoutes(jwtSecret: String, userRepository: UserRepository)
                     path = "/transloom/auth",
                     maxAge = 600,
                     httpOnly = true,
-                    secure = getSecretValue("secure-cookies") != "false",
+                    secure = true,
                     extensions = mapOf("SameSite" to "Lax")
                 )
             )

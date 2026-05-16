@@ -48,4 +48,8 @@ jobs:
             --update-secrets=RAZORPAY_SECRET=razorpay-secret:latest \
             --update-secrets=RAZORPAY_WEBHOOK_SECRET=razorpay-webhook-secret:latest \
             --update-secrets=SENDGRID_API_KEY=sendgrid-api-key:latest \
-            --update-secrets=REDIS_URL=redis-url:latest
+            --update-secrets=REDIS_URL=redis-url:latest \
+            --update-secrets=TOKEN_ENCRYPTION_KEY=token-encryption-key:latest
+            --update-secrets=GITHUB_CLIENT_ID=github-client-id:latest
+            --update-secrets=GITHUB_CLIENT_SECRET=github-client-secret:latest
+            --update-secrets=GITHUB_WEBHOOK_SECRET=github-webhook-secret:latest
