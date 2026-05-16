@@ -1,8 +1,10 @@
 package domain.service.impl
 
-import com.androidplay.weatherify.domain.*
-import com.androidplay.core.secrets.getSecretValue
 import com.androidplay.core.common.Result
+import com.androidplay.core.razorpay.RazorpayEventHandler
+import com.androidplay.core.razorpay.WebhookResult
+import com.androidplay.core.secrets.getSecretValue
+import com.androidplay.weatherify.domain.*
 import com.androidplay.weatherify.repository.PaymentRepository
 import com.androidplay.weatherify.repository.RefundRepository
 import com.androidplay.weatherify.repository.UserRepository
@@ -16,9 +18,7 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.delay
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 import util.Constants
 import java.time.Instant
@@ -35,9 +35,77 @@ class RefundServiceImpl(
     private val userRepository: UserRepository,
     private val emailService: EmailService,
     private val notificationService: domain.service.NotificationService
-) : RefundService {
+) : RefundService, RazorpayEventHandler {
 
     private val logger = LoggerFactory.getLogger(RefundServiceImpl::class.java)
+
+    // ─── RazorpayEventHandler ──────────────────────────────────────────────────
+
+    override val eventPrefixes = listOf("refund.")
+
+    override suspend fun handle(eventType: String, event: JsonObject): WebhookResult {
+        return try {
+            val refundEntity = event["payload"]?.jsonObject
+                ?.get("refund")?.jsonObject
+                ?.get("entity")?.jsonObject
+                ?: return WebhookResult.Skipped("No refund entity in payload")
+
+            val refundId = refundEntity["id"]?.jsonPrimitive?.contentOrNull
+                ?: return WebhookResult.Skipped("No refund ID in payload")
+
+            val newStatus = when {
+                eventType.contains("refund.processed", ignoreCase = true) -> RefundStatus.PROCESSED
+                eventType.contains("refund.failed", ignoreCase = true) -> RefundStatus.FAILED
+                eventType.contains("refund.created", ignoreCase = true) -> RefundStatus.PENDING
+                else -> {
+                    val entityStatus = refundEntity["status"]?.jsonPrimitive?.contentOrNull?.lowercase()
+                    when (entityStatus) {
+                        "processed" -> RefundStatus.PROCESSED
+                        "failed" -> RefundStatus.FAILED
+                        else -> RefundStatus.PENDING
+                    }
+                }
+            }
+
+            val existing = refundRepository.getRefundById(refundId).getOrNull()
+            if (existing?.status == newStatus) {
+                return WebhookResult.Skipped("Duplicate refund webhook for $refundId status=$newStatus")
+            }
+
+            val now = java.time.Instant.now().toString()
+            val updateResult = refundRepository.updateRefundStatus(
+                refundId = refundId,
+                status = newStatus,
+                processedAt = if (newStatus == RefundStatus.PROCESSED) now else null,
+                errorCode = null,
+                errorDescription = null
+            )
+            if (updateResult is Result.Error) {
+                return WebhookResult.Error("Failed to update refund $refundId: ${updateResult.message}")
+            }
+
+            // Fire-and-forget notifications — don't fail the webhook if they throw
+            try {
+                val refund = refundRepository.getRefundById(refundId).getOrNull()
+                if (refund != null && newStatus != RefundStatus.PENDING) {
+                    val statusStr = newStatus.name.lowercase()
+                    emailService.sendRefundNotification(
+                        userEmail = refund.userEmail, refundId = refund.refundId,
+                        amount = refund.amount / 100.0, paymentId = refund.paymentId, status = statusStr
+                    )
+                    sendRefundPushNotification(userEmail = refund.userEmail, amount = refund.amount / 100.0, status = statusStr)
+                }
+            } catch (e: Exception) {
+                logger.warn("Refund notification failed (non-fatal): {}", e.message)
+            }
+
+            logger.info("Refund webhook handled: {} -> {}", refundId, newStatus)
+            WebhookResult.Ok
+        } catch (e: Exception) {
+            logger.error("Unexpected error handling refund webhook", e)
+            WebhookResult.Error("Failed to handle refund webhook: ${e.message}")
+        }
+    }
 
     // Razorpay API configuration
     private val razorpayKeyId: String by lazy { getSecretValue(Constants.Auth.RAZORPAY_KEY_ID) }

@@ -114,9 +114,9 @@ fun Route.configureDashboardRoutes(
             val invoices = billingRepository.listInvoices(userId).map { inv ->
                 val dateStr = inv.createdAt.toLocalDateTime(TimeZone.UTC).date.toString()
                 InvoiceItem(
-                    id = inv.stripeInvoiceId,
+                    id = inv.razorpayPaymentId,
                     date = dateStr,
-                    amount = "${"$"}${"%.2f".format(inv.amountCents / 100.0)}",
+                    amount = "₹${"%.2f".format(inv.amountPaise / 100.0)}",
                     status = inv.status.replaceFirstChar { it.uppercase() }
                 )
             }

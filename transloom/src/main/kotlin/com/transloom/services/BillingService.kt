@@ -6,9 +6,9 @@ import com.transloom.repository.BillingRepository
 import com.androidplay.core.secrets.getSecretValue
 import org.slf4j.LoggerFactory
 
-fun BillingPlan.stripePriceId(): String? = when (this) {
-    BillingPlan.SOLO -> getSecretValue("stripe-price-solo").takeIf { it.isNotBlank() }
-    BillingPlan.TEAM -> getSecretValue("stripe-price-team").takeIf { it.isNotBlank() }
+fun BillingPlan.razorpayPlanId(): String? = when (this) {
+    BillingPlan.SOLO -> getSecretValue("razorpay-plan-solo").takeIf { it.isNotBlank() }
+    BillingPlan.TEAM -> getSecretValue("razorpay-plan-team").takeIf { it.isNotBlank() }
     else -> null
 }
 

@@ -26,10 +26,11 @@ import com.transloom.repository.TranslationMemoryRepository
 import com.transloom.pipeline.TranslationPipeline
 import com.transloom.pipeline.buildConfigWithGlossary
 import com.transloom.queue.TranslationJobQueue
+import com.androidplay.core.razorpay.RazorpayWebhookDispatcher
 import com.transloom.routes.*
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
-import com.transloom.services.StripeService
+import com.transloom.services.RazorpayBillingService
 import com.transloom.services.TranslationService
 import com.androidplay.core.secrets.getSecretValue
 import com.androidplay.core.cache.CacheRepository
@@ -113,7 +114,11 @@ fun Application.module() {
 
     val jobQueue = TranslationJobQueue(jobQueueRepository)
     val billingService = BillingService(billingRepository)
-    val stripeService = StripeService(billingRepository)
+    val razorpayService = RazorpayBillingService(billingRepository)
+    val webhookDispatcher = RazorpayWebhookDispatcher(
+        webhookSecret = getSecretValue("razorpay-webhook-secret"),
+        handlers = listOf(razorpayService)
+    )
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
     val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository)
@@ -142,18 +147,20 @@ fun Application.module() {
         cacheRepository.close()
         githubService.close()
         translationService.close()
+        razorpayService.close()
         log.info("All resources closed on application stop")
     }
 
     routing {
         configurePortalRoutes()
         configureWebhookRoutes(jobQueue, projectRepository)
-        configureAuthRoutes(jwtSecret, userRepository)
-        configureStripeWebhook(stripeService)
+        configureAuthRoutes(jwtSecret, userRepository, razorpayService)
+        configureRazorpayWebhook(webhookDispatcher)
+        configurePublicCheckoutRoute(razorpayService)
         authenticate("auth-jwt") {
             configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
-            configureBillingRoutes(stripeService, billingRepository, userRepository)
+            configureBillingRoutes(razorpayService, billingRepository, userRepository)
         }
     }
 }

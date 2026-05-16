@@ -132,10 +132,8 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "github-client-id"         -> "dummy_client_id"
     "github-client-secret"     -> "dummy_client_secret"
     "webhook-url"              -> "https://transloom.dev/transloom/webhook/github"
-    "stripe-secret-key"        -> ""
-    "stripe-webhook-secret"    -> ""
-    "stripe-price-solo"        -> ""
-    "stripe-price-team"        -> ""
+    "razorpay-plan-solo"       -> ""
+    "razorpay-plan-team"       -> ""
     "app-url"                  -> "http://localhost:8081"
     else                       -> ""
 }

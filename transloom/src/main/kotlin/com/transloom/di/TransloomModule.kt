@@ -32,9 +32,9 @@ fun transloomIndexes(): List<IndexSpec> {
         IndexSpec("translations", Document("status", 1)),
         IndexSpec("translation_memory", Document("hashKey", 1), unique),
         IndexSpec("subscriptions", Document("userId", 1), unique),
-        IndexSpec("subscriptions", Document("stripeCustomerId", 1)),
+        IndexSpec("subscriptions", Document("razorpaySubscriptionId", 1)),
         IndexSpec("usage_logs", Document(mapOf("userId" to 1, "yearMonth" to 1)), unique),
-        IndexSpec("invoice_records", Document("stripeInvoiceId", 1), unique),
+        IndexSpec("invoice_records", Document("razorpayPaymentId", 1), unique),
         IndexSpec("invoice_records", Document("userId", 1)),
     )
 }

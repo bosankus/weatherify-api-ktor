@@ -1,15 +1,41 @@
 package com.transloom.routes
 
+import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.html.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.html.*
+
+private const val FAVICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="favG" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00F5B0"/>
+      <stop offset="100%" stop-color="#00A87A"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#favG)"/>
+  <path d="M8 11 H24 M16 11 V24" stroke="#0a0a0a" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+  <path d="M10 18.5 Q13 16.5 16 18.5 T22 18.5" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.5"/>
+</svg>"""
 
 fun Route.configurePortalRoutes() {
     route("/transloom") {
         get { call.respondHtml { landingPage() } }
         get("/app") { call.respondHtml { dashboardApp() } }
         get("/review-portal") { call.respondHtml { reviewPortal() } }
+        get("/favicon.svg") {
+            call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
+        }
+    }
+}
+
+private fun HEAD.favicon() {
+    link {
+        rel = "icon"
+        type = "image/svg+xml"
+        href = "/transloom/favicon.svg"
     }
 }
 
@@ -26,7 +52,7 @@ private const val LOGO_SVG = """
   <rect x="0" y="0" width="32" height="32" rx="8" fill="url(#tlmGrad)"/>
   <path d="M8.5 10.5 H23.5" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round"/>
   <path d="M16 10.5 V23" stroke="#0a0a0a" stroke-width="2.8" stroke-linecap="round"/>
-  <path d="M10 18.5 Q13 16.5 16 18.5 T22 18.5" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.55"/>
+  <path class="weft" d="M10 18.5 Q13 16.5 16 18.5 T22 18.5" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.55"/>
 </svg>
 """
 
@@ -50,7 +76,12 @@ button,.btn{cursor:pointer;border:none;font-family:inherit;font-size:14px;font-w
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}
 .brand{display:inline-flex;align-items:center;gap:10px;font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.2px}
-.brand-mark{flex-shrink:0;display:block;filter:drop-shadow(0 2px 8px rgba(0,229,160,.18))}
+.brand-mark{flex-shrink:0;display:block;filter:drop-shadow(0 2px 8px rgba(0,229,160,.18));transform-origin:center;animation:brandBreath 4.5s ease-in-out infinite;transition:transform .35s cubic-bezier(.2,.8,.2,1),filter .35s ease}
+.brand-mark .weft{stroke-dasharray:18;stroke-dashoffset:0;animation:weftFlow 3.6s ease-in-out infinite}
+.brand:hover .brand-mark,a:hover>.brand-mark{animation-play-state:paused;transform:scale(1.12) rotate(-8deg);filter:drop-shadow(0 6px 18px rgba(0,229,160,.5))}
+@keyframes brandBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes weftFlow{0%{stroke-dashoffset:18;opacity:.25}50%{stroke-dashoffset:0;opacity:.75}100%{stroke-dashoffset:-18;opacity:.25}}
+@media(prefers-reduced-motion:reduce){.brand-mark,.brand-mark .weft{animation:none}}
 .fade-up{opacity:0;transform:translateY(18px);transition:opacity .65s cubic-bezier(.2,.7,.2,1),transform .65s cubic-bezier(.2,.7,.2,1)}
 .fade-up.in-view{opacity:1;transform:translateY(0)}
 .fade-up.d1{transition-delay:.08s}.fade-up.d2{transition-delay:.16s}.fade-up.d3{transition-delay:.24s}.fade-up.d4{transition-delay:.32s}
@@ -93,7 +124,7 @@ private fun FlowContent.planTier(name: String, price: String, desc: String, plan
             span("plan-desc") { +desc }
         }
         button(classes = "btn btn-primary tier-btn") {
-            attributes["onclick"] = "checkout('$planKey')"
+            attributes["onclick"] = "subscribe('$planKey')"
             +"Select"
         }
     }
@@ -113,6 +144,7 @@ private fun HTML.landingPage() {
         title { +"Transloom — Automated app localization for developers" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         meta(name = "description", content = "Push a commit. Transloom translates your new strings into every target language and opens a pull request — automatically.")
+        favicon()
         style { unsafe { +"$SHARED_CSS$LANDING_CSS" } }
     }
     body {
@@ -123,7 +155,7 @@ private fun HTML.landingPage() {
                     a("#how") { +"How it works" }
                     a("/transloom#features") { +"Features" }
                     a("#pricing") { +"Pricing" }
-                    a("/transloom/auth/github") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Connect GitHub" }
+                    a("#pricing") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
                 }
             }
         }
@@ -140,7 +172,7 @@ private fun HTML.landingPage() {
                     +"respects your glossary, and opens a pull request — automatically."
                 }
                 div("hero-actions fade-up d3") {
-                    a("/transloom/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Connect with GitHub" }
+                    a("#pricing") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started" }
                     a("/transloom#how") { classes = setOf("btn", "btn-ghost"); +"See how it works →" }
                 }
                 div("hero-lang-strip fade-up d4") {
@@ -226,15 +258,126 @@ private fun HTML.landingPage() {
             id = "how"
             div("section-inner") {
                 p("section-label fade-up") { +"HOW IT WORKS" }
-                h2("fade-up d1") { +"Zero config. Zero friction." }
-                div("steps") {
-                    listOf(
-                        Triple("01","Push a commit","Add a new string key to strings.xml or Localizable.strings and push."),
-                        Triple("02","Transloom detects it","Our webhook picks up the diff, extracts new keys, and validates placeholder integrity."),
-                        Triple("03","AI translates","Gemini 2.5 Flash translates with your app tone, category, and custom glossary applied."),
-                        Triple("04","PR lands in your repo","A ready-to-merge pull request appears with all target languages — auto-approved or queued for review.")
-                    ).forEachIndexed { i, (num, title, desc) ->
-                        stepCard(num, title, desc, extra = "fade-up d${i.coerceAtMost(4)}")
+                h2("fade-up d1") { +"From commit to PR. Under a minute. Fully transparent." }
+                p("how-sub fade-up d2") { +"No black box. Watch your code flow through every stage of our pipeline." }
+
+                div("timeline") {
+
+                    // ── STEP 1: Push ────────────────────────────────────────
+                    div("tl-step fade-up") {
+                        div("tl-rail") { div("tl-node") { +"01" }; div("tl-line") {} }
+                        div("tl-body") {
+                            h3 { +"You push one commit" }
+                            p("tl-desc") { +"Add a new string key to "; code { +"strings.xml" }; +" or "; code { +"Localizable.strings" }; +" and push to your watched branch. That's the only step you do." }
+                            div("visual term") {
+                                div("term-head") {
+                                    span("term-dot dot-r") {}
+                                    span("term-dot dot-y") {}
+                                    span("term-dot dot-g") {}
+                                    span("term-title") { +"~/myapp" }
+                                }
+                                div("term-body") {
+                                    div("term-line tl-a1") { span("prompt") { +"$" }; +" git diff HEAD~1" }
+                                    div("term-line tl-a2 ln-add") { +"+ <string name=\"welcome\">Welcome back!</string>" }
+                                    div("term-line tl-a3") { span("prompt") { +"$" }; +" git push origin main" }
+                                    div("term-line tl-a4 term-ok") { +"✓ pushed to main · sha 3a4f2b1" }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── STEP 2: Webhook ─────────────────────────────────────
+                    div("tl-step fade-up d1") {
+                        div("tl-rail") { div("tl-node") { +"02" }; div("tl-line") {} }
+                        div("tl-body") {
+                            h3 { +"GitHub pings our webhook" }
+                            p("tl-desc") { +"Within ~100ms. We verify the HMAC-SHA256 signature on every request — no signature, no work." }
+                            div("visual webhook-card") {
+                                div("wh-method") { span("badge-post") { +"POST" }; span("wh-path") { +"/transloom/webhook/github" } }
+                                div("wh-line wh-header") { span("wh-key") { +"X-Hub-Signature-256:" }; +" "; span("wh-val") { +"sha256=a3f8…2bd" } }
+                                div("wh-line wh-body") {
+                                    unsafe { +"""{<br>&nbsp;&nbsp;<span class="json-k">"repository"</span>: <span class="json-s">"yourorg/yourapp"</span>,<br>&nbsp;&nbsp;<span class="json-k">"commits"</span>: [{ <span class="json-k">"added"</span>: [<span class="json-s">"strings.xml"</span>] }]<br>}""" }
+                                }
+                                div("wh-status") { span("status-check") { +"✓" }; +" Signature verified · payload accepted" }
+                            }
+                        }
+                    }
+
+                    // ── STEP 3: Extract ─────────────────────────────────────
+                    div("tl-step fade-up d2") {
+                        div("tl-rail") { div("tl-node") { +"03" }; div("tl-line") {} }
+                        div("tl-body") {
+                            h3 { +"We extract only what changed" }
+                            p("tl-desc") { +"Just the strings you added. Placeholders validated. Glossary terms detected. Your existing translations are never touched." }
+                            div("visual parse-card") {
+                                div("parse-file") { +"📂 res/values/strings.xml" }
+                                div("parse-row parse-new") {
+                                    span("parse-tag") { +"NEW" }
+                                    span("parse-key") { +"welcome" }
+                                    span("parse-arrow") { +"→" }
+                                    span("parse-val") { +"\"Welcome back!\"" }
+                                }
+                                div("parse-checks") {
+                                    div("parse-check pc1") { +"✓ placeholder integrity" }
+                                    div("parse-check pc2") { +"✓ glossary lookup" }
+                                    div("parse-check pc3") { +"✓ TM cache miss" }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── STEP 4: Translate ───────────────────────────────────
+                    div("tl-step fade-up d3") {
+                        div("tl-rail") { div("tl-node") { +"04" }; div("tl-line") {} }
+                        div("tl-body") {
+                            h3 { +"Gemini 2.5 Flash translates" }
+                            p("tl-desc") { +"Context-aware. Your app category + tone baked into every prompt. Each output is sanity-checked — anything weird gets flagged for review instead of shipping silently." }
+                            div("visual translate-card") {
+                                div("xl-header") { +"Translating "; span("accent") { +"welcome" }; +" into 5 languages…" }
+                                div("xl-rows") {
+                                    div("xl-row xr1") { span("xl-flag") { +"🇪🇸" }; span("xl-text") { +"\"¡Bienvenido de nuevo!\"" }; span("xl-check") { +"✓" } }
+                                    div("xl-row xr2") { span("xl-flag") { +"🇫🇷" }; span("xl-text") { +"\"Bon retour !\"" }; span("xl-check") { +"✓" } }
+                                    div("xl-row xr3") { span("xl-flag") { +"🇩🇪" }; span("xl-text") { +"\"Willkommen zurück!\"" }; span("xl-check") { +"✓" } }
+                                    div("xl-row xr4") { span("xl-flag") { +"🇯🇵" }; span("xl-text") { +"\"おかえりなさい！\"" }; span("xl-check") { +"✓" } }
+                                    div("xl-row xr5") { span("xl-flag") { +"🇮🇳" }; span("xl-text") { +"\"वापसी पर स्वागत है!\"" }; span("xl-check") { +"✓" } }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── STEP 5: PR ──────────────────────────────────────────
+                    div("tl-step tl-last fade-up d4") {
+                        div("tl-rail") { div("tl-node tl-final") { +"05" } }
+                        div("tl-body") {
+                            h3 { +"PR lands in your repo, ready to merge" }
+                            p("tl-desc") { +"Reviewed strings auto-approve; flagged ones queue for your review portal. Toggle "; strong { +"auto-merge" }; +" if you trust us — ship globally without lifting a finger." }
+                            div("visual pr-card") {
+                                div("pr-head") {
+                                    div("pr-title-row") {
+                                        span("pr-icon") { +"🔀" }
+                                        strong { +"Translations: welcome" }
+                                        span("pr-num") { +"#128" }
+                                    }
+                                    div("pr-meta") { +"opened by "; span("pr-author") { +"transloom-bot" }; +" · 5 files changed · "; span("accent") { +"+5 −0" } }
+                                }
+                                div("pr-files") {
+                                    listOf("values-es/strings.xml","values-fr/strings.xml","values-de/strings.xml","values-ja/strings.xml","values-hi/strings.xml")
+                                        .forEach { f -> div("pr-file") { span("pr-add") { +"+1" }; +" $f" } }
+                                }
+                                div("pr-checks") { span("pr-check-ok") { +"✓" }; +" All checks passed" }
+                                button(classes = "pr-merge") { +"Merge pull request" }
+                            }
+                        }
+                    }
+                }
+
+                div("how-footer fade-up") {
+                    div("time-pill") {
+                        span("time-dot") {}
+                        +"Typical end-to-end time: "
+                        strong { +"~45 seconds" }
+                        span("time-sep") { +"·" }
+                        +"Median on the Free tier"
                     }
                 }
             }
@@ -264,7 +407,7 @@ private fun HTML.landingPage() {
                 div("pricing-grid") {
                     div("pricing-card fade-up") {
                         p("pricing-name") { +"Free" }
-                        p("pricing-price") { +"$0"; span("price-mo") { +"/mo" } }
+                        p("pricing-price") { +"₹0"; span("price-mo") { +"/mo" } }
                         p("pricing-period") { +"Forever · No credit card needed" }
                         ul("pricing-features") {
                             li { +"500 strings / month" }
@@ -279,7 +422,7 @@ private fun HTML.landingPage() {
                         span("rec-badge") { +"Best for Solo Developers" }
                         span("trial-badge") { +"60-day free trial" }
                         p("pricing-name") { +"Solo" }
-                        p("pricing-price") { +"$4.99"; span("price-mo") { +"/mo" } }
+                        p("pricing-price") { +"₹499"; span("price-mo") { +"/mo" } }
                         p("pricing-period") { +"after trial · Cancel anytime" }
                         ul("pricing-features") {
                             li { +"5,000 strings / month" }
@@ -289,12 +432,12 @@ private fun HTML.landingPage() {
                             li { +"Translation memory" }
                             li { +"Review portal" }
                         }
-                        a("/transloom/auth/github?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 60-day free trial" }
+                        a("/transloom/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 60-day free trial" }
                     }
                     div("pricing-card fade-up d2") {
                         span("trial-badge") { +"60-day free trial" }
                         p("pricing-name") { +"Team" }
-                        p("pricing-price") { +"$19.99"; span("price-mo") { +"/mo" } }
+                        p("pricing-price") { +"₹1,999"; span("price-mo") { +"/mo" } }
                         p("pricing-period") { +"after trial · Cancel anytime" }
                         ul("pricing-features") {
                             li { +"Unlimited strings" }
@@ -303,7 +446,7 @@ private fun HTML.landingPage() {
                             li { +"Everything in Solo" }
                             li { +"Priority support" }
                         }
-                        a("/transloom/auth/github?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 60-day free trial" }
+                        a("/transloom/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 60-day free trial" }
                     }
                 }
                 p("pricing-note") { +"All paid plans include a 60-day free trial. No charge until the trial ends — cancel any time." }
@@ -326,7 +469,17 @@ private fun HTML.landingPage() {
         }
 
         script { unsafe { +"""
-            const t=localStorage.getItem('transloom_token');if(t){window.location.href='/transloom/app';}
+            const params=new URLSearchParams(window.location.search);
+            if(params.get('billing_error')==='link_failed'){
+                const sub=params.get('sub')||'';
+                const banner=document.createElement('div');
+                banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#3a1a1a;border-bottom:1px solid #ff4d4f;color:#ffb8b8;padding:14px 24px;text-align:center;font-size:14px;z-index:9999;line-height:1.5';
+                banner.innerHTML='⚠ We received your payment but couldn'+String.fromCharCode(39)+'t link it to your account. Please email <a href="mailto:support@androidplay.in?subject=Subscription%20'+sub+'" style="color:#fff;text-decoration:underline">support@androidplay.in</a> with reference: <code style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:3px">'+sub+'</code>';
+                document.body.prepend(banner);
+                history.replaceState({},'','/transloom');
+            } else {
+                const t=localStorage.getItem('transloom_token');if(t){window.location.href='/transloom/app';}
+            }
             const io=new IntersectionObserver((entries)=>{
                 entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in-view');io.unobserve(e.target);}});
             },{threshold:0.12,rootMargin:'0px 0px -40px 0px'});
@@ -399,6 +552,117 @@ h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bo
 .step:hover .step-num{opacity:.7}
 .step-body h3{font-size:15px;font-weight:600;margin-bottom:6px}
 .step-body p{font-size:13px;color:var(--text-muted);line-height:1.6}
+/* ─── How it works — animated pipeline timeline ─────────────────────────── */
+.how-section{padding:88px 24px 100px}
+.how-sub{color:var(--text-muted);font-size:16px;margin-top:-32px;margin-bottom:56px;max-width:560px}
+.timeline{display:flex;flex-direction:column;max-width:880px;margin:0 auto}
+.tl-step{display:grid;grid-template-columns:56px 1fr;gap:24px;align-items:start;position:relative}
+.tl-rail{display:flex;flex-direction:column;align-items:center;height:100%;position:relative}
+.tl-node{width:44px;height:44px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;box-shadow:0 0 0 4px rgba(0,229,160,.08);position:relative;z-index:2}
+.tl-step.in-view .tl-node{animation:nodePulse 2.4s ease-out infinite}
+@keyframes nodePulse{0%,100%{box-shadow:0 0 0 4px rgba(0,229,160,.08)}50%{box-shadow:0 0 0 11px rgba(0,229,160,0)}}
+.tl-line{width:2px;flex:1;background:linear-gradient(180deg,rgba(0,229,160,.55) 0%,var(--border) 100%);position:relative;margin-top:6px;min-height:60px;overflow:hidden}
+.tl-step.in-view .tl-line::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:flowDot 3.6s linear infinite}
+@keyframes flowDot{0%{top:-12px;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:calc(100% + 12px);opacity:0}}
+.tl-body{padding-bottom:44px;min-width:0}
+.tl-body h3{font-size:19px;font-weight:700;margin-bottom:6px;letter-spacing:-.3px}
+.tl-desc{color:var(--text-muted);font-size:14px;line-height:1.65;margin-bottom:18px;max-width:560px}
+.tl-desc code{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:12.5px;color:var(--accent);font-family:ui-monospace,'SF Mono',Menlo,monospace}
+.tl-desc strong{color:var(--text)}
+
+.visual{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 14px 36px -18px rgba(0,0,0,.7);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;transition:transform .3s ease,border-color .3s ease}
+.tl-step:hover .visual{transform:translateY(-2px);border-color:rgba(0,229,160,.3)}
+.tl-step .visual *[class*='tl-a'],.tl-step .visual .wh-method,.tl-step .visual .wh-line,.tl-step .visual .wh-status,.tl-step .visual .parse-file,.tl-step .visual .parse-row,.tl-step .visual .parse-check,.tl-step .visual .xl-header,.tl-step .visual .xl-row,.tl-step .visual .pr-head,.tl-step .visual .pr-file,.tl-step .visual .pr-checks,.tl-step .visual .pr-merge{animation-play-state:paused}
+.tl-step.in-view .visual *[class*='tl-a'],.tl-step.in-view .visual .wh-method,.tl-step.in-view .visual .wh-line,.tl-step.in-view .visual .wh-status,.tl-step.in-view .visual .parse-file,.tl-step.in-view .visual .parse-row,.tl-step.in-view .visual .parse-check,.tl-step.in-view .visual .xl-header,.tl-step.in-view .visual .xl-row,.tl-step.in-view .visual .pr-head,.tl-step.in-view .visual .pr-file,.tl-step.in-view .visual .pr-checks,.tl-step.in-view .visual .pr-merge{animation-play-state:running}
+
+@keyframes lineIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes checkPop{from{opacity:0;transform:scale(.3)}60%{transform:scale(1.15)}to{opacity:1;transform:scale(1)}}
+
+/* Terminal (step 1) */
+.term .term-head{background:var(--surface2);padding:8px 14px;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--border)}
+.term-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dot-r{background:#ff5f56}.dot-y{background:#ffbd2e}.dot-g{background:#27c93f}
+.term-title{margin-left:8px;font-size:11px;color:var(--text-muted)}
+.term-body{padding:14px 16px;line-height:1.85;min-height:128px}
+.term-line{opacity:0;animation:lineIn .3s ease forwards}
+.tl-a1{animation-delay:.5s}.tl-a2{animation-delay:1.1s}.tl-a3{animation-delay:1.8s}.tl-a4{animation-delay:2.5s}
+.term .prompt{color:var(--accent);margin-right:6px}
+.term-ok{color:var(--accent)}
+.ln-add{color:var(--accent);background:rgba(0,229,160,.08);padding:1px 6px;border-radius:3px;display:inline-block;margin-left:2px}
+
+/* Webhook card (step 2) */
+.webhook-card{padding:14px 16px;line-height:1.75;min-height:160px}
+.wh-method{display:flex;align-items:center;gap:10px;margin-bottom:10px;opacity:0;animation:lineIn .3s ease .3s forwards}
+.badge-post{background:var(--accent);color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:.5px}
+.wh-path{color:var(--text);font-size:12.5px}
+.wh-line{font-size:12px;color:var(--text-dim);opacity:0;animation:lineIn .3s ease forwards}
+.wh-header{animation-delay:.7s}
+.wh-key{color:var(--text-muted)}.wh-val{color:var(--text-dim)}
+.wh-body{animation-delay:1.1s;background:var(--surface2);padding:9px 11px;border-radius:4px;margin-top:6px;line-height:1.65;font-size:11.5px}
+.json-k{color:#7ac9ff}.json-s{color:var(--accent)}
+.wh-status{margin-top:12px;color:var(--accent);font-weight:600;font-size:12px;opacity:0;animation:lineIn .3s ease 1.8s forwards}
+.status-check{display:inline-block;margin-right:5px;opacity:0;animation:checkPop .4s ease 1.95s forwards}
+
+/* Parse card (step 3) */
+.parse-card{padding:14px 16px;line-height:1.7;min-height:128px}
+.parse-file{color:var(--text-muted);font-size:11.5px;margin-bottom:10px;opacity:0;animation:lineIn .3s ease .3s forwards}
+.parse-row{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:5px;font-size:12.5px;opacity:0;animation:lineIn .3s ease .7s forwards}
+.parse-new{background:rgba(0,229,160,.08);color:var(--text);border:1px solid rgba(0,229,160,.15)}
+.parse-tag{background:var(--accent);color:#000;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.6px}
+.parse-key{color:#7ac9ff}.parse-arrow{color:var(--text-muted)}.parse-val{color:var(--accent)}
+.parse-checks{display:flex;gap:14px;margin-top:11px;flex-wrap:wrap}
+.parse-check{color:var(--text-dim);font-size:11.5px;opacity:0;animation:lineIn .3s ease forwards}
+.pc1{animation-delay:1.2s}.pc2{animation-delay:1.45s}.pc3{animation-delay:1.7s}
+
+/* Translate card (step 4) */
+.translate-card{padding:14px 16px;min-height:210px}
+.xl-header{font-size:12.5px;color:var(--text-muted);margin-bottom:12px;opacity:0;animation:lineIn .3s ease .3s forwards}
+.xl-header .accent{color:var(--accent);font-weight:600}
+.xl-rows{display:flex;flex-direction:column;gap:5px}
+.xl-row{display:flex;align-items:center;gap:11px;padding:5px 7px;border-radius:4px;opacity:0;animation:lineIn .35s ease forwards}
+.xr1{animation-delay:.6s}.xr2{animation-delay:.95s}.xr3{animation-delay:1.3s}.xr4{animation-delay:1.7s}.xr5{animation-delay:2.1s}
+.xl-flag{font-size:14px;flex-shrink:0;line-height:1}
+.xl-text{flex:1;color:var(--text);font-size:12.5px}
+.xl-check{color:var(--accent);font-weight:700;font-size:14px;opacity:0;animation:checkPop .3s ease forwards}
+.xr1 .xl-check{animation-delay:.85s}.xr2 .xl-check{animation-delay:1.2s}.xr3 .xl-check{animation-delay:1.55s}.xr4 .xl-check{animation-delay:1.95s}.xr5 .xl-check{animation-delay:2.35s}
+
+/* PR card (step 5) */
+.pr-card{padding:0;line-height:1.55;min-height:260px}
+.pr-head{padding:13px 16px;border-bottom:1px solid var(--border);background:var(--surface2);opacity:0;animation:lineIn .3s ease .3s forwards}
+.pr-title-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;font-family:-apple-system,system-ui,sans-serif}
+.pr-icon{font-size:14px}
+.pr-num{margin-left:auto;color:var(--text-muted);font-size:12px;font-weight:400}
+.pr-meta{font-size:11.5px;color:var(--text-muted);font-family:-apple-system,system-ui,sans-serif}
+.pr-meta .accent{color:var(--accent)}
+.pr-author{color:var(--accent);font-weight:600}
+.pr-files{padding:10px 16px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-dim)}
+.pr-file{display:flex;align-items:center;gap:10px;padding:3px 0;opacity:0;animation:lineIn .25s ease forwards}
+.pr-files .pr-file:nth-child(1){animation-delay:.6s}
+.pr-files .pr-file:nth-child(2){animation-delay:.78s}
+.pr-files .pr-file:nth-child(3){animation-delay:.96s}
+.pr-files .pr-file:nth-child(4){animation-delay:1.14s}
+.pr-files .pr-file:nth-child(5){animation-delay:1.32s}
+.pr-add{background:rgba(0,229,160,.15);color:var(--accent);font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;font-family:ui-monospace,'SF Mono',Menlo,monospace}
+.pr-checks{padding:9px 16px;border-top:1px solid var(--border);font-size:11.5px;color:var(--accent);font-weight:600;font-family:-apple-system,system-ui,sans-serif;opacity:0;animation:lineIn .3s ease 1.55s forwards}
+.pr-check-ok{font-size:14px;margin-right:5px;display:inline-block}
+.pr-merge{margin:6px 16px 14px;background:var(--accent);color:#000;border:none;font-size:13px;font-weight:600;padding:8px 16px;border-radius:6px;cursor:pointer;font-family:inherit;display:block;opacity:0;animation:lineIn .3s ease 1.8s forwards;transition:background .2s ease}
+.pr-merge:hover{background:#00c98d}
+
+.how-footer{margin-top:28px;display:flex;justify-content:center}
+.time-pill{display:inline-flex;align-items:center;gap:10px;background:var(--surface);border:1px solid rgba(0,229,160,.3);border-radius:30px;padding:10px 22px;font-size:13.5px;color:var(--text-dim);box-shadow:0 8px 24px -12px rgba(0,229,160,.2)}
+.time-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:livePulse 1.4s ease-in-out infinite}
+.time-pill strong{color:var(--accent);font-weight:700;margin:0 4px}
+.time-sep{color:var(--text-muted);margin:0 4px}
+@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+
+@media(max-width:680px){
+  .tl-step{grid-template-columns:42px 1fr;gap:16px}
+  .tl-node{width:34px;height:34px;font-size:11px}
+  .visual{font-size:11.5px}
+  .tl-body h3{font-size:17px}
+  .pr-num,.pr-meta{font-size:10.5px}
+}
+
 .features-section{background:var(--surface2)}
 .features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
 .feature-card{padding:24px}
@@ -444,6 +708,7 @@ private fun HTML.dashboardApp() {
     head {
         title { +"Transloom — Dashboard" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        favicon()
         style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS" } }
     }
     body {
@@ -545,9 +810,9 @@ private fun HTML.dashboardApp() {
                             div("plan-actions") {
                                 id = "plan-actions"
                                 a("#") {
-                                    id = "portal-link"
-                                    attributes["onclick"] = "openPortal(); return false;"
-                                    +"Manage subscription →"
+                                    id = "cancel-link"
+                                    attributes["onclick"] = "cancelSubscription(); return false;"
+                                    +"Cancel subscription →"
                                 }
                             }
                             // F5: Historical Usage Container
@@ -560,9 +825,9 @@ private fun HTML.dashboardApp() {
                         div("plans-compare card") {
                             p("plan-label") { +"Plans" }
                             div("plan-tiers") {
-                                planTier("Free","$0/mo","500 strings · 1 project · 3 languages","FREE")
-                                planTier("Solo","$4.99/mo","5,000 strings · 3 projects · All languages","SOLO")
-                                planTier("Team","$19.99/mo","Unlimited strings · 10 projects · All languages","TEAM")
+                                planTier("Free","₹0/mo","500 strings · 1 project · 3 languages","FREE")
+                                planTier("Solo","₹499/mo","5,000 strings · 3 projects · All languages","SOLO")
+                                planTier("Team","₹1,999/mo","Unlimited strings · 10 projects · All languages","TEAM")
                             }
                         }
                     }
@@ -739,7 +1004,7 @@ private const val DASHBOARD_CSS = """
 .invoice-header{margin-top:8px;margin-bottom:12px}
 .invoices-title{font-size:15px;font-weight:600}
 .invoice-list{display:flex;flex-direction:column;gap:8px}
-.invoice-row{display:grid;grid-template-columns:120px 1fr 100px 80px auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 16px;font-size:13px}
+.invoice-row{display:grid;grid-template-columns:110px 1fr 90px 80px;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 16px;font-size:13px}
 .invoice-status-paid{color:var(--accent);font-size:12px;font-weight:600}
 .invoice-status-open{color:var(--yellow);font-size:12px;font-weight:600}
 .invoice-pdf{font-size:12px;color:var(--text-muted)}
@@ -767,7 +1032,7 @@ const urlToken=urlParams.get('token');
 const planFromUrl=urlParams.get('plan');
 if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;history.replaceState({},'','/transloom/app');}
 if(!token){window.location.href='/transloom';}
-if(planFromUrl&&planFromUrl!=='FREE'){setTimeout(()=>checkout(planFromUrl),600);}
+if(planFromUrl&&planFromUrl!=='FREE'){setTimeout(()=>subscribe(planFromUrl),600);}
 
 // Show billing success/cancel toasts
 if(urlParams.get('billing')==='success')setTimeout(()=>toast('Subscription activated! 🎉'),300);
@@ -876,21 +1141,19 @@ async function loadBilling(){
       list.innerHTML=invData.invoices.map(inv=>`
         <div class="invoice-row">
           <span>${'$'}{esc(inv.date)}</span>
-          <span>${'$'}{esc(inv.id.slice(0,24))}...</span>
+          <span style="font-family:monospace;font-size:11px">${'$'}{esc(inv.id)}</span>
           <span>${'$'}{esc(inv.amount)}</span>
           <span class="invoice-status-${'$'}{esc(inv.status.toLowerCase())}">${'$'}{esc(inv.status)}</span>
-          ${'$'}{inv.pdfUrl?'<a class="invoice-pdf" href="'+inv.pdfUrl+'" target="_blank" rel="noopener">PDF ↗</a>':'<span></span>'}
         </div>`).join('');
     }
   }
 }
 
-async function checkout(plan){
-  // Fix 18: plan in request body, not query param
-  const res=await api('/billing/checkout',{method:'POST',body:JSON.stringify({plan})});
+async function subscribe(plan){
+  const res=await api('/billing/subscribe',{method:'POST',body:JSON.stringify({plan})});
   if(!res)return;
-  if(res.ok){const data=await res.json();window.location.href=data.checkoutUrl;}
-  else{const err=await res.json();toast(err.error||'Checkout failed','error');}
+  if(res.ok){const data=await res.json();window.location.href=data.subscribeUrl;}
+  else{const err=await res.json();toast(err.error||'Subscription failed','error');}
 }
 
 async function upgradePlan(){
@@ -898,11 +1161,12 @@ async function upgradePlan(){
   document.getElementById('billing').scrollIntoView({behavior:'smooth'});
 }
 
-async function openPortal(){
-  const res=await api('/billing/portal');
+async function cancelSubscription(){
+  if(!confirm('Cancel your subscription? It will remain active until the end of the current billing period.'))return;
+  const res=await api('/billing/cancel',{method:'POST'});
   if(!res)return;
-  if(res.ok){const data=await res.json();window.open(data.portalUrl,'_blank');}
-  else{const err=await res.json();toast(err.error||'Cannot open portal','error');}
+  if(res.ok){toast('Subscription will cancel at end of period');loadBilling();}
+  else{const err=await res.json();toast(err.error||'Cancel failed','error');}
 }
 
 function openNewProject(){document.getElementById('modal-backdrop').classList.add('open');}
@@ -1039,6 +1303,7 @@ private fun HTML.reviewPortal() {
     head {
         title { +"Transloom — Review Portal" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        favicon()
         style { unsafe { +"$SHARED_CSS$REVIEW_CSS" } }
     }
     body {

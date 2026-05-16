@@ -46,9 +46,6 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.koin.ktor)
 
-    // Stripe
-    implementation(libs.stripe.java)
-
     // DateTime (for routes that use kotlinx.datetime directly)
     implementation(libs.kotlinx.datetime)
 }

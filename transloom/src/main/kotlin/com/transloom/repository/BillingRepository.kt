@@ -13,15 +13,15 @@ interface BillingRepository {
     suspend fun upsertSubscription(
         userId: String,
         plan: BillingPlan,
-        stripeCustomerId: String? = null,
-        stripeSubscriptionId: String? = null,
+        razorpayCustomerId: String? = null,
+        razorpaySubscriptionId: String? = null,
         cancelAtPeriodEnd: Boolean = false,
         currentPeriodEnd: Instant? = null
     )
 
-    suspend fun downgradeToFree(stripeCustomerId: String)
+    suspend fun downgradeToFree(razorpaySubscriptionId: String)
 
-    suspend fun findByStripeCustomer(stripeCustomerId: String): String?
+    suspend fun findByRazorpaySubscription(subscriptionId: String): String?
 
     suspend fun getUsage(userId: String): UsageStats
 
@@ -31,12 +31,10 @@ interface BillingRepository {
 
     suspend fun insertInvoice(
         userId: String,
-        stripeInvoiceId: String,
-        amountCents: Int,
+        razorpayPaymentId: String,
+        amountPaise: Int,
         currency: String,
         status: String,
-        invoicePdfUrl: String?,
-        periodStart: Instant,
         periodEnd: Instant
     )
 

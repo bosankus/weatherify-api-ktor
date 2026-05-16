@@ -40,8 +40,8 @@ class MongoBillingRepository(
     override suspend fun upsertSubscription(
         userId: String,
         plan: BillingPlan,
-        stripeCustomerId: String?,
-        stripeSubscriptionId: String?,
+        razorpayCustomerId: String?,
+        razorpaySubscriptionId: String?,
         cancelAtPeriodEnd: Boolean,
         currentPeriodEnd: Instant?
     ) {
@@ -51,8 +51,8 @@ class MongoBillingRepository(
             Updates.set("cancelAtPeriodEnd", cancelAtPeriodEnd),
             Updates.set("updatedAt", now)
         )
-        stripeCustomerId?.let { setUpdates += Updates.set("stripeCustomerId", it) }
-        stripeSubscriptionId?.let { setUpdates += Updates.set("stripeSubscriptionId", it) }
+        razorpayCustomerId?.let { setUpdates += Updates.set("razorpayCustomerId", it) }
+        razorpaySubscriptionId?.let { setUpdates += Updates.set("razorpaySubscriptionId", it) }
         currentPeriodEnd?.let { setUpdates += Updates.set("currentPeriodEnd", it.toEpochMilliseconds()) }
 
         val update = Updates.combine(
@@ -64,12 +64,12 @@ class MongoBillingRepository(
         subscriptions.findOneAndUpdate(eq("userId", userId), update, FindOneAndUpdateOptions().upsert(true))
     }
 
-    override suspend fun downgradeToFree(stripeCustomerId: String) {
+    override suspend fun downgradeToFree(razorpaySubscriptionId: String) {
         subscriptions.updateOne(
-            eq("stripeCustomerId", stripeCustomerId),
+            eq("razorpaySubscriptionId", razorpaySubscriptionId),
             Updates.combine(
                 Updates.set("plan", BillingPlan.FREE.name),
-                Updates.unset("stripeSubscriptionId"),
+                Updates.unset("razorpaySubscriptionId"),
                 Updates.set("cancelAtPeriodEnd", false),
                 Updates.unset("currentPeriodEnd"),
                 Updates.set("updatedAt", System.currentTimeMillis())
@@ -77,9 +77,8 @@ class MongoBillingRepository(
         )
     }
 
-    override suspend fun findByStripeCustomer(stripeCustomerId: String): String? {
-        return subscriptions.find(eq("stripeCustomerId", stripeCustomerId)).firstOrNull()?.getString("userId")
-    }
+    override suspend fun findByRazorpaySubscription(subscriptionId: String): String? =
+        subscriptions.find(eq("razorpaySubscriptionId", subscriptionId)).firstOrNull()?.getString("userId")
 
     override suspend fun getUsage(userId: String): UsageStats {
         val ym = currentYearMonth()
@@ -89,8 +88,8 @@ class MongoBillingRepository(
         return UsageStats(stringsTranslated, projectsUsed)
     }
 
-    override suspend fun getHistoricalUsage(userId: String): List<HistoricalUsage> {
-        return usageLogs.find(eq("userId", userId))
+    override suspend fun getHistoricalUsage(userId: String): List<HistoricalUsage> =
+        usageLogs.find(eq("userId", userId))
             .sort(Sorts.descending("yearMonth"))
             .toList()
             .map { doc ->
@@ -99,7 +98,6 @@ class MongoBillingRepository(
                     stringsTranslated = (doc["stringsTranslated"] as? Number)?.toInt() ?: 0
                 )
             }
-    }
 
     override suspend fun recordUsage(userId: String, stringsTranslated: Int) {
         val ym = currentYearMonth()
@@ -119,51 +117,47 @@ class MongoBillingRepository(
 
     override suspend fun insertInvoice(
         userId: String,
-        stripeInvoiceId: String,
-        amountCents: Int,
+        razorpayPaymentId: String,
+        amountPaise: Int,
         currency: String,
         status: String,
-        invoicePdfUrl: String?,
-        periodStart: Instant,
         periodEnd: Instant
     ) {
-        val exists = invoices.countDocuments(eq("stripeInvoiceId", stripeInvoiceId)) > 0
-        if (exists) return
         val now = System.currentTimeMillis()
         val doc = Document().apply {
             put("_id", UUID.randomUUID().toString())
             put("userId", userId)
-            put("stripeInvoiceId", stripeInvoiceId)
-            put("amountCents", amountCents)
+            put("razorpayPaymentId", razorpayPaymentId)
+            put("amountPaise", amountPaise)
             put("currency", currency)
             put("status", status)
-            put("invoicePdfUrl", invoicePdfUrl)
-            put("periodStart", periodStart.toEpochMilliseconds())
             put("periodEnd", periodEnd.toEpochMilliseconds())
             put("createdAt", now)
         }
-        invoices.insertOne(doc)
+        try {
+            invoices.insertOne(doc)
+        } catch (e: com.mongodb.MongoWriteException) {
+            // Unique index on razorpayPaymentId rejects concurrent duplicates from webhook redeliveries.
+            if (e.error.code != 11000) throw e
+        }
     }
 
-    override suspend fun listInvoices(userId: String, limit: Int): List<InvoiceRecord> {
-        return invoices.find(eq("userId", userId))
+    override suspend fun listInvoices(userId: String, limit: Int): List<InvoiceRecord> =
+        invoices.find(eq("userId", userId))
             .sort(Sorts.descending("createdAt"))
             .limit(limit)
             .toList()
             .map { doc ->
                 InvoiceRecord(
                     id = doc.getString("_id"),
-                    stripeInvoiceId = doc.getString("stripeInvoiceId"),
-                    amountCents = (doc["amountCents"] as? Number)?.toInt() ?: 0,
-                    currency = doc.getString("currency") ?: "usd",
-                    status = doc.getString("status") ?: "paid",
-                    invoicePdfUrl = doc.getString("invoicePdfUrl"),
-                    periodStart = Instant.fromEpochMilliseconds((doc["periodStart"] as Number).toLong()),
-                    periodEnd = Instant.fromEpochMilliseconds((doc["periodEnd"] as Number).toLong()),
+                    razorpayPaymentId = doc.getString("razorpayPaymentId") ?: "",
+                    amountPaise = (doc["amountPaise"] as? Number)?.toInt() ?: 0,
+                    currency = doc.getString("currency") ?: "INR",
+                    status = doc.getString("status") ?: "captured",
+                    periodEnd = Instant.fromEpochMilliseconds((doc["periodEnd"] as? Number)?.toLong() ?: 0L),
                     createdAt = Instant.fromEpochMilliseconds((doc["createdAt"] as Number).toLong())
                 )
             }
-    }
 
     private fun currentYearMonth(): String {
         val ldt = Clock.System.now().toLocalDateTime(TimeZone.UTC)
@@ -171,15 +165,14 @@ class MongoBillingRepository(
     }
 
     private fun Document.toSubscription(): Subscription {
-        val planStr = getString("plan") ?: BillingPlan.FREE.name
-        val plan = runCatching { BillingPlan.valueOf(planStr) }.getOrElse { BillingPlan.FREE }
+        val plan = runCatching { BillingPlan.valueOf(getString("plan") ?: "") }.getOrElse { BillingPlan.FREE }
         val periodEnd = (get("currentPeriodEnd") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
         return Subscription(
             userId = getString("userId"),
             plan = plan,
-            stripeCustomerId = getString("stripeCustomerId"),
-            stripeSubscriptionId = getString("stripeSubscriptionId"),
+            razorpayCustomerId = getString("razorpayCustomerId"),
+            razorpaySubscriptionId = getString("razorpaySubscriptionId"),
             cancelAtPeriodEnd = getBoolean("cancelAtPeriodEnd", false),
             currentPeriodEnd = periodEnd
         )
