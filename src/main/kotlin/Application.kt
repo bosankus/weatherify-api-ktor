@@ -1,7 +1,7 @@
 package bose.ankush
 
 import bose.ankush.base.*
-import domain.service.impl.RefundServiceImpl
+import domain.service.RefundService
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -24,7 +24,7 @@ fun Application.module() {
     configureHTTP()
     configureAuthentication()
     configureRouting()
-    val refundService by inject<RefundServiceImpl>()
+    val refundService by inject<RefundService>()
     configureTransloom(refundService)
     configureFirebase()
     configureServiceCatalogSeeding()

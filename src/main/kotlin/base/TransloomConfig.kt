@@ -15,7 +15,7 @@ import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
 import com.transloom.services.RazorpayBillingService
 import com.transloom.services.TranslationService
-import domain.service.impl.RefundServiceImpl
+import domain.service.RefundService
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.routing.*
@@ -23,7 +23,7 @@ import kotlinx.coroutines.runBlocking
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 
-fun Application.configureTransloom(refundService: RefundServiceImpl) {
+fun Application.configureTransloom(refundService: RefundService) {
     val log = LoggerFactory.getLogger("Transloom")
 
     val jwtSecret = getSecretValue("jwt-secret")
@@ -56,8 +56,8 @@ fun Application.configureTransloom(refundService: RefundServiceImpl) {
     val webhookDispatcher = RazorpayWebhookDispatcher(
         webhookSecret = webhookSecret,
         handlers = listOf(
-            razorpayService,   // subscription.*
-            refundService      // refund.*
+            razorpayService,                          // subscription.*
+            refundService as com.androidplay.core.razorpay.RazorpayEventHandler  // refund.*
         )
     )
 
