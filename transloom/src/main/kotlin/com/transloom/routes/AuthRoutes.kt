@@ -3,7 +3,6 @@ package com.transloom.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.transloom.repository.UserRepository
-import com.transloom.services.RazorpayBillingService
 import com.androidplay.core.secrets.getSecretValue
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -17,11 +16,14 @@ import kotlinx.serialization.json.Json
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.util.date.GMTDate
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.util.*
 
 private val log = LoggerFactory.getLogger("AuthRoutes")
+
+private const val JWT_TTL_MS = 7L * 24 * 60 * 60 * 1000
 
 @Serializable
 data class GitHubTokenRequest(
@@ -48,8 +50,7 @@ data class GitHubUser(
 
 fun Route.configureAuthRoutes(
     jwtSecret: String,
-    userRepository: UserRepository,
-    razorpayService: RazorpayBillingService
+    userRepository: UserRepository
 ) {
     val httpClient = HttpClient(CIO) {
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
@@ -70,8 +71,6 @@ fun Route.configureAuthRoutes(
                 path = "/transloom/auth", maxAge = 600,
                 httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
             ))
-            // rp_subscription / rp_plan cookies are already set by /transloom/billing/rp-callback
-            // before this route is called in the anonymous payment-first flow. Nothing to add here.
             val url = "https://github.com/login/oauth/authorize" +
                     "?client_id=$clientId" +
                     "&redirect_uri=$redirectUri" +
@@ -89,15 +88,15 @@ fun Route.configureAuthRoutes(
                 return@get
             }
             call.response.cookies.append(Cookie("oauth_state", "", path = "/transloom/auth",
-                expires = io.ktor.util.date.GMTDate.START, maxAge = 0))
+                expires = GMTDate.START, maxAge = 0))
 
-            // Read and clear the Razorpay subscription cookies set during anonymous payment-first flow.
-            val rpSubscription = call.request.cookies["rp_subscription"]
-            val rpPlan = call.request.cookies["rp_plan"]
-            call.response.cookies.append(Cookie("rp_subscription", "", path = "/transloom/auth",
-                expires = io.ktor.util.date.GMTDate.START, maxAge = 0))
-            call.response.cookies.append(Cookie("rp_plan", "", path = "/transloom/auth",
-                expires = io.ktor.util.date.GMTDate.START, maxAge = 0))
+            // Pull the plan the user picked on the pricing page (if any) so we can route them
+            // back into the branded checkout flow once they're signed in.
+            val pendingPlan = call.request.cookies[PENDING_PLAN_COOKIE]
+            if (!pendingPlan.isNullOrBlank()) {
+                call.response.cookies.append(Cookie(PENDING_PLAN_COOKIE, "", path = "/",
+                    expires = GMTDate.START, maxAge = 0))
+            }
 
             val code = call.request.queryParameters["code"]
             if (code == null) {
@@ -108,13 +107,9 @@ fun Route.configureAuthRoutes(
             if (clientId == "dummy_client_id") {
                 log.info("Mocking GitHub OAuth (no GITHUB_CLIENT_ID set)")
                 val mockUser = userRepository.upsert(12345L, "mock-developer", "mock@transloom.dev", null, null)
-                val mockToken = JWT.create()
-                    .withAudience("transloom-app").withIssuer("transloom-backend")
-                    .withClaim("userId", mockUser.id).withClaim("githubId", 12345L)
-                    .withClaim("username", "mock-developer")
-                    .withExpiresAt(Date(System.currentTimeMillis() + 604800000))
-                    .sign(Algorithm.HMAC256(jwtSecret))
-                call.respondRedirect(frontendRedirectUrl + mockToken)
+                val mockToken = mintJwt(jwtSecret, mockUser.id, 12345L, "mock-developer")
+                call.issueSessionCookie(mockToken)
+                redirectAfterAuth(call, mockToken, pendingPlan, frontendRedirectUrl)
                 return@get
             }
 
@@ -145,28 +140,39 @@ fun Route.configureAuthRoutes(
             )
             log.info("OAuth success: user={} id={}", githubUser.login, user.id)
 
-            // Payment-first flow: link the pre-paid Razorpay subscription to this user.
-            // If linking fails we must NOT silently issue a JWT — the user would land on FREE plan
-            // while still being charged. Block the flow and show a billing-error page; the customer's
-            // Razorpay subscription remains intact and can be recovered manually from logs.
-            if (!rpSubscription.isNullOrBlank() && !rpPlan.isNullOrBlank()) {
-                val linked = razorpayService.linkAnonymousSubscription(user.id, rpSubscription, rpPlan)
-                if (!linked) {
-                    log.error("Failed to link rp_subscription={} to user={} ({}). Aborting OAuth completion.",
-                        rpSubscription, user.id, githubUser.login)
-                    call.respondRedirect("/transloom?billing_error=link_failed&sub=$rpSubscription")
-                    return@get
-                }
-            }
-
-            val jwtToken = JWT.create()
-                .withAudience("transloom-app").withIssuer("transloom-backend")
-                .withClaim("userId", user.id).withClaim("githubId", githubUser.id)
-                .withClaim("username", githubUser.login)
-                .withExpiresAt(Date(System.currentTimeMillis() + 604800000))
-                .sign(Algorithm.HMAC256(jwtSecret))
-
-            call.respondRedirect(frontendRedirectUrl + jwtToken)
+            val jwtToken = mintJwt(jwtSecret, user.id, githubUser.id, githubUser.login)
+            call.issueSessionCookie(jwtToken)
+            redirectAfterAuth(call, jwtToken, pendingPlan, frontendRedirectUrl)
         }
     }
+}
+
+private suspend fun redirectAfterAuth(
+    call: ApplicationCall,
+    jwtToken: String,
+    pendingPlan: String?,
+    frontendRedirectUrl: String
+) {
+    if (!pendingPlan.isNullOrBlank()) {
+        // User came from a paid-plan CTA — drop them into the branded checkout page.
+        call.respondRedirect("/transloom/billing/checkout?plan=${pendingPlan.uppercase()}")
+    } else {
+        call.respondRedirect(frontendRedirectUrl + jwtToken)
+    }
+}
+
+private fun mintJwt(secret: String, userId: String, githubId: Long, username: String): String =
+    JWT.create()
+        .withAudience("transloom-app").withIssuer("transloom-backend")
+        .withClaim("userId", userId).withClaim("githubId", githubId)
+        .withClaim("username", username)
+        .withExpiresAt(Date(System.currentTimeMillis() + JWT_TTL_MS))
+        .sign(Algorithm.HMAC256(secret))
+
+private fun ApplicationCall.issueSessionCookie(token: String) {
+    response.cookies.append(Cookie(
+        name = SESSION_COOKIE, value = token,
+        path = "/", maxAge = (JWT_TTL_MS / 1000).toInt(),
+        httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
+    ))
 }

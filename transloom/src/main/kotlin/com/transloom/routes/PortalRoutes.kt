@@ -613,6 +613,7 @@ private fun HTML.dashboardApp() {
         title { +"Transloom — Dashboard" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
+        script { src = "https://checkout.razorpay.com/v1/checkout.js" }
         style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS" } }
     }
     body {
@@ -1064,8 +1065,31 @@ async function loadBilling(){
 async function subscribe(plan){
   const res=await api('/billing/subscribe',{method:'POST',body:JSON.stringify({plan})});
   if(!res)return;
-  if(res.ok){const data=await res.json();window.location.href=data.subscribeUrl;}
-  else{const err=await res.json();toast(err.error||'Subscription failed','error');}
+  if(!res.ok){const err=await res.json();toast(err.error||'Subscription failed','error');return;}
+  const data=await res.json();
+  if(!window.Razorpay){toast('Checkout failed to load — refresh and retry','error');return;}
+  const rzp=new Razorpay({
+    key:data.keyId,
+    subscription_id:data.subscriptionId,
+    name:'Transloom',
+    description:data.plan+' plan · 60-day free trial',
+    image:'/transloom/favicon.svg',
+    theme:{color:'#00E5A0',backdrop_color:'#000000'},
+    handler:function(resp){
+      const p=new URLSearchParams({
+        razorpay_payment_id:resp.razorpay_payment_id||'',
+        razorpay_subscription_id:resp.razorpay_subscription_id||data.subscriptionId,
+        razorpay_signature:resp.razorpay_signature||''
+      });
+      window.location.href='/transloom/billing/rp-callback?'+p.toString();
+    },
+    modal:{escape:true,backdropclose:false},
+    notes:{plan:data.plan}
+  });
+  rzp.on('payment.failed',function(r){
+    toast('Payment failed: '+(r.error&&r.error.description?r.error.description:'Please retry'),'error');
+  });
+  rzp.open();
 }
 
 async function upgradePlan(){

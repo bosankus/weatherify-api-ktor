@@ -2,26 +2,39 @@ package com.transloom.routes
 
 import com.androidplay.core.razorpay.RazorpayWebhookDispatcher
 import com.androidplay.core.razorpay.WebhookResult
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
+import com.auth0.jwt.exceptions.JWTVerificationException
 import com.transloom.domain.BillingPlan
 import com.transloom.repository.BillingRepository
 import com.transloom.repository.UserRepository
 import com.transloom.model.ApiError
 import com.transloom.services.RazorpayBillingService
+import com.transloom.services.SubscriptionInit
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.html.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.util.date.GMTDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.html.*
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
+import java.util.UUID
 
 private val log = LoggerFactory.getLogger("BillingRoutes")
 
+// Name of the httpOnly session cookie set after OAuth completion. Lets server-side
+// routes (like the checkout page) resolve the user without an Authorization header.
+internal const val SESSION_COOKIE = "tl_session"
+internal const val PENDING_PLAN_COOKIE = "pending_plan"
+
 @Serializable data class SubscribePlanBody(val plan: String = "SOLO")
-@Serializable data class SubscribeResponse(val subscribeUrl: String)
+@Serializable data class SubscribeResponse(val subscriptionId: String, val keyId: String, val plan: String)
 
 @Serializable
 data class SubscriptionResponse(
@@ -41,6 +54,18 @@ data class InvoiceResponse(
     val amount: String,
     val currency: String,
     val status: String
+)
+
+@Serializable
+data class HistoryEntry(val month: String, val count: Int)
+
+@Serializable
+data class UsageResponse(
+    val stringsTranslated: Int,
+    val stringLimit: Int?,
+    val projectsUsed: Int,
+    val projectLimit: Int?,
+    val history: List<HistoryEntry>
 )
 
 // ─── Authenticated billing routes ─────────────────────────────────────────────
@@ -70,6 +95,7 @@ fun Route.configureBillingRoutes(
         }
 
         // Authenticated upgrade — user is already logged in via dashboard.
+        // Returns Checkout.js init payload so the SPA can open the modal in-app.
         post("/subscribe") {
             val userId = call.userId() ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
             val body = runCatching { call.receive<SubscribePlanBody>() }.getOrElse { SubscribePlanBody() }
@@ -79,11 +105,11 @@ fun Route.configureBillingRoutes(
             if (plan == BillingPlan.FREE || plan == BillingPlan.ENTERPRISE) {
                 return@post call.respond(HttpStatusCode.BadRequest, ApiError("Use SOLO or TEAM for subscription"))
             }
-            val url = runCatching { razorpayService.createAuthenticatedSubscription(userId, plan) }.getOrElse {
+            val init = runCatching { razorpayService.createSubscriptionForUser(userId, plan) }.getOrElse {
                 log.error("Subscription creation failed for userId={}: {}", userId, it.message)
                 return@post call.respond(HttpStatusCode.InternalServerError, ApiError(it.message ?: "Razorpay error"))
             }
-            call.respond(SubscribeResponse(url))
+            call.respond(SubscribeResponse(init.subscriptionId, init.keyId, init.plan.name))
         }
 
         post("/cancel") {
@@ -116,79 +142,123 @@ fun Route.configureBillingRoutes(
             val usage = billingRepository.getUsage(userId)
             val history = billingRepository.getHistoricalUsage(userId)
             call.respond(
-                mapOf(
-                    "stringsTranslated" to usage.stringsTranslated,
-                    "stringLimit" to plan.stringLimit,
-                    "projectsUsed" to usage.projectsUsed,
-                    "projectLimit" to (if (plan.maxProjects == Int.MAX_VALUE) null else plan.maxProjects),
-                    "history" to history.map { mapOf("month" to it.yearMonth, "count" to it.stringsTranslated) }
+                UsageResponse(
+                    stringsTranslated = usage.stringsTranslated,
+                    stringLimit = plan.stringLimit,
+                    projectsUsed = usage.projectsUsed,
+                    projectLimit = if (plan.maxProjects == Int.MAX_VALUE) null else plan.maxProjects,
+                    history = history.map { HistoryEntry(it.yearMonth, it.stringsTranslated) }
                 )
             )
         }
     }
 }
 
-// ─── Public (unauthenticated) routes ──────────────────────────────────────────
+// ─── Public checkout flow ─────────────────────────────────────────────────────
 
 /**
- * Anonymous checkout: user picks a paid plan on the landing page before signing in.
- * Creates a Razorpay subscription and redirects the user to Razorpay's hosted page.
- * After card auth Razorpay calls back to /transloom/billing/rp-callback.
+ * Auth-first checkout: clicking "Start trial" routes through GitHub OAuth so we know
+ * who the user is before they see a payment form. The branded checkout page then
+ * embeds Razorpay's Checkout.js modal — no more handing the user to Razorpay's
+ * hosted short_url page where they get stranded after payment.
  */
-fun Route.configurePublicCheckoutRoute(razorpayService: RazorpayBillingService) {
+fun Route.configurePublicCheckoutRoute(
+    razorpayService: RazorpayBillingService,
+    userRepository: UserRepository,
+    jwtSecret: String
+) {
     get("/transloom/billing/start-subscription") {
         val planParam = call.request.queryParameters["plan"]?.uppercase()
-        log.debug("Checkout request: plan parameter = {}", planParam)
-
-        val plan = runCatching { BillingPlan.valueOf(planParam ?: "") }.getOrElse { e ->
-            log.warn("Failed to parse plan parameter '{}': {}", planParam, e.message)
+        val plan = runCatching { BillingPlan.valueOf(planParam ?: "") }.getOrElse {
+            log.warn("Invalid plan parameter: {}", planParam)
             return@get call.respondRedirect("/transloom#pricing")
         }
-
         if (plan == BillingPlan.FREE || plan == BillingPlan.ENTERPRISE) {
-            log.debug("Redirecting {} plan to GitHub auth", plan.name)
             return@get call.respondRedirect("/transloom/auth/github")
         }
 
-        try {
-            log.info("Creating anonymous subscription for plan: {}", plan.name)
-            val url = razorpayService.createAnonymousSubscription(plan)
-            log.info("Subscription created, redirecting to: {}", url)
-            call.respondRedirect(url)
-        } catch (e: Exception) {
-            log.error("Anonymous subscription failed for plan={}: {}", plan.name, e.message, e)
-            call.respondRedirect("/transloom#pricing")
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId != null) {
+            // Already signed in — go straight to the checkout page.
+            return@get call.respondRedirect("/transloom/billing/checkout?plan=${plan.name}")
         }
+
+        // Not signed in — remember the plan, send the user through GitHub OAuth.
+        call.response.cookies.append(Cookie(
+            name = PENDING_PLAN_COOKIE, value = plan.name,
+            path = "/", maxAge = 900,
+            httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
+        ))
+        call.respondRedirect("/transloom/auth/github")
+    }
+
+    get("/transloom/billing/checkout") {
+        val planParam = call.request.queryParameters["plan"]?.uppercase()
+        val plan = runCatching { BillingPlan.valueOf(planParam ?: "") }.getOrElse {
+            return@get call.respondRedirect("/transloom#pricing")
+        }
+        if (plan == BillingPlan.FREE || plan == BillingPlan.ENTERPRISE) {
+            return@get call.respondRedirect("/transloom#pricing")
+        }
+
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId == null) {
+            // Lost session — restart the auth dance.
+            call.response.cookies.append(Cookie(
+                name = PENDING_PLAN_COOKIE, value = plan.name,
+                path = "/", maxAge = 900,
+                httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
+            ))
+            return@get call.respondRedirect("/transloom/auth/github")
+        }
+
+        val user = userRepository.findById(userId)
+        if (user == null) {
+            log.warn("Session cookie userId={} not found in DB — clearing session", userId)
+            call.clearSession()
+            return@get call.respondRedirect("/transloom/auth/github")
+        }
+
+        val init = runCatching { razorpayService.createSubscriptionForUser(userId, plan) }.getOrElse {
+            log.error("Subscription creation failed for userId={} plan={}: {}", userId, plan.name, it.message, it)
+            return@get call.respondRedirect("/transloom#pricing?billing_error=create_failed")
+        }
+
+        call.respondHtml { checkoutPage(plan, init, user.email, user.githubUsername, user.avatarUrl) }
     }
 
     /**
-     * Razorpay redirects here after card authentication on the hosted subscription page.
-     * Verifies the signature, stores the subscription ID in a cookie, then sends the user
-     * through GitHub OAuth so we can link the subscription to the newly-created user.
+     * Razorpay Checkout.js handler hits this endpoint with paymentId, subscriptionId,
+     * and signature after a successful payment. We verify signature then redirect
+     * to a polished success page. The webhook handler does the heavy lifting; this
+     * is just the user-facing redirect.
      */
     get("/transloom/billing/rp-callback") {
         val paymentId = call.request.queryParameters["razorpay_payment_id"]
         val subscriptionId = call.request.queryParameters["razorpay_subscription_id"]
-            ?: return@get call.respondRedirect("/transloom#pricing")
         val signature = call.request.queryParameters["razorpay_signature"]
-        val plan = call.request.queryParameters["plan"] ?: "SOLO"
 
-        if (!razorpayService.verifyCallbackSignature(paymentId, subscriptionId, signature)) {
-            log.warn("Invalid Razorpay callback signature for sub={}", subscriptionId)
-            return@get call.respondRedirect("/transloom#pricing")
+        if (paymentId.isNullOrBlank() || subscriptionId.isNullOrBlank() || signature.isNullOrBlank()) {
+            log.warn("rp-callback missing params: payment={} sub={} sig={}",
+                paymentId, subscriptionId, signature?.let { "<set>" })
+            return@get call.respondRedirect("/transloom#pricing?billing_error=missing_params")
         }
+        if (!razorpayService.verifyCheckoutHandler(paymentId, subscriptionId, signature)) {
+            log.warn("Invalid Checkout.js handler signature for sub={}", subscriptionId)
+            return@get call.respondRedirect("/transloom#pricing?billing_error=invalid_signature")
+        }
+        val ownerId = razorpayService.ownerOf(subscriptionId)
+        val sessionUserId = call.sessionUserId(jwtSecret)
+        if (ownerId == null || ownerId != sessionUserId) {
+            log.warn("rp-callback ownership mismatch: sub-owner={} session={}", ownerId, sessionUserId)
+            return@get call.respondRedirect("/transloom#pricing?billing_error=owner_mismatch")
+        }
+        call.respondRedirect("/transloom/billing/success?sub=$subscriptionId")
+    }
 
-        call.response.cookies.append(Cookie(
-            name = "rp_subscription", value = subscriptionId,
-            path = "/transloom/auth", maxAge = 1800,
-            httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
-        ))
-        call.response.cookies.append(Cookie(
-            name = "rp_plan", value = plan.uppercase(),
-            path = "/transloom/auth", maxAge = 1800,
-            httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
-        ))
-        call.respondRedirect("/transloom/auth/github")
+    get("/transloom/billing/success") {
+        val subscriptionId = call.request.queryParameters["sub"].orEmpty()
+        call.respondHtml { successPage(subscriptionId) }
     }
 }
 
@@ -203,12 +273,34 @@ fun Route.configureRazorpayWebhook(dispatcher: RazorpayWebhookDispatcher) {
             is WebhookResult.Skipped -> { log.debug("Webhook skipped: {}", result.reason); call.respond(HttpStatusCode.OK, "skipped") }
             is WebhookResult.Error   -> {
                 log.warn("Webhook error: {}", result.message)
-                // 500 (not 400) so Razorpay retries on transient failures (DB hiccup, downstream down).
-                // The only intentionally-rejected case (bad signature) still returns 500 — Razorpay will retry
-                // a few times and then alert, which is the desired observability path.
                 call.respond(HttpStatusCode.InternalServerError, result.message)
             }
         }
     }
 }
 
+// ─── Session cookie helpers ───────────────────────────────────────────────────
+
+internal fun ApplicationCall.sessionUserId(jwtSecret: String): String? {
+    val token = request.cookies[SESSION_COOKIE] ?: return null
+    return runCatching {
+        val verifier = JWT.require(Algorithm.HMAC256(jwtSecret))
+            .withAudience("transloom-app")
+            .withIssuer("transloom-backend")
+            .build()
+        verifier.verify(token).getClaim("userId")?.asString()?.let {
+            UUID.fromString(it).toString()
+        }
+    }.getOrElse { e ->
+        if (e is JWTVerificationException) log.debug("Invalid session cookie: {}", e.message)
+        null
+    }
+}
+
+internal fun ApplicationCall.clearSession() {
+    response.cookies.append(Cookie(
+        name = SESSION_COOKIE, value = "",
+        path = "/", expires = GMTDate.START, maxAge = 0,
+        httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
+    ))
+}

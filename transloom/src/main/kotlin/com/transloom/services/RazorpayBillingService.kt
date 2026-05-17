@@ -27,6 +27,16 @@ private const val TRIAL_DAYS = 60L
 // Razorpay requires total_count >= 1. 120 monthly cycles = 10 years, effectively indefinite.
 private const val SUBSCRIPTION_CYCLES = 120
 
+/**
+ * Init payload returned to the branded checkout page so Checkout.js can open
+ * a hosted modal on our domain instead of redirecting to Razorpay's short_url.
+ */
+data class SubscriptionInit(
+    val subscriptionId: String,
+    val keyId: String,
+    val plan: BillingPlan
+)
+
 class RazorpayBillingService(
     private val billingRepository: BillingRepository
 ) : RazorpayEventHandler {
@@ -44,6 +54,8 @@ class RazorpayBillingService(
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
     }
 
+    val publicKeyId: String get() = keyId
+
     // ─── RazorpayEventHandler ─────────────────────────────────────────────────
 
     override val eventPrefixes = listOf("subscription.")
@@ -60,27 +72,20 @@ class RazorpayBillingService(
             else -> WebhookResult.Skipped("Unhandled subscription event: $eventType")
         }
 
-    // ─── Subscription creation ─────────────────────────────────────────────────
+    // ─── Subscription creation (authenticated only) ───────────────────────────
 
-    suspend fun createAnonymousSubscription(plan: BillingPlan): String {
+    /**
+     * Creates a Razorpay subscription for an already-known userId and pre-records the
+     * subscription against the user so webhooks land on the right account even before
+     * the first charge fires. Returns the IDs the embedded Checkout.js modal needs.
+     */
+    suspend fun createSubscriptionForUser(userId: String, plan: BillingPlan): SubscriptionInit {
+        require(plan != BillingPlan.FREE && plan != BillingPlan.ENTERPRISE) {
+            "Cannot create Razorpay subscription for plan ${plan.name}"
+        }
         val planId = plan.razorpayPlanId()
             ?: throw IllegalArgumentException("No Razorpay plan ID configured for ${plan.name}")
-        return createSubscription(
-            planId = planId,
-            notes = buildJsonObject { put("plan", plan.name); put("flow", "anonymous") }
-        )
-    }
 
-    suspend fun createAuthenticatedSubscription(userId: String, plan: BillingPlan): String {
-        val planId = plan.razorpayPlanId()
-            ?: throw IllegalArgumentException("No Razorpay plan ID configured for ${plan.name}")
-        return createSubscription(
-            planId = planId,
-            notes = buildJsonObject { put("plan", plan.name); put("userId", userId); put("flow", "authenticated") }
-        )
-    }
-
-    private suspend fun createSubscription(planId: String, notes: JsonObject): String {
         val startAt = Clock.System.now().epochSeconds + (TRIAL_DAYS * 24 * 3600)
         val body = buildJsonObject {
             put("plan_id", planId)
@@ -88,7 +93,11 @@ class RazorpayBillingService(
             put("quantity", 1)
             put("customer_notify", 1)
             put("start_at", startAt)
-            put("notes", notes)
+            put("notes", buildJsonObject {
+                put("plan", plan.name)
+                put("userId", userId)
+                put("flow", "authenticated")
+            })
         }
         val response = withContext(Dispatchers.IO) {
             http.post("$RAZORPAY_API/subscriptions") {
@@ -97,60 +106,36 @@ class RazorpayBillingService(
                 setBody(body.toString())
             }.body<JsonObject>()
         }
-        return response["short_url"]?.jsonPrimitive?.contentOrNull
-            ?: throw IllegalStateException("Razorpay did not return short_url: $response")
+        val subscriptionId = response["id"]?.jsonPrimitive?.contentOrNull
+            ?: throw IllegalStateException("Razorpay did not return subscription id: $response")
+
+        // Pre-link the subscription so webhook handlers can resolve the user immediately.
+        billingRepository.upsertSubscription(
+            userId = userId,
+            plan = plan,
+            razorpaySubscriptionId = subscriptionId
+        )
+        log.info("Created Razorpay subscription {} for userId={} plan={}", subscriptionId, userId, plan.name)
+        return SubscriptionInit(subscriptionId, keyId, plan)
     }
 
-    // ─── Anonymous linking ─────────────────────────────────────────────────────
-
-    suspend fun linkAnonymousSubscription(userId: String, subscriptionId: String, planName: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val plan = runCatching { BillingPlan.valueOf(planName.uppercase()) }.getOrElse {
-                    log.warn("Invalid plan '{}' for subscription {}", planName, subscriptionId)
-                    return@withContext false
-                }
-                val sub = fetchSubscription(subscriptionId) ?: return@withContext false
-                billingRepository.upsertSubscription(
-                    userId = userId, plan = plan,
-                    razorpayCustomerId = sub["customer_id"]?.jsonPrimitive?.contentOrNull,
-                    razorpaySubscriptionId = subscriptionId
-                )
-                log.info("Linked subscription {} → userId={} plan={}", subscriptionId, userId, plan.name)
-                true
-            } catch (e: Exception) {
-                log.error("Failed to link subscription {}: {}", subscriptionId, e.message, e)
-                false
-            }
-        }
-    }
-
-    // ─── Callback signature verification ──────────────────────────────────────
+    // ─── Checkout.js handler signature verification ───────────────────────────
 
     /**
-     * Verifies the signature Razorpay sends to the callback_url after card auth.
-     *  - Normal case (immediate payment): HMAC-SHA256(payment_id|subscription_id, key_secret)
-     *  - Trial case (no payment yet):     no signature exists, so we fall back to a direct
-     *    server-side lookup via Razorpay's API to prove the subscription is real and ours.
-     *    This blocks attackers from forging callback URLs with arbitrary sub IDs.
+     * Verifies the signature the embedded Checkout.js modal returns in its `handler`
+     * callback after a successful payment. Formula:
+     *   HMAC-SHA256("$paymentId|$subscriptionId", keySecret) == signature
+     * For trial-only subscriptions (no payment yet), Checkout.js still produces a payment
+     * id for the first auth-charge of ₹0 / ₹1, so this single path covers both.
      */
-    suspend fun verifyCallbackSignature(paymentId: String?, subscriptionId: String, signature: String?): Boolean {
-        if (!paymentId.isNullOrBlank() && !signature.isNullOrBlank()) {
-            val expected = hmac256("$paymentId|$subscriptionId", keySecret)
-            return timingSafeEquals(expected, signature)
-        }
-        // Trial path: confirm the subscription actually exists in our Razorpay account and is
-        // in a status consistent with "card just authenticated". Anything else is rejected.
-        val sub = fetchSubscription(subscriptionId)
-        if (sub == null) {
-            log.warn("Trial callback rejected — sub {} not found in Razorpay", subscriptionId)
-            return false
-        }
-        val status = sub["status"]?.jsonPrimitive?.contentOrNull
-        val ok = status in setOf("authenticated", "active", "created")
-        if (!ok) log.warn("Trial callback rejected — sub {} has unexpected status={}", subscriptionId, status)
-        return ok
+    fun verifyCheckoutHandler(paymentId: String, subscriptionId: String, signature: String): Boolean {
+        val expected = hmac256("$paymentId|$subscriptionId", keySecret)
+        return timingSafeEquals(expected, signature)
     }
+
+    /** Resolves the userId that owns this subscription (set at create time). */
+    suspend fun ownerOf(subscriptionId: String): String? =
+        billingRepository.findByRazorpaySubscription(subscriptionId)
 
     // ─── Cancel subscription ───────────────────────────────────────────────────
 
@@ -178,13 +163,9 @@ class RazorpayBillingService(
         val subscriptionId = sub["id"]?.jsonPrimitive?.contentOrNull ?: return WebhookResult.Skipped("No sub ID")
         val notes = sub["notes"]?.jsonObject
 
-        if (notes?.get("flow")?.jsonPrimitive?.contentOrNull == "anonymous") {
-            return WebhookResult.Skipped("anonymous flow — will be linked during OAuth callback")
-        }
-
         val userId = notes?.get("userId")?.jsonPrimitive?.contentOrNull
             ?: billingRepository.findByRazorpaySubscription(subscriptionId)
-            ?: return WebhookResult.Skipped("No userId for sub=$subscriptionId (pre-OAuth)")
+            ?: return WebhookResult.Skipped("No userId for sub=$subscriptionId")
 
         val plan = runCatching { BillingPlan.valueOf(notes?.get("plan")?.jsonPrimitive?.contentOrNull ?: "") }
             .getOrDefault(BillingPlan.SOLO)
@@ -219,17 +200,6 @@ class RazorpayBillingService(
         billingRepository.downgradeToFree(subscriptionId)
         log.info("Subscription ended, downgraded to free: sub={}", subscriptionId)
         return WebhookResult.Ok
-    }
-
-    private suspend fun fetchSubscription(subscriptionId: String): JsonObject? = try {
-        withContext(Dispatchers.IO) {
-            http.get("$RAZORPAY_API/subscriptions/$subscriptionId") {
-                header(HttpHeaders.Authorization, authHeader)
-            }.body<JsonObject>()
-        }
-    } catch (e: Exception) {
-        log.error("Failed to fetch subscription {}: {}", subscriptionId, e.message)
-        null
     }
 
     private fun subEntity(event: JsonObject): JsonObject? =
