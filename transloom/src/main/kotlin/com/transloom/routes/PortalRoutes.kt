@@ -20,10 +20,20 @@ private const val FAVICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
   <path d="M10 18.5 Q13 16.5 16 18.5 T22 18.5" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.5"/>
 </svg>"""
 
-fun Route.configurePortalRoutes() {
+fun Route.configurePortalRoutes(jwtSecret: String) {
     route("/transloom") {
         get { call.respondHtml { landingPage() } }
-        get("/app") { call.respondHtml { dashboardApp() } }
+        get("/app") {
+            // If the user is authenticated and has an incomplete checkout, route them back
+            // to the payment page rather than silently landing them on the free-tier dashboard.
+            val pendingPlan = call.request.cookies[PENDING_PLAN_COOKIE]
+            val sessionUserId = call.sessionUserId(jwtSecret)
+            if (!pendingPlan.isNullOrBlank() && sessionUserId != null) {
+                call.respondRedirect("/transloom/billing/checkout?plan=$pendingPlan")
+                return@get
+            }
+            call.respondHtml { dashboardApp() }
+        }
         get("/review-portal") { call.respondHtml { reviewPortal() } }
         get("/favicon.svg") {
             call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))

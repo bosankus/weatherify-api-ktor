@@ -62,6 +62,9 @@ class RazorpayBillingService(
 
     override suspend fun handle(eventType: String, event: JsonObject): WebhookResult =
         when (eventType) {
+            // Card saved for trial — upgrade the plan immediately so the user's dashboard
+            // reflects the correct plan during the 60-day trial before any charge fires.
+            "subscription.authenticated" -> handleSubscriptionAuthenticated(event)
             "subscription.activated", "subscription.charged" -> handleSubscriptionCharged(event)
             "subscription.cancelled", "subscription.completed" -> handleSubscriptionEnded(event)
             "subscription.halted" -> {
@@ -109,12 +112,8 @@ class RazorpayBillingService(
         val subscriptionId = response["id"]?.jsonPrimitive?.contentOrNull
             ?: throw IllegalStateException("Razorpay did not return subscription id: $response")
 
-        // Pre-link the subscription so webhook handlers can resolve the user immediately.
-        billingRepository.upsertSubscription(
-            userId = userId,
-            plan = plan,
-            razorpaySubscriptionId = subscriptionId
-        )
+        // Do NOT upgrade plan here — wait for subscription.authenticated webhook (card saved).
+        // userId is embedded in notes so the webhook handler can resolve the user without a DB lookup.
         log.info("Created Razorpay subscription {} for userId={} plan={}", subscriptionId, userId, plan.name)
         return SubscriptionInit(subscriptionId, keyId, plan)
     }
@@ -155,6 +154,24 @@ class RazorpayBillingService(
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────
+
+    private suspend fun handleSubscriptionAuthenticated(event: JsonObject): WebhookResult {
+        val sub = subEntity(event) ?: return WebhookResult.Skipped("No subscription entity")
+        val subscriptionId = sub["id"]?.jsonPrimitive?.contentOrNull ?: return WebhookResult.Skipped("No sub ID")
+        val notes = sub["notes"]?.jsonObject
+        val userId = notes?.get("userId")?.jsonPrimitive?.contentOrNull
+            ?: billingRepository.findByRazorpaySubscription(subscriptionId)
+            ?: return WebhookResult.Skipped("No userId for authenticated sub=$subscriptionId")
+        val plan = runCatching { BillingPlan.valueOf(notes?.get("plan")?.jsonPrimitive?.contentOrNull ?: "") }
+            .getOrDefault(BillingPlan.SOLO)
+        billingRepository.upsertSubscription(
+            userId = userId, plan = plan,
+            razorpayCustomerId = sub["customer_id"]?.jsonPrimitive?.contentOrNull,
+            razorpaySubscriptionId = subscriptionId
+        )
+        log.info("Subscription authenticated (card saved): userId={} plan={} sub={}", userId, plan.name, subscriptionId)
+        return WebhookResult.Ok
+    }
 
     private suspend fun handleSubscriptionCharged(event: JsonObject): WebhookResult {
         val sub = subEntity(event) ?: return WebhookResult.Skipped("No subscription entity")

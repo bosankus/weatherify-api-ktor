@@ -186,7 +186,7 @@ fun Route.configurePublicCheckoutRoute(
         // Not signed in — remember the plan, send the user through GitHub OAuth.
         call.response.cookies.append(Cookie(
             name = PENDING_PLAN_COOKIE, value = plan.name,
-            path = "/", maxAge = 900,
+            path = "/", maxAge = 7 * 24 * 3600,
             httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
         ))
         call.respondRedirect("/transloom/auth/github")
@@ -253,6 +253,12 @@ fun Route.configurePublicCheckoutRoute(
             log.warn("rp-callback ownership mismatch: sub-owner={} session={}", ownerId, sessionUserId)
             return@get call.respondRedirect("/transloom#pricing?billing_error=owner_mismatch")
         }
+        // Payment complete — remove the pending plan marker so the user isn't re-routed on next visit.
+        call.response.cookies.append(Cookie(
+            name = PENDING_PLAN_COOKIE, value = "",
+            path = "/", expires = GMTDate.START, maxAge = 0,
+            httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
+        ))
         call.respondRedirect("/transloom/billing/success?sub=$subscriptionId")
     }
 

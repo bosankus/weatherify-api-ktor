@@ -152,7 +152,7 @@ fun Application.module() {
     }
 
     routing {
-        configurePortalRoutes()
+        configurePortalRoutes(jwtSecret)
         configureWebhookRoutes(jobQueue, projectRepository)
         configureAuthRoutes(jwtSecret, userRepository)
         configureRazorpayWebhook(webhookDispatcher)

@@ -89,11 +89,11 @@ fun Application.configureTransloom(refundService: RefundService) {
     }
 
     routing {
-        configurePortalRoutes()
+        configurePortalRoutes(jwtSecret)
         configureWebhookRoutes(jobQueue, projectRepository)
-        configureAuthRoutes(jwtSecret, userRepository, razorpayService)
+        configureAuthRoutes(jwtSecret, userRepository)
         configureRazorpayWebhook(webhookDispatcher)
-        configurePublicCheckoutRoute(razorpayService)
+        configurePublicCheckoutRoute(razorpayService, userRepository, jwtSecret)
         authenticate("auth-jwt") {
             configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
