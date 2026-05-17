@@ -33,7 +33,6 @@ class RazorpayBillingService(
 
     private val keyId = getSecretValue("razorpay-key-id")
     private val keySecret = getSecretValue("razorpay-secret")
-    private val appUrl = getSecretValue("app-url")
 
     private val authHeader: String by lazy {
         "Basic ${Base64.getEncoder().encodeToString("$keyId:$keySecret".toByteArray(Charsets.UTF_8))}"
@@ -66,8 +65,7 @@ class RazorpayBillingService(
             ?: throw IllegalArgumentException("No Razorpay plan ID configured for ${plan.name}")
         return createSubscription(
             planId = planId,
-            notes = buildJsonObject { put("plan", plan.name); put("flow", "anonymous") },
-            callbackUrl = "$appUrl/transloom/billing/rp-callback?plan=${plan.name}"
+            notes = buildJsonObject { put("plan", plan.name); put("flow", "anonymous") }
         )
     }
 
@@ -76,12 +74,11 @@ class RazorpayBillingService(
             ?: throw IllegalArgumentException("No Razorpay plan ID configured for ${plan.name}")
         return createSubscription(
             planId = planId,
-            notes = buildJsonObject { put("plan", plan.name); put("userId", userId); put("flow", "authenticated") },
-            callbackUrl = "$appUrl/transloom/app?billing=success"
+            notes = buildJsonObject { put("plan", plan.name); put("userId", userId); put("flow", "authenticated") }
         )
     }
 
-    private suspend fun createSubscription(planId: String, notes: JsonObject, callbackUrl: String): String {
+    private suspend fun createSubscription(planId: String, notes: JsonObject): String {
         val startAt = Clock.System.now().epochSeconds + (TRIAL_DAYS * 24 * 3600)
         val body = buildJsonObject {
             put("plan_id", planId)
@@ -89,7 +86,6 @@ class RazorpayBillingService(
             put("quantity", 1)
             put("customer_notify", 1)
             put("start_at", startAt)
-            put("callback_url", callbackUrl)
             put("notes", notes)
         }
         val response = withContext(Dispatchers.IO) {
