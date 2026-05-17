@@ -138,17 +138,25 @@ fun Route.configureBillingRoutes(
 fun Route.configurePublicCheckoutRoute(razorpayService: RazorpayBillingService) {
     get("/transloom/billing/start-subscription") {
         val planParam = call.request.queryParameters["plan"]?.uppercase()
-        val plan = runCatching { BillingPlan.valueOf(planParam ?: "") }.getOrElse {
+        log.debug("Checkout request: plan parameter = {}", planParam)
+
+        val plan = runCatching { BillingPlan.valueOf(planParam ?: "") }.getOrElse { e ->
+            log.warn("Failed to parse plan parameter '{}': {}", planParam, e.message)
             return@get call.respondRedirect("/transloom#pricing")
         }
+
         if (plan == BillingPlan.FREE || plan == BillingPlan.ENTERPRISE) {
+            log.debug("Redirecting {} plan to GitHub auth", plan.name)
             return@get call.respondRedirect("/transloom/auth/github")
         }
+
         try {
+            log.info("Creating anonymous subscription for plan: {}", plan.name)
             val url = razorpayService.createAnonymousSubscription(plan)
+            log.info("Subscription created, redirecting to: {}", url)
             call.respondRedirect(url)
         } catch (e: Exception) {
-            log.error("Anonymous subscription failed for plan={}: {}", plan.name, e.message)
+            log.error("Anonymous subscription failed for plan={}: {}", plan.name, e.message, e)
             call.respondRedirect("/transloom#pricing")
         }
     }

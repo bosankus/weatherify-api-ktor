@@ -1,5 +1,6 @@
 package com.transloom.domain
 
+import com.androidplay.core.secrets.getSecretValue
 import kotlinx.datetime.Instant
 
 enum class BillingPlan(
@@ -12,7 +13,13 @@ enum class BillingPlan(
     FREE("Free", null, 500, 1, 3),
     SOLO("Solo", 49900, 5000, 3, Int.MAX_VALUE),      // ₹499/mo
     TEAM("Team", 199900, null, 10, Int.MAX_VALUE),    // ₹1,999/mo
-    ENTERPRISE("Enterprise", null, null, Int.MAX_VALUE, Int.MAX_VALUE)
+    ENTERPRISE("Enterprise", null, null, Int.MAX_VALUE, Int.MAX_VALUE);
+
+    fun razorpayPlanId(): String? = when (this) {
+        FREE, ENTERPRISE -> null
+        SOLO -> getSecretValue("razorpay-plan-id-solo")
+        TEAM -> getSecretValue("razorpay-plan-id-team")
+    }
 }
 
 data class Subscription(
