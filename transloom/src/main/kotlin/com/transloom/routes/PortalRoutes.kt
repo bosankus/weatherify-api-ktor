@@ -765,6 +765,10 @@ private fun HTML.dashboardApp() {
                     button(classes = "modal-close") { attributes["onclick"] = "closeModal()"; +"✕" }
                 }
                 div("modal-body") {
+                    p {
+                        style = "font-size:13px;color:var(--text-muted);padding:10px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);line-height:1.5"
+                        +"Transloom auto-installs a GitHub webhook on your repo. On every push, new strings are detected, translated by Gemini AI, and a pull request is opened automatically."
+                    }
                     div("form-row") {
                         label { +"Project name" }
                         input { type = InputType.text; id = "proj-name"; placeholder = "My App" }
@@ -945,6 +949,24 @@ private const val DASHBOARD_CSS = """
 .gl-target{color:var(--accent);flex:1}
 .btn-gl-delete{background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:4px 8px;border-radius:var(--radius-sm);transition:all .15s;margin-left:auto}
 .btn-gl-delete:hover{color:var(--red);background:rgba(255,77,79,.1)}
+.ob-guide{background:var(--surface);border:1px solid rgba(0,229,160,.2);border-radius:var(--radius);padding:32px}
+.ob-intro{margin-bottom:28px}
+.ob-intro h3{font-size:18px;font-weight:700;margin-bottom:6px}
+.ob-intro p{font-size:14px;color:var(--text-muted)}
+.ob-steps{display:flex;flex-direction:column}
+.ob-step{display:flex;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}
+.ob-step:last-child{border-bottom:none;padding-bottom:0}
+.ob-step:first-child{padding-top:0}
+.ob-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.ob-done .ob-num{background:var(--accent-dim);color:var(--accent);border:1.5px solid rgba(0,229,160,.4)}
+.ob-active .ob-num{background:var(--accent);color:#0a0a0a}
+.ob-pending .ob-num{background:var(--surface2);color:var(--text-muted);border:1.5px solid var(--border)}
+.ob-body{flex:1;display:flex;flex-direction:column;gap:3px}
+.ob-body strong{font-size:14px;font-weight:600}
+.ob-done .ob-body strong{color:var(--text-dim)}
+.ob-pending .ob-body strong{color:var(--text-muted)}
+.ob-body span{font-size:13px;color:var(--text-muted)}
+.ob-cta{padding:8px 16px;font-size:13px;white-space:nowrap}
 """
 
 private val DASHBOARD_JS = """
@@ -990,7 +1012,28 @@ async function loadProjects(){
   const data=await res.json();
   const list=document.getElementById('project-list');
   if(!data.projects||data.projects.length===0){
-    list.innerHTML='<div class="empty-state">No projects yet.<br><small>Create your first project to start translating automatically.</small></div>';return;
+    list.innerHTML=`<div class="ob-guide">
+      <div class="ob-intro">
+        <h3>Welcome to Transloom</h3>
+        <p>You are on the Free tier &mdash; 500 strings/month, 1 project, 3 languages. Get set up in minutes.</p>
+      </div>
+      <div class="ob-steps">
+        <div class="ob-step ob-done">
+          <div class="ob-num">&#10003;</div>
+          <div class="ob-body"><strong>Connect GitHub</strong><span>Done &mdash; you are signed in with your GitHub account</span></div>
+        </div>
+        <div class="ob-step ob-active">
+          <div class="ob-num">2</div>
+          <div class="ob-body"><strong>Create your first project</strong><span>Point Transloom at your repo and strings file. The GitHub webhook is auto-installed.</span></div>
+          <button class="btn btn-primary ob-cta" onclick="openNewProject()">+ Create project</button>
+        </div>
+        <div class="ob-step ob-pending">
+          <div class="ob-num">3</div>
+          <div class="ob-body"><strong>Push a new string</strong><span>Add a string to your file and push to GitHub. Transloom detects it and opens a PR with translations in under 60 seconds.</span></div>
+        </div>
+      </div>
+    </div>`;
+    return;
   }
   list.innerHTML=data.projects.map(p=>`
     <div class="project-card">
@@ -1149,7 +1192,7 @@ async function createProject(){
   const targets=selected.map(code=>({code,name:langMap[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
   const res=await api('/projects',{method:'POST',body:JSON.stringify({name,githubRepo:repo,watchBranch:branch,sourceFilePath:sourcePath,category,tone,targets})});
   if(!res)return;
-  if(res.ok){toast('Project created! Webhook auto-installed.');closeModal();loadProjects();loadStats();}
+  if(res.ok){toast('Project created! Now push a new string to trigger your first translation.');closeModal();loadProjects();loadStats();}
   else{const err=await res.json();toast(err.error||'Failed to create project','error');}
 }
 

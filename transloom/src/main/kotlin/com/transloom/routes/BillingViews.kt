@@ -79,9 +79,9 @@ internal fun HTML.checkoutPage(
 
                     ul("co-checks") {
                         li { unsafe { +ICON_CHECK }; +"No charge for 60 days" }
-                        li { unsafe { +ICON_CHECK }; +"Email reminder 7 days before billing starts" }
+                        li { unsafe { +ICON_CHECK }; +"Trial end date visible in your dashboard" }
                         li { unsafe { +ICON_CHECK }; +"Cancel any time — keep using free tier" }
-                        li { unsafe { +ICON_CHECK }; +"GST-compliant invoices auto-emailed" }
+                        li { unsafe { +ICON_CHECK }; +"GST-compliant invoices in your account" }
                     }
                 }
 
@@ -193,12 +193,6 @@ internal fun HTML.checkoutPage(
                       // small delay so the disabled state paints before modal blocks
                       setTimeout(openCheckout, 80);
                     });
-                    // Auto-open on first paint for the fastest path to payment.
-                    setTimeout(function(){
-                      btn.disabled = true;
-                      overlay.classList.add('co-overlay-show');
-                      setTimeout(openCheckout, 120);
-                    }, 250);
                   }
 
                   if (window.Razorpay) {
@@ -253,7 +247,7 @@ internal fun HTML.successPage(subscriptionId: String) {
                 h1 { +"Your 60-day trial is live." }
                 p("co-success-sub") {
                     +"We've authorized your card but won't bill you for 60 days. "
-                    +"You'll get an email 7 days before the first charge."
+                    +"Your trial end date is shown in your dashboard — cancel anytime to stay on the free tier."
                 }
                 p("co-success-meta") {
                     +"Subscription "
