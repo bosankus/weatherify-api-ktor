@@ -41,6 +41,9 @@ data class ReviewItemResponse(
 )
 
 @Serializable
+data class ReviewListResponse(val pending_reviews: List<ReviewItemResponse>, val count: Int)
+
+@Serializable
 data class RejectBody(val reason: String)
 
 @Serializable

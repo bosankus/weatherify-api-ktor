@@ -28,4 +28,6 @@ interface ProjectRepository {
     suspend fun delete(projectId: String)
 
     suspend fun getGlossary(projectId: String): Map<String, Map<String, String>>
+
+    suspend fun listAll(): List<Project>
 }

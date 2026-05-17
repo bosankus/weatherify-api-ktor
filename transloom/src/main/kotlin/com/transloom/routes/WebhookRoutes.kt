@@ -129,7 +129,7 @@ fun Route.configureWebhookRoutes(jobQueue: TranslationJobQueue, projectRepositor
                 commits.any { commit ->
                     val modified = commit.jsonObject["modified"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
                     val added = commit.jsonObject["added"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
-                    modified.contains(project.sourceFilePath) || added.contains(project.sourceFilePath)
+                    (modified + added).any { it == project.sourceFilePath || it.endsWith("/${project.sourceFilePath}") }
                 }
             } else true
 

@@ -126,6 +126,10 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         projects.deleteOne(eq("_id", projectId))
     }
 
+    override suspend fun listAll(): List<Project> {
+        return projects.find().sort(Sorts.descending("createdAt")).toList().map { it.toProject() }
+    }
+
     override suspend fun getGlossary(projectId: String): Map<String, Map<String, String>> {
         val entries = glossary
             .find(and(eq("projectId", projectId), eq("isActive", true)))

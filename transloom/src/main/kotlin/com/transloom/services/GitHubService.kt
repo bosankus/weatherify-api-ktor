@@ -61,6 +61,12 @@ data class WebhookConfig(val url: String, val content_type: String, val secret: 
 @Serializable
 data class WebhookCreateRequest(val name: String, val active: Boolean, val events: List<String>, val config: WebhookConfig)
 
+@Serializable
+data class WebhookListItem(val id: Long, val config: WebhookListConfig)
+
+@Serializable
+data class WebhookListConfig(val url: String = "")
+
 class GitHubService {
     private val log = LoggerFactory.getLogger(GitHubService::class.java)
 
@@ -211,7 +217,7 @@ class GitHubService {
         }
 
         val webhookSecret = getSecretValue("github-webhook-secret").ifBlank { "dev_secret" }
-        val webhookUrl = getSecretValue("webhook-url")
+        val webhookUrl = "https://data.androidplay.in/transloom/webhook/github"
 
         val req = WebhookCreateRequest(
             name = "web",
@@ -242,6 +248,54 @@ class GitHubService {
         } else {
             log.info("Successfully created push webhook for repo {}", repo)
         }
+    }
+
+    // Returns true if an existing stale webhook was replaced, false if already correct or freshly created.
+    suspend fun ensureWebhook(repo: String, token: String): Boolean {
+        if (token == "dummy-token") return false
+
+        val correctUrl = "https://data.androidplay.in/transloom/webhook/github"
+        val webhookSecret = getSecretValue("github-webhook-secret").ifBlank { "dev_secret" }
+
+        val existing = runCatching {
+            client.get("https://api.github.com/repos/$repo/hooks") {
+                gitHubAuth(token)
+                header(HttpHeaders.Accept, "application/vnd.github+json")
+            }.body<List<WebhookListItem>>()
+        }.getOrElse {
+            log.warn("ensureWebhook: could not list hooks for {}: {}", repo, it.message)
+            return false
+        }
+
+        val stale = existing.filter { it.config.url != correctUrl }
+        val correct = existing.any { it.config.url == correctUrl }
+
+        if (correct && stale.isEmpty()) return false
+
+        for (hook in stale) {
+            runCatching {
+                client.delete("https://api.github.com/repos/$repo/hooks/${hook.id}") {
+                    gitHubAuth(token)
+                    header(HttpHeaders.Accept, "application/vnd.github+json")
+                }
+            }.onFailure { log.warn("ensureWebhook: failed to delete stale hook {} on {}: {}", hook.id, repo, it.message) }
+        }
+
+        if (!correct) {
+            val req = WebhookCreateRequest(
+                name = "web", active = true, events = listOf("push"),
+                config = WebhookConfig(url = correctUrl, content_type = "json", secret = webhookSecret)
+            )
+            client.post("https://api.github.com/repos/$repo/hooks") {
+                gitHubAuth(token)
+                header(HttpHeaders.Accept, "application/vnd.github+json")
+                contentType(ContentType.Application.Json)
+                setBody(req)
+            }
+        }
+
+        log.info("ensureWebhook: replaced {} stale hook(s) on {}", stale.size, repo)
+        return true
     }
 
     fun close() { client.close() }

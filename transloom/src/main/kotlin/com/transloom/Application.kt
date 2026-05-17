@@ -17,6 +17,8 @@ import com.transloom.di.transloomModule
 import com.transloom.di.transloomIndexes
 import com.androidplay.core.mongo.MongoIndexer
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import com.transloom.repository.ProjectRepository
 import com.transloom.repository.UserRepository
@@ -140,6 +142,25 @@ fun Application.module() {
             return@startWorker
         }
         pipeline.processWebhookPayload(payload, project, config, githubToken)
+    }
+
+    launch {
+        delay(10_000)
+        log.info("Webhook self-heal: checking all projects...")
+        val allProjects = runCatching { projectRepository.listAll() }.getOrElse {
+            log.error("Webhook self-heal: failed to list projects — {}", it.message); emptyList()
+        }
+        var healed = 0
+        for (project in allProjects) {
+            val owner = userRepository.findById(project.ownerId)
+            val token = owner?.githubToken
+            if (token == null) continue
+            runCatching { githubService.ensureWebhook(project.githubRepo, token) }
+                .onSuccess { if (it) healed++ }
+                .onFailure { log.warn("Webhook self-heal failed for {}: {}", project.githubRepo, it.message) }
+            delay(500)
+        }
+        log.info("Webhook self-heal complete: {}/{} webhooks updated", healed, allProjects.size)
     }
 
     environment.monitor.subscribe(ApplicationStopped) {

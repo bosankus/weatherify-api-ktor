@@ -148,6 +148,14 @@ fun Route.configureApiRoutes(
 
                 val updated = projectRepository.findById(projectId)
                     ?: return@put call.respond(HttpStatusCode.NotFound, ApiError("Project not found after update"))
+
+                val owner = userRepository.findById(userId)
+                val userToken = owner?.githubToken
+                if (userToken != null) {
+                    runCatching { githubService.ensureWebhook(updated.githubRepo, userToken) }
+                        .onFailure { apiLog.warn("Webhook re-install failed on project update for {}: {}", updated.githubRepo, it.message) }
+                }
+
                 call.respond(
                     HttpStatusCode.OK,
                     ProjectResponse(
@@ -214,7 +222,7 @@ fun Route.configureApiRoutes(
                         projectName = t.projectName
                     )
                 }
-                call.respond(HttpStatusCode.OK, mapOf("pending_reviews" to response, "count" to response.size))
+                call.respond(HttpStatusCode.OK, ReviewListResponse(response, response.size))
             }
 
             post("/{id}/approve") {
