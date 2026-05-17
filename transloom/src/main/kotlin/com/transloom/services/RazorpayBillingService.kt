@@ -24,6 +24,8 @@ import javax.crypto.spec.SecretKeySpec
 
 private const val RAZORPAY_API = "https://api.razorpay.com/v1"
 private const val TRIAL_DAYS = 60L
+// Razorpay requires total_count >= 1. 120 monthly cycles = 10 years, effectively indefinite.
+private const val SUBSCRIPTION_CYCLES = 120
 
 class RazorpayBillingService(
     private val billingRepository: BillingRepository
@@ -82,7 +84,7 @@ class RazorpayBillingService(
         val startAt = Clock.System.now().epochSeconds + (TRIAL_DAYS * 24 * 3600)
         val body = buildJsonObject {
             put("plan_id", planId)
-            put("total_count", 0)
+            put("total_count", SUBSCRIPTION_CYCLES)
             put("quantity", 1)
             put("customer_notify", 1)
             put("start_at", startAt)
