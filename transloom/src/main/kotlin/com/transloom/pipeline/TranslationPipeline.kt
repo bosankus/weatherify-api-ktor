@@ -129,7 +129,7 @@ class TranslationPipeline(
                 baseBranch = payload.branchName,
                 files = updatedFiles,
                 commitMessage = "chore(i18n): auto-translate strings to ${config.targets.map { it.code }.joinToString()}",
-                prTitle = "🌐 Transloom: Auto-Translations for ${payload.commitHash.take(7)}",
+                prTitle = "Transloom: Auto-Translations for ${payload.commitHash.take(7)}",
                 prBody = buildPrBody(addedStrings.size, config.targets.size),
                 token = githubToken
             )
@@ -174,7 +174,7 @@ class TranslationPipeline(
     }
 
     private fun buildPrBody(stringCount: Int, languageCount: Int): String = """
-        ## 🌐 Transloom Auto-Translation
+        ## Transloom Auto-Translation
 
         | | |
         |---|---|

@@ -438,7 +438,7 @@ private fun HTML.landingPage() {
                 const sub=params.get('sub')||'';
                 const banner=document.createElement('div');
                 banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#3a1a1a;border-bottom:1px solid #ff4d4f;color:#ffb8b8;padding:14px 24px;text-align:center;font-size:14px;z-index:9999;line-height:1.5';
-                banner.innerHTML='⚠ We received your payment but couldn'+String.fromCharCode(39)+'t link it to your account. Please email <a href="mailto:support@androidplay.in?subject=Subscription%20'+sub+'" style="color:#fff;text-decoration:underline">support@androidplay.in</a> with reference: <code style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:3px">'+sub+'</code>';
+                banner.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-3px;margin-right:6px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>We received your payment but couldn'+String.fromCharCode(39)+'t link it to your account. Please email <a href="mailto:support@androidplay.in?subject=Subscription%20'+sub+'" style="color:#fff;text-decoration:underline">support@androidplay.in</a> with reference: <code style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:3px">'+sub+'</code>';
                 document.body.prepend(banner);
                 history.replaceState({},'','/transloom');
             } else {
@@ -768,11 +768,17 @@ private fun HTML.dashboardApp() {
                         div("plat-toggle") {
                             label("plat-opt") {
                                 input { type = InputType.radio; name = "platform"; id = "plat-android"; value = "android" }
-                                +"🤖 Android"
+                                span("plat-icon") {
+                                    unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16V8a7 7 0 0 1 14 0v8"/><line x1="2" y1="20" x2="22" y2="20"/><circle cx="9" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="15" cy="11" r=".8" fill="currentColor" stroke="none"/><line x1="7" y1="5" x2="5.5" y2="3.5"/><line x1="17" y1="5" x2="18.5" y2="3.5"/></svg>""" }
+                                }
+                                +"Android"
                             }
                             label("plat-opt") {
                                 input { type = InputType.radio; name = "platform"; id = "plat-ios"; value = "ios" }
-                                +"🍎 iOS"
+                                span("plat-icon") {
+                                    unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/></svg>""" }
+                                }
+                                +"iOS"
                             }
                         }
                     }
@@ -879,6 +885,8 @@ private const val DASHBOARD_CSS = """
 .plat-opt{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;cursor:pointer;transition:all .12s}
 .plat-opt:has(input:checked){background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:500}
 .plat-opt input{width:0;height:0;opacity:0;position:absolute}
+.plat-icon{display:inline-flex;align-items:center;color:var(--text-muted);transition:color .12s}
+.plat-opt:has(input:checked) .plat-icon{color:var(--accent)}
 .field-hint{font-size:11px;color:var(--text-muted);margin-top:4px}
 .lang-picker{display:flex;flex-wrap:wrap;gap:8px}
 .lang-toggle{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:13px;cursor:pointer;transition:all .12s}
@@ -939,7 +947,7 @@ if(!token){window.location.href='/transloom';}
 if(planFromUrl&&planFromUrl!=='FREE'){setTimeout(()=>subscribe(planFromUrl),600);}
 
 // Show billing success/cancel toasts
-if(urlParams.get('billing')==='success')setTimeout(()=>toast('Subscription activated! 🎉'),300);
+if(urlParams.get('billing')==='success')setTimeout(()=>toast('Subscription activated'),300);
 if(urlParams.get('billing')==='cancelled')setTimeout(()=>toast('Checkout cancelled','error'),300);
 
 function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
@@ -1300,7 +1308,7 @@ function render(){
   const items=currentFilter==='all'?allItems:allItems.filter(i=>i.status===currentFilter);
   document.getElementById('item-count').textContent=items.length+' item'+(items.length!==1?'s':'');
   const list=document.getElementById('review-list');
-  if(items.length===0){list.innerHTML='<div class="empty-state">No translations to review. 🎉</div>';return;}
+  if(items.length===0){list.innerHTML='<div class="empty-state"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-4px;margin-right:8px;color:var(--accent)"><polyline points="20 6 9 17 4 12"/></svg>All caught up — no translations to review.</div>';return;}
   const pillClass=s=>s==='review'?'pill-review':'pill-blocked';
   const pillLabel=s=>s==='review'?'Pending':'Blocked';
   list.innerHTML=items.map(item=>`
@@ -1318,7 +1326,7 @@ function render(){
         <div class="target-pane">
           <div class="pane-label">TRANSLATION <span style="color:var(--text-muted);font-weight:400;font-size:10px;letter-spacing:0">(editable — your changes will be committed)</span></div>
           <textarea class="translation-input" id="trans-${'$'}{esc(item.id)}">${'$'}{esc(item.translatedText)}</textarea>
-          ${'$'}{item.blockReason?'<div class="block-reason">⚠ '+esc(item.blockReason)+'</div>':''}
+          ${'$'}{item.blockReason?'<div class="block-reason"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-2px;margin-right:5px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'+esc(item.blockReason)+'</div>':''}
         </div>
       </div>
       <div class="review-actions">

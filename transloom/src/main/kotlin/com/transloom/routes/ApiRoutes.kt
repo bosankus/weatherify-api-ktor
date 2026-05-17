@@ -391,7 +391,7 @@ private fun launchFollowUpPr(
                     baseBranch = project.watchBranch,
                     files = mapOf(target.file to merged),
                     commitMessage = "chore(i18n): add approved ${translation.targetLanguage} translation for '${translation.stringKey}'",
-                    prTitle = "🌐 Transloom: Approved translation — ${translation.targetLanguage}/${translation.stringKey}",
+                    prTitle = "Transloom: Approved translation — ${translation.targetLanguage}/${translation.stringKey}",
                     prBody = "Manual approval of translation for key `${translation.stringKey}` in **${translation.targetLanguage}**.\n\n> Approved via the Transloom review portal.",
                     token = githubToken
                 )
