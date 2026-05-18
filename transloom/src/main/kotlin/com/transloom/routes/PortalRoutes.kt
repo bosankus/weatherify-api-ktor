@@ -22,7 +22,13 @@ private const val FAVICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 
 fun Route.configurePortalRoutes(jwtSecret: String) {
     route("/transloom") {
-        get { call.respondHtml { landingPage() } }
+        get {
+            if (call.sessionUserId(jwtSecret) != null) {
+                call.respondRedirect("/transloom/app")
+                return@get
+            }
+            call.respondHtml { landingPage() }
+        }
         get("/app") {
             val pendingPlan = call.request.cookies[PENDING_PLAN_COOKIE]
             val sessionUserId = call.sessionUserId(jwtSecret)
@@ -960,7 +966,7 @@ let token=localStorage.getItem('transloom_token');
 const urlParams=new URLSearchParams(window.location.search);
 const urlToken=urlParams.get('token');
 if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;history.replaceState({},'','/transloom/app');}
-if(!token){window.location.href='/transloom';throw new Error('no token');}
+if(!token){window.location.href='/transloom/app';throw new Error('no token');}
 // Carry the JWT through portal-internal navigation so Safari ITP / private mode /
 // fresh tabs that may lose localStorage still arrive authenticated.
 document.addEventListener('click',function(e){
@@ -975,7 +981,7 @@ async function api(path,opts={}){
   const res=await fetch(BASE+path,{...opts,headers:{...authHeaders(),...(opts.headers||{})}});
   if(res.status===401){logout();return null;}return res;
 }
-function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom';}
+function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom/auth/logout';}
 function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
 function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return{};}}
 function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
@@ -1252,8 +1258,7 @@ async function deleteGlossaryEntry(entryId){
   else toast('Failed to delete','error');
 }
 
-const payload=jwtPayload(token);
-document.getElementById('user-chip').textContent=payload.username?'@'+payload.username:'Logged in';
+document.getElementById('user-chip').textContent=jwtPayload(token).username?'@'+jwtPayload(token).username:'Logged in';
 
 // ─── Pipeline Activity ─────────────────────────────────────────────────────
 
@@ -1556,7 +1561,7 @@ let token=localStorage.getItem('transloom_token');
 const urlParams=new URLSearchParams(location.search);
 const urlToken=urlParams.get('token');
 if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;urlParams.delete('token');const qs=urlParams.toString();history.replaceState({},'','/transloom/projects'+(qs?'?'+qs:'')+location.hash);}
-if(!token){window.location.href='/transloom';throw new Error('no token');}
+if(!token){window.location.href='/transloom/app';throw new Error('no token');}
 document.addEventListener('click',function(e){
   var a=e.target.closest&&e.target.closest('a[href^="/transloom/"]');
   if(!a||a.target==='_blank'||a.hasAttribute('download'))return;
@@ -1568,7 +1573,7 @@ async function api(path,opts={}){
   const res=await fetch(BASE+path,{...opts,headers:{...authHeaders(),...(opts.headers||{})}});
   if(res.status===401){logout();return null;}return res;
 }
-function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom';}
+function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom/auth/logout';}
 function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
 function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
 function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return{};}}
@@ -2059,7 +2064,7 @@ let token=localStorage.getItem('transloom_token');
 const urlParams=new URLSearchParams(location.search);
 const urlToken=urlParams.get('token');
 if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;urlParams.delete('token');const qs=urlParams.toString();history.replaceState({},'','/transloom/billing'+(qs?'?'+qs:''));}
-if(!token){window.location.href='/transloom';throw new Error('no token');}
+if(!token){window.location.href='/transloom/app';throw new Error('no token');}
 document.addEventListener('click',function(e){
   var a=e.target.closest&&e.target.closest('a[href^="/transloom/"]');
   if(!a||a.target==='_blank'||a.hasAttribute('download'))return;
@@ -2071,7 +2076,7 @@ async function api(path,opts={}){
   const res=await fetch(BASE+path,{...opts,headers:{...authHeaders(),...(opts.headers||{})}});
   if(res.status===401){logout();return null;}return res;
 }
-function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom';}
+function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom/auth/logout';}
 function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
 function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
 function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return{};}}
@@ -2162,9 +2167,8 @@ async function loadBillingPage(){
   }
 
   // User chip
-  const payload=jwtPayload(token);
   const chip=document.getElementById('user-chip');
-  if(chip)chip.textContent=payload.email||payload.sub||'You';
+  if(chip){const p=jwtPayload(token);chip.textContent=p.username?'@'+p.username:(p.email||'You');}
 
   // Invoices
   if(invRes){
@@ -2550,7 +2554,7 @@ let token=localStorage.getItem('transloom_token');
 const urlParams=new URLSearchParams(location.search);
 const urlToken=urlParams.get('token');
 if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;history.replaceState({},'','/transloom/review-portal');}
-if(!token){window.location.href='/transloom';throw new Error('no token');}
+if(!token){window.location.href='/transloom/app';throw new Error('no token');}
 document.addEventListener('click',function(e){
   var a=e.target.closest&&e.target.closest('a[href^="/transloom/"]');
   if(!a||a.target==='_blank'||a.hasAttribute('download'))return;
@@ -2558,8 +2562,11 @@ document.addEventListener('click',function(e){
   try{var u=new URL(a.href,location.origin);if(!u.searchParams.get('token')){u.searchParams.set('token',token);a.href=u.toString();}}catch(_){}
 },true);
 function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
+function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom/auth/logout';}
 function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
 function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+const chip=document.getElementById('user-chip');if(chip){const p=jwtPayload(token);chip.textContent=p.username?'@'+p.username:(p.email||'You');}
+function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return{};}}
 
 let allItems=[];let currentFilter='all';
 

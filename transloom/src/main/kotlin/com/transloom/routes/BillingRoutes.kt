@@ -249,7 +249,11 @@ fun Route.configurePublicCheckoutRoute(
 
         val userId = call.sessionUserId(jwtSecret)
         if (userId != null) {
-            // Already signed in — go straight to the checkout page.
+            val currentSub = billingRepository.getSubscription(userId)
+            if (currentSub.plan != BillingPlan.FREE) {
+                // Already on a paid plan — send them to their billing dashboard.
+                return@get call.respondRedirect("/transloom/billing")
+            }
             return@get call.respondRedirect("/transloom/billing/checkout?plan=${plan.name}")
         }
 
@@ -287,6 +291,12 @@ fun Route.configurePublicCheckoutRoute(
             log.warn("Session cookie userId={} not found in DB — clearing session", userId)
             call.clearSession()
             return@get call.respondRedirect("/transloom/auth/github")
+        }
+
+        val currentSub = billingRepository.getSubscription(userId)
+        if (currentSub.plan != BillingPlan.FREE) {
+            log.info("checkout: userId={} already on plan={} — redirecting to billing dashboard", userId, currentSub.plan)
+            return@get call.respondRedirect("/transloom/billing")
         }
 
         val init = runCatching { razorpayService.createSubscriptionForUser(userId, plan) }.getOrElse {

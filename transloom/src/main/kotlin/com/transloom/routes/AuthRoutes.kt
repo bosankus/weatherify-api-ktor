@@ -163,6 +163,11 @@ fun Route.configureAuthRoutes(
             call.issueSessionCookie(jwtToken)
             redirectAfterAuth(call, jwtToken, pendingPlan, frontendRedirectUrl)
         }
+
+        get("/logout") {
+            call.clearSession()
+            call.respondRedirect("/transloom")
+        }
     }
 }
 
