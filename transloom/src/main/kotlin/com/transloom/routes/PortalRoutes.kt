@@ -56,6 +56,7 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
 
             call.respondHtml { dashboardApp() }
         }
+        get("/welcome") { call.respondHtml { welcomePage() } }
         get("/billing") { call.respondHtml { billingApp() } }
         get("/projects") { call.respondHtml { projectsApp() } }
         get("/review-portal") { call.respondHtml { reviewPortal() } }
@@ -123,6 +124,7 @@ private fun appSidebar(active: String, reviewBadge: Boolean = false) = """
 private val APP_SIDEBAR_DASH     get() = appSidebar("dash",     reviewBadge = true)
 private val APP_SIDEBAR_PROJECTS get() = appSidebar("projects")
 private val APP_SIDEBAR_BILLING  get() = appSidebar("billing")
+private val APP_SIDEBAR_REVIEW   get() = appSidebar("review")
 
 // ─── Shared CSS ───────────────────────────────────────────────────────────────
 
@@ -191,6 +193,100 @@ private fun FlowContent.statCard(statId: String, label: String, value: String, y
     }
 }
 
+// ─── Welcome / Plan Selection Page (shown to brand-new users after OAuth) ─────
+
+private fun HTML.welcomePage() {
+    head {
+        title { +"Welcome to Transloom" }
+        meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        favicon()
+        style { unsafe { +"$SHARED_CSS$LANDING_CSS$WELCOME_CSS" } }
+    }
+    body {
+        nav {
+            div("nav-inner") {
+                a("/transloom") { div("brand") { unsafe { +LOGO_SVG }; span { +"Transloom" } } }
+            }
+        }
+
+        section("welcome-hero") {
+            div("welcome-hero-inner") {
+                span("badge") { +"Account created" }
+                h1("welcome-title") { +"You're in. Pick your plan." }
+                p("welcome-sub") {
+                    +"Start free and upgrade whenever you're ready — no card required on the free tier."
+                }
+            }
+        }
+
+        section("pricing-section welcome-pricing") {
+            div("section-inner") {
+                div("pricing-grid") {
+                    div("pricing-card") {
+                        p("pricing-name") { +"Free" }
+                        p("pricing-price") { +"₹0"; span("price-mo") { +"/mo" } }
+                        p("pricing-period") { +"Forever · No credit card needed" }
+                        ul("pricing-features") {
+                            li { +"500 strings / month" }
+                            li { +"1 project" }
+                            li { +"3 target languages" }
+                            li { +"GitHub webhook" }
+                            li { +"AI translation" }
+                        }
+                        a("/transloom/app") { classes = setOf("pricing-cta", "outline"); +"Continue free →" }
+                    }
+                    div("pricing-card recommended") {
+                        span("rec-badge") { +"Best for Solo Developers" }
+                        span("trial-badge") { +"7-day free trial" }
+                        p("pricing-name") { +"Solo" }
+                        p("pricing-price") { +"₹499"; span("price-mo") { +"/mo" } }
+                        p("pricing-period") { +"after trial · Cancel anytime" }
+                        ul("pricing-features") {
+                            li { +"5,000 strings / month" }
+                            li { +"3 projects" }
+                            li { +"All target languages" }
+                            li { +"Glossary enforcement" }
+                            li { +"Translation memory" }
+                            li { +"Review portal" }
+                        }
+                        a("/transloom/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
+                    }
+                    div("pricing-card") {
+                        span("trial-badge") { +"7-day free trial" }
+                        p("pricing-name") { +"Team" }
+                        p("pricing-price") { +"₹1,999"; span("price-mo") { +"/mo" } }
+                        p("pricing-period") { +"after trial · Cancel anytime" }
+                        ul("pricing-features") {
+                            li { +"Unlimited strings" }
+                            li { +"10 projects" }
+                            li { +"All target languages" }
+                            li { +"Everything in Solo" }
+                            li { +"Priority support" }
+                        }
+                        a("/transloom/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 7-day free trial" }
+                    }
+                }
+                p("pricing-note") { +"All paid plans include a 7-day free trial. No charge until the trial ends — cancel any time." }
+            }
+        }
+
+        script { unsafe { +"""
+            const io=new IntersectionObserver((entries)=>{
+                entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in-view');io.unobserve(e.target);}});
+            },{threshold:0.12,rootMargin:'0px 0px -40px 0px'});
+            document.querySelectorAll('.fade-up').forEach(el=>io.observe(el));
+        """ } }
+    }
+}
+
+private const val WELCOME_CSS = """
+.welcome-hero{padding:64px 24px 16px;text-align:center}
+.welcome-hero-inner{max-width:600px;margin:0 auto}
+.welcome-title{font-size:clamp(28px,5vw,48px);font-weight:800;line-height:1.15;letter-spacing:-1px;margin:16px 0 12px}
+.welcome-sub{color:var(--text-muted);font-size:16px;line-height:1.7}
+.welcome-pricing{padding-top:0}
+"""
+
 // ─── Landing Page ─────────────────────────────────────────────────────────────
 
 private fun HTML.landingPage() {
@@ -209,6 +305,7 @@ private fun HTML.landingPage() {
                     a("#how") { +"How it works" }
                     a("/transloom#features") { +"Features" }
                     a("#pricing") { +"Pricing" }
+                    a("/transloom/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
                     a("#pricing") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
                 }
             }
@@ -394,6 +491,8 @@ private fun HTML.landingPage() {
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""","Placeholder guard","Automatic detection of %1\$s, %d, %@, &#8211; — bad translations are blocked before they ship.","fade-up d1")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>""","Glossary enforcement","Define brand terms once per language. Applied consistently across every string, every time.","fade-up d2")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>""","Review portal","Flag anomalous translations for human review before they hit your main branch.","fade-up d3")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/><path d="M18.5 5c-.3 1-.7 1.3-1.5 1.5.8.2 1.2.5 1.5 1.5.3-1 .7-1.3 1.5-1.5-.8-.2-1.2-.5-1.5-1.5z"/></svg>""","Smart change detection","AI classifies every English edit — surface rewrites skip retranslation; semantic changes trigger it. Fewer API calls, lower cost.","fade-up d4")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""","Cultural sensitivity","Post-translation AI check flags formality mismatches, inappropriate idioms, and market-specific concerns before they ship.","fade-up d4")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""","Translation memory","Identical strings reuse cached translations — faster throughput, lower API cost.","fade-up d4")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""","Android + iOS","Native support for strings.xml and Localizable.strings file formats out of the box.","fade-up d4")
                 }
@@ -663,13 +762,49 @@ private fun HTML.dashboardApp() {
                     }
                 }
 
+                div("dash-alert") { id = "dash-alert" }
+
                 div("stats-grid") {
-                    div("stat-card card") { p("stat-label") { +"Strings Translated" }; p("stat-value") { id = "total-translated"; +"—" } }
-                    div("stat-card card") { p("stat-label") { +"Pending Review" }; p("stat-value stat-yellow") { id = "pending-review"; +"—" } }
-                    div("stat-card card") { p("stat-label") { +"Blocked" }; p("stat-value stat-yellow") { id = "blocked-count"; +"—" } }
-                    div("stat-card card") { p("stat-label") { +"Languages" }; p("stat-value") { id = "active-langs"; +"—" } }
-                    div("stat-card card") { p("stat-label") { +"Projects" }; p("stat-value") { id = "total-projects"; +"—" } }
-                    div("stat-card card") { p("stat-label") { +"Current Plan" }; p("stat-value stat-plan") { id = "plan-stat"; +"—" } }
+                    div("stat-card card") {
+                        div("stat-card-top") {
+                            p("stat-label") { +"Strings Translated" }
+                            unsafe { +"<svg class='stat-icon' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></svg>" }
+                        }
+                        p("stat-value loading") { id = "total-translated"; +"—" }
+                        p("stat-sub") { +"translated all time" }
+                    }
+                    div("stat-card card") {
+                        div("stat-card-top") {
+                            p("stat-label") { +"Pending Review" }
+                            unsafe { +"<svg class='stat-icon' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>" }
+                        }
+                        p("stat-value loading") { id = "pending-review"; +"—" }
+                        p("stat-sub") { +"awaiting your approval" }
+                    }
+                    div("stat-card card") {
+                        div("stat-card-top") {
+                            p("stat-label") { +"Blocked" }
+                            unsafe { +"<svg class='stat-icon' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='4.93' y1='4.93' x2='19.07' y2='19.07'/></svg>" }
+                        }
+                        p("stat-value loading") { id = "blocked-count"; +"—" }
+                        p("stat-sub") { +"rejected translations" }
+                    }
+                    div("stat-card card") {
+                        div("stat-card-top") {
+                            p("stat-label") { +"Languages" }
+                            unsafe { +"<svg class='stat-icon' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='2' y1='12' x2='22' y2='12'/><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/></svg>" }
+                        }
+                        p("stat-value loading") { id = "active-langs"; +"—" }
+                        p("stat-sub") { +"active target languages" }
+                    }
+                    div("stat-card card") {
+                        div("stat-card-top") {
+                            p("stat-label") { +"Projects" }
+                            unsafe { +"<svg class='stat-icon' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>" }
+                        }
+                        p("stat-value loading") { id = "total-projects"; +"—" }
+                        p("stat-sub") { +"connected repos" }
+                    }
                 }
 
                 div("dash-body") {
@@ -714,26 +849,39 @@ private fun HTML.dashboardApp() {
                                     div("usage-track") { div("usage-fill") { id = "w-projects-bar" } }
                                 }
                                 p("widget-hint") { id = "w-trial-info" }
+                                div { id = "w-upgrade-cta" }
                             }
                         }
 
                         div("widget-card") {
                             div("widget-header") {
-                                span("widget-title") { +"Run Summary" }
-                                span("widget-badge") { id = "w-run-badge" }
+                                span("widget-title") { +"Review Queue" }
+                                a("/transloom/review-portal") { classes = setOf("widget-link"); +"Open →" }
                             }
                             div("widget-body") {
-                                div { id = "w-run-summary" }
+                                div { id = "w-review-queue" }
                             }
                         }
 
                         div("widget-card") {
                             div("widget-header") { span("widget-title") { +"Quick Actions" } }
                             div("widget-body qa-body") {
-                                a("/transloom/projects") { id = "qa-new-project"; classes = setOf("qa-btn"); +"+ New project" }
-                                a("/transloom/review-portal") { classes = setOf("qa-btn"); +"Review translations" }
-                                a("/transloom/projects#glossary") { classes = setOf("qa-btn"); +"Edit glossary" }
-                                a("/transloom/billing") { classes = setOf("qa-btn"); +"Manage plan" }
+                                a("/transloom/projects") {
+                                    id = "qa-new-project"; classes = setOf("qa-btn")
+                                    unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/><line x1='12' y1='11' x2='12' y2='17'/><line x1='9' y1='14' x2='15' y2='14'/></svg> New project" }
+                                }
+                                a("/transloom/review-portal") {
+                                    classes = setOf("qa-btn")
+                                    unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg> Review translations" }
+                                }
+                                a("/transloom/projects") {
+                                    classes = setOf("qa-btn")
+                                    unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg> Edit glossary" }
+                                }
+                                a("/transloom/billing") {
+                                    classes = setOf("qa-btn")
+                                    unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='1' y='4' width='22' height='16' rx='2' ry='2'/><line x1='1' y1='10' x2='23' y2='10'/></svg> Manage plan" }
+                                }
                             }
                         }
                     }
@@ -768,8 +916,8 @@ private const val DASHBOARD_CSS = """
 .page-title{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:3px}
 .page-sub{font-size:13px;color:var(--text-muted)}
 /* ── Stats grid ──────────────────────────────────────────────────────────── */
-.stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:28px}
-@media(max-width:1200px){.stats-grid{grid-template-columns:repeat(3,1fr)}}
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px}
+@media(max-width:1100px){.stats-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
 .stat-card{padding:18px 20px}
 .stat-label{font-size:11px;font-weight:600;letter-spacing:.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px}
@@ -928,9 +1076,11 @@ private const val DASHBOARD_CSS = """
 .step-label.error{color:var(--red)}
 .step-label.skipped{color:var(--text-muted);opacity:.6}
 .step-label.pending{color:var(--text-muted)}
-.step-detail{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;text-align:right}
+.step-detail{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;text-align:right}
 .step-detail.done{color:var(--text-dim)}
 .step-detail.error{color:var(--red)}
+.run-savings-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.25);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;flex-shrink:0}
+.run-no-retranslation{font-size:12px;color:var(--accent);opacity:.8}
 .run-footer{padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pr-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);font-weight:500}
 .pr-link:hover{text-decoration:underline}
@@ -958,6 +1108,44 @@ private const val DASHBOARD_CSS = """
 .ob-pending .ob-body strong{color:var(--text-muted)}
 .ob-body span{font-size:13px;color:var(--text-muted)}
 .ob-cta{padding:8px 16px;font-size:13px;white-space:nowrap}
+/* ── Stat card improvements ──────────────────────────────────────────────── */
+.stat-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.stat-icon{color:var(--text-muted);opacity:.45;flex-shrink:0;margin-top:2px}
+.stat-sub{font-size:11px;color:var(--text-muted);margin-top:5px;font-weight:400;letter-spacing:.1px}
+/* ── Review alert banner ─────────────────────────────────────────────────── */
+.dash-alert{display:none;align-items:center;justify-content:space-between;gap:14px;padding:11px 16px;border-radius:var(--radius);border:1px solid rgba(250,173,20,.3);background:rgba(250,173,20,.06);margin-bottom:20px;font-size:13px;line-height:1.5}
+.dash-alert.visible{display:flex}
+.dash-alert.critical{border-color:rgba(255,77,79,.3);background:rgba(255,77,79,.05)}
+.dash-alert-msg{color:var(--text-muted);flex:1}
+.dash-alert-msg strong{color:var(--yellow)}
+.dash-alert.critical .dash-alert-msg strong{color:var(--red)}
+.dash-alert-action{font-size:13px;font-weight:600;color:var(--yellow);white-space:nowrap;padding:5px 12px;border-radius:var(--radius-sm);border:1px solid rgba(250,173,20,.3);transition:all .15s}
+.dash-alert.critical .dash-alert-action{color:var(--red);border-color:rgba(255,77,79,.3)}
+.dash-alert-action:hover{opacity:.8}
+/* ── Review Queue widget ─────────────────────────────────────────────────── */
+.rq-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.rq-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);background:var(--surface2);border:1px solid var(--border)}
+.rq-pending{border-color:rgba(250,173,20,.25);background:rgba(250,173,20,.05)}
+.rq-blocked{border-color:rgba(255,77,79,.25);background:rgba(255,77,79,.05)}
+.rq-num{font-size:24px;font-weight:700;line-height:1;min-width:28px;letter-spacing:-.5px}
+.rq-pending .rq-num{color:var(--yellow)}
+.rq-blocked .rq-num{color:var(--red)}
+.rq-info{display:flex;flex-direction:column;gap:2px}
+.rq-label{font-size:12px;font-weight:600;color:var(--text-dim)}
+.rq-sublabel{font-size:11px;color:var(--text-muted)}
+.rq-cta{display:block;text-align:center;padding:8px 14px;font-size:13px;font-weight:600;border-radius:var(--radius-sm)}
+.rq-all-clear{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);padding:4px 0}
+/* ── Plan widget additions ───────────────────────────────────────────────── */
+.w-upgrade-link{display:block;font-size:12px;color:var(--accent);margin-top:10px;text-align:center;padding:7px 12px;border:1px solid rgba(0,229,160,.25);border-radius:var(--radius-sm);background:var(--accent-dim2);transition:all .15s;font-weight:500}
+.w-upgrade-link:hover{background:var(--accent-dim);border-color:rgba(0,229,160,.4)}
+/* ── Quick action icons ──────────────────────────────────────────────────── */
+.qa-btn{display:flex;align-items:center;gap:8px}
+.qa-btn svg{flex-shrink:0;opacity:.65}
+/* ── Status badges (dashboard plan widget) ───────────────────────────────── */
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px}
+.status-active{background:rgba(0,229,160,.12);color:var(--accent);border:1px solid rgba(0,229,160,.25)}
+.status-cancelling{background:rgba(255,77,79,.1);color:var(--red);border:1px solid rgba(255,77,79,.2)}
+.status-free{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)}
 """
 
 private val DASHBOARD_JS = """
@@ -997,9 +1185,39 @@ async function loadStats(){
   set('blocked-count',s.blockedCount);
   set('active-langs',s.activeLanguages);
   set('total-projects',s.totalProjects);
-  set('plan-stat',s.currentPlanDisplay||s.currentPlan||'—');
+  // Dynamic color coding — pending = yellow when non-zero, blocked = red when non-zero
+  const pendingEl=document.getElementById('pending-review');
+  if(pendingEl)pendingEl.style.color=(s.pendingReview??0)>0?'var(--yellow)':'';
+  const blockedEl=document.getElementById('blocked-count');
+  if(blockedEl)blockedEl.style.color=(s.blockedCount??0)>0?'var(--red)':'';
+  // Sidebar review badge
   const badge=document.getElementById('review-count');
   if(badge){if((s.pendingReview??0)>0){badge.textContent=s.pendingReview;badge.style.display='inline';}else{badge.style.display='none';}}
+  // Alert banner and review queue widget
+  updateDashAlert(s.pendingReview||0,s.blockedCount||0);
+  updateReviewQueueWidget(s.pendingReview||0,s.blockedCount||0);
+}
+
+function updateDashAlert(pending,blocked){
+  const el=document.getElementById('dash-alert');if(!el)return;
+  if(pending===0&&blocked===0){el.className='dash-alert';return;}
+  const parts=[];
+  if(pending>0)parts.push('<strong>'+pending+'</strong> pending review');
+  if(blocked>0)parts.push('<strong>'+blocked+'</strong> blocked');
+  el.innerHTML='<span class="dash-alert-msg">'+parts.join(' &middot; ')+'</span><a class="dash-alert-action" href="/transloom/review-portal">Review now &rarr;</a>';
+  el.className='dash-alert visible'+(blocked>0?' critical':'');
+}
+
+function updateReviewQueueWidget(pending,blocked){
+  const el=document.getElementById('w-review-queue');if(!el)return;
+  if(pending===0&&blocked===0){
+    el.innerHTML='<div class="rq-all-clear"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Queue is empty &mdash; all clear!</div>';
+    return;
+  }
+  el.innerHTML='<div class="rq-rows">'
+    +(pending>0?'<div class="rq-row rq-pending"><span class="rq-num">'+pending+'</span><div class="rq-info"><span class="rq-label">pending review</span><span class="rq-sublabel">awaiting your approval</span></div></div>':'')
+    +(blocked>0?'<div class="rq-row rq-blocked"><span class="rq-num">'+blocked+'</span><div class="rq-info"><span class="rq-label">blocked</span><span class="rq-sublabel">rejected &mdash; needs rework</span></div></div>':'')
+    +'</div><a href="/transloom/review-portal" class="rq-cta btn btn-primary">Open review portal &rarr;</a>';
 }
 
 async function loadPlanWidget(){
@@ -1024,7 +1242,12 @@ async function loadPlanWidget(){
   const pmax=sub.maxProjects>0?sub.maxProjects:null;
   setBar('w-projects-bar','w-projects',usage.projectsUsed,pmax);
   const hint=document.getElementById('w-trial-info');
-  if(hint&&sub.currentPeriodEnd&&sub.plan!=='FREE')hint.textContent=(sub.cancelAtPeriodEnd?'Cancels ':'Renews ')+sub.currentPeriodEnd;
+  if(hint){
+    if(sub.plan==='FREE'&&usage.stringLimit>0){const rem=Math.max(0,usage.stringLimit-(usage.stringsTranslated||0));hint.textContent=rem+' strings remaining this month';}
+    else if(sub.currentPeriodEnd&&sub.plan!=='FREE'){hint.textContent=(sub.cancelAtPeriodEnd?'Cancels ':'Renews ')+sub.currentPeriodEnd;}
+  }
+  const cta=document.getElementById('w-upgrade-cta');
+  if(cta&&sub.plan==='FREE')cta.innerHTML='<a href="/transloom/billing" class="w-upgrade-link">Upgrade for more capacity &rarr;</a>';
 }
 
 function updateRunSummaryWidget(){
@@ -1309,7 +1532,14 @@ function buildRunHtml(runId){
   const isRetrying=!!run.retryPending;
   const steps=STEP_ORDER.map(id=>buildStepHtml(id,run.steps[id],run.stepLabels[id]||id)).join('');
 
-  // Footer: error + retry button, or PR link, or duration
+  // Savings chip — shown whenever the semantic analyzer skipped retranslation
+  const skipped=run.surfaceSkipped||0;
+  const savingsChip=skipped>0
+    ?'<span class="run-savings-chip"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg>'
+      +' '+skipped+' '+(skipped===1?'string':'strings')+' saved</span>'
+    :'';
+
+  // Footer: error + retry button, or PR link, or no-changes message
   let left='',right='';
   if(run.prUrl){
     left='<a class="pr-link" href="'+esc(run.prUrl)+'" target="_blank" rel="noopener">'
@@ -1326,11 +1556,14 @@ function buildRunHtml(runId){
       +'<svg class="step-spin" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M2.5 9.5l1.4-1.4M8.1 3.9l1.4-1.4"/></svg>'
       +' Retrying…</button>';
   } else if(!isActive){
-    left='<span class="run-duration">No changes found</span>';
+    left=skipped>0
+      ?'<span class="run-no-retranslation">Surface rewrites only — retranslation skipped</span>'
+      :'<span class="run-duration">No changes found</span>';
   }
   if(run.finishedAt) right='<span class="run-duration">'+runDuration(run.startedAt,run.finishedAt)+'</span>';
 
-  const footHtml=(left||right)?('<div class="run-footer">'+left+right+'</div>'):'';
+  const footParts=[savingsChip,left,right].filter(Boolean);
+  const footHtml=footParts.length?('<div class="run-footer">'+footParts.join('')+'</div>'):'';
 
   const dot=isActive?'active':(isRetrying?'retrying':(hasError?'error':'done'));
   let cardCls='run-card';
@@ -1369,7 +1602,8 @@ function applySnapshot(snapshot){
     repo:snapshot.repo,branch:snapshot.branch,commitShort:snapshot.commitShort,
     startedAt:snapshot.startedAt,finishedAt:snapshot.finishedAt||null,
     prUrl:snapshot.prUrl||null,error:snapshot.error||null,
-    projectId:snapshot.projectId||null,retriedFromRunId:snapshot.retriedFromRunId||null
+    projectId:snapshot.projectId||null,retriedFromRunId:snapshot.retriedFromRunId||null,
+    surfaceSkipped:snapshot.surfaceSkipped||0
   });
   if(!run.steps)run.steps={};
   if(!run.stepLabels)run.stepLabels={};
@@ -1428,6 +1662,7 @@ function handlePipelineEvent(evt){
     const run=runState[d.runId];if(!run)return;
     run.finishedAt=d.finishedAt||Date.now();
     if(d.prUrl)run.prUrl=d.prUrl;if(d.error)run.error=d.error;
+    if(d.surfaceSkipped)run.surfaceSkipped=d.surfaceSkipped;
     run.retryPending=false;
     renderRunCard(d.runId);updateActivityBadge();updateRunSummaryWidget();loadStats();
   }
@@ -1539,6 +1774,16 @@ private const val PROJECTS_CSS = """
 /* ── Edit modal ─────────────────────────────────────────────────────────────── */
 .edit-modal-title{font-size:16px;font-weight:700;letter-spacing:-.2px}
 .edit-modal-repo{font-size:12px;color:var(--text-muted);font-family:monospace;margin-top:2px}
+.feature-toggle-row{border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;background:var(--surface2)}
+.feature-toggle-header{display:flex;align-items:flex-start;gap:12px}
+.feature-toggle-label{position:relative;display:inline-flex;align-items:center;flex-shrink:0;cursor:pointer;margin-top:2px}
+.feature-toggle-label input{opacity:0;width:0;height:0;position:absolute}
+.feature-toggle-track{display:inline-block;width:36px;height:20px;background:var(--border);border-radius:10px;transition:background .2s;flex-shrink:0}
+.feature-toggle-track::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s}
+.feature-toggle-label input:checked+.feature-toggle-track{background:var(--accent)}
+.feature-toggle-label input:checked+.feature-toggle-track::after{transform:translateX(16px)}
+.feature-toggle-name{font-size:13px;font-weight:600;margin-bottom:3px}
+.feature-toggle-hint{font-size:12px;color:var(--text-muted);line-height:1.5}
 /* ── Glossary section ───────────────────────────────────────────────────────── */
 .glossary-section{margin-top:8px}
 .glossary-controls{margin-bottom:12px}
@@ -1724,6 +1969,7 @@ async function openEditModal(projectId){
   document.getElementById('edit-proj-category').value=p.category;
   document.getElementById('edit-proj-tone').value=p.tone;
   document.getElementById('edit-modal-repo').textContent=p.githubRepo;
+  document.getElementById('edit-cultural-enabled').checked=!!p.culturalSensitivityEnabled;
   const isIos=p.sourceFilePath&&p.sourceFilePath.includes('.strings');
   const platRadio=document.getElementById(isIos?'edit-plat-ios':'edit-plat-android');
   if(platRadio)platRadio.checked=true;
@@ -1754,7 +2000,8 @@ async function saveEdit(){
   if(!name){toast('Name is required','error');return;}
   if(!selected.length){toast('Select at least one language','error');return;}
   const targets=selected.map(code=>({code,name:LANG_MAP[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
-  const res=await api('/projects/'+projectId,{method:'PUT',body:JSON.stringify({name,watchBranch,sourceFilePath,category,tone,targets})});
+  const culturalSensitivityEnabled=document.getElementById('edit-cultural-enabled')?.checked||false;
+  const res=await api('/projects/'+projectId,{method:'PUT',body:JSON.stringify({name,watchBranch,sourceFilePath,category,tone,targets,culturalSensitivityEnabled})});
   if(!res)return;
   if(res.ok){toast('Project updated');closeEditModal();await init();}
   else{const err=await res.json();toast(err.error||'Update failed','error');}
@@ -1974,6 +2221,18 @@ private fun HTML.projectsApp() {
                         div { label { +"Category" }; select { id = "edit-proj-category"; option { value = "productivity"; +"Productivity" }; option { value = "gaming"; +"Gaming" }; option { value = "fintech"; +"Fintech" }; option { value = "social"; +"Social" }; option { value = "health"; +"Health" }; option { value = "ecommerce"; +"E-commerce" } } }
                     }
                     div("form-row") { label { +"Tone" }; select { id = "edit-proj-tone"; option { value = "professional"; +"Professional" }; option { value = "friendly"; +"Friendly" }; option { value = "casual"; +"Casual" }; option { value = "formal"; +"Formal" } } }
+                    div("form-row feature-toggle-row") {
+                        div("feature-toggle-header") {
+                            label("feature-toggle-label") {
+                                input { type = InputType.checkBox; id = "edit-cultural-enabled" }
+                                span("feature-toggle-track") {}
+                            }
+                            div {
+                                p("feature-toggle-name") { +"Cultural sensitivity check" }
+                                p("feature-toggle-hint") { +"Post-translation AI pass flags formality mismatches, market-inappropriate idioms, and communication style issues. Off by default." }
+                            }
+                        }
+                    }
                     div("form-row") {
                         label { +"Target languages" }
                         div("lang-picker") {
@@ -2482,22 +2741,53 @@ private fun HTML.reviewPortal() {
         title { +"Transloom — Review Portal" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
-        style { unsafe { +"$SHARED_CSS$REVIEW_CSS" } }
+        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS$REVIEW_CSS" } }
     }
     body {
-        div("review-layout") {
-            div("review-header") {
-                a("/transloom/app") { classes = setOf("back-link"); +"← Dashboard" }
-                h1 { +"Translation Review" }
-                p("header-sub") { +"Approve or reject flagged translations before they merge." }
+        div("app-layout") {
+            unsafe { +APP_SIDEBAR_REVIEW }
+            main("rv-page") {
+                div("page-header") {
+                    div {
+                        div("page-title") { +"Translation Review" }
+                        div("page-sub") { +"Review flagged translations before they merge into your repos. Edit inline, then approve or reject." }
+                    }
+                    div("rv-stat-chips") { id = "rv-stat-chips" }
+                }
+                div("rv-toolbar") {
+                    div("rv-filters") {
+                        button(classes = "rv-filter active") {
+                            attributes["onclick"] = "filterBy('all',this)"
+                            +"All "; span("rv-filter-count") { id = "cnt-all" }
+                        }
+                        button(classes = "rv-filter") {
+                            attributes["onclick"] = "filterBy('review',this)"
+                            +"Pending "; span("rv-filter-count") { id = "cnt-review" }
+                        }
+                        button(classes = "rv-filter") {
+                            id = "tab-cultural"
+                            attributes["onclick"] = "filterBy('cultural',this)"
+                            attributes["style"] = "display:none"
+                            +"Cultural "; span("rv-filter-count") { id = "cnt-cultural" }
+                        }
+                        button(classes = "rv-filter") {
+                            attributes["onclick"] = "filterBy('blocked',this)"
+                            +"Blocked "; span("rv-filter-count") { id = "cnt-blocked" }
+                        }
+                    }
+                    div("rv-search-wrap") {
+                        unsafe { +"<svg class='rv-search-icon' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>" }
+                        input {
+                            type = InputType.text
+                            classes = setOf("rv-search-input")
+                            id = "rv-search"
+                            placeholder = "Search by key, project, or text…"
+                            attributes["oninput"] = "applySearch(this.value)"
+                        }
+                    }
+                }
+                div("rv-list") { id = "review-list" }
             }
-            div("filters-bar") {
-                button(classes = "filter-btn active") { attributes["onclick"] = "filterStatus('all',this)"; +"All" }
-                button(classes = "filter-btn") { attributes["onclick"] = "filterStatus('review',this)"; +"Pending" }
-                button(classes = "filter-btn") { attributes["onclick"] = "filterStatus('blocked',this)"; +"Blocked" }
-                span("filter-count") { id = "item-count" }
-            }
-            div("review-list") { id = "review-list"; div("empty-state") { +"Loading..." } }
         }
         div("toast") { id = "toast" }
         script { unsafe { +REVIEW_JS } }
@@ -2505,47 +2795,68 @@ private fun HTML.reviewPortal() {
 }
 
 private const val REVIEW_CSS = """
-.review-layout{max-width:900px;margin:0 auto;padding:32px 24px}
-.review-header{margin-bottom:28px}
-.back-link{font-size:13px;color:var(--text-muted);margin-bottom:12px;display:inline-block}
-.back-link:hover{color:var(--accent)}
-.review-header h1{font-size:26px;font-weight:700;margin-bottom:6px}
-.header-sub{color:var(--text-muted);font-size:14px}
-.filters-bar{display:flex;align-items:center;gap:8px;margin-bottom:20px}
-.filter-btn{padding:6px 14px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);font-size:13px;cursor:pointer;transition:all .12s}
-.filter-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
-.filter-count{font-size:12px;color:var(--text-muted);margin-left:auto}
-.review-list{display:flex;flex-direction:column;gap:16px}
-.review-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.review-card.status-review{border-left:3px solid var(--yellow)}
-.review-card.status-blocked{border-left:3px solid var(--red)}
-.review-card-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--surface2)}
-.review-key{font-size:12px;font-family:monospace;color:var(--accent)}
-.review-meta{font-size:12px;color:var(--text-muted);display:flex;gap:12px;align-items:center}
-.status-pill{font-size:11px;font-weight:600;border-radius:20px;padding:2px 10px}
-.pill-review{background:rgba(250,173,20,.12);color:var(--yellow);border:1px solid rgba(250,173,20,.3)}
-.pill-blocked{background:rgba(255,77,79,.12);color:var(--red);border:1px solid rgba(255,77,79,.3)}
-.review-body{display:grid;grid-template-columns:1fr 1fr}
-.source-pane,.target-pane{padding:16px 18px}
-.source-pane{border-right:1px solid var(--border)}
-.pane-label{font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px}
-.source-text{font-size:14px;color:var(--text-dim);line-height:1.6}
-.translation-input{font-size:14px;line-height:1.6;resize:vertical;min-height:60px}
-.block-reason{font-size:12px;color:var(--red);background:rgba(255,77,79,.08);border:1px solid rgba(255,77,79,.2);border-radius:var(--radius-sm);padding:8px 12px;margin-top:8px}
-.review-actions{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;align-items:center}
-.btn-approve{background:var(--accent);color:#000;padding:7px 16px;font-size:13px;border-radius:var(--radius-sm);border:none;cursor:pointer;transition:all .15s}
-.btn-reject{background:rgba(255,77,79,.12);color:var(--red);border:1px solid rgba(255,77,79,.3);padding:7px 16px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s}
-.btn-approve:hover:not(:disabled){background:#00c98d}
-.btn-reject:hover:not(:disabled){background:rgba(255,77,79,.2)}
-.btn-approve:disabled,.btn-reject:disabled{opacity:.45;cursor:not-allowed}
-.reject-panel{display:none;padding:12px 18px;border-top:1px solid var(--border);background:rgba(255,77,79,.04)}
-.reject-panel.open{display:block}
-.reject-panel textarea{min-height:52px;resize:vertical;font-size:13px;margin-bottom:8px;border-color:rgba(255,77,79,.4)}
-.reject-panel-actions{display:flex;gap:8px;justify-content:flex-end}
-.btn-confirm-reject{background:var(--red);color:#fff;border:none;padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer}
-.btn-confirm-reject:hover{background:#e03e40}
-.btn-cancel-reject{background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer}
-.btn-cancel-reject:hover{color:var(--text);border-color:var(--text-muted)}
+.rv-page{flex:1;overflow-y:auto;padding:28px 32px}
+.rv-stat-chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rv-stat-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid}
+.rv-chip-pending{background:rgba(250,173,20,.1);color:var(--yellow);border-color:rgba(250,173,20,.25)}
+.rv-chip-blocked{background:rgba(255,77,79,.1);color:var(--red);border-color:rgba(255,77,79,.25)}
+.rv-chip-projects{background:var(--accent-dim);color:var(--accent);border-color:rgba(0,229,160,.25)}
+.rv-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap}
+.rv-filters{display:flex;gap:4px}
+.rv-filter{padding:7px 14px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);font-size:13px;cursor:pointer;transition:all .12s;display:inline-flex;align-items:center;gap:6px}
+.rv-filter.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:500}
+.rv-filter-count{font-size:11px;font-weight:700;background:rgba(0,0,0,.15);border-radius:10px;padding:1px 6px;min-width:18px;text-align:center;line-height:1.6}
+.rv-filter.active .rv-filter-count{background:rgba(0,229,160,.18)}
+.rv-search-wrap{position:relative;flex:1;max-width:300px}
+.rv-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}
+.rv-search-input{padding-left:32px!important}
+.rv-list{display:flex;flex-direction:column;gap:12px}
+.rv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:box-shadow .15s}
+.rv-card:hover{box-shadow:0 2px 16px rgba(0,0,0,.22)}
+.rv-card.status-review{border-left:3px solid var(--yellow)}
+.rv-card.status-blocked{border-left:3px solid var(--red)}
+.rv-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);gap:12px}
+.rv-card-header-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.rv-key{font-size:12px;font-family:'SFMono-Regular',Consolas,monospace;color:var(--accent);background:var(--accent-dim2);padding:3px 8px;border-radius:4px;border:1px solid rgba(0,229,160,.15);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;display:inline-block;vertical-align:middle}
+.rv-badges{display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap}
+.rv-badge{font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid}
+.rv-badge-project{background:var(--surface);border-color:var(--border);color:var(--text-muted)}
+.rv-badge-lang{background:var(--accent-dim2);border-color:rgba(0,229,160,.2);color:var(--accent);font-family:monospace;font-size:10px;letter-spacing:.6px;font-weight:700}
+.rv-status-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.2px;flex-shrink:0;border:1px solid}
+.rv-pill-review{background:rgba(250,173,20,.1);color:var(--yellow);border-color:rgba(250,173,20,.3)}
+.rv-pill-blocked{background:rgba(255,77,79,.1);color:var(--red);border-color:rgba(255,77,79,.3)}
+.rv-pill-cultural{background:rgba(138,43,226,.12);color:#b57bee;border-color:rgba(138,43,226,.3)}
+.rv-block-banner{display:flex;align-items:flex-start;gap:8px;padding:10px 16px;background:rgba(255,77,79,.05);border-bottom:1px solid rgba(255,77,79,.15);font-size:12px;color:var(--red);line-height:1.5}
+.rv-cultural-banner{padding:12px 16px;background:rgba(138,43,226,.06);border-bottom:1px solid rgba(138,43,226,.18);font-size:12px}
+.rv-cultural-banner-title{display:flex;align-items:center;gap:6px;color:#b57bee;font-weight:600;margin-bottom:6px}
+.rv-cultural-issues{margin:0;padding:0 0 0 18px;color:var(--text-muted);line-height:1.7}
+.rv-chip-cultural{background:rgba(138,43,226,.1);color:#b57bee;border-color:rgba(138,43,226,.25)}
+.rv-body{display:grid;grid-template-columns:1fr 1fr}
+.rv-source{padding:16px;border-right:1px solid var(--border)}
+.rv-target{padding:16px}
+.rv-pane-label{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:5px}
+.rv-editable-hint{font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;color:var(--text-muted);opacity:.65;margin-left:2px}
+.rv-source-text{font-size:14px;color:var(--text-dim);line-height:1.75}
+.rv-textarea{font-size:14px;line-height:1.75;resize:vertical;min-height:80px;background:var(--surface2)!important;border-color:var(--border)!important;transition:border-color .15s!important}
+.rv-textarea:focus{border-color:var(--accent)!important}
+.rv-actions{padding:10px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.rv-char-hint{font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rv-action-btns{display:flex;gap:8px;flex-shrink:0}
+.rv-btn-reject{display:inline-flex;align-items:center;gap:5px;background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;font-family:inherit}
+.rv-btn-reject:hover:not(:disabled){border-color:var(--red);color:var(--red);background:rgba(255,77,79,.06)}
+.rv-btn-approve{display:inline-flex;align-items:center;gap:5px;background:var(--accent);color:#000;padding:6px 16px;font-size:13px;font-weight:600;border-radius:var(--radius-sm);border:none;cursor:pointer;transition:all .15s;font-family:inherit}
+.rv-btn-approve:hover:not(:disabled){background:#00c98d;transform:translateY(-1px);box-shadow:0 4px 14px -4px rgba(0,229,160,.4)}
+.rv-btn-approve:disabled,.rv-btn-reject:disabled{opacity:.38;cursor:not-allowed!important;transform:none!important;box-shadow:none!important}
+.rv-reject-panel{display:none;padding:14px 16px;border-top:1px solid rgba(255,77,79,.18);background:rgba(255,77,79,.03)}
+.rv-reject-panel.open{display:block}
+.rv-reject-textarea{min-height:60px;resize:vertical;font-size:13px;margin-top:8px;margin-bottom:10px;border-color:rgba(255,77,79,.35)!important}
+.rv-reject-footer{display:flex;gap:8px;justify-content:flex-end}
+.rv-btn-confirm-reject{background:var(--red);color:#fff;border:none;padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;transition:background .15s}
+.rv-btn-confirm-reject:hover:not(:disabled){background:#e03e40}
+.rv-btn-confirm-reject:disabled{opacity:.4;cursor:not-allowed}
+.rv-btn-cancel{background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;transition:all .15s}
+.rv-btn-cancel:hover{color:var(--text);border-color:var(--text-muted)}
+@media(max-width:700px){.rv-body{grid-template-columns:1fr}.rv-source{border-right:none;border-bottom:1px solid var(--border)}.rv-toolbar{flex-direction:column;align-items:stretch}.rv-search-wrap{max-width:100%}}
 """
 
 private val REVIEW_JS = """
@@ -2565,89 +2876,172 @@ function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'ap
 function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom/auth/logout';}
 function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
 function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch(e){return{};}}
 const chip=document.getElementById('user-chip');if(chip){const p=jwtPayload(token);chip.textContent=p.username?'@'+p.username:(p.email||'You');}
-function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return{};}}
 
-let allItems=[];let currentFilter='all';
+const LANG_NAMES={af:'Afrikaans',ar:'Arabic',bg:'Bulgarian',bn:'Bengali',ca:'Catalan',cs:'Czech',da:'Danish',de:'German',el:'Greek',en:'English',es:'Spanish',et:'Estonian',fa:'Persian',fi:'Finnish',fr:'French',gu:'Gujarati',he:'Hebrew',hi:'Hindi',hr:'Croatian',hu:'Hungarian',hy:'Armenian',id:'Indonesian',it:'Italian',ja:'Japanese',ka:'Georgian',kn:'Kannada',ko:'Korean',lt:'Lithuanian',lv:'Latvian',mk:'Macedonian',ml:'Malayalam',mr:'Marathi',ms:'Malay',nl:'Dutch',no:'Norwegian',pa:'Punjabi',pl:'Polish',pt:'Portuguese',ro:'Romanian',ru:'Russian',sk:'Slovak',sl:'Slovenian',sq:'Albanian',sr:'Serbian',sv:'Swedish',sw:'Swahili',ta:'Tamil',te:'Telugu',th:'Thai',tl:'Filipino',tr:'Turkish',uk:'Ukrainian',ur:'Urdu',vi:'Vietnamese',zh:'Chinese'};
+function langName(code){return LANG_NAMES[code]||(code?code.toUpperCase():'?');}
+
+let allItems=[];let currentFilter='all';let searchQuery='';
 
 async function loadReviews(){
+  document.getElementById('review-list').innerHTML='<div class="empty-state">Loading…</div>';
   const res=await fetch(BASE+'/review',{headers:authHeaders()});
-  if(!res.ok){document.getElementById('review-list').innerHTML='<div class="empty-state">Failed to load reviews.</div>';return;}
-  const data=await res.json();allItems=data.pending_reviews||[];render();
+  if(!res.ok){document.getElementById('review-list').innerHTML='<div class="empty-state">Failed to load reviews. Please try refreshing.</div>';return;}
+  const data=await res.json();
+  allItems=data.pending_reviews||[];
+  updateStatChips();
+  render();
 }
 
-function filterStatus(status,btn){
+function isCulturalItem(item){return item.status==='review'&&item.blockReason&&item.blockReason.startsWith('Cultural:');}
+function parseCulturalIssues(blockReason){return blockReason.replace(/^Cultural:\s*/,'').split(/;\s*/).filter(Boolean);}
+
+function updateStatChips(){
+  const pending=allItems.filter(i=>i.status==='review').length;
+  const blocked=allItems.filter(i=>i.status==='blocked').length;
+  const cultural=allItems.filter(isCulturalItem).length;
+  const projects=[...new Set(allItems.map(i=>i.projectName))].length;
+  const el=document.getElementById('rv-stat-chips');if(!el)return;
+  const clockSvg='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  const blockSvg='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>';
+  const folderSvg='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+  const culturalSvg='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg>';
+  el.innerHTML=(pending>0?'<span class="rv-stat-chip rv-chip-pending">'+clockSvg+' '+pending+' pending</span>':'')+(cultural>0?'<span class="rv-stat-chip rv-chip-cultural">'+culturalSvg+' '+cultural+' cultural</span>':'')+(blocked>0?'<span class="rv-stat-chip rv-chip-blocked">'+blockSvg+' '+blocked+' blocked</span>':'')+(projects>1?'<span class="rv-stat-chip rv-chip-projects">'+folderSvg+' '+projects+' projects</span>':'')+(pending===0&&blocked===0?'<span class="rv-stat-chip rv-chip-projects"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> All clear</span>':'');
+}
+
+function updateCounts(){
+  const all=allItems.length;
+  const pending=allItems.filter(i=>i.status==='review').length;
+  const blocked=allItems.filter(i=>i.status==='blocked').length;
+  const cultural=allItems.filter(isCulturalItem).length;
+  const s=(id,n)=>{const el=document.getElementById(id);if(el)el.textContent=n;};
+  s('cnt-all',all);s('cnt-review',pending);s('cnt-blocked',blocked);s('cnt-cultural',cultural);
+  // Show/hide cultural tab based on whether any exist
+  const culturalTab=document.getElementById('tab-cultural');
+  if(culturalTab)culturalTab.style.display=cultural>0?'':'none';
+}
+
+function filterBy(status,btn){
   currentFilter=status;
-  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.rv-filter').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');render();
 }
 
-function render(){
-  const items=currentFilter==='all'?allItems:allItems.filter(i=>i.status===currentFilter);
-  document.getElementById('item-count').textContent=items.length+' item'+(items.length!==1?'s':'');
-  const list=document.getElementById('review-list');
-  if(items.length===0){list.innerHTML='<div class="empty-state"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-4px;margin-right:8px;color:var(--accent)"><polyline points="20 6 9 17 4 12"/></svg>All caught up — no translations to review.</div>';return;}
-  const pillClass=s=>s==='review'?'pill-review':'pill-blocked';
-  const pillLabel=s=>s==='review'?'Pending':'Blocked';
-  list.innerHTML=items.map(item=>`
-    <div class="review-card status-${'$'}{esc(item.status)}" id="card-${'$'}{esc(item.id)}">
-      <div class="review-card-header">
-        <span class="review-key">${'$'}{esc(item.stringKey)}</span>
-        <div class="review-meta">
-          <span>${'$'}{esc(item.projectName)}</span>
-          <span>${'$'}{esc(item.targetLanguage)}${'$'}{item.targetRegion?' ('+esc(item.targetRegion)+')':''}</span>
-          <span class="status-pill ${'$'}{pillClass(item.status)}">${'$'}{pillLabel(item.status)}</span>
-        </div>
-      </div>
-      <div class="review-body">
-        <div class="source-pane"><div class="pane-label">SOURCE (EN)</div><div class="source-text">${'$'}{esc(item.sourceText)}</div></div>
-        <div class="target-pane">
-          <div class="pane-label">TRANSLATION <span style="color:var(--text-muted);font-weight:400;font-size:10px;letter-spacing:0">(editable — your changes will be committed)</span></div>
-          <textarea class="translation-input" id="trans-${'$'}{esc(item.id)}">${'$'}{esc(item.translatedText)}</textarea>
-          ${'$'}{item.blockReason?'<div class="block-reason"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-2px;margin-right:5px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'+esc(item.blockReason)+'</div>':''}
-        </div>
-      </div>
-      <div class="review-actions">
-        <button class="btn-reject" id="btn-reject-${'$'}{esc(item.id)}" onclick="showRejectPanel('${'$'}{esc(item.id)}')">Reject</button>
-        <button class="btn-approve" id="btn-approve-${'$'}{esc(item.id)}" onclick="approve('${'$'}{esc(item.id)}')">✓ Approve</button>
-      </div>
-      <div class="reject-panel" id="reject-panel-${'$'}{esc(item.id)}">
-        <div class="pane-label" style="margin-bottom:8px">REJECTION REASON</div>
-        <textarea id="reject-reason-${'$'}{esc(item.id)}" placeholder="Describe why this translation needs to be redone…"></textarea>
-        <div class="reject-panel-actions">
-          <button class="btn-cancel-reject" onclick="hideRejectPanel('${'$'}{esc(item.id)}')">Cancel</button>
-          <button class="btn-confirm-reject" onclick="confirmReject('${'$'}{esc(item.id)}')">Confirm Rejection</button>
-        </div>
-      </div>
-    </div>`).join('');
+function applySearch(q){searchQuery=q.toLowerCase().trim();render();}
+
+function getVisible(){
+  let items;
+  if(currentFilter==='cultural') items=allItems.filter(isCulturalItem);
+  else if(currentFilter==='all') items=allItems;
+  else items=allItems.filter(i=>i.status===currentFilter);
+  if(searchQuery)items=items.filter(i=>(i.stringKey||'').toLowerCase().includes(searchQuery)||(i.projectName||'').toLowerCase().includes(searchQuery)||(i.sourceText||'').toLowerCase().includes(searchQuery)||(i.translatedText||'').toLowerCase().includes(searchQuery));
+  return items;
 }
 
-// Fix U8: send the reviewer's (possibly edited) textarea value as editedText.
-// Fix U1: disable buttons while the request is in flight to prevent double-submit / duplicate PRs.
+function render(){
+  updateCounts();
+  const items=getVisible();
+  const list=document.getElementById('review-list');
+  if(items.length===0){
+    const okSvg='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-4px;margin-right:8px;color:var(--accent)"><polyline points="20 6 9 17 4 12"/></svg>';
+    const msg=searchQuery?'No results for “'+esc(searchQuery)+'”.'
+      :currentFilter==='blocked'?'No blocked translations.'
+      :currentFilter==='review'?okSvg+'All pending translations reviewed!'
+      :okSvg+'All caught up — no translations to review.';
+    list.innerHTML='<div class="empty-state">'+msg+'</div>';return;
+  }
+
+  const warnSvg='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  const globeSvg='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+  const xSvg='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+  const checkSvg='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  const arrowSvg='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+
+  list.innerHTML=items.map(function(item){
+    var id=esc(item.id);
+    var isBlocked=item.status==='blocked';
+    var lang=(item.targetLanguage||'')+(item.targetRegion?'-'+item.targetRegion:'');
+    var lname=langName(item.targetLanguage)+(item.targetRegion?' ('+esc(item.targetRegion)+')':'');
+    var charCount=item.translatedText?item.translatedText.length:0;
+    var srcLen=item.sourceText?item.sourceText.length:0;
+    var pillCls=isBlocked?'rv-pill-blocked':(isCulturalItem(item)?'rv-pill-cultural':'rv-pill-review');
+    var pillTxt=isBlocked?'Blocked':(isCulturalItem(item)?'Cultural':'Pending');
+    var blockBanner=isBlocked&&item.blockReason?'<div class="rv-block-banner">'+warnSvg+'<span><strong>Rejection reason:</strong> '+esc(item.blockReason)+'</span></div>':'';
+    var isCultural=isCulturalItem(item);
+    var culturalBanner='';
+    if(isCultural){
+      var cIssues=parseCulturalIssues(item.blockReason||'');
+      var issueHtml=cIssues.map(function(s){return '<li>'+esc(s)+'</li>';}).join('');
+      culturalBanner='<div class="rv-cultural-banner"><div class="rv-cultural-banner-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg><strong>Cultural sensitivity flag</strong></div>'+(issueHtml?'<ul class="rv-cultural-issues">'+issueHtml+'</ul>':'')+'</div>';
+    }
+    return '<div class="rv-card status-'+esc(item.status)+'" id="card-'+id+'">'+
+      '<div class="rv-card-header">'+
+        '<div class="rv-card-header-left">'+
+          '<code class="rv-key" title="'+esc(item.stringKey)+'">'+esc(item.stringKey)+'</code>'+
+          '<div class="rv-badges">'+
+            '<span class="rv-badge rv-badge-project">'+esc(item.projectName)+'</span>'+
+            '<span class="rv-badge rv-badge-lang" title="'+esc(lname)+'">'+esc(lang.toUpperCase())+'</span>'+
+          '</div>'+
+        '</div>'+
+        '<span class="rv-status-pill '+pillCls+'">'+pillTxt+'</span>'+
+      '</div>'+
+      blockBanner+culturalBanner+
+      '<div class="rv-body">'+
+        '<div class="rv-source">'+
+          '<div class="rv-pane-label">'+globeSvg+' Source &middot; English</div>'+
+          '<div class="rv-source-text">'+esc(item.sourceText)+'</div>'+
+        '</div>'+
+        '<div class="rv-target">'+
+          '<div class="rv-pane-label">'+arrowSvg+' Translation &middot; '+esc(lname)+'<span class="rv-editable-hint">&ensp;editable</span></div>'+
+          '<textarea class="rv-textarea" id="trans-'+id+'" oninput="updateCharCount(\''+id+'\',this.value,'+srcLen+')">'+esc(item.translatedText)+'</textarea>'+
+        '</div>'+
+      '</div>'+
+      '<div class="rv-actions">'+
+        '<span class="rv-char-hint" id="chars-'+id+'">'+charCount+' chars</span>'+
+        '<div class="rv-action-btns">'+
+          '<button class="rv-btn-reject" id="btn-reject-'+id+'" onclick="showRejectPanel(\''+id+'\')">'+xSvg+' Reject</button>'+
+          '<button class="rv-btn-approve" id="btn-approve-'+id+'" onclick="approve(\''+id+'\')">'+checkSvg+' Approve &amp; merge</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="rv-reject-panel" id="reject-panel-'+id+'">'+
+        '<div class="rv-pane-label" style="margin-bottom:6px">'+warnSvg+' Rejection Reason</div>'+
+        '<textarea id="reject-reason-'+id+'" class="rv-reject-textarea" placeholder="Describe why this translation needs to be redone…"></textarea>'+
+        '<div class="rv-reject-footer">'+
+          '<button class="rv-btn-cancel" onclick="hideRejectPanel(\''+id+'\')">Cancel</button>'+
+          '<button class="rv-btn-confirm-reject" onclick="confirmReject(\''+id+'\')">Confirm Rejection</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function updateCharCount(id,val,srcLen){
+  const el=document.getElementById('chars-'+id);if(!el)return;
+  const n=val.length;
+  el.textContent=n+' chars';
+  const ratio=srcLen>0?n/srcLen:1;
+  el.style.color=(srcLen>0&&(ratio<0.35||ratio>2.8))?'var(--yellow)':'var(--text-muted)';
+}
+
 async function approve(id){
-  const approveBtn=document.getElementById('btn-approve-'+id);
-  const rejectBtn=document.getElementById('btn-reject-'+id);
-  if(approveBtn)approveBtn.disabled=true;
-  if(rejectBtn)rejectBtn.disabled=true;
+  const ab=document.getElementById('btn-approve-'+id),rb=document.getElementById('btn-reject-'+id);
+  if(ab)ab.disabled=true;if(rb)rb.disabled=true;
   const editedText=(document.getElementById('trans-'+id)?.value||'').trim();
-  const res=await fetch(BASE+'/review/'+id+'/approve',{
-    method:'POST',headers:authHeaders(),
-    body:JSON.stringify({editedText:editedText||null})
-  });
+  const res=await fetch(BASE+'/review/'+id+'/approve',{method:'POST',headers:authHeaders(),body:JSON.stringify({editedText:editedText||null})});
   if(res.ok){
     allItems=allItems.filter(i=>i.id!==id);
     document.getElementById('card-'+id)?.remove();
-    toast('Approved!');
-    if(allItems.length===0)render();
-  } else {
-    if(approveBtn)approveBtn.disabled=false;
-    if(rejectBtn)rejectBtn.disabled=false;
+    updateStatChips();updateCounts();
+    toast('Approved — PR will be updated shortly.');
+    if(getVisible().length===0)render();
+  }else{
+    if(ab)ab.disabled=false;if(rb)rb.disabled=false;
     const err=await res.json().catch(()=>({}));
-    toast(err.error||'Approval failed — please try again','error');
+    toast(err.error||'Approval failed — please try again.','error');
   }
 }
 
-// Fix U2: replace window.prompt() with an inline rejection panel.
 function showRejectPanel(id){
   document.getElementById('reject-panel-'+id)?.classList.add('open');
   document.getElementById('btn-approve-'+id).disabled=true;
@@ -2661,19 +3055,20 @@ function hideRejectPanel(id){
 }
 async function confirmReject(id){
   const reason=(document.getElementById('reject-reason-'+id)?.value||'').trim();
-  if(!reason){toast('Please enter a rejection reason','error');return;}
-  const confirmBtn=document.querySelector('#reject-panel-'+id+' .btn-confirm-reject');
+  if(!reason){toast('Please enter a rejection reason.','error');return;}
+  const confirmBtn=document.querySelector('#reject-panel-'+id+' .rv-btn-confirm-reject');
   if(confirmBtn)confirmBtn.disabled=true;
   const res=await fetch(BASE+'/review/'+id+'/reject',{method:'POST',headers:authHeaders(),body:JSON.stringify({reason})});
   if(res.ok){
     const item=allItems.find(i=>i.id===id);
     if(item){item.status='blocked';item.blockReason=reason;}
+    updateStatChips();
     toast('Translation blocked.');
     render();
-  } else {
+  }else{
     if(confirmBtn)confirmBtn.disabled=false;
     const err=await res.json().catch(()=>({}));
-    toast(err.error||'Rejection failed — please try again','error');
+    toast(err.error||'Rejection failed — please try again.','error');
   }
 }
 loadReviews();

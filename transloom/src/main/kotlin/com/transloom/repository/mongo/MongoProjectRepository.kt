@@ -39,6 +39,7 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             put("category", input.category)
             put("tone", input.tone)
             put("targets", targetsDocuments)
+            put("culturalSensitivityEnabled", input.culturalSensitivityEnabled)
             put("createdAt", now)
             put("updatedAt", now)
         }
@@ -54,7 +55,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             sourceFilePath = input.sourceFilePath,
             category = input.category,
             tone = input.tone,
-            targets = input.targets
+            targets = input.targets,
+            culturalSensitivityEnabled = input.culturalSensitivityEnabled
         )
     }
 
@@ -85,7 +87,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         category: String?,
         watchBranch: String?,
         sourceFilePath: String?,
-        targets: List<TargetConfig>?
+        targets: List<TargetConfig>?,
+        culturalSensitivityEnabled: Boolean?
     ): Boolean {
         val updates = mutableListOf<org.bson.conversions.Bson>()
 
@@ -95,6 +98,7 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         watchBranch?.let { updates.add(Updates.set("watchBranch", it)) }
         sourceFilePath?.let { updates.add(Updates.set("sourceFilePath", it)) }
         targets?.let { updates.add(Updates.set("targets", it.map { t -> t.toDocument() })) }
+        culturalSensitivityEnabled?.let { updates.add(Updates.set("culturalSensitivityEnabled", it)) }
 
         if (updates.isEmpty()) return false
 
@@ -173,7 +177,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             sourceFilePath = getString("sourceFilePath") ?: "",
             category = getString("category") ?: "",
             tone = getString("tone") ?: "",
-            targets = targets
+            targets = targets,
+            culturalSensitivityEnabled = getBoolean("culturalSensitivityEnabled") ?: false
         )
     }
 }

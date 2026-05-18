@@ -4,6 +4,8 @@ import com.androidplay.core.mongo.IndexSpec
 import com.androidplay.core.mongo.MongoIndexer
 import com.transloom.repository.*
 import com.transloom.repository.mongo.*
+import com.transloom.services.CulturalSensitivityAnalyzer
+import com.transloom.services.SemanticChangeAnalyzer
 import org.bson.Document
 import org.koin.dsl.module
 import com.mongodb.client.model.IndexOptions
@@ -16,6 +18,10 @@ fun transloomModule(encryptionKey: String) = module {
     single<BillingRepository> { MongoBillingRepository(get(), get()) }
     single<TranslationMemoryRepository> { MongoTranslationMemoryRepository(get()) }
     single<UserActivityRepository> { MongoUserActivityRepository(get()) }
+    single<SemanticChangeCacheRepository> { MongoSemanticChangeCacheRepository(get()) }
+    single { SemanticChangeAnalyzer(get()) }
+    single<CulturalAnalysisCacheRepository> { MongoCulturalAnalysisCacheRepository(get()) }
+    single { CulturalSensitivityAnalyzer(get()) }
 }
 
 fun transloomIndexes(): List<IndexSpec> {
@@ -42,5 +48,9 @@ fun transloomIndexes(): List<IndexSpec> {
         // the abandoned-payment scan which filters by event then sorts by time.
         IndexSpec("user_events", Document(mapOf("userId" to 1, "occurredAt" to -1))),
         IndexSpec("user_events", Document(mapOf("event" to 1, "occurredAt" to -1))),
+        IndexSpec("semantic_change_cache", Document("hashKey", 1)),
+        IndexSpec("semantic_change_cache", Document("createdAt", 1)),
+        IndexSpec("cultural_analysis_cache", Document("hashKey", 1)),
+        IndexSpec("cultural_analysis_cache", Document("createdAt", 1)),
     )
 }

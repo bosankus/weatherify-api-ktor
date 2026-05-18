@@ -21,7 +21,8 @@ data class PipelineEvent(
     val detail: String? = null,
     val prUrl: String? = null,
     val error: String? = null,
-    val snapshot: PipelineRunState? = null
+    val snapshot: PipelineRunState? = null,
+    val surfaceSkipped: Int? = null
 )
 
 class PipelineEventBus {
@@ -74,11 +75,22 @@ class PipelineEventBus {
     fun stepError(userId: String, runId: String, stepId: String, detail: String? = null) =
         updateStep(userId, runId, stepId, "error", detail)
 
-    fun finishRun(userId: String, runId: String, prUrl: String? = null, error: String? = null) {
+    fun finishRun(
+        userId: String,
+        runId: String,
+        prUrl: String? = null,
+        error: String? = null,
+        surfaceSkipped: Int = 0
+    ) {
         val finishedAt = System.currentTimeMillis()
-        mutateRun(userId, runId) { it.copy(finishedAt = finishedAt, prUrl = prUrl, error = error) }
+        mutateRun(userId, runId) {
+            it.copy(finishedAt = finishedAt, prUrl = prUrl, error = error, surfaceSkipped = surfaceSkipped)
+        }
         activeSteps.remove(runId)
-        emit(userId, PipelineEvent(type = "finish", runId = runId, prUrl = prUrl, error = error))
+        emit(userId, PipelineEvent(
+            type = "finish", runId = runId, prUrl = prUrl, error = error,
+            surfaceSkipped = surfaceSkipped.takeIf { it > 0 }
+        ))
     }
 
     private fun updateStep(userId: String, runId: String, stepId: String, status: String, detail: String?) {

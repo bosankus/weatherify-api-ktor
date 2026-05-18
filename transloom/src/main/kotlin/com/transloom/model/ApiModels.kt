@@ -71,7 +71,8 @@ data class UpdateProjectBody(
     val category: String? = null,
     val watchBranch: String? = null,
     val sourceFilePath: String? = null,
-    val targets: List<TargetConfig>? = null
+    val targets: List<TargetConfig>? = null,
+    val culturalSensitivityEnabled: Boolean? = null
 )
 
 @Serializable
@@ -83,7 +84,8 @@ data class ProjectDetailResponse(
     val sourceFilePath: String,
     val category: String,
     val tone: String,
-    val targets: List<TargetConfig>
+    val targets: List<TargetConfig>,
+    val culturalSensitivityEnabled: Boolean = false
 )
 
 @Serializable

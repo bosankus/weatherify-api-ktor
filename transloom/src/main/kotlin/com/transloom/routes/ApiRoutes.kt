@@ -25,6 +25,8 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -118,7 +120,8 @@ fun Route.configureApiRoutes(
                     sourceFilePath = body.sourceFilePath,
                     category = body.category,
                     tone = body.tone,
-                    targets = body.targets
+                    targets = body.targets,
+                    culturalSensitivityEnabled = false  // always off at creation; user opts in via Edit
                 )
                 val project = runCatching { projectRepository.create(userId, input) }.getOrElse {
                     if (it.message?.contains("E11000") == true || it.message?.contains("duplicate") == true) {
@@ -183,7 +186,8 @@ fun Route.configureApiRoutes(
                     category = body.category,
                     watchBranch = body.watchBranch,
                     sourceFilePath = body.sourceFilePath,
-                    targets = body.targets
+                    targets = body.targets,
+                    culturalSensitivityEnabled = body.culturalSensitivityEnabled
                 )
 
                 val updated = projectRepository.findById(projectId)
@@ -228,7 +232,8 @@ fun Route.configureApiRoutes(
                         sourceFilePath = project.sourceFilePath,
                         category = project.category,
                         tone = project.tone,
-                        targets = project.targets
+                        targets = project.targets,
+                        culturalSensitivityEnabled = project.culturalSensitivityEnabled
                     )
                 )
             }
@@ -313,8 +318,7 @@ fun Route.configureApiRoutes(
                 val editedText = body.editedText?.takeIf { it.isNotBlank() }
                 translationRepository.approve(translationId, editedText)
 
-                val translationForPr = if (editedText != null) translation.copy(translatedText = editedText) else translation
-                launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, translationForPr)
+                launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, translation.projectId)
 
                 call.respond(HttpStatusCode.OK, mapOf("status" to "approved", "id" to translationId))
             }
@@ -510,52 +514,91 @@ fun Route.configureApiRoutes(
     }
 }
 
+/**
+ * Launches a batched follow-up PR for all manually-approved translations in a project.
+ *
+ * A 2-second delay collects simultaneous approvals so they land in one PR instead of many.
+ * An atomic "claim" (status "approved" → "auto") ensures only one concurrent coroutine
+ * builds and submits the PR even when multiple approvals fire at the same time.
+ */
 private fun launchFollowUpPr(
     application: Application,
     githubService: GitHubService,
     projectRepository: ProjectRepository,
     userRepository: UserRepository,
     translationRepository: TranslationRepository,
-    translation: Translation
+    projectId: String
 ) {
     application.launch {
-        val project = projectRepository.findById(translation.projectId) ?: run {
-            apiLog.warn("Project {} not found for follow-up PR", translation.projectId); return@launch
-        }
-        val owner = userRepository.findById(project.ownerId)
-        val githubToken = owner?.githubToken ?: run {
-            apiLog.warn("No GitHub token for user {} — cannot create follow-up PR", project.ownerId)
+        // Brief window: collect any simultaneous approvals so they land in one PR.
+        delay(2_000L)
+
+        val pending = translationRepository.getApprovedForProject(projectId)
+        if (pending.isEmpty()) return@launch
+
+        // Atomic claim: first coroutine to run sets status "approved" → "auto".
+        // Any concurrent duplicate coroutine will find 0 modified documents and bail.
+        val claimed = translationRepository.claimApproved(pending.map { it.id })
+        if (claimed == 0) {
+            apiLog.debug("Follow-up PR: lost claim race for project={}, bailing", projectId)
             return@launch
         }
 
-        val target = project.targets.firstOrNull { it.code == translation.targetLanguage } ?: run {
-            apiLog.warn("No target config for lang={} in project={}", translation.targetLanguage, project.id)
+        val project = projectRepository.findById(projectId) ?: run {
+            apiLog.warn("Follow-up PR: project {} not found", projectId)
+            pending.forEach { translationRepository.revertToReview(it.id) }
             return@launch
         }
+        val owner = userRepository.findById(project.ownerId)
+        val githubToken = owner?.githubToken ?: run {
+            apiLog.warn("Follow-up PR: no GitHub token for project {}", projectId)
+            pending.forEach { translationRepository.revertToReview(it.id) }
+            return@launch
+        }
+
+        // Group translations by their target file path (one file per language).
+        val fileTranslations = mutableMapOf<String, MutableMap<String, String>>()
+        for (t in pending) {
+            val target = project.targets.firstOrNull { it.code == t.targetLanguage } ?: continue
+            fileTranslations.getOrPut(target.file) { mutableMapOf() }[t.stringKey] = t.translatedText
+        }
+        if (fileTranslations.isEmpty()) return@launch
+
+        val stringCount = pending.map { it.stringKey }.distinct().size
+        val langCount   = pending.map { it.targetLanguage }.distinct().size
 
         val maxRetries = 3
         var lastError: Exception? = null
         for (attempt in 1..maxRetries) {
             try {
-                val existingContent = githubService.fetchFileContent(
-                    repo = project.githubRepo, branch = project.watchBranch,
-                    filePath = target.file, token = githubToken
-                )
-                val merged = when {
-                    target.file.endsWith(".xml") -> StringParserService.mergeAndroidXml(existingContent, mapOf(translation.stringKey to translation.translatedText))
-                    target.file.endsWith(".strings") -> StringParserService.mergeIosStrings(existingContent, mapOf(translation.stringKey to translation.translatedText))
-                    else -> return@launch
+                // Fetch every target file and merge in parallel — one network call per language.
+                val updatedFiles: Map<String, String> = coroutineScope {
+                    fileTranslations.entries.map { (filePath, translations) ->
+                        async {
+                            val existing = githubService.fetchFileContent(
+                                repo = project.githubRepo, branch = project.watchBranch,
+                                filePath = filePath, token = githubToken
+                            )
+                            val merged = when {
+                                filePath.endsWith(".xml")     -> StringParserService.mergeAndroidXml(existing, translations)
+                                filePath.endsWith(".strings") -> StringParserService.mergeIosStrings(existing, translations)
+                                else -> return@async null
+                            }
+                            filePath to merged
+                        }
+                    }.awaitAll().filterNotNull().toMap()
                 }
+
                 val pr = githubService.createBranchAndPr(
-                    repo = project.githubRepo,
-                    baseBranch = project.watchBranch,
-                    files = mapOf(target.file to merged),
-                    commitMessage = "chore(i18n): add approved ${translation.targetLanguage} translation for '${translation.stringKey}'",
-                    prTitle = "Transloom: Approved translation — ${translation.targetLanguage}/${translation.stringKey}",
-                    prBody = "Manual approval of translation for key `${translation.stringKey}` in **${translation.targetLanguage}**.\n\n> Approved via the Transloom review portal.",
-                    token = githubToken
+                    repo          = project.githubRepo,
+                    baseBranch    = project.watchBranch,
+                    files         = updatedFiles,
+                    commitMessage = "chore(i18n): add $stringCount approved translation${if (stringCount != 1) "s" else ""} for $langCount language${if (langCount != 1) "s" else ""}",
+                    prTitle       = "Transloom: $stringCount approved translation${if (stringCount != 1) "s" else ""} · $langCount language${if (langCount != 1) "s" else ""}",
+                    prBody        = buildApprovalPrBody(pending),
+                    token         = githubToken
                 )
-                apiLog.info("Follow-up PR created after approval: {}", pr.prUrl)
+                apiLog.info("Batch follow-up PR created: {} ({} translations, {} languages)", pr.prUrl, pending.size, langCount)
                 return@launch
             } catch (e: Exception) {
                 lastError = e
@@ -567,8 +610,27 @@ private fun launchFollowUpPr(
             }
         }
 
-        apiLog.error("Follow-up PR failed after {} retries for translationId={}: {}", maxRetries, translation.id, lastError?.message)
-        translationRepository.revertToReview(translation.id)
-        apiLog.info("Translation {} reverted to 'review' status", translation.id)
+        apiLog.error("Follow-up PR failed after {} retries for project={}: {}", maxRetries, projectId, lastError?.message)
+        pending.forEach { translationRepository.revertToReview(it.id) }
+        apiLog.info("{} translations reverted to 'review' for project={}", pending.size, projectId)
     }
+}
+
+private fun buildApprovalPrBody(translations: List<Translation>): String {
+    val rows = translations.groupBy { it.targetLanguage }.entries
+        .joinToString("\n") { (lang, items) ->
+            val keys = items.joinToString(", ") { "`${it.stringKey}`" }
+            "| ${lang.uppercase()} | ${items.size} | $keys |"
+        }
+    return """
+        ## Transloom: Approved Translations
+
+        | Language | Strings | Keys |
+        |---|---|---|
+        $rows
+
+        > Manually reviewed and approved via the Transloom review portal.
+
+        *Generated by [Transloom](https://transloom.dev)*
+    """.trimIndent()
 }

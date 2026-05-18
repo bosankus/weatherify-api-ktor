@@ -11,7 +11,8 @@ data class Project(
     val sourceFilePath: String,
     val category: String,
     val tone: String,
-    val targets: List<TargetConfig> = emptyList()
+    val targets: List<TargetConfig> = emptyList(),
+    val culturalSensitivityEnabled: Boolean = false
 )
 
 @Serializable
@@ -29,5 +30,6 @@ data class CreateProjectInput(
     val sourceFilePath: String = "values/strings.xml",
     val category: String,
     val tone: String,
-    val targets: List<TargetConfig>
+    val targets: List<TargetConfig>,
+    val culturalSensitivityEnabled: Boolean = false
 )

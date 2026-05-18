@@ -33,8 +33,10 @@ import com.transloom.queue.TranslationJobQueue
 import com.androidplay.core.razorpay.RazorpayWebhookDispatcher
 import com.transloom.routes.*
 import com.transloom.services.BillingService
+import com.transloom.services.CulturalSensitivityAnalyzer
 import com.transloom.services.GitHubService
 import com.transloom.services.RazorpayBillingService
+import com.transloom.services.SemanticChangeAnalyzer
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import com.transloom.services.UserLifecycleMonitor
@@ -138,7 +140,9 @@ fun Application.module() {
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
     val pipelineEventBus = com.transloom.services.PipelineEventBus()
-    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus)
+    val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
+    val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
+    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer)
 
     jobQueue.startWorker { payload ->
         val projectUuid = runCatching { java.util.UUID.fromString(payload.projectId) }.getOrElse {
@@ -183,6 +187,8 @@ fun Application.module() {
         cacheRepository.close()
         githubService.close()
         translationService.close()
+        semanticChangeAnalyzer.close()
+        culturalSensitivityAnalyzer.close()
         razorpayService.close()
         lifecycleMonitor.stop()
         log.info("All resources closed on application stop")

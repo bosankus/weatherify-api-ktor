@@ -12,10 +12,14 @@ import com.transloom.queue.TranslationJobQueue
 import com.transloom.repository.GlossaryRepository
 import com.transloom.repository.mongo.*
 import com.transloom.routes.*
+import com.transloom.repository.mongo.MongoCulturalAnalysisCacheRepository
+import com.transloom.repository.mongo.MongoSemanticChangeCacheRepository
 import com.transloom.services.BillingService
+import com.transloom.services.CulturalSensitivityAnalyzer
 import com.transloom.services.GitHubService
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.RazorpayBillingService
+import com.transloom.services.SemanticChangeAnalyzer
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import com.transloom.services.UserLifecycleMonitor
@@ -61,8 +65,11 @@ fun Application.configureTransloom(refundService: RefundService) {
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
     val pipelineEventBus = PipelineEventBus()
+    val semanticChangeAnalyzer = SemanticChangeAnalyzer(MongoSemanticChangeCacheRepository(db))
+    val culturalSensitivityAnalyzer = CulturalSensitivityAnalyzer(MongoCulturalAnalysisCacheRepository(db))
     val pipeline = TranslationPipeline(
-        githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus
+        githubService, translationService, billingService, projectRepository, translationRepository,
+        pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer
     )
 
     // Central webhook dispatcher — register all Razorpay event handlers here.
@@ -98,6 +105,8 @@ fun Application.configureTransloom(refundService: RefundService) {
         jobQueue.close()
         githubService.close()
         translationService.close()
+        semanticChangeAnalyzer.close()
+        culturalSensitivityAnalyzer.close()
         razorpayService.close()
         lifecycleMonitor.stop()
         log.info("Transloom resources closed")
