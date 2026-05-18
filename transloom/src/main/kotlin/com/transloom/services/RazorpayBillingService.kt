@@ -112,8 +112,13 @@ class RazorpayBillingService(
         val subscriptionId = response["id"]?.jsonPrimitive?.contentOrNull
             ?: throw IllegalStateException("Razorpay did not return subscription id: $response")
 
-        // Do NOT upgrade plan here — wait for subscription.authenticated webhook (card saved).
-        // userId is embedded in notes so the webhook handler can resolve the user without a DB lookup.
+        // Pre-record the subscription so the webhook fallback lookup (findByRazorpaySubscription)
+        // works even if notes parsing fails. Plan stays unchanged until subscription.authenticated fires.
+        val currentSub = billingRepository.getSubscription(userId)
+        billingRepository.upsertSubscription(
+            userId = userId, plan = currentSub.plan,
+            razorpaySubscriptionId = subscriptionId
+        )
         log.info("Created Razorpay subscription {} for userId={} plan={}", subscriptionId, userId, plan.name)
         return SubscriptionInit(subscriptionId, keyId, plan)
     }
@@ -135,6 +140,31 @@ class RazorpayBillingService(
     /** Resolves the userId that owns this subscription (set at create time). */
     suspend fun ownerOf(subscriptionId: String): String? =
         billingRepository.findByRazorpaySubscription(subscriptionId)
+
+    // ─── Activate trial subscription immediately ───────────────────────────────
+
+    /**
+     * Ends the 60-day trial early by updating start_at to now so Razorpay charges
+     * the user immediately. Clears limitHitAt so the dashboard prompt disappears.
+     * The subscription.activated / subscription.charged webhook will arrive shortly
+     * and record the invoice + currentPeriodEnd as normal.
+     */
+    suspend fun activateNow(userId: String) {
+        val sub = billingRepository.getSubscription(userId)
+        val subscriptionId = sub.razorpaySubscriptionId
+            ?: throw IllegalStateException("No active subscription found for userId=$userId")
+        if (!sub.inTrial) throw IllegalStateException("Subscription is not in trial for userId=$userId")
+        val now = Clock.System.now().epochSeconds
+        withContext(Dispatchers.IO) {
+            http.patch("$RAZORPAY_API/subscriptions/$subscriptionId") {
+                header(HttpHeaders.Authorization, authHeader)
+                contentType(ContentType.Application.Json)
+                setBody("""{"start_at":$now}""")
+            }
+        }
+        billingRepository.setLimitHitAt(userId, null)
+        log.info("Trial activated immediately for userId={} sub={}", userId, subscriptionId)
+    }
 
     // ─── Cancel subscription ───────────────────────────────────────────────────
 

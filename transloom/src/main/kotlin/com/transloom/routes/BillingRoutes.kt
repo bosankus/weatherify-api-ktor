@@ -44,7 +44,8 @@ data class SubscriptionResponse(
     val stringLimit: Int?,
     val maxProjects: Int,
     val cancelAtPeriodEnd: Boolean,
-    val currentPeriodEnd: String?
+    val currentPeriodEnd: String?,
+    val trialLimitHit: Boolean
 )
 
 @Serializable
@@ -89,7 +90,8 @@ fun Route.configureBillingRoutes(
                     stringLimit = plan.stringLimit,
                     maxProjects = if (plan.maxProjects == Int.MAX_VALUE) -1 else plan.maxProjects,
                     cancelAtPeriodEnd = sub.cancelAtPeriodEnd,
-                    currentPeriodEnd = sub.currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString()
+                    currentPeriodEnd = sub.currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString(),
+                    trialLimitHit = sub.inTrial && sub.limitHitAt != null
                 )
             )
         }
@@ -110,6 +112,24 @@ fun Route.configureBillingRoutes(
                 return@post call.respond(HttpStatusCode.InternalServerError, ApiError(it.message ?: "Razorpay error"))
             }
             call.respond(SubscribeResponse(init.subscriptionId, init.keyId, init.plan.name))
+        }
+
+        // Ends the trial immediately and starts the paid plan now (Razorpay PATCH start_at).
+        // Dashboard shows this option when GET /subscription returns trialLimitHit = true.
+        post("/activate-now") {
+            val userId = call.userId() ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            runCatching { razorpayService.activateNow(userId) }.getOrElse {
+                log.warn("activate-now failed for userId={}: {}", userId, it.message)
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError(it.message ?: "Activation failed"))
+            }
+            call.respond(mapOf("status" to "Plan activated — billing starts now"))
+        }
+
+        // Dismisses the trial limit prompt without starting the plan (translation stays paused).
+        post("/dismiss-limit") {
+            val userId = call.userId() ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            billingRepository.setLimitHitAt(userId, null)
+            call.respond(mapOf("status" to "Dismissed"))
         }
 
         post("/cancel") {

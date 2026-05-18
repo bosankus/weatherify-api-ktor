@@ -13,6 +13,7 @@ import com.transloom.repository.mongo.*
 import com.transloom.routes.*
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
+import com.transloom.services.PipelineEventBus
 import com.transloom.services.RazorpayBillingService
 import com.transloom.services.TranslationService
 import domain.service.RefundService
@@ -47,8 +48,9 @@ fun Application.configureTransloom(refundService: RefundService) {
     val razorpayService = RazorpayBillingService(billingRepository)
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
+    val pipelineEventBus = PipelineEventBus()
     val pipeline = TranslationPipeline(
-        githubService, translationService, billingService, projectRepository, translationRepository
+        githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus
     )
 
     // Central webhook dispatcher — register all Razorpay event handlers here.
@@ -95,7 +97,7 @@ fun Application.configureTransloom(refundService: RefundService) {
         configureRazorpayWebhook(webhookDispatcher)
         configurePublicCheckoutRoute(razorpayService, userRepository, jwtSecret)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository)
+            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository)
         }

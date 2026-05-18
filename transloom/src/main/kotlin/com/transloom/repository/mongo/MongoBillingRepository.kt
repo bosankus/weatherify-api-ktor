@@ -72,9 +72,25 @@ class MongoBillingRepository(
                 Updates.unset("razorpaySubscriptionId"),
                 Updates.set("cancelAtPeriodEnd", false),
                 Updates.unset("currentPeriodEnd"),
+                Updates.unset("limitHitAt"),
                 Updates.set("updatedAt", System.currentTimeMillis())
             )
         )
+    }
+
+    override suspend fun setLimitHitAt(userId: String, at: Instant?) {
+        val update = if (at != null) {
+            Updates.combine(
+                Updates.set("limitHitAt", at.toEpochMilliseconds()),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        } else {
+            Updates.combine(
+                Updates.unset("limitHitAt"),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        }
+        subscriptions.updateOne(eq("userId", userId), update)
     }
 
     override suspend fun findByRazorpaySubscription(subscriptionId: String): String? =
@@ -168,13 +184,16 @@ class MongoBillingRepository(
         val plan = runCatching { BillingPlan.valueOf(getString("plan") ?: "") }.getOrElse { BillingPlan.FREE }
         val periodEnd = (get("currentPeriodEnd") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
+        val limitHitAt = (get("limitHitAt") as? Number)?.toLong()
+            ?.let { Instant.fromEpochMilliseconds(it) }
         return Subscription(
             userId = getString("userId"),
             plan = plan,
             razorpayCustomerId = getString("razorpayCustomerId"),
             razorpaySubscriptionId = getString("razorpaySubscriptionId"),
             cancelAtPeriodEnd = getBoolean("cancelAtPeriodEnd", false),
-            currentPeriodEnd = periodEnd
+            currentPeriodEnd = periodEnd,
+            limitHitAt = limitHitAt
         )
     }
 }

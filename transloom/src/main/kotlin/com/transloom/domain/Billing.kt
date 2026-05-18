@@ -28,8 +28,13 @@ data class Subscription(
     val razorpayCustomerId: String?,
     val razorpaySubscriptionId: String?,
     val cancelAtPeriodEnd: Boolean,
-    val currentPeriodEnd: Instant?
-)
+    val currentPeriodEnd: Instant?,
+    val limitHitAt: Instant? = null
+) {
+    val inTrial: Boolean get() =
+        plan != BillingPlan.FREE && plan != BillingPlan.ENTERPRISE &&
+        razorpaySubscriptionId != null && currentPeriodEnd == null
+}
 
 data class InvoiceRecord(
     val id: String,

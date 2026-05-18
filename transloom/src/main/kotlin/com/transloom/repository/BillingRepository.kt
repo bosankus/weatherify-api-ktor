@@ -21,6 +21,8 @@ interface BillingRepository {
 
     suspend fun downgradeToFree(razorpaySubscriptionId: String)
 
+    suspend fun setLimitHitAt(userId: String, at: Instant?)
+
     suspend fun findByRazorpaySubscription(subscriptionId: String): String?
 
     suspend fun getUsage(userId: String): UsageStats

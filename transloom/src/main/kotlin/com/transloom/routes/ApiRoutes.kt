@@ -1,5 +1,7 @@
 package com.transloom.routes
 
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
 import com.transloom.domain.CreateProjectInput
 import com.transloom.domain.Translation
 import com.transloom.repository.GlossaryRepository
@@ -9,6 +11,7 @@ import com.transloom.repository.UserRepository
 import com.transloom.model.*
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
+import com.transloom.services.PipelineEventBus
 import com.transloom.services.StringParserService
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -17,7 +20,10 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
@@ -30,7 +36,9 @@ fun Route.configureApiRoutes(
     githubService: GitHubService,
     projectRepository: ProjectRepository,
     userRepository: UserRepository,
-    translationRepository: TranslationRepository
+    translationRepository: TranslationRepository,
+    pipelineEventBus: PipelineEventBus,
+    jwtSecret: String
 ) {
     val glossaryRepository: GlossaryRepository by inject()
 
@@ -332,6 +340,51 @@ fun Route.configureApiRoutes(
                 val deleted = glossaryRepository.deactivate(entryId, projectId)
                 if (deleted) call.respond(HttpStatusCode.OK, mapOf("status" to "Glossary entry removed"))
                 else call.respond(HttpStatusCode.NotFound, ApiError("Entry not found"))
+            }
+        }
+
+        // --- Pipeline Activity ---
+
+        // Returns last 20 pipeline runs for the authenticated user (page-load snapshot).
+        get("/pipeline/runs") {
+            val userId = call.userId()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            call.respond(mapOf("runs" to pipelineEventBus.recentRuns(userId)))
+        }
+
+        // SSE stream of real-time pipeline events. EventSource can't send Authorization headers,
+        // so the JWT is accepted as ?token= and verified manually here.
+        get("/pipeline/events") {
+            val token = call.request.queryParameters["token"]
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Missing token"))
+            val userId = runCatching {
+                JWT.require(Algorithm.HMAC256(jwtSecret))
+                    .withAudience("transloom-app").withIssuer("transloom-backend")
+                    .build().verify(token).getClaim("userId")?.asString()
+                    ?.let { UUID.fromString(it).toString() }
+            }.getOrNull() ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+
+            call.response.header(HttpHeaders.CacheControl, "no-cache, no-transform")
+            call.response.header(HttpHeaders.Connection, "keep-alive")
+            call.response.header("X-Accel-Buffering", "no")
+            call.respondBytesWriter(contentType = ContentType.parse("text/event-stream; charset=utf-8")) {
+                coroutineScope {
+                    val heartbeat = launch {
+                        while (isActive) {
+                            delay(25_000)
+                            writeStringUtf8(": ping\n\n")
+                            flush()
+                        }
+                    }
+                    try {
+                        pipelineEventBus.eventsFor(userId).collect { json ->
+                            writeStringUtf8("data: $json\n\n")
+                            flush()
+                        }
+                    } finally {
+                        heartbeat.cancel()
+                    }
+                }
             }
         }
 

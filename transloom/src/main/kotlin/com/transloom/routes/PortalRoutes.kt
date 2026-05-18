@@ -633,6 +633,10 @@ private fun HTML.dashboardApp() {
                 nav("sidebar-nav") {
                     a("/transloom/app") { classes = setOf("nav-item","active"); +"⬡ Dashboard" }
                     a("#") { attributes["onclick"] = "document.getElementById('projects').scrollIntoView({behavior:'smooth'});return false;"; classes = setOf("nav-item"); +"◻ Projects" }
+                    a("#") { attributes["onclick"] = "document.getElementById('activity').scrollIntoView({behavior:'smooth'});return false;"; classes = setOf("nav-item")
+                        +"⟳ Activity "
+                        span("nav-badge activity-badge") { id = "activity-badge" }
+                    }
                     a("/transloom/review-portal") {
                         classes = setOf("nav-item")
                         +"⚑ Review "
@@ -656,6 +660,22 @@ private fun HTML.dashboardApp() {
                     statCard("pending-review", "Pending review", "—", yellow = true)
                     statCard("active-langs", "Active languages", "—")
                     statCard("total-projects", "Projects", "—")
+                }
+
+                div("content-section") {
+                    id = "activity"
+                    div("section-header") {
+                        h2 { +"Pipeline Activity" }
+                        span("activity-live") { id = "activity-live-dot" }
+                    }
+                    div("run-list") { id = "run-list"
+                        div("activity-empty") { id = "activity-empty"
+                            div("activity-empty-icon") {
+                                unsafe { +"""<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>""" }
+                            }
+                            p { +"No pipeline runs yet. Push a commit to see activity here." }
+                        }
+                    }
                 }
 
                 div("content-section") {
@@ -949,6 +969,53 @@ private const val DASHBOARD_CSS = """
 .gl-target{color:var(--accent);flex:1}
 .btn-gl-delete{background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:4px 8px;border-radius:var(--radius-sm);transition:all .15s;margin-left:auto}
 .btn-gl-delete:hover{color:var(--red);background:rgba(255,77,79,.1)}
+/* ─── Pipeline Activity ───────────────────────────────────────────────────── */
+.activity-live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)}
+.activity-live::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(0,229,160,.4);animation:livePulse 2s infinite}
+@keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(0,229,160,.5)}70%{box-shadow:0 0 0 8px rgba(0,229,160,0)}100%{box-shadow:0 0 0 0 rgba(0,229,160,0)}}
+.activity-badge{background:rgba(0,229,160,.15);color:var(--accent);display:none}
+.run-list{display:flex;flex-direction:column;gap:12px}
+.activity-empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:40px 24px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);color:var(--text-muted);font-size:13px;text-align:center}
+.activity-empty-icon{color:var(--text-muted);opacity:.5}
+.run-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:border-color .25s}
+.run-card.run-active{border-color:rgba(0,229,160,.3);box-shadow:0 0 0 1px rgba(0,229,160,.1) inset}
+.run-card.run-error{border-color:rgba(255,77,79,.25)}
+.run-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);gap:12px}
+.run-repo{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run-meta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);flex-shrink:0}
+.run-commit{font-family:monospace;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;color:var(--text-dim)}
+.run-branch{color:var(--text-muted)}
+.run-ago{color:var(--text-muted)}
+.run-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.run-status-dot.active{background:var(--accent);animation:livePulse 1.8s infinite}
+.run-status-dot.done{background:var(--accent)}
+.run-status-dot.error{background:var(--red)}
+.run-steps{padding:12px 18px;display:flex;flex-direction:column;gap:0}
+.step-row{display:flex;align-items:center;gap:12px;padding:7px 0;position:relative}
+.step-row:not(:last-child)::after{content:'';position:absolute;left:11px;top:28px;width:1px;height:calc(100% - 10px);background:var(--border);z-index:0}
+.step-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;position:relative;z-index:1;transition:all .3s ease}
+.step-icon.pending{background:var(--surface2);border:1.5px solid var(--border);color:var(--text-muted)}
+.step-icon.running{background:rgba(0,229,160,.12);border:1.5px solid rgba(0,229,160,.4);color:var(--accent)}
+.step-icon.done{background:rgba(0,229,160,.15);border:1.5px solid rgba(0,229,160,.5);color:var(--accent)}
+.step-icon.error{background:rgba(255,77,79,.12);border:1.5px solid rgba(255,77,79,.4);color:var(--red)}
+.step-icon.skipped{background:var(--surface2);border:1.5px solid var(--border);color:var(--text-muted);opacity:.5}
+.step-spin{animation:spin .9s linear infinite}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.step-body{flex:1;display:flex;align-items:center;justify-content:space-between;min-width:0}
+.step-label{font-size:13px;transition:color .2s}
+.step-label.running{color:var(--text);font-weight:500}
+.step-label.done{color:var(--text-dim)}
+.step-label.error{color:var(--red)}
+.step-label.skipped{color:var(--text-muted);opacity:.6}
+.step-label.pending{color:var(--text-muted)}
+.step-detail{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;text-align:right}
+.step-detail.done{color:var(--text-dim)}
+.step-detail.error{color:var(--red)}
+.run-footer{padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.pr-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);font-weight:500}
+.pr-link:hover{text-decoration:underline}
+.run-error-msg{font-size:12px;color:var(--red)}
+.run-duration{font-size:12px;color:var(--text-muted)}
 .ob-guide{background:var(--surface);border:1px solid rgba(0,229,160,.2);border-radius:var(--radius);padding:32px}
 .ob-intro{margin-bottom:28px}
 .ob-intro h3{font-size:18px;font-weight:700;margin-bottom:6px}
@@ -1283,7 +1350,123 @@ async function deleteGlossaryEntry(entryId){
 
 const payload=jwtPayload(token);
 document.getElementById('user-chip').textContent=payload.username?'@'+payload.username:'Logged in';
-loadStats();loadProjects();loadBilling();
+
+// ─── Pipeline Activity ─────────────────────────────────────────────────────
+
+const STEP_ORDER=['WEBHOOK_RECEIVED','FETCHING_STRINGS','DETECTING_CHANGES','BILLING_CHECK','TRANSLATING','CREATING_PR'];
+const STEP_ICONS={
+  pending:'<svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  running:'<svg class="step-spin" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M2.5 9.5l1.4-1.4M8.1 3.9l1.4-1.4"/></svg>',
+  done:'<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 8.5 2.5"/></svg>',
+  error:'<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/></svg>',
+  skipped:'<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="5" x2="8" y2="5"/></svg>'
+};
+
+// runId -> { repo, branch, commitShort, startedAt, finishedAt, steps:{id->{status,detail}}, prUrl, error }
+const runState={};
+
+function timeAgo(ms){const d=(Date.now()-ms)/1e3;if(d<60)return 'just now';if(d<3600)return Math.floor(d/60)+'m ago';if(d<86400)return Math.floor(d/3600)+'h ago';return Math.floor(d/86400)+'d ago';}
+function runDuration(s,e){const sec=Math.round((e-s)/1e3);if(sec<60)return sec+'s';return Math.floor(sec/60)+'m '+sec%60+'s';}
+
+function buildStepHtml(id,st,label){
+  const s=st||{status:'pending',detail:null};
+  const icon=STEP_ICONS[s.status]||STEP_ICONS.pending;
+  const detail=s.detail?('<span class="step-detail '+esc(s.status)+'">'+esc(s.detail)+'</span>'):'';
+  return '<div class="step-row"><div class="step-icon '+esc(s.status)+'">'+icon+'</div>'
+    +'<div class="step-body"><span class="step-label '+esc(s.status)+'">'+esc(label)+'</span>'+detail+'</div></div>';
+}
+
+function buildRunHtml(runId){
+  const run=runState[runId];if(!run)return '';
+  const isActive=!run.finishedAt,hasError=!!run.error;
+  const steps=STEP_ORDER.map(id=>buildStepHtml(id,run.steps[id],run.stepLabels[id]||id)).join('');
+  let footer='',dur='';
+  if(run.prUrl){
+    footer='<a class="pr-link" href="'+esc(run.prUrl)+'" target="_blank" rel="noopener">'
+      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>'
+      +' View pull request</a>';
+  }else if(run.error){
+    footer='<span class="run-error-msg">&#9888; '+esc(run.error)+'</span>';
+  }else if(!isActive){
+    footer='<span class="run-duration">No changes found</span>';
+  }
+  if(run.finishedAt) dur='<span class="run-duration">'+runDuration(run.startedAt,run.finishedAt)+'</span>';
+  const footHtml=(footer||dur)?('<div class="run-footer">'+footer+dur+'</div>'):'';
+  const dot=isActive?'active':(hasError?'error':'done');
+  const cardCls='run-card'+(isActive?' run-active':'')+(hasError?' run-error':'');
+  return '<div class="'+cardCls+'" id="rc-'+runId+'">'
+    +'<div class="run-header"><div class="run-repo">'+esc(run.repo)+'</div>'
+    +'<div class="run-meta">'
+    +'<span class="run-branch">'+esc(run.branch)+'</span>'
+    +'<span class="run-commit">'+esc(run.commitShort)+'</span>'
+    +'<span class="run-ago">'+timeAgo(run.startedAt)+'</span>'
+    +'<div class="run-status-dot '+dot+'"></div>'
+    +'</div></div>'
+    +'<div class="run-steps">'+steps+'</div>'
+    +footHtml+'</div>';
+}
+
+function renderRunCard(runId){
+  const html=buildRunHtml(runId);if(!html)return;
+  const existing=document.getElementById('rc-'+runId);
+  if(existing){existing.outerHTML=html;}
+  else{
+    document.getElementById('activity-empty')?.remove();
+    document.getElementById('run-list').insertAdjacentHTML('afterbegin',html);
+  }
+}
+
+function applySnapshot(snapshot){
+  const run=runState[snapshot.runId]||{};
+  Object.assign(run,{repo:snapshot.repo,branch:snapshot.branch,commitShort:snapshot.commitShort,
+    startedAt:snapshot.startedAt,finishedAt:snapshot.finishedAt||null,
+    prUrl:snapshot.prUrl||null,error:snapshot.error||null,steps:{},stepLabels:{}});
+  (snapshot.steps||[]).forEach(function(s){run.steps[s.id]={status:s.status,detail:s.detail||null};run.stepLabels[s.id]=s.label;});
+  runState[snapshot.runId]=run;
+}
+
+function updateActivityBadge(){
+  const active=Object.values(runState).filter(function(r){return !r.finishedAt;}).length;
+  const badge=document.getElementById('activity-badge');
+  if(active>0){badge.textContent=active;badge.style.display='inline';}else{badge.style.display='none';}
+  const dot=document.getElementById('activity-live-dot');
+  if(dot)dot.style.display=active>0?'inline-flex':'none';
+}
+
+function handlePipelineEvent(evt){
+  const d=JSON.parse(evt.data);
+  if(d.type==='start'&&d.snapshot){
+    applySnapshot(d.snapshot);renderRunCard(d.runId);updateActivityBadge();
+    document.getElementById('activity').scrollIntoView({behavior:'smooth',block:'nearest'});
+  }else if(d.type==='step'){
+    const run=runState[d.runId];if(!run)return;
+    run.steps[d.stepId]={status:d.status,detail:d.detail||null};
+    renderRunCard(d.runId);updateActivityBadge();
+  }else if(d.type==='finish'){
+    const run=runState[d.runId];if(!run)return;
+    run.finishedAt=d.finishedAt||Date.now();
+    if(d.prUrl)run.prUrl=d.prUrl;if(d.error)run.error=d.error;
+    renderRunCard(d.runId);updateActivityBadge();loadStats();
+  }
+}
+
+async function loadPipelineRuns(){
+  const res=await api('/pipeline/runs');if(!res||!res.ok)return;
+  const data=await res.json();
+  const runs=(data.runs||[]).slice(0,10);if(!runs.length)return;
+  document.getElementById('activity-empty')?.remove();
+  runs.forEach(function(s){applySnapshot(s);renderRunCard(s.runId);});
+  updateActivityBadge();
+}
+
+function connectPipelineSSE(){
+  if(!token)return;
+  const es=new EventSource(BASE+'/pipeline/events?token='+encodeURIComponent(token));
+  es.onmessage=handlePipelineEvent;
+  es.onerror=function(){es.close();setTimeout(connectPipelineSSE,5000);};
+}
+
+loadStats();loadProjects();loadBilling();loadPipelineRuns();connectPipelineSSE();
 """.trimIndent()
 
 // ─── Review Portal ────────────────────────────────────────────────────────────

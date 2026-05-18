@@ -123,7 +123,8 @@ fun Application.module() {
     )
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
-    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository)
+    val pipelineEventBus = com.transloom.services.PipelineEventBus()
+    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus)
 
     jobQueue.startWorker { payload ->
         val projectUuid = runCatching { java.util.UUID.fromString(payload.projectId) }.getOrElse {
@@ -179,7 +180,7 @@ fun Application.module() {
         configureRazorpayWebhook(webhookDispatcher)
         configurePublicCheckoutRoute(razorpayService, userRepository, jwtSecret)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository)
+            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository)
         }
