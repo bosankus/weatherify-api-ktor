@@ -12,7 +12,9 @@ data class PipelineRunState(
     val finishedAt: Long? = null,
     val steps: List<PipelineStepState>,
     val prUrl: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val projectId: String? = null,
+    val retriedFromRunId: String? = null
 )
 
 @Serializable

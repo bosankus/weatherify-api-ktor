@@ -34,6 +34,7 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
             }
             call.respondHtml { dashboardApp() }
         }
+        get("/billing") { call.respondHtml { billingApp() } }
         get("/review-portal") { call.respondHtml { reviewPortal() } }
         get("/favicon.svg") {
             call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
@@ -123,20 +124,6 @@ private fun FlowContent.featureCard(icon: String, title: String, desc: String, e
         div("feature-icon") { unsafe { +icon } }
         h3 { +title }
         p { +desc }
-    }
-}
-
-private fun FlowContent.planTier(name: String, price: String, desc: String, planKey: String) {
-    div("plan-tier") {
-        div("plan-tier-info") {
-            strong { +name }
-            span("plan-price") { +price }
-            span("plan-desc") { +desc }
-        }
-        button(classes = "btn btn-primary tier-btn") {
-            attributes["onclick"] = "subscribe('$planKey')"
-            +"Select"
-        }
     }
 }
 
@@ -239,23 +226,6 @@ private fun HTML.landingPage() {
                             }
                         }
                     }
-                }
-            }
-        }
-
-        section("stats-band") {
-            div("stats-band-inner") {
-                div("stat-tile fade-up") {
-                    p("stat-num") { +"<60s" }
-                    p("stat-cap") { +"from commit to pull request" }
-                }
-                div("stat-tile fade-up d1") {
-                    p("stat-num") { +"0" }
-                    p("stat-cap") { +"config files to write" }
-                }
-                div("stat-tile fade-up d2") {
-                    p("stat-num") { +"100%" }
-                    p("stat-cap") { +"placeholders preserved" }
                 }
             }
         }
@@ -510,11 +480,6 @@ nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.78);backdrop-filter
 .tr-check{color:var(--accent);font-weight:700;font-size:13px}
 .demo-arrow{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--accent);opacity:.7}
 .demo-arrow-label{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:var(--text-muted)}
-.stats-band{padding:56px 24px;background:var(--surface2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-.stats-band-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:24px;text-align:center}
-.stat-tile{padding:8px 16px}
-.stat-num{font-size:clamp(32px,4.5vw,42px);font-weight:800;background:linear-gradient(135deg,#00F5B0 0%,#00B894 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-1.5px;line-height:1;margin-bottom:8px}
-.stat-cap{font-size:13px;color:var(--text-muted);letter-spacing:.2px}
 section{padding:80px 24px}
 .section-inner{max-width:1100px;margin:0 auto}
 .section-label{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px}
@@ -643,7 +608,7 @@ private fun HTML.dashboardApp() {
                         span("nav-badge review-badge") { id = "review-count"; +"0" }
                     }
                     a("#") { attributes["onclick"] = "document.getElementById('glossary').scrollIntoView({behavior:'smooth'});return false;"; classes = setOf("nav-item"); +"📖 Glossary" }
-                    a("#") { attributes["onclick"] = "document.getElementById('billing').scrollIntoView({behavior:'smooth'});return false;"; classes = setOf("nav-item"); +"◈ Billing" }
+                    a("/transloom/billing") { classes = setOf("nav-item"); +"◈ Billing" }
                 }
                 div("sidebar-footer") {
                     div("user-chip") { id = "user-chip"; +"Loading..." }
@@ -666,7 +631,16 @@ private fun HTML.dashboardApp() {
                     id = "activity"
                     div("section-header") {
                         h2 { +"Pipeline Activity" }
-                        span("activity-live") { id = "activity-live-dot" }
+                        div {
+                            style = "display:flex;align-items:center;gap:8px"
+                            span("activity-live") { id = "activity-live-dot" }
+                            span {
+                                id = "sse-status"
+                                classes = setOf("sse-status", "connected")
+                                div { classes = setOf("sse-status-dot") }
+                                span { id = "sse-status-text"; +"Live" }
+                            }
+                        }
                     }
                     div("run-list") { id = "run-list"
                         div("activity-empty") { id = "activity-empty"
@@ -717,62 +691,6 @@ private fun HTML.dashboardApp() {
                     div("glossary-list") { id = "glossary-list"; div("empty-state") { +"Select a project to view its glossary." } }
                 }
 
-                div("content-section") {
-                    id = "billing"
-                    div("section-header") { h2 { +"Billing" } }
-
-                    // Plan card + usage
-                    div("billing-grid") {
-                        div("plan-card card") {
-                            div("plan-header") {
-                                div {
-                                    p("plan-label") { +"Current Plan" }
-                                    p("plan-name") { id = "plan-name"; +"—" }
-                                }
-                                button(classes = "btn btn-primary upgrade-btn") {
-                                    id = "upgrade-btn"
-                                    attributes["onclick"] = "upgradePlan()"
-                                    +"Upgrade"
-                                }
-                            }
-                            div("usage-section") {
-                                div("usage-row") {
-                                    span { +"Strings this month" }
-                                    span { id = "usage-text"; +"—" }
-                                }
-                                div("usage-bar-track") { div("usage-bar-fill") { id = "usage-bar" } }
-                            }
-                            div("plan-actions") {
-                                id = "plan-actions"
-                                a("#") {
-                                    id = "cancel-link"
-                                    attributes["onclick"] = "cancelSubscription(); return false;"
-                                    +"Cancel subscription →"
-                                }
-                            }
-                            // F5: Historical Usage Container
-                            div {
-                                id = "historical-usage"
-                                style = "margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border);"
-                            }
-                        }
-
-                        div("plans-compare card") {
-                            p("plan-label") { +"Plans" }
-                            div("plan-tiers") {
-                                planTier("Free","₹0/mo","500 strings · 1 project · 3 languages","FREE")
-                                planTier("Solo","₹499/mo","5,000 strings · 3 projects · All languages","SOLO")
-                                planTier("Team","₹1,999/mo","Unlimited strings · 10 projects · All languages","TEAM")
-                            }
-                        }
-                    }
-
-                    // Invoices
-                    div("section-header invoice-header") {
-                        h3("invoices-title") { +"Invoices" }
-                    }
-                    div("invoice-list") { id = "invoice-list" }
-                }
             }
         }
 
@@ -974,22 +892,33 @@ private const val DASHBOARD_CSS = """
 .activity-live::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(0,229,160,.4);animation:livePulse 2s infinite}
 @keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(0,229,160,.5)}70%{box-shadow:0 0 0 8px rgba(0,229,160,0)}100%{box-shadow:0 0 0 0 rgba(0,229,160,0)}}
 .activity-badge{background:rgba(0,229,160,.15);color:var(--accent);display:none}
+.sse-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;letter-spacing:.5px;padding:3px 10px;border-radius:20px;transition:all .3s}
+.sse-status.connected{background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.2)}
+.sse-status.reconnecting{background:rgba(250,173,20,.1);color:var(--yellow);border:1px solid rgba(250,173,20,.2);animation:ssePulse 1.5s ease-in-out infinite}
+.sse-status.disconnected{background:rgba(255,77,79,.08);color:var(--red);border:1px solid rgba(255,77,79,.2)}
+.sse-status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.sse-status.reconnecting .sse-status-dot{animation:sseDot 1.2s ease-in-out infinite}
+@keyframes ssePulse{0%,100%{opacity:1}50%{opacity:.65}}
+@keyframes sseDot{0%,100%{opacity:.3}50%{opacity:1}}
 .run-list{display:flex;flex-direction:column;gap:12px}
 .activity-empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:40px 24px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);color:var(--text-muted);font-size:13px;text-align:center}
 .activity-empty-icon{color:var(--text-muted);opacity:.5}
 .run-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:border-color .25s}
 .run-card.run-active{border-color:rgba(0,229,160,.3);box-shadow:0 0 0 1px rgba(0,229,160,.1) inset}
 .run-card.run-error{border-color:rgba(255,77,79,.25)}
+.run-card.run-retrying{border-color:rgba(250,173,20,.3);box-shadow:0 0 0 1px rgba(250,173,20,.08) inset}
 .run-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);gap:12px}
 .run-repo{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run-meta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);flex-shrink:0}
 .run-commit{font-family:monospace;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;color:var(--text-dim)}
 .run-branch{color:var(--text-muted)}
-.run-ago{color:var(--text-muted)}
+.run-ago{color:var(--text-muted);font-variant-numeric:tabular-nums}
 .run-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .run-status-dot.active{background:var(--accent);animation:livePulse 1.8s infinite}
 .run-status-dot.done{background:var(--accent)}
 .run-status-dot.error{background:var(--red)}
+.run-status-dot.retrying{background:var(--yellow);animation:livePulse 1.8s infinite}
+.run-retried-badge{font-size:10px;font-weight:700;letter-spacing:.5px;padding:1px 7px;border-radius:10px;background:rgba(250,173,20,.12);color:var(--yellow);border:1px solid rgba(250,173,20,.25);white-space:nowrap}
 .run-steps{padding:12px 18px;display:flex;flex-direction:column;gap:0}
 .step-row{display:flex;align-items:center;gap:12px;padding:7px 0;position:relative}
 .step-row:not(:last-child)::after{content:'';position:absolute;left:11px;top:28px;width:1px;height:calc(100% - 10px);background:var(--border);z-index:0}
@@ -1011,11 +940,15 @@ private const val DASHBOARD_CSS = """
 .step-detail{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;text-align:right}
 .step-detail.done{color:var(--text-dim)}
 .step-detail.error{color:var(--red)}
-.run-footer{padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.run-footer{padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pr-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);font-weight:500}
 .pr-link:hover{text-decoration:underline}
-.run-error-msg{font-size:12px;color:var(--red)}
+.run-error-msg{font-size:12px;color:var(--red);flex:1}
 .run-duration{font-size:12px;color:var(--text-muted)}
+.retry-btn{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:5px 12px;border-radius:var(--radius-sm);background:rgba(255,77,79,.08);color:var(--red);border:1px solid rgba(255,77,79,.25);cursor:pointer;transition:all .15s;flex-shrink:0}
+.retry-btn:hover{background:rgba(255,77,79,.14);border-color:rgba(255,77,79,.4)}
+.retry-btn:disabled{opacity:.5;cursor:not-allowed}
+.retry-btn.retrying{background:rgba(250,173,20,.1);color:var(--yellow);border-color:rgba(250,173,20,.3)}
 .ob-guide{background:var(--surface);border:1px solid rgba(0,229,160,.2);border-radius:var(--radius);padding:32px}
 .ob-intro{margin-bottom:28px}
 .ob-intro h3{font-size:18px;font-weight:700;margin-bottom:6px}
@@ -1118,70 +1051,6 @@ async function loadProjects(){
   sel.innerHTML='<option value="">— Select a project —</option>'+data.projects.map(p=>`<option value="${'$'}{p.id}">${'$'}{esc(p.name)}</option>`).join('');
 }
 
-async function loadBilling(){
-  const [subRes,usageRes,invRes]=await Promise.all([
-    api('/billing/subscription'),api('/billing/usage'),api('/billing/invoices')
-  ]);
-  if(!subRes||!subRes.ok||!usageRes||!usageRes.ok){toast('Failed to load billing info','error');return;}
-
-  const sub=await subRes.json();
-  const usage=await usageRes.json();
-
-  // Fix 23: use displayName from billing/subscription; stats currentPlan returns enum key
-  document.getElementById('plan-name').textContent=sub.displayName||sub.plan;
-
-  // Show/hide upgrade button
-  const upgradeBtn=document.getElementById('upgrade-btn');
-  if(sub.plan==='TEAM'||sub.plan==='ENTERPRISE'){upgradeBtn.style.display='none';}
-
-  // Usage bar
-  if(usage.stringLimit){
-    const pct=Math.min(100,Math.round((usage.stringsTranslated/usage.stringLimit)*100));
-    document.getElementById('usage-bar').style.width=pct+'%';
-    document.getElementById('usage-text').textContent=usage.stringsTranslated+' / '+usage.stringLimit;
-    if(pct>80)document.getElementById('usage-bar').style.background='var(--yellow)';
-  } else {
-    document.getElementById('usage-text').textContent=usage.stringsTranslated+' (unlimited)';
-    document.getElementById('usage-bar').style.width='100%';
-    document.getElementById('usage-bar').style.background='var(--accent-dim)';
-  }
-
-  // Cancel notice
-  if(sub.cancelAtPeriodEnd&&sub.currentPeriodEnd){
-    document.getElementById('plan-actions').innerHTML='<span style="color:var(--yellow);font-size:12px">Cancels on ${'$'}{sub.currentPeriodEnd}</span>';
-  }
-
-  // F5: Historical usage UI
-  const uh=document.getElementById('historical-usage');
-  if(uh) {
-      if(usage.history && usage.history.length>0) {
-          uh.innerHTML = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;font-weight:600;letter-spacing:1px">HISTORICAL USAGE</div>' + 
-            usage.history.map(h=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">
-              <span>${'$'}{esc(h.month)}</span><span style="font-family:monospace">${'$'}{h.count} strings</span>
-            </div>`).join('');
-      } else {
-          uh.innerHTML = '';
-      }
-  }
-
-  // Invoices
-  if(invRes){
-    const invData=await invRes.json();
-    const list=document.getElementById('invoice-list');
-    if(!invData.invoices||invData.invoices.length===0){
-      list.innerHTML='<div style="font-size:13px;color:var(--text-muted);padding:12px 0">No invoices yet.</div>';
-    } else {
-      list.innerHTML=invData.invoices.map(inv=>`
-        <div class="invoice-row">
-          <span>${'$'}{esc(inv.date)}</span>
-          <span style="font-family:monospace;font-size:11px">${'$'}{esc(inv.id)}</span>
-          <span>${'$'}{esc(inv.amount)}</span>
-          <span class="invoice-status-${'$'}{esc(inv.status.toLowerCase())}">${'$'}{esc(inv.status)}</span>
-        </div>`).join('');
-    }
-  }
-}
-
 async function subscribe(plan){
   const res=await api('/billing/subscribe',{method:'POST',body:JSON.stringify({plan})});
   if(!res)return;
@@ -1210,19 +1079,6 @@ async function subscribe(plan){
     toast('Payment failed: '+(r.error&&r.error.description?r.error.description:'Please retry'),'error');
   });
   rzp.open();
-}
-
-async function upgradePlan(){
-  // Open the plans card by scrolling to billing section
-  document.getElementById('billing').scrollIntoView({behavior:'smooth'});
-}
-
-async function cancelSubscription(){
-  if(!confirm('Cancel your subscription? It will remain active until the end of the current billing period.'))return;
-  const res=await api('/billing/cancel',{method:'POST'});
-  if(!res)return;
-  if(res.ok){toast('Subscription will cancel at end of period');loadBilling();}
-  else{const err=await res.json();toast(err.error||'Cancel failed','error');}
 }
 
 function openNewProject(){document.getElementById('modal-backdrop').classList.add('open');}
@@ -1355,19 +1211,36 @@ document.getElementById('user-chip').textContent=payload.username?'@'+payload.us
 
 const STEP_ORDER=['WEBHOOK_RECEIVED','FETCHING_STRINGS','DETECTING_CHANGES','BILLING_CHECK','TRANSLATING','CREATING_PR'];
 const STEP_ICONS={
-  pending:'<svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  pending:'<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
   running:'<svg class="step-spin" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M2.5 9.5l1.4-1.4M8.1 3.9l1.4-1.4"/></svg>',
   done:'<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 8.5 2.5"/></svg>',
   error:'<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/></svg>',
   skipped:'<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="5" x2="8" y2="5"/></svg>'
 };
 
-// runId -> { repo, branch, commitShort, startedAt, finishedAt, steps:{id->{status,detail}}, prUrl, error }
+// runId -> { repo, branch, commitShort, startedAt, finishedAt, steps:{id->{status,detail}},
+//            stepLabels, prUrl, error, projectId, retriedFromRunId, retryPending }
 const runState={};
 
-function timeAgo(ms){const d=(Date.now()-ms)/1e3;if(d<60)return 'just now';if(d<3600)return Math.floor(d/60)+'m ago';if(d<86400)return Math.floor(d/3600)+'h ago';return Math.floor(d/86400)+'d ago';}
+// ── Timestamps ────────────────────────────────────────────────────────────────
+function timeAgo(ms){
+  const d=(Date.now()-ms)/1e3;
+  if(d<5)return 'just now';
+  if(d<60)return Math.floor(d)+'s ago';
+  if(d<3600)return Math.floor(d/60)+'m ago';
+  if(d<86400)return Math.floor(d/3600)+'h ago';
+  return Math.floor(d/86400)+'d ago';
+}
 function runDuration(s,e){const sec=Math.round((e-s)/1e3);if(sec<60)return sec+'s';return Math.floor(sec/60)+'m '+sec%60+'s';}
 
+// Tick timestamps in all visible run cards every 20s without a full re-render
+setInterval(function(){
+  document.querySelectorAll('[data-started]').forEach(function(el){
+    el.textContent=timeAgo(parseInt(el.dataset.started,10));
+  });
+},20000);
+
+// ── Card builders ─────────────────────────────────────────────────────────────
 function buildStepHtml(id,st,label){
   const s=st||{status:'pending',detail:null};
   const icon=STEP_ICONS[s.status]||STEP_ICONS.pending;
@@ -1378,28 +1251,49 @@ function buildStepHtml(id,st,label){
 
 function buildRunHtml(runId){
   const run=runState[runId];if(!run)return '';
-  const isActive=!run.finishedAt,hasError=!!run.error;
+  const isActive=!run.finishedAt;
+  const hasError=!!run.error;
+  const isRetrying=!!run.retryPending;
   const steps=STEP_ORDER.map(id=>buildStepHtml(id,run.steps[id],run.stepLabels[id]||id)).join('');
-  let footer='',dur='';
+
+  // Footer: error + retry button, or PR link, or duration
+  let left='',right='';
   if(run.prUrl){
-    footer='<a class="pr-link" href="'+esc(run.prUrl)+'" target="_blank" rel="noopener">'
+    left='<a class="pr-link" href="'+esc(run.prUrl)+'" target="_blank" rel="noopener">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>'
       +' View pull request</a>';
-  }else if(run.error){
-    footer='<span class="run-error-msg">&#9888; '+esc(run.error)+'</span>';
-  }else if(!isActive){
-    footer='<span class="run-duration">No changes found</span>';
+  } else if(hasError&&!isRetrying){
+    left='<span class="run-error-msg">&#9888; '+esc(run.error)+'</span>';
+    left+='<button class="retry-btn" onclick="retriggerRun(\''+runId+'\')">'
+      +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>'
+      +' Retry</button>';
+  } else if(hasError&&isRetrying){
+    left='<span class="run-error-msg">&#9888; '+esc(run.error)+'</span>';
+    left+='<button class="retry-btn retrying" disabled>'
+      +'<svg class="step-spin" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M2.5 9.5l1.4-1.4M8.1 3.9l1.4-1.4"/></svg>'
+      +' Retrying…</button>';
+  } else if(!isActive){
+    left='<span class="run-duration">No changes found</span>';
   }
-  if(run.finishedAt) dur='<span class="run-duration">'+runDuration(run.startedAt,run.finishedAt)+'</span>';
-  const footHtml=(footer||dur)?('<div class="run-footer">'+footer+dur+'</div>'):'';
-  const dot=isActive?'active':(hasError?'error':'done');
-  const cardCls='run-card'+(isActive?' run-active':'')+(hasError?' run-error':'');
+  if(run.finishedAt) right='<span class="run-duration">'+runDuration(run.startedAt,run.finishedAt)+'</span>';
+
+  const footHtml=(left||right)?('<div class="run-footer">'+left+right+'</div>'):'';
+
+  const dot=isActive?'active':(isRetrying?'retrying':(hasError?'error':'done'));
+  let cardCls='run-card';
+  if(isActive)cardCls+=' run-active';
+  else if(isRetrying)cardCls+=' run-retrying';
+  else if(hasError)cardCls+=' run-error';
+
+  const retriedBadge=run.retriedFromRunId
+    ?'<span class="run-retried-badge">↺ Retry</span>' : '';
+
   return '<div class="'+cardCls+'" id="rc-'+runId+'">'
-    +'<div class="run-header"><div class="run-repo">'+esc(run.repo)+'</div>'
+    +'<div class="run-header"><div class="run-repo">'+esc(run.repo)+' '+retriedBadge+'</div>'
     +'<div class="run-meta">'
     +'<span class="run-branch">'+esc(run.branch)+'</span>'
     +'<span class="run-commit">'+esc(run.commitShort)+'</span>'
-    +'<span class="run-ago">'+timeAgo(run.startedAt)+'</span>'
+    +'<span class="run-ago" data-started="'+run.startedAt+'">'+timeAgo(run.startedAt)+'</span>'
     +'<div class="run-status-dot '+dot+'"></div>'
     +'</div></div>'
     +'<div class="run-steps">'+steps+'</div>'
@@ -1417,37 +1311,123 @@ function renderRunCard(runId){
 }
 
 function applySnapshot(snapshot){
-  const run=runState[snapshot.runId]||{};
-  Object.assign(run,{repo:snapshot.repo,branch:snapshot.branch,commitShort:snapshot.commitShort,
+  const run=runState[snapshot.runId]||{steps:{},stepLabels:{}};
+  Object.assign(run,{
+    repo:snapshot.repo,branch:snapshot.branch,commitShort:snapshot.commitShort,
     startedAt:snapshot.startedAt,finishedAt:snapshot.finishedAt||null,
-    prUrl:snapshot.prUrl||null,error:snapshot.error||null,steps:{},stepLabels:{}});
-  (snapshot.steps||[]).forEach(function(s){run.steps[s.id]={status:s.status,detail:s.detail||null};run.stepLabels[s.id]=s.label;});
+    prUrl:snapshot.prUrl||null,error:snapshot.error||null,
+    projectId:snapshot.projectId||null,retriedFromRunId:snapshot.retriedFromRunId||null
+  });
+  if(!run.steps)run.steps={};
+  if(!run.stepLabels)run.stepLabels={};
+  (snapshot.steps||[]).forEach(function(s){
+    run.steps[s.id]={status:s.status,detail:s.detail||null};
+    run.stepLabels[s.id]=s.label;
+  });
   runState[snapshot.runId]=run;
 }
 
 function updateActivityBadge(){
   const active=Object.values(runState).filter(function(r){return !r.finishedAt;}).length;
   const badge=document.getElementById('activity-badge');
-  if(active>0){badge.textContent=active;badge.style.display='inline';}else{badge.style.display='none';}
+  if(badge){if(active>0){badge.textContent=active;badge.style.display='inline';}else{badge.style.display='none';}}
   const dot=document.getElementById('activity-live-dot');
   if(dot)dot.style.display=active>0?'inline-flex':'none';
 }
 
-function handlePipelineEvent(evt){
-  const d=JSON.parse(evt.data);
-  if(d.type==='start'&&d.snapshot){
-    applySnapshot(d.snapshot);renderRunCard(d.runId);updateActivityBadge();
+// ── Smart scroll: only auto-scroll when user hasn't scrolled past first card ──
+let userViewedHistory=false;
+function maybeScrollToActivity(){
+  const list=document.getElementById('run-list');
+  if(!list)return;
+  const firstCard=list.querySelector('.run-card');
+  if(!firstCard)return;
+  const rect=firstCard.getBoundingClientRect();
+  // Consider user "inspecting history" if the first card is already fully visible
+  // or if they have scrolled the activity section out of view upward
+  if(rect.top>0&&rect.top<window.innerHeight*0.6){return;} // first card visible — no scroll
+  if(!userViewedHistory){
     document.getElementById('activity').scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+}
+document.addEventListener('scroll',function(){userViewedHistory=true;},{once:true,passive:true});
+
+// ── Handle incoming SSE events ────────────────────────────────────────────────
+function handlePipelineEvent(evt){
+  // Ignore heartbeat comments
+  if(!evt.data||evt.data.trim()==='')return;
+  let d;try{d=JSON.parse(evt.data);}catch{return;}
+
+  if(d.type==='start'&&d.snapshot){
+    applySnapshot(d.snapshot);
+    // If this is a retry run, mark the parent as retried (clear retryPending)
+    if(d.snapshot.retriedFromRunId){
+      const parent=runState[d.snapshot.retriedFromRunId];
+      if(parent){parent.retryPending=false;renderRunCard(d.snapshot.retriedFromRunId);}
+    }
+    renderRunCard(d.runId);updateActivityBadge();maybeScrollToActivity();
   }else if(d.type==='step'){
     const run=runState[d.runId];if(!run)return;
+    if(!run.steps)run.steps={};
     run.steps[d.stepId]={status:d.status,detail:d.detail||null};
     renderRunCard(d.runId);updateActivityBadge();
   }else if(d.type==='finish'){
     const run=runState[d.runId];if(!run)return;
     run.finishedAt=d.finishedAt||Date.now();
     if(d.prUrl)run.prUrl=d.prUrl;if(d.error)run.error=d.error;
+    run.retryPending=false;
     renderRunCard(d.runId);updateActivityBadge();loadStats();
   }
+}
+
+// ── Retrigger a failed run ────────────────────────────────────────────────────
+async function retriggerRun(runId){
+  const run=runState[runId];
+  if(!run||run.retryPending)return;
+  run.retryPending=true;
+  renderRunCard(runId); // show "Retrying…" button state immediately
+
+  const res=await api('/pipeline/runs/'+encodeURIComponent(runId)+'/retry',{method:'POST'});
+  if(!res||!res.ok){
+    run.retryPending=false;
+    renderRunCard(runId);
+    toast('Failed to queue retry — please try again','error');
+    return;
+  }
+  toast('Retry queued — watching for new run…');
+  // The SSE "start" event for the new run will arrive shortly and clear retryPending via handlePipelineEvent
+}
+
+// ── SSE connection with exponential-backoff reconnect ─────────────────────────
+let sseBackoff=2000;
+let sseInstance=null;
+
+function setSseStatus(state,text){
+  const el=document.getElementById('sse-status');
+  const txt=document.getElementById('sse-status-text');
+  if(!el)return;
+  el.className='sse-status '+state;
+  if(txt)txt.textContent=text;
+}
+
+function connectPipelineSSE(){
+  if(!token)return;
+  if(sseInstance){try{sseInstance.close();}catch(e){}}
+  const es=new EventSource(BASE+'/pipeline/events?token='+encodeURIComponent(token));
+  sseInstance=es;
+
+  es.onopen=function(){
+    sseBackoff=2000;
+    setSseStatus('connected','Live');
+  };
+  es.onmessage=handlePipelineEvent;
+  es.onerror=function(){
+    es.close();
+    sseInstance=null;
+    setSseStatus('reconnecting','Reconnecting…');
+    setTimeout(connectPipelineSSE,sseBackoff);
+    sseBackoff=Math.min(sseBackoff*2,30000);
+  };
 }
 
 async function loadPipelineRuns(){
@@ -1459,15 +1439,521 @@ async function loadPipelineRuns(){
   updateActivityBadge();
 }
 
-function connectPipelineSSE(){
-  if(!token)return;
-  const es=new EventSource(BASE+'/pipeline/events?token='+encodeURIComponent(token));
-  es.onmessage=handlePipelineEvent;
-  es.onerror=function(){es.close();setTimeout(connectPipelineSSE,5000);};
+loadStats();loadProjects();loadPipelineRuns();connectPipelineSSE();
+""".trimIndent()
+
+// ─── Billing Page ─────────────────────────────────────────────────────────────
+
+private const val BILLING_CSS = """
+.billing-page{padding:28px 32px;flex:1;overflow-y:auto}
+.billing-page-header{margin-bottom:28px}
+.billing-page-header h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.billing-page-header p{font-size:13px;color:var(--text-muted)}
+.billing-section{margin-bottom:32px}
+.billing-section-title{font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:12px}
+.sub-summary{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.sub-detail-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .25s}
+.sub-detail-label{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
+.sub-detail-value{font-size:17px;font-weight:600;color:var(--text)}
+.sub-detail-value.accent{color:var(--accent)}
+.plan-status-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px}
+.status-active{background:rgba(0,229,160,.12);color:var(--accent);border:1px solid rgba(0,229,160,.25)}
+.status-trial{background:rgba(250,173,20,.1);color:var(--yellow);border:1px solid rgba(250,173,20,.25)}
+.status-cancelling{background:rgba(255,77,79,.1);color:var(--red);border:1px solid rgba(255,77,79,.2)}
+.status-free{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)}
+.plan-actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center}
+.plan-upgrade-group{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-top:16px}
+.plan-upgrade-group-title{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:10px}
+.upgrade-option{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);margin-bottom:8px;transition:border-color .15s}
+.upgrade-option:last-child{margin-bottom:0}
+.upgrade-option:hover{border-color:rgba(0,229,160,.3)}
+.upgrade-option-info strong{font-size:13px;font-weight:600}
+.upgrade-option-info span{font-size:12px;color:var(--text-muted)}
+.upgrade-option-price{font-size:13px;font-weight:700;color:var(--accent);margin-right:12px}
+.sync-state{display:none;align-items:center;gap:12px;padding:14px 16px;background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.2);border-radius:var(--radius);margin-top:16px}
+.sync-state.visible{display:flex}
+.sync-spinner{width:18px;height:18px;border:2px solid rgba(0,229,160,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.sync-text{font-size:13px;color:var(--accent);font-weight:500}
+.inline-banner{display:none;padding:14px 18px;border-radius:var(--radius);margin-top:0;margin-bottom:20px;font-size:13px;line-height:1.5}
+.inline-banner.visible{display:block}
+.inline-banner.success{background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.25);color:var(--accent)}
+.inline-banner.warning{background:rgba(250,173,20,.08);border:1px solid rgba(250,173,20,.25);color:var(--yellow)}
+.inline-banner.error{background:rgba(255,77,79,.07);border:1px solid rgba(255,77,79,.2);color:var(--red)}
+.inline-banner strong{display:block;font-size:14px;margin-bottom:3px}
+.payment-method-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;display:flex;align-items:center;gap:16px}
+.payment-method-icon{width:44px;height:44px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.payment-method-info{flex:1}
+.payment-method-title{font-size:14px;font-weight:600;margin-bottom:2px}
+.payment-method-sub{font-size:12px;color:var(--text-muted)}
+.invoice-table-header{display:grid;grid-template-columns:110px 1fr 100px 90px 80px;gap:12px;padding:8px 16px;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--text-muted);text-transform:uppercase;border-bottom:1px solid var(--border)}
+.invoice-row-full{display:grid;grid-template-columns:110px 1fr 100px 90px 80px;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;font-size:13px;transition:border-color .15s}
+.invoice-row-full:hover{border-color:rgba(0,229,160,.2)}
+.invoice-id{font-family:monospace;font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.invoice-amount{font-weight:600}
+.invoice-download{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;transition:color .15s}
+.invoice-download:hover{color:var(--accent)}
+.empty-invoices{text-align:center;padding:40px 24px;color:var(--text-muted);font-size:14px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius)}
+.usage-overview{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.usage-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.usage-item-label{font-size:12px;color:var(--text-muted);margin-bottom:6px}
+.usage-item-value{font-size:15px;font-weight:600;margin-bottom:8px}
+@media(max-width:768px){.sub-summary{grid-template-columns:1fr}.usage-grid{grid-template-columns:1fr}.invoice-table-header{display:none}.invoice-row-full{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}}
+"""
+
+private val BILLING_JS = """
+const BASE='/transloom/api';
+let token=localStorage.getItem('transloom_token');
+if(!token){window.location.href='/transloom';}
+function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
+async function api(path,opts={}){
+  const res=await fetch(BASE+path,{...opts,headers:{...authHeaders(),...(opts.headers||{})}});
+  if(res.status===401){logout();return null;}return res;
+}
+function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom';}
+function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
+function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return{};}}
+
+// ── Payment flow lock — prevents duplicate checkout attempts ──────────────────
+let paymentPending=false;
+
+// ── In-page sync state elements ───────────────────────────────────────────────
+function showSyncState(visible,msg='Updating your plan…'){
+  const el=document.getElementById('sync-state');
+  if(!el)return;
+  el.classList.toggle('visible',visible);
+  const txt=el.querySelector('.sync-text');
+  if(txt)txt.textContent=msg;
 }
 
-loadStats();loadProjects();loadBilling();loadPipelineRuns();connectPipelineSSE();
+function showInlineBanner(type,title,body){
+  const el=document.getElementById('payment-banner');
+  if(!el)return;
+  el.className='inline-banner visible '+type;
+  el.innerHTML=(title?`<strong>${'$'}{esc(title)}</strong>`:'')+(body?esc(body):'');
+}
+
+function hideInlineBanner(){
+  const el=document.getElementById('payment-banner');
+  if(el)el.className='inline-banner';
+}
+
+// ── Main billing page loader ───────────────────────────────────────────────────
+async function loadBillingPage(){
+  const [subRes,usageRes,invRes]=await Promise.all([
+    api('/billing/subscription'),api('/billing/usage'),api('/billing/invoices')
+  ]);
+  if(!subRes||!subRes.ok||!usageRes||!usageRes.ok){toast('Failed to load billing info','error');return;}
+  const sub=await subRes.json();
+  const usage=await usageRes.json();
+
+  // Plan name
+  document.getElementById('plan-name').textContent=sub.displayName||sub.plan;
+
+  // Status badge
+  const statusEl=document.getElementById('plan-status');
+  if(sub.cancelAtPeriodEnd){
+    statusEl.className='status-badge status-cancelling';statusEl.textContent='Cancelling';
+  } else if(sub.plan==='FREE'){
+    statusEl.className='status-badge status-free';statusEl.textContent='Free';
+  } else if(sub.trialLimitHit){
+    statusEl.className='status-badge status-trial';statusEl.textContent='Trial limit hit';
+  } else {
+    statusEl.className='status-badge status-active';statusEl.textContent='Active';
+  }
+
+  // Renewal / period
+  const expiryLabel=document.getElementById('plan-expiry-label');
+  if(sub.currentPeriodEnd){
+    document.getElementById('renewal-date').textContent=sub.currentPeriodEnd;
+    document.getElementById('billing-period').textContent='Until '+sub.currentPeriodEnd;
+    if(expiryLabel)expiryLabel.textContent=sub.cancelAtPeriodEnd?'CANCELS ON':'RENEWAL DATE';
+  } else {
+    document.getElementById('renewal-date').textContent='—';
+    document.getElementById('billing-period').textContent='No active billing period';
+    if(expiryLabel)expiryLabel.textContent='RENEWAL DATE';
+  }
+
+  // Price
+  if(sub.monthlyPricePaise){
+    document.getElementById('plan-price').textContent='₹'+(sub.monthlyPricePaise/100)+'/mo';
+  } else {
+    document.getElementById('plan-price').textContent=sub.plan==='FREE'?'Free':'—';
+  }
+
+  // Usage bars
+  const barEl=document.getElementById('usage-bar-billing');
+  if(usage.stringLimit){
+    const pct=Math.min(100,Math.round((usage.stringsTranslated/usage.stringLimit)*100));
+    if(barEl){barEl.style.width=pct+'%';if(pct>80)barEl.style.background='var(--yellow)';}
+    document.getElementById('usage-strings').textContent=usage.stringsTranslated+' / '+usage.stringLimit;
+  } else {
+    if(barEl){barEl.style.width='100%';barEl.style.background='var(--accent-dim)';}
+    document.getElementById('usage-strings').textContent=usage.stringsTranslated+' (unlimited)';
+  }
+  document.getElementById('usage-projects').textContent=
+    usage.projectLimit?usage.projectsUsed+' / '+usage.projectLimit:usage.projectsUsed+' (unlimited)';
+
+  // Plan actions — only rendered when no payment is in progress
+  if(!paymentPending){
+    renderPlanActions(sub);
+  }
+
+  // User chip
+  const payload=jwtPayload(token);
+  const chip=document.getElementById('user-chip');
+  if(chip)chip.textContent=payload.email||payload.sub||'You';
+
+  // Invoices
+  if(invRes){
+    const invData=await invRes.json();
+    const list=document.getElementById('invoice-list-billing');
+    if(!invData.invoices||invData.invoices.length===0){
+      list.innerHTML='<div class="empty-invoices">No invoices yet. Your first invoice will appear here after your trial ends.</div>';
+    } else {
+      list.innerHTML=invData.invoices.map(inv=>`
+        <div class="invoice-row-full">
+          <span>${'$'}{esc(inv.date)}</span>
+          <span class="invoice-id">${'$'}{esc(inv.id)}</span>
+          <span class="invoice-amount">${'$'}{esc(inv.amount)}</span>
+          <span class="invoice-status-${'$'}{esc(inv.status.toLowerCase())}">${'$'}{esc(inv.status)}</span>
+          <a class="invoice-download" href="/transloom/api/billing/invoices/${'$'}{encodeURIComponent(inv.id)}/receipt?token=${'$'}{encodeURIComponent(token)}" target="_blank">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </a>
+        </div>`).join('');
+    }
+  }
+}
+
+// ── Render plan action buttons based on current plan ──────────────────────────
+function renderPlanActions(sub){
+  const el=document.getElementById('plan-actions-billing');
+  if(!el)return;
+  let html='';
+
+  if(sub.trialLimitHit){
+    html+='<button class="btn btn-primary" onclick="activateNow()">Activate paid plan now</button>';
+  }
+
+  if(sub.plan==='FREE'){
+    // Show both upgrade options explicitly so users know what they're buying
+    html+=`
+      <div class="plan-upgrade-group">
+        <div class="plan-upgrade-group-title">Available plans</div>
+        <div class="upgrade-option">
+          <div class="upgrade-option-info">
+            <strong>Solo</strong>
+            <span> &mdash; 5,000 strings &middot; 3 projects &middot; All languages</span>
+          </div>
+          <div style="display:flex;align-items:center">
+            <span class="upgrade-option-price">₹499/mo</span>
+            <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="startUpgrade('SOLO')">Select</button>
+          </div>
+        </div>
+        <div class="upgrade-option">
+          <div class="upgrade-option-info">
+            <strong>Team</strong>
+            <span> &mdash; Unlimited strings &middot; 10 projects &middot; All languages</span>
+          </div>
+          <div style="display:flex;align-items:center">
+            <span class="upgrade-option-price">₹1,999/mo</span>
+            <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border)" onclick="startUpgrade('TEAM')">Select</button>
+          </div>
+        </div>
+      </div>`;
+  } else if(sub.plan==='SOLO'){
+    html+='<button class="btn btn-primary" style="font-size:13px" onclick="startUpgrade(\'TEAM\')">Upgrade to Team</button>';
+  }
+
+  if((sub.plan==='SOLO'||sub.plan==='TEAM')&&!sub.cancelAtPeriodEnd){
+    html+='<a href="#" style="font-size:13px;color:var(--text-muted);align-self:center" onclick="cancelSubscription();return false">Cancel subscription →</a>';
+  }
+  if(sub.cancelAtPeriodEnd&&(sub.plan==='SOLO'||sub.plan==='TEAM')){
+    html+='<span style="font-size:12px;color:var(--yellow)">Access continues until '+esc(sub.currentPeriodEnd||'end of period')+'</span>';
+  }
+
+  el.innerHTML=html;
+}
+
+// ── Open Razorpay checkout for a given plan ────────────────────────────────────
+async function startUpgrade(plan){
+  if(paymentPending){toast('A payment is already in progress','error');return;}
+  if(!window.Razorpay){toast('Checkout not loaded — please refresh','error');return;}
+
+  paymentPending=true;
+  // Optimistically disable action buttons so user can't click again
+  const actionsEl=document.getElementById('plan-actions-billing');
+  if(actionsEl)actionsEl.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Opening checkout…</span>';
+
+  const res=await api('/billing/subscribe',{method:'POST',body:JSON.stringify({plan})});
+  if(!res||!res.ok){
+    const err=res?await res.json():{};
+    toast(err.error||'Could not initiate checkout','error');
+    paymentPending=false;
+    loadBillingPage();
+    return;
+  }
+  const data=await res.json();
+
+  const rzp=new Razorpay({
+    key:data.keyId,
+    subscription_id:data.subscriptionId,
+    name:'Transloom',
+    description:data.plan+' plan · 60-day free trial',
+    image:'/transloom/favicon.svg',
+    theme:{color:'#00E5A0',backdrop_color:'#000000'},
+    modal:{escape:true,backdropclose:false,ondismiss:function(){
+      // User closed checkout without paying — restore buttons
+      paymentPending=false;
+      loadBillingPage();
+    }},
+    handler:function(resp){
+      // Payment captured by Razorpay — now verify server-side and sync subscription
+      verifyAndSync(
+        resp.razorpay_payment_id||'',
+        resp.razorpay_subscription_id||data.subscriptionId,
+        resp.razorpay_signature||''
+      );
+    }
+  });
+  rzp.on('payment.failed',function(r){
+    paymentPending=false;
+    toast('Payment failed: '+(r.error&&r.error.description?r.error.description:'Please retry'),'error');
+    loadBillingPage();
+  });
+  rzp.open();
+}
+
+// ── Post-payment: verify signature then poll until subscription syncs ──────────
+async function verifyAndSync(paymentId,subscriptionId,signature){
+  showSyncState(true,'Verifying payment…');
+  // Optimistic: immediately show the upgraded plan name in the header
+  document.getElementById('plan-name').textContent='Solo';
+  document.getElementById('plan-status').className='status-badge status-active';
+  document.getElementById('plan-status').textContent='Active';
+  const actionsEl=document.getElementById('plan-actions-billing');
+  if(actionsEl)actionsEl.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Updating…</span>';
+
+  // Server-side signature verification
+  const vRes=await api('/billing/confirm-payment',{
+    method:'POST',
+    body:JSON.stringify({paymentId,subscriptionId,signature})
+  });
+
+  if(!vRes||!vRes.ok){
+    // Signature verification failed or network error
+    showSyncState(false);
+    paymentPending=false;
+    showInlineBanner('warning',
+      'We received your payment and are checking your subscription.',
+      'This can take a minute. Please refresh in a moment — if you are still not upgraded, contact support@androidplay.in with reference: '+esc(paymentId)
+    );
+    loadBillingPage();
+    return;
+  }
+
+  // Verification succeeded — now poll until webhook updates the DB
+  showSyncState(true,'Activating your plan…');
+  const upgraded=await pollUntilUpgraded(18,2000);
+
+  showSyncState(false);
+  paymentPending=false;
+
+  if(upgraded){
+    showInlineBanner('success',
+      'You are now on the '+esc(upgraded)+' plan.',
+      'Your subscription is active. Refresh the page to see your updated entitlements.'
+    );
+    loadBillingPage();
+  } else {
+    // Webhook hasn't fired yet — show a friendly recovery state, not the old pricing view
+    showInlineBanner('warning',
+      'Payment confirmed — subscription update in progress.',
+      'This usually takes under a minute. Refresh the page shortly or contact support@androidplay.in with reference: '+esc(paymentId)
+    );
+    // Still reload so UI reflects what we do know (we won't show upgrade prompts again)
+    loadBillingPage();
+  }
+}
+
+// ── Poll GET /billing/subscription until plan is no longer FREE ───────────────
+async function pollUntilUpgraded(maxRetries,intervalMs){
+  for(let i=0;i<maxRetries;i++){
+    await new Promise(r=>setTimeout(r,intervalMs));
+    const res=await api('/billing/subscription');
+    if(!res||!res.ok)continue;
+    const sub=await res.json();
+    if(sub.plan&&sub.plan!=='FREE')return sub.displayName||sub.plan;
+  }
+  return null;
+}
+
+async function downgradePlan(){
+  if(!confirm('Downgrade to Free plan? Your current plan stays active until the period ends.'))return;
+  await cancelSubscription();
+}
+
+async function activateNow(){
+  const res=await api('/billing/activate-now',{method:'POST'});
+  if(!res)return;
+  if(res.ok){toast('Paid plan activated');hideInlineBanner();loadBillingPage();}
+  else{const err=await res.json();toast(err.error||'Activation failed','error');}
+}
+
+async function cancelSubscription(){
+  if(!confirm('Cancel subscription? You will keep access until the end of the billing period.'))return;
+  const res=await api('/billing/cancel',{method:'POST'});
+  if(!res)return;
+  if(res.ok){toast('Subscription will cancel at end of period');loadBillingPage();}
+  else{const err=await res.json();toast(err.error||'Cancel failed','error');}
+}
+
+loadBillingPage();
 """.trimIndent()
+
+private fun HTML.billingApp() {
+    head {
+        title { +"Transloom — Billing" }
+        meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        favicon()
+        script { src = "https://checkout.razorpay.com/v1/checkout.js" }
+        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS$BILLING_CSS" } }
+    }
+    body {
+        div("app-layout") {
+            aside("sidebar") {
+                div("sidebar-logo brand") { unsafe { +LOGO_SVG }; span { +"Transloom" } }
+                nav("sidebar-nav") {
+                    a("/transloom/app") { classes = setOf("nav-item"); +"⬡ Dashboard" }
+                    a("/transloom/app") { attributes["onclick"] = "event.preventDefault();window.location.href='/transloom/app#projects'"; classes = setOf("nav-item"); +"◻ Projects" }
+                    a("/transloom/review-portal") { classes = setOf("nav-item"); +"⚑ Review" }
+                    a("/transloom/billing") { classes = setOf("nav-item", "active"); +"◈ Billing" }
+                }
+                div("sidebar-footer") {
+                    div("user-chip") { id = "user-chip"; +"Loading..." }
+                    button(classes = "btn btn-ghost logout-btn") {
+                        attributes["onclick"] = "logout()"
+                        +"Sign out"
+                    }
+                }
+            }
+
+            main("billing-page") {
+                div("billing-page-header") {
+                    h1 { +"Billing" }
+                    p { +"Manage your plan, payment method, and download invoices." }
+                }
+
+                // ── Inline payment status banner (hidden until needed) ─────────
+                div {
+                    id = "payment-banner"
+                    classes = setOf("inline-banner")
+                }
+
+                // ── Subscription summary ──────────────────────────────────────
+                div("billing-section") {
+                    div("billing-section-title") { +"Subscription" }
+                    div("sub-summary") {
+                        div("sub-detail-card") {
+                            div("plan-status-row") {
+                                div {
+                                    div("sub-detail-label") { +"Current Plan" }
+                                    p("plan-name sub-detail-value accent") { id = "plan-name"; +"—" }
+                                }
+                                span { id = "plan-status"; classes = setOf("status-badge", "status-active"); +"Loading" }
+                            }
+                            div {
+                                div("sub-detail-label") { +"Monthly price" }
+                                div("sub-detail-value") { id = "plan-price"; +"—" }
+                            }
+                            // Sync state — visible during post-payment reconciliation
+                            div {
+                                id = "sync-state"
+                                classes = setOf("sync-state")
+                                div { classes = setOf("sync-spinner") }
+                                span("sync-text") { +"Updating your plan…" }
+                            }
+                            div {
+                                id = "plan-actions-billing"
+                                classes = setOf("plan-actions-row")
+                            }
+                        }
+                        div("sub-detail-card") {
+                            div {
+                                div("sub-detail-label") { id = "plan-expiry-label"; +"Renewal Date" }
+                                div("sub-detail-value") { id = "renewal-date"; +"—" }
+                            }
+                            div {
+                                style = "margin-top:16px"
+                                div("sub-detail-label") { +"Billing Period" }
+                                div("sub-detail-value") { id = "billing-period"; style = "font-size:14px"; +"—" }
+                            }
+                        }
+                    }
+                }
+
+                // ── Usage overview ────────────────────────────────────────────
+                div("billing-section") {
+                    div("billing-section-title") { +"Usage This Period" }
+                    div("usage-overview") {
+                        div("usage-grid") {
+                            div {
+                                div("usage-item-label") { +"Strings translated" }
+                                div("usage-item-value") { id = "usage-strings"; +"—" }
+                                div("usage-bar-track") { div("usage-bar-fill") { id = "usage-bar-billing" } }
+                            }
+                            div {
+                                div("usage-item-label") { +"Projects" }
+                                div("usage-item-value") { id = "usage-projects"; +"—" }
+                            }
+                        }
+                    }
+                }
+
+                // ── Payment method ────────────────────────────────────────────
+                div("billing-section") {
+                    div("billing-section-title") { +"Payment Method" }
+                    div("payment-method-card") {
+                        div("payment-method-icon") {
+                            unsafe { +"<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='1' y='4' width='22' height='16' rx='2' ry='2'/><line x1='1' y1='10' x2='23' y2='10'/></svg>" }
+                        }
+                        div("payment-method-info") {
+                            div("payment-method-title") { +"Managed by Razorpay" }
+                            div("payment-method-sub") { +"Payment details are securely stored with Razorpay. To update your card or UPI, contact support." }
+                        }
+                    }
+                }
+
+                // ── Invoice history ───────────────────────────────────────────
+                div("billing-section") {
+                    div("billing-section-title") { +"Invoice History" }
+                    div("invoice-table-header") {
+                        span { +"Date" }
+                        span { +"Reference" }
+                        span { +"Amount" }
+                        span { +"Status" }
+                        span { +"" }
+                    }
+                    div {
+                        id = "invoice-list-billing"
+                        classes = setOf("invoice-list")
+                        div("empty-invoices") { +"Loading invoices..." }
+                    }
+                }
+            }
+        }
+
+        div {
+            id = "toast"
+            classes = setOf("toast")
+        }
+
+        script { unsafe { raw(BILLING_JS) } }
+    }
+}
 
 // ─── Review Portal ────────────────────────────────────────────────────────────
 

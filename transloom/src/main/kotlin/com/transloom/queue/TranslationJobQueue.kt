@@ -14,7 +14,8 @@ data class WebhookPayload(
     val repositoryFullName: String,
     val commitHash: String,
     val branchName: String,
-    val projectId: String
+    val projectId: String,
+    val retriedFromRunId: String? = null
 )
 
 private const val QUEUE_KEY = "transloom:jobs"

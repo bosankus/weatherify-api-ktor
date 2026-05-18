@@ -40,7 +40,14 @@ class PipelineEventBus {
     fun recentRuns(userId: String): List<PipelineRunState> =
         runsByUser[userId]?.toList()?.reversed() ?: emptyList()
 
-    fun startRun(userId: String, repo: String, branch: String, commitShort: String): String {
+    fun startRun(
+        userId: String,
+        repo: String,
+        branch: String,
+        commitShort: String,
+        projectId: String? = null,
+        retriedFromRunId: String? = null
+    ): String {
         val runId = UUID.randomUUID().toString()
         val steps = initialSteps().toMutableList()
         activeSteps[runId] = steps
@@ -48,7 +55,7 @@ class PipelineEventBus {
         val snapshot = PipelineRunState(
             runId = runId, repo = repo, branch = branch,
             commitShort = commitShort, startedAt = System.currentTimeMillis(),
-            steps = steps.toList()
+            steps = steps.toList(), projectId = projectId, retriedFromRunId = retriedFromRunId
         )
         pushRun(userId, snapshot)
         emit(userId, PipelineEvent(type = "start", runId = runId, snapshot = snapshot))

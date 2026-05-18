@@ -11,6 +11,8 @@ import com.transloom.repository.UserRepository
 import com.transloom.model.*
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
+import com.transloom.queue.TranslationJobQueue
+import com.transloom.queue.WebhookPayload
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.StringParserService
 import io.ktor.http.*
@@ -38,7 +40,8 @@ fun Route.configureApiRoutes(
     userRepository: UserRepository,
     translationRepository: TranslationRepository,
     pipelineEventBus: PipelineEventBus,
-    jwtSecret: String
+    jwtSecret: String,
+    jobQueue: TranslationJobQueue
 ) {
     val glossaryRepository: GlossaryRepository by inject()
 
@@ -386,6 +389,37 @@ fun Route.configureApiRoutes(
                     }
                 }
             }
+        }
+
+        // Retrigger a failed pipeline run using the same project + branch.
+        post("/pipeline/runs/{runId}/retry") {
+            val userId = call.userId()
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val runId = call.parameters["runId"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Missing runId"))
+
+            val run = pipelineEventBus.recentRuns(userId).find { it.runId == runId }
+                ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Run not found"))
+
+            val projectId = run.projectId
+                ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError("Run has no project reference — cannot retry"))
+
+            // Verify the user still owns the project before requeuing
+            val project = projectRepository.findById(projectId)
+            if (project == null || project.ownerId != userId) {
+                return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
+            }
+
+            val payload = WebhookPayload(
+                repositoryFullName = run.repo,
+                commitHash = run.branch,   // re-run against branch HEAD
+                branchName = run.branch,
+                projectId = projectId,
+                retriedFromRunId = runId
+            )
+            jobQueue.enqueueJob(payload)
+            apiLog.info("Retry enqueued: originalRunId={} project={} repo={}", runId, projectId, run.repo)
+            call.respond(mapOf("queued" to true, "originalRunId" to runId))
         }
 
         // --- Webhook Install ---

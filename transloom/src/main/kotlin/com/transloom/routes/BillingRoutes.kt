@@ -34,6 +34,7 @@ internal const val SESSION_COOKIE = "tl_session"
 internal const val PENDING_PLAN_COOKIE = "pending_plan"
 
 @Serializable data class SubscribePlanBody(val plan: String = "SOLO")
+@Serializable data class ConfirmPaymentBody(val paymentId: String = "", val subscriptionId: String = "", val signature: String = "")
 @Serializable data class SubscribeResponse(val subscriptionId: String, val keyId: String, val plan: String)
 
 @Serializable
@@ -154,6 +155,27 @@ fun Route.configureBillingRoutes(
                 )
             }
             call.respond(mapOf("invoices" to invoices))
+        }
+
+        post("/confirm-payment") {
+            val userId = call.userId() ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val body = runCatching { call.receive<ConfirmPaymentBody>() }.getOrElse {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
+            }
+            if (body.paymentId.isBlank() || body.subscriptionId.isBlank() || body.signature.isBlank()) {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("Missing payment fields"))
+            }
+            if (!razorpayService.verifyCheckoutHandler(body.paymentId, body.subscriptionId, body.signature)) {
+                log.warn("confirm-payment: invalid signature for userId={} paymentId={}", userId, body.paymentId)
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError("Payment signature invalid"))
+            }
+            val ownerId = razorpayService.ownerOf(body.subscriptionId)
+            if (ownerId != null && ownerId != userId) {
+                log.warn("confirm-payment: subscription ownership mismatch userId={} owner={}", userId, ownerId)
+                return@post call.respond(HttpStatusCode.Forbidden, ApiError("Subscription does not belong to this account"))
+            }
+            log.info("confirm-payment: verified paymentId={} for userId={}", body.paymentId, userId)
+            call.respond(mapOf("verified" to true, "paymentId" to body.paymentId))
         }
 
         get("/usage") {
@@ -304,6 +326,115 @@ fun Route.configureRazorpayWebhook(dispatcher: RazorpayWebhookDispatcher) {
         }
     }
 }
+
+// ─── Invoice receipt (token-in-URL, no Authorization header needed for downloads) ──
+
+fun Route.configureBillingReceiptRoute(
+    jwtSecret: String,
+    billingRepository: BillingRepository,
+    userRepository: UserRepository
+) {
+    get("/transloom/api/billing/invoices/{id}/receipt") {
+        val token = call.request.queryParameters["token"]
+        val userId = token?.let { extractUserIdFromBearer(it, jwtSecret) }
+            ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+
+        val paymentId = call.parameters["id"]
+            ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing invoice id"))
+
+        val invoices = billingRepository.listInvoices(userId)
+        val invoice = invoices.find { it.razorpayPaymentId == paymentId }
+            ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("Invoice not found"))
+
+        val user = userRepository.findById(userId)
+        val dateStr = invoice.createdAt.toLocalDateTime(TimeZone.UTC).date.toString()
+        val amount = "₹${"%.2f".format(invoice.amountPaise / 100.0)}"
+        val email = user?.email ?: "—"
+
+        call.respondText(ContentType.Text.Html, HttpStatusCode.OK) {
+            buildInvoiceReceipt(
+                paymentId = invoice.razorpayPaymentId,
+                date = dateStr,
+                amount = amount,
+                currency = invoice.currency.uppercase(),
+                status = invoice.status.replaceFirstChar { it.uppercase() },
+                userEmail = email
+            )
+        }
+    }
+}
+
+private fun extractUserIdFromBearer(token: String, jwtSecret: String): String? = runCatching {
+    val verifier = JWT.require(Algorithm.HMAC256(jwtSecret))
+        .withAudience("transloom-app")
+        .withIssuer("transloom-backend")
+        .build()
+    verifier.verify(token).getClaim("userId")?.asString()
+        ?.let { java.util.UUID.fromString(it).toString() }
+}.getOrNull()
+
+private fun buildInvoiceReceipt(
+    paymentId: String,
+    date: String,
+    amount: String,
+    currency: String,
+    status: String,
+    userEmail: String
+): String = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice $paymentId — Transloom</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:14px;color:#111;background:#fff;margin:0;padding:40px}
+  .receipt{max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;padding:36px 40px}
+  .receipt-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:1px solid #e5e7eb}
+  .brand{font-size:18px;font-weight:700;color:#111;display:flex;align-items:center;gap:8px}
+  .brand-dot{width:10px;height:10px;background:#00c98d;border-radius:50%;display:inline-block}
+  .receipt-title{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:4px}
+  .receipt-id{font-family:monospace;font-size:12px;color:#374151}
+  .receipt-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:14px}
+  .receipt-row:last-child{border-bottom:none}
+  .row-label{color:#6b7280}
+  .row-value{font-weight:500;color:#111}
+  .amount-row{margin-top:8px;padding-top:16px;border-top:2px solid #e5e7eb}
+  .amount-value{font-size:22px;font-weight:700;color:#111}
+  .status-paid{color:#00c98d;font-weight:600}
+  .status-open{color:#f59e0b;font-weight:600}
+  .footer{margin-top:28px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center}
+  @media print{body{padding:20px}@page{margin:1cm}}
+</style>
+</head>
+<body>
+<div class="receipt">
+  <div class="receipt-header">
+    <div class="brand"><span class="brand-dot"></span>Transloom</div>
+    <div>
+      <div class="receipt-title">Invoice</div>
+      <div class="receipt-id">$paymentId</div>
+    </div>
+  </div>
+  <div class="receipt-row"><span class="row-label">Date</span><span class="row-value">$date</span></div>
+  <div class="receipt-row"><span class="row-label">Billed to</span><span class="row-value">$userEmail</span></div>
+  <div class="receipt-row"><span class="row-label">Description</span><span class="row-value">Transloom subscription</span></div>
+  <div class="receipt-row"><span class="row-label">Currency</span><span class="row-value">$currency</span></div>
+  <div class="receipt-row"><span class="row-label">Status</span>
+    <span class="row-value ${if (status.lowercase() == "paid") "status-paid" else "status-open"}">$status</span>
+  </div>
+  <div class="receipt-row amount-row">
+    <span class="row-label" style="font-size:15px;font-weight:600;color:#111">Total</span>
+    <span class="amount-value">$amount</span>
+  </div>
+</div>
+<div class="footer">
+  Transloom by Androidplay &nbsp;·&nbsp; support@androidplay.in<br>
+  <button onclick="window.print()" style="margin-top:12px;background:#111;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer">Print / Save as PDF</button>
+</div>
+</body>
+</html>
+""".trimIndent()
 
 // ─── Session cookie helpers ───────────────────────────────────────────────────
 

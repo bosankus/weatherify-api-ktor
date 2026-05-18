@@ -68,7 +68,10 @@ class TranslationPipeline(
         githubToken: String
     ) {
         val userId = project.ownerId
-        val runId = eventBus.startRun(userId, payload.repositoryFullName, payload.branchName, payload.commitHash.take(7))
+        val runId = eventBus.startRun(
+            userId, payload.repositoryFullName, payload.branchName, payload.commitHash.take(7),
+            projectId = project.id, retriedFromRunId = payload.retriedFromRunId
+        )
         log.info("Pipeline: repo={} branch={} commit={}", payload.repositoryFullName, payload.branchName, payload.commitHash.take(7))
 
         // ── Step: Fetch source file ────────────────────────────────────────────
