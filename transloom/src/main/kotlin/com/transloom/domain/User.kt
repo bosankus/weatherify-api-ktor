@@ -16,4 +16,6 @@ data class User(
     /** Furthest onboarding milestone reached; advances monotonically. */
     val onboardingStep: OnboardingStep = OnboardingStep.SIGNED_UP,
     val onboardingCompletedAt: Instant? = null,
+    /** Set when the user clicks "Skip" on the in-product tour; cleared on resume. */
+    val onboardingDismissedAt: Instant? = null,
 )

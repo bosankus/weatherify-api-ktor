@@ -95,6 +95,22 @@ fun Route.configureApiRoutes(
                     )
                 }
 
+                // Pre-flight: a missing GitHub token will silently break webhook auto-install,
+                // leaving the user stuck at WEBHOOK_INSTALLED. Catch it here and route them
+                // straight back through OAuth so they don't create an orphaned project.
+                val preflightUser = userRepository.findById(userId)
+                if (preflightUser?.githubToken.isNullOrBlank()) {
+                    return@post call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        StructuredApiError(
+                            error = "GitHub access is required to connect a repository.",
+                            code = "GITHUB_REAUTH_REQUIRED",
+                            actionHint = "Reconnect your GitHub account to continue.",
+                            reauthUrl = "/transloom/auth/github"
+                        )
+                    )
+                }
+
                 val input = CreateProjectInput(
                     name = body.name,
                     githubRepo = body.githubRepo,

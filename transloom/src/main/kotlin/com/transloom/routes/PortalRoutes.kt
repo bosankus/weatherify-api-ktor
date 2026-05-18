@@ -639,7 +639,7 @@ private fun HTML.dashboardApp() {
         title { +"Transloom — Dashboard" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
-        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS" } }
+        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS$ONBOARDING_CSS" } }
     }
     body {
         div("app-layout") {
@@ -724,7 +724,7 @@ private fun HTML.dashboardApp() {
                         div("widget-card") {
                             div("widget-header") { span("widget-title") { +"Quick Actions" } }
                             div("widget-body qa-body") {
-                                a("/transloom/projects") { classes = setOf("qa-btn"); +"+ New project" }
+                                a("/transloom/projects") { id = "qa-new-project"; classes = setOf("qa-btn"); +"+ New project" }
                                 a("/transloom/review-portal") { classes = setOf("qa-btn"); +"Review translations" }
                                 a("/transloom/projects#glossary") { classes = setOf("qa-btn"); +"Edit glossary" }
                                 a("/transloom/billing") { classes = setOf("qa-btn"); +"Manage plan" }
@@ -735,7 +735,10 @@ private fun HTML.dashboardApp() {
             }
         }
         div("toast") { id = "toast" }
+        div { id = "ob-host" }
         script { unsafe { +DASHBOARD_JS } }
+        script { unsafe { +ONBOARDING_JS } }
+        script { unsafe { +"Onboarding.boot('dashboard');" } }
     }
 }
 
@@ -1144,8 +1147,16 @@ async function createProject(){
   const targets=selected.map(code=>({code,name:langMap[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
   const res=await api('/projects',{method:'POST',body:JSON.stringify({name,githubRepo:repo,watchBranch:branch,sourceFilePath:sourcePath,category,tone,targets})});
   if(!res)return;
-  if(res.ok){toast('Project created! Now push a new string to trigger your first translation.');closeModal();loadProjects();loadStats();}
-  else{const err=await res.json();toast(err.error||'Failed to create project','error');}
+  if(res.ok){toast('Project created! Now push a new string to trigger your first translation.');closeModal();loadProjects();loadStats();window.Onboarding&&Onboarding.refresh();}
+  else{
+    const err=await res.json().catch(()=>({}));
+    if(res.status===422&&err.code==='GITHUB_REAUTH_REQUIRED'){
+      toast('Reconnecting GitHub…','error');
+      setTimeout(()=>{window.location.href=err.reauthUrl||'/transloom/auth/github';},900);
+      return;
+    }
+    toast(err.error||'Failed to create project','error');
+  }
 }
 
 let projectToDelete = null;
@@ -1667,8 +1678,16 @@ async function createProject(){
   const targets=selected.map(code=>({code,name:LANG_MAP[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
   const res=await api('/projects',{method:'POST',body:JSON.stringify({name,githubRepo:repo,watchBranch:branch,sourceFilePath:sourcePath,category,tone,targets})});
   if(!res)return;
-  if(res.ok){toast('Project created! Webhook auto-installed.');closeNewModal();await init();}
-  else{const err=await res.json();toast(err.error||'Failed to create project','error');}
+  if(res.ok){toast('Project created! Webhook auto-installed.');closeNewModal();await init();window.Onboarding&&Onboarding.refresh();}
+  else{
+    const err=await res.json().catch(()=>({}));
+    if(res.status===422&&err.code==='GITHUB_REAUTH_REQUIRED'){
+      toast('Reconnecting GitHub…','error');
+      setTimeout(()=>{window.location.href=err.reauthUrl||'/transloom/auth/github';},900);
+      return;
+    }
+    toast(err.error||'Failed to create project','error');
+  }
 }
 
 // ── Edit project modal ─────────────────────────────────────────────────────────
@@ -1809,7 +1828,7 @@ private fun HTML.projectsApp() {
         title { +"Transloom — Projects" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
-        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS$PROJECTS_CSS" } }
+        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS$PROJECTS_CSS$ONBOARDING_CSS" } }
     }
     body {
         div("app-layout") {
@@ -1950,7 +1969,10 @@ private fun HTML.projectsApp() {
         }
 
         div("toast") { id = "toast" }
+        div { id = "ob-host" }
         script { unsafe { +PROJECTS_JS } }
+        script { unsafe { +ONBOARDING_JS } }
+        script { unsafe { +"Onboarding.boot('projects');" } }
     }
 }
 
@@ -2301,7 +2323,7 @@ private fun HTML.billingApp() {
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
         script { src = "https://checkout.razorpay.com/v1/checkout.js" }
-        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS$BILLING_CSS" } }
+        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS$BILLING_CSS$ONBOARDING_CSS" } }
     }
     body {
         div("app-layout") {
@@ -2415,8 +2437,11 @@ private fun HTML.billingApp() {
             id = "toast"
             classes = setOf("toast")
         }
+        div { id = "ob-host" }
 
         script { unsafe { raw(BILLING_JS) } }
+        script { unsafe { +ONBOARDING_JS } }
+        script { unsafe { +"Onboarding.boot('billing');" } }
     }
 }
 
@@ -2610,4 +2635,235 @@ async function confirmReject(id){
   }
 }
 loadReviews();
+""".trimIndent()
+
+// ─── Onboarding tour (shared across dashboard/projects/billing) ───────────────
+
+private const val ONBOARDING_CSS = """
+.ob-overlay{position:fixed;inset:0;z-index:9000;pointer-events:none}
+.ob-overlay.active{pointer-events:auto}
+.ob-shade{position:fixed;background:rgba(8,10,14,.62);transition:opacity .18s;opacity:0}
+.ob-overlay.active .ob-shade{opacity:1}
+.ob-spot{position:fixed;border-radius:10px;box-shadow:0 0 0 3px rgba(0,229,160,.55),0 0 0 99999px rgba(8,10,14,.62);pointer-events:none;transition:all .22s cubic-bezier(.2,.7,.2,1);opacity:0}
+.ob-overlay.active .ob-spot.visible{opacity:1}
+.ob-pop{position:fixed;background:var(--surface,#15181d);border:1px solid var(--border,#262a31);border-radius:12px;padding:18px 18px 14px;width:340px;max-width:calc(100vw - 32px);box-shadow:0 16px 48px -12px rgba(0,0,0,.6);color:var(--text,#e6e7eb);z-index:9001;opacity:0;transform:translateY(4px);transition:opacity .18s,transform .18s}
+.ob-overlay.active .ob-pop.visible{opacity:1;transform:translateY(0)}
+.ob-pop-eyebrow{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--accent,#00e5a0);margin-bottom:6px}
+.ob-pop-title{font-size:15px;font-weight:700;letter-spacing:-.2px;margin-bottom:6px;color:var(--text,#e6e7eb)}
+.ob-pop-body{font-size:13px;line-height:1.5;color:var(--text-muted,#9aa0aa);margin-bottom:14px}
+.ob-pop-body strong{color:var(--text,#e6e7eb);font-weight:600}
+.ob-pop-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.ob-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;background:var(--surface2,#1c1f25);border:1px solid var(--border,#262a31);color:var(--text-dim,#c5c8cf)}
+.ob-chip.warn{color:var(--yellow,#faad14);border-color:rgba(250,173,20,.3)}
+.ob-pop-actions{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ob-pop-progress{font-size:11px;color:var(--text-muted,#9aa0aa);letter-spacing:.4px}
+.ob-pop-buttons{display:flex;gap:8px}
+.ob-pop-btn{font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;border:1px solid transparent;background:transparent;color:var(--text-muted,#9aa0aa);transition:all .12s}
+.ob-pop-btn:hover{color:var(--text,#e6e7eb)}
+.ob-pop-btn.primary{background:var(--accent,#00e5a0);color:#06281d;border-color:var(--accent,#00e5a0)}
+.ob-pop-btn.primary:hover{filter:brightness(1.08);color:#06281d}
+.ob-pop-btn:focus-visible{outline:2px solid var(--accent,#00e5a0);outline-offset:2px}
+.ob-resume-pill{position:fixed;bottom:24px;right:24px;z-index:8500;display:none;align-items:center;gap:10px;padding:10px 16px;background:var(--surface,#15181d);border:1px solid var(--accent,#00e5a0);border-radius:24px;font-size:13px;font-weight:600;color:var(--text,#e6e7eb);box-shadow:0 8px 28px -8px rgba(0,0,0,.5);cursor:pointer;transition:transform .15s}
+.ob-resume-pill:hover{transform:translateY(-1px)}
+.ob-resume-pill.visible{display:inline-flex}
+.ob-resume-pill .ob-resume-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#00e5a0);box-shadow:0 0 0 4px rgba(0,229,160,.15)}
+@media (prefers-reduced-motion:reduce){.ob-spot,.ob-pop{transition:none}}
+"""
+
+private val ONBOARDING_JS = """
+(function(){
+  if(window.Onboarding)return;
+  var BASE='/transloom/api/onboarding';
+  var state=null,page='dashboard',steps=[],idx=0,prevFocus=null;
+
+  function authHeaders(){var t=localStorage.getItem('transloom_token');return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
+  function fetchState(){return fetch(BASE+'/state',{headers:authHeaders()}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});}
+  function postSkip(){return fetch(BASE+'/skip',{method:'POST',headers:authHeaders()}).catch(function(){});}
+  function postResume(){return fetch(BASE+'/resume',{method:'POST',headers:authHeaders()}).catch(function(){});}
+
+  function host(){var h=document.getElementById('ob-host');if(!h){h=document.createElement('div');h.id='ob-host';document.body.appendChild(h);}return h;}
+  function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+  function planLabel(p){return p==='SOLO'?'Solo':p==='TEAM'?'Team':p==='ENTERPRISE'?'Enterprise':'Free';}
+
+  function buildSteps(){
+    var planChip='<span class="ob-chip">Plan: <strong style="margin-left:4px">'+esc(planLabel(state.plan))+'</strong></span>';
+    var trialChip=state.inTrial?'<span class="ob-chip warn">Trial</span>':'';
+    var meta=planChip+trialChip;
+    if(page==='dashboard'){
+      return [
+        {
+          eyebrow:'Welcome',
+          title:'Welcome to Transloom',
+          body:'You\'re all set on the <strong>'+esc(planLabel(state.plan))+'</strong> plan. In the next two steps we\'ll connect your GitHub repo and watch your first translation run.',
+          meta:meta,
+          anchor:null,
+          primary:{label:'Get started',action:'next'},
+          secondary:{label:'Skip',action:'skip'}
+        },
+        {
+          eyebrow:'Step 1 of 2',
+          title:'Connect your first repository',
+          body:'Click <strong>+ New project</strong> to point Transloom at your GitHub repo. We\'ll auto-install the webhook so every push triggers translation.',
+          anchor:'#qa-new-project',
+          primary:{label:'Open projects',action:'navigate',href:'/transloom/projects?ob=connect'},
+          secondary:{label:'Skip',action:'skip'}
+        }
+      ];
+    }
+    if(page==='projects'){
+      // Resumes here when dashboard sent the user with ?ob=connect, or when they navigate directly while still SIGNED_UP.
+      return [
+        {
+          eyebrow:'Step 2 of 2',
+          title:'Create your project',
+          body:'Fill in your GitHub repo URL (e.g. <strong>owner/repo</strong>), pick a branch and target languages. We\'ll handle the webhook.',
+          anchor:'#new-proj-btn',
+          primary:{label:'Open form',action:'click-anchor'},
+          secondary:{label:'Skip',action:'skip'}
+        }
+      ];
+    }
+    return [];
+  }
+
+  function getAnchorRect(sel){
+    if(!sel)return null;
+    var el=document.querySelector(sel);
+    if(!el)return null;
+    el.scrollIntoView({block:'center',behavior:'smooth'});
+    return el.getBoundingClientRect();
+  }
+
+  function positionPop(pop,rect){
+    var pad=12,vw=window.innerWidth,vh=window.innerHeight,pw=pop.offsetWidth,ph=pop.offsetHeight;
+    if(!rect){
+      pop.style.left=Math.max(16,(vw-pw)/2)+'px';
+      pop.style.top=Math.max(16,(vh-ph)/2)+'px';
+      return;
+    }
+    var preferBelow=(rect.bottom+pad+ph)<=vh-8;
+    var top=preferBelow?(rect.bottom+pad):Math.max(16,rect.top-pad-ph);
+    var left=Math.min(Math.max(16,rect.left+(rect.width-pw)/2),vw-pw-16);
+    pop.style.left=left+'px';pop.style.top=top+'px';
+  }
+
+  function render(){
+    cleanup();
+    var step=steps[idx];if(!step)return;
+    var overlay=document.createElement('div');overlay.className='ob-overlay active';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-live','polite');
+    var shade=document.createElement('div');shade.className='ob-shade';shade.style.inset='0';overlay.appendChild(shade);
+    var spot=document.createElement('div');spot.className='ob-spot';overlay.appendChild(spot);
+    var pop=document.createElement('div');pop.className='ob-pop';
+    var meta=step.meta?'<div class="ob-pop-meta">'+step.meta+'</div>':'';
+    var progress=steps.length>1?(idx+1)+' / '+steps.length:'';
+    pop.innerHTML=
+      '<div class="ob-pop-eyebrow">'+esc(step.eyebrow||'')+'</div>'+
+      '<div class="ob-pop-title">'+esc(step.title)+'</div>'+
+      '<div class="ob-pop-body">'+step.body+'</div>'+
+      meta+
+      '<div class="ob-pop-actions">'+
+        '<span class="ob-pop-progress">'+esc(progress)+'</span>'+
+        '<div class="ob-pop-buttons">'+
+          (step.secondary?'<button type="button" class="ob-pop-btn" data-act="'+esc(step.secondary.action)+'">'+esc(step.secondary.label)+'</button>':'')+
+          (step.primary?'<button type="button" class="ob-pop-btn primary" data-act="'+esc(step.primary.action)+'">'+esc(step.primary.label)+'</button>':'')+
+        '</div>'+
+      '</div>';
+    overlay.appendChild(pop);
+    host().appendChild(overlay);
+
+    var rect=getAnchorRect(step.anchor);
+    if(rect){
+      var pad=8;
+      spot.style.left=(rect.left-pad)+'px';spot.style.top=(rect.top-pad)+'px';
+      spot.style.width=(rect.width+pad*2)+'px';spot.style.height=(rect.height+pad*2)+'px';
+      spot.classList.add('visible');
+    }
+    requestAnimationFrame(function(){positionPop(pop,rect);pop.classList.add('visible');});
+
+    var btns=pop.querySelectorAll('button[data-act]');
+    btns.forEach(function(b){b.addEventListener('click',function(){handleAction(b.getAttribute('data-act'),step);});});
+    var first=pop.querySelector('button.primary')||btns[0];if(first){prevFocus=document.activeElement;first.focus();}
+
+    overlay._onKey=function(e){
+      if(e.key==='Escape'){e.preventDefault();skip();}
+      else if(e.key==='Tab'){
+        var nodes=Array.prototype.slice.call(btns);if(!nodes.length)return;
+        var i=nodes.indexOf(document.activeElement);
+        if(e.shiftKey){if(i<=0){e.preventDefault();nodes[nodes.length-1].focus();}}
+        else{if(i===nodes.length-1){e.preventDefault();nodes[0].focus();}}
+      }
+    };
+    document.addEventListener('keydown',overlay._onKey);
+    overlay._onResize=function(){positionPop(pop,getAnchorRect(step.anchor));};
+    window.addEventListener('resize',overlay._onResize);window.addEventListener('scroll',overlay._onResize,true);
+  }
+
+  function cleanup(){
+    var h=document.getElementById('ob-host');if(!h)return;
+    Array.prototype.slice.call(h.querySelectorAll('.ob-overlay')).forEach(function(o){
+      if(o._onKey)document.removeEventListener('keydown',o._onKey);
+      if(o._onResize){window.removeEventListener('resize',o._onResize);window.removeEventListener('scroll',o._onResize,true);}
+      o.remove();
+    });
+    if(prevFocus&&prevFocus.focus){try{prevFocus.focus();}catch(_){}prevFocus=null;}
+  }
+
+  function handleAction(act,step){
+    if(act==='next'){idx++;if(idx>=steps.length){finish();}else{render();}}
+    else if(act==='skip'){skip();}
+    else if(act==='navigate'){postSkip();window.location.href=step.primary.href;}
+    else if(act==='click-anchor'){
+      var el=step.anchor&&document.querySelector(step.anchor);
+      cleanup();if(el)el.click();
+    }
+  }
+
+  function finish(){cleanup();renderResumePill(false);}
+
+  function skip(){postSkip();cleanup();renderResumePill(true);}
+
+  function renderResumePill(show){
+    var existing=document.getElementById('ob-resume-pill');
+    if(!show){if(existing)existing.classList.remove('visible');return;}
+    if(existing){existing.classList.add('visible');return;}
+    var pill=document.createElement('div');pill.id='ob-resume-pill';pill.className='ob-resume-pill';
+    pill.setAttribute('role','button');pill.setAttribute('tabindex','0');pill.setAttribute('aria-label','Resume setup');
+    pill.innerHTML='<span class="ob-resume-dot"></span><span>Resume setup</span>';
+    function resume(){postResume().then(function(){pill.classList.remove('visible');state.dismissed=false;steps=buildSteps();idx=0;render();});}
+    pill.addEventListener('click',resume);
+    pill.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();resume();}});
+    document.body.appendChild(pill);requestAnimationFrame(function(){pill.classList.add('visible');});
+  }
+
+  function shouldRun(){
+    if(!state)return false;
+    if(state.completed)return false;
+    if(page==='dashboard')return state.step==='SIGNED_UP';
+    if(page==='projects'){
+      var fromDash=new URLSearchParams(window.location.search).get('ob')==='connect';
+      return (state.step==='SIGNED_UP'&&!state.hasProject)||fromDash;
+    }
+    return false;
+  }
+
+  var Onboarding={
+    boot:function(pageName){
+      page=pageName||'dashboard';
+      fetchState().then(function(s){
+        if(!s)return;state=s;
+        if(state.dismissed&&!state.completed){renderResumePill(true);return;}
+        if(!shouldRun())return;
+        steps=buildSteps();idx=0;render();
+      });
+    },
+    refresh:function(){
+      fetchState().then(function(s){if(!s)return;state=s;
+        if(state.completed){cleanup();renderResumePill(false);return;}
+        if(state.step!=='SIGNED_UP'){cleanup();}
+      });
+    },
+    cleanup:cleanup
+  };
+  window.Onboarding=Onboarding;
+})();
 """.trimIndent()

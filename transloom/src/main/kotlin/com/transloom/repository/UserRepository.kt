@@ -31,6 +31,12 @@ interface UserRepository {
      */
     suspend fun advanceOnboarding(userId: String, step: OnboardingStep, at: Instant)
 
+    /** Marks the in-product tour as dismissed. Idempotent. */
+    suspend fun setOnboardingDismissed(userId: String, at: Instant)
+
+    /** Clears the dismissed flag so the tour resumes on next dashboard load. */
+    suspend fun clearOnboardingDismissed(userId: String)
+
     /** All users — only used by the background monitor; bounded by [limit] for safety. */
     suspend fun listAll(limit: Int = 5_000): List<User>
 

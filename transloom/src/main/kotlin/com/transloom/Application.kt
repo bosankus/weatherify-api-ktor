@@ -200,6 +200,7 @@ fun Application.module() {
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
             configureInsightsRoutes(userActivityService)
+            configureOnboardingRoutes(userRepository, billingRepository, projectRepository)
         }
     }
 }

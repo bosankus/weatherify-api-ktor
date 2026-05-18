@@ -122,6 +122,20 @@ class MongoUserRepository(
         collection.updateOne(eq("_id", userId), Updates.combine(updates))
     }
 
+    override suspend fun setOnboardingDismissed(userId: String, at: Instant) {
+        collection.updateOne(
+            eq("_id", userId),
+            Updates.set("onboardingDismissedAt", at.toEpochMilliseconds())
+        )
+    }
+
+    override suspend fun clearOnboardingDismissed(userId: String) {
+        collection.updateOne(
+            eq("_id", userId),
+            Updates.unset("onboardingDismissedAt")
+        )
+    }
+
     override suspend fun listAll(limit: Int): List<User> =
         collection.find()
             .sort(Sorts.descending("lastActiveAt"))
@@ -143,6 +157,8 @@ class MongoUserRepository(
             .getOrDefault(OnboardingStep.SIGNED_UP)
         val onboardingCompletedAt = (get("onboardingCompletedAt") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
+        val onboardingDismissedAt = (get("onboardingDismissedAt") as? Number)?.toLong()
+            ?.let { Instant.fromEpochMilliseconds(it) }
         return User(
             id = getString("_id"),
             githubId = getLong("githubId"),
@@ -153,7 +169,8 @@ class MongoUserRepository(
             signupAt = signupAt,
             lastActiveAt = lastActiveAt,
             onboardingStep = onboardingStep,
-            onboardingCompletedAt = onboardingCompletedAt
+            onboardingCompletedAt = onboardingCompletedAt,
+            onboardingDismissedAt = onboardingDismissedAt
         )
     }
 }

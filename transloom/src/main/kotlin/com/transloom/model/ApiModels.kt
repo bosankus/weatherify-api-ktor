@@ -88,3 +88,15 @@ data class ProjectDetailResponse(
 
 @Serializable
 data class ApiError(val error: String)
+
+/**
+ * Structured error envelope for cases where the UI needs to act on the failure
+ * (e.g. send the user back to GitHub OAuth) rather than just show a toast.
+ */
+@Serializable
+data class StructuredApiError(
+    val error: String,
+    val code: String,
+    val actionHint: String? = null,
+    val reauthUrl: String? = null
+)
