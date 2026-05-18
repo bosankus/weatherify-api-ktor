@@ -2,7 +2,9 @@ package com.transloom.routes
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.transloom.domain.UserEvent
 import com.transloom.repository.UserRepository
+import com.transloom.services.UserActivityService
 import com.androidplay.core.secrets.getSecretValue
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -50,7 +52,8 @@ data class GitHubUser(
 
 fun Route.configureAuthRoutes(
     jwtSecret: String,
-    userRepository: UserRepository
+    userRepository: UserRepository,
+    userActivityService: UserActivityService
 ) {
     val httpClient = HttpClient(CIO) {
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
@@ -106,7 +109,13 @@ fun Route.configureAuthRoutes(
 
             if (clientId == "dummy_client_id") {
                 log.info("Mocking GitHub OAuth (no GITHUB_CLIENT_ID set)")
-                val mockUser = userRepository.upsert(12345L, "mock-developer", "mock@transloom.dev", null, null)
+                val mockResult = userRepository.upsert(12345L, "mock-developer", "mock@transloom.dev", null, null)
+                val mockUser = mockResult.user
+                userActivityService.record(
+                    mockUser.id,
+                    if (mockResult.isNewUser) UserEvent.SIGNED_UP else UserEvent.LOGGED_IN,
+                    mapOf("flow" to "mock")
+                )
                 val mockToken = mintJwt(jwtSecret, mockUser.id, 12345L, "mock-developer")
                 call.issueSessionCookie(mockToken)
                 redirectAfterAuth(call, mockToken, pendingPlan, frontendRedirectUrl)
@@ -133,12 +142,22 @@ fun Route.configureAuthRoutes(
                 header(HttpHeaders.Accept, "application/vnd.github.v3+json")
             }.body()
 
-            val user = userRepository.upsert(
+            val upsertResult = userRepository.upsert(
                 githubId = githubUser.id, username = githubUser.login,
                 email = githubUser.email, avatarUrl = githubUser.avatar_url,
                 githubToken = tokenResponse.access_token
             )
-            log.info("OAuth success: user={} id={}", githubUser.login, user.id)
+            val user = upsertResult.user
+            log.info("OAuth success: user={} id={} new={}", githubUser.login, user.id, upsertResult.isNewUser)
+
+            userActivityService.record(
+                user.id,
+                if (upsertResult.isNewUser) UserEvent.SIGNED_UP else UserEvent.LOGGED_IN,
+                mapOf(
+                    "githubLogin" to githubUser.login,
+                    "pendingPlan" to (pendingPlan ?: "")
+                )
+            )
 
             val jwtToken = mintJwt(jwtSecret, user.id, githubUser.id, githubUser.login)
             call.issueSessionCookie(jwtToken)

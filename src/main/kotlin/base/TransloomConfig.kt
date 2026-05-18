@@ -17,6 +17,8 @@ import com.transloom.services.GitHubService
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.RazorpayBillingService
 import com.transloom.services.TranslationService
+import com.transloom.services.UserActivityService
+import com.transloom.services.UserLifecycleMonitor
 import domain.service.RefundService
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -42,12 +44,20 @@ fun Application.configureTransloom(refundService: RefundService) {
     val translationRepository = MongoTranslationRepository(db)
     val billingRepository = MongoBillingRepository(db, projectRepository)
     val memoryRepository = MongoTranslationMemoryRepository(db)
+    val userActivityRepository = MongoUserActivityRepository(db)
 
     val jobQueueRepository: JobQueueRepository by inject()
 
     val jobQueue = TranslationJobQueue(jobQueueRepository)
     val billingService = BillingService(billingRepository)
-    val razorpayService = RazorpayBillingService(billingRepository)
+    val userActivityService = UserActivityService(
+        userRepository = userRepository,
+        userActivityRepository = userActivityRepository,
+        billingRepository = billingRepository,
+        projectRepository = projectRepository
+    )
+    val razorpayService = RazorpayBillingService(billingRepository, userActivityService)
+    val lifecycleMonitor = UserLifecycleMonitor(userActivityService).also { it.start() }
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
     val pipelineEventBus = PipelineEventBus()
@@ -89,20 +99,22 @@ fun Application.configureTransloom(refundService: RefundService) {
         githubService.close()
         translationService.close()
         razorpayService.close()
+        lifecycleMonitor.stop()
         log.info("Transloom resources closed")
     }
 
     routing {
         configurePortalRoutes(jwtSecret)
         configureWebhookRoutes(jobQueue, projectRepository)
-        configureAuthRoutes(jwtSecret, userRepository)
+        configureAuthRoutes(jwtSecret, userRepository, userActivityService)
         configureRazorpayWebhook(webhookDispatcher)
-        configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret)
-        configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository)
+        configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
+        configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue, glossaryRepository)
+            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue, glossaryRepository, userActivityService)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
-            configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret)
+            configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
+            configureInsightsRoutes(userActivityService)
         }
     }
 }

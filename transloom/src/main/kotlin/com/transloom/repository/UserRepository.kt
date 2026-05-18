@@ -1,17 +1,38 @@
 package com.transloom.repository
 
+import com.transloom.domain.OnboardingStep
 import com.transloom.domain.User
+import kotlinx.datetime.Instant
 
 interface UserRepository {
+    /**
+     * Returns the user after upsert and a flag indicating whether this call inserted
+     * a new document (true) or matched an existing one (false). The flag drives the
+     * SIGNED_UP vs LOGGED_IN distinction in activity tracking.
+     */
     suspend fun upsert(
         githubId: Long,
         username: String,
         email: String?,
         avatarUrl: String?,
         githubToken: String?
-    ): User
+    ): UpsertResult
 
     suspend fun findByGithubId(githubId: Long): User?
 
     suspend fun findById(userId: String): User?
+
+    /** Bumps lastActiveAt to now. Fire-and-forget; failures don't block requests. */
+    suspend fun touchLastActive(userId: String, at: Instant)
+
+    /**
+     * Monotonically advances onboardingStep. If [step] is COMPLETED, stamps
+     * onboardingCompletedAt as well. Earlier steps are ignored.
+     */
+    suspend fun advanceOnboarding(userId: String, step: OnboardingStep, at: Instant)
+
+    /** All users — only used by the background monitor; bounded by [limit] for safety. */
+    suspend fun listAll(limit: Int = 5_000): List<User>
+
+    data class UpsertResult(val user: User, val isNewUser: Boolean)
 }

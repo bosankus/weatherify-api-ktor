@@ -4,6 +4,7 @@ import com.androidplay.core.razorpay.RazorpayEventHandler
 import com.androidplay.core.razorpay.WebhookResult
 import com.androidplay.core.secrets.getSecretValue
 import com.transloom.domain.BillingPlan
+import com.transloom.domain.UserEvent
 import com.transloom.repository.BillingRepository
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -38,7 +39,10 @@ data class SubscriptionInit(
 )
 
 class RazorpayBillingService(
-    private val billingRepository: BillingRepository
+    private val billingRepository: BillingRepository,
+    // Nullable so this service can be constructed standalone in tests / smaller deployments
+    // that don't enable activity tracking. When null, webhook events are not recorded.
+    private val userActivityService: UserActivityService? = null
 ) : RazorpayEventHandler {
 
     private val log = LoggerFactory.getLogger(RazorpayBillingService::class.java)
@@ -200,6 +204,10 @@ class RazorpayBillingService(
             razorpayCustomerId = sub["customer_id"]?.jsonPrimitive?.contentOrNull,
             razorpaySubscriptionId = subscriptionId
         )
+        userActivityService?.record(
+            userId, UserEvent.SUBSCRIPTION_AUTHENTICATED,
+            mapOf("plan" to plan.name, "subscriptionId" to subscriptionId)
+        )
         log.info("Subscription authenticated (card saved): userId={} plan={} sub={}", userId, plan.name, subscriptionId)
         return WebhookResult.Ok
     }
@@ -229,15 +237,28 @@ class RazorpayBillingService(
         if (payment != null) {
             val paymentId = payment["id"]?.jsonPrimitive?.contentOrNull
             if (paymentId != null) {
+                val amount = payment["amount"]?.jsonPrimitive?.intOrNull ?: 0
                 billingRepository.insertInvoice(
                     userId = userId, razorpayPaymentId = paymentId,
-                    amountPaise = payment["amount"]?.jsonPrimitive?.intOrNull ?: 0,
+                    amountPaise = amount,
                     currency = payment["currency"]?.jsonPrimitive?.contentOrNull ?: "INR",
                     status = payment["status"]?.jsonPrimitive?.contentOrNull ?: "captured",
                     periodEnd = currentEnd ?: Clock.System.now()
                 )
+                userActivityService?.record(
+                    userId, UserEvent.INVOICE_GENERATED,
+                    mapOf(
+                        "paymentId" to paymentId,
+                        "amountPaise" to amount.toString(),
+                        "plan" to plan.name
+                    )
+                )
             }
         }
+        userActivityService?.record(
+            userId, UserEvent.SUBSCRIPTION_CHARGED,
+            mapOf("plan" to plan.name, "subscriptionId" to subscriptionId)
+        )
         log.info("Subscription charged: userId={} plan={} sub={}", userId, plan.name, subscriptionId)
         return WebhookResult.Ok
     }
@@ -245,7 +266,14 @@ class RazorpayBillingService(
     private suspend fun handleSubscriptionEnded(event: JsonObject): WebhookResult {
         val subscriptionId = subEntity(event)?.get("id")?.jsonPrimitive?.contentOrNull
             ?: return WebhookResult.Skipped("No subscription ID")
+        val userId = billingRepository.findByRazorpaySubscription(subscriptionId)
         billingRepository.downgradeToFree(subscriptionId)
+        userId?.let {
+            userActivityService?.record(
+                it, UserEvent.SUBSCRIPTION_CANCELLED,
+                mapOf("subscriptionId" to subscriptionId, "source" to "webhook")
+            )
+        }
         log.info("Subscription ended, downgraded to free: sub={}", subscriptionId)
         return WebhookResult.Ok
     }

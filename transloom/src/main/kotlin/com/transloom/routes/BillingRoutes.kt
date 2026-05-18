@@ -6,11 +6,14 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.auth0.jwt.exceptions.JWTVerificationException
 import com.transloom.domain.BillingPlan
+import com.transloom.domain.UserEvent
 import com.transloom.repository.BillingRepository
 import com.transloom.repository.UserRepository
 import com.transloom.model.ApiError
+import com.transloom.services.InvoicePdfGenerator
 import com.transloom.services.RazorpayBillingService
 import com.transloom.services.SubscriptionInit
+import com.transloom.services.UserActivityService
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -77,7 +80,8 @@ fun Route.configureBillingRoutes(
     razorpayService: RazorpayBillingService,
     billingRepository: BillingRepository,
     userRepository: UserRepository,
-    jwtSecret: String
+    jwtSecret: String,
+    userActivityService: UserActivityService
 ) {
     route("/transloom/api/billing") {
 
@@ -114,6 +118,10 @@ fun Route.configureBillingRoutes(
                 log.error("Subscription creation failed for userId={}: {}", userId, it.message)
                 return@post call.respond(HttpStatusCode.InternalServerError, ApiError(it.message ?: "Razorpay error"))
             }
+            userActivityService.record(
+                userId, UserEvent.SUBSCRIPTION_INITIATED,
+                mapOf("plan" to plan.name, "subscriptionId" to init.subscriptionId, "flow" to "authenticated")
+            )
             call.respond(SubscribeResponse(init.subscriptionId, init.keyId, init.plan.name))
         }
 
@@ -140,6 +148,7 @@ fun Route.configureBillingRoutes(
             runCatching { razorpayService.cancelSubscription(userId) }.getOrElse {
                 return@post call.respond(HttpStatusCode.BadRequest, ApiError(it.message ?: "Cancel failed"))
             }
+            userActivityService.record(userId, UserEvent.SUBSCRIPTION_CANCELLED, mapOf("source" to "user"))
             call.respond(mapOf("status" to "Subscription will cancel at end of billing period"))
         }
 
@@ -180,6 +189,13 @@ fun Route.configureBillingRoutes(
             // sees their upgraded tier right away without waiting for the Razorpay webhook.
             val activated = billingRepository.activatePendingPlan(userId)
             log.info("confirm-payment: verified paymentId={} userId={} activatedPlan={}", body.paymentId, userId, activated?.name)
+            userActivityService.record(
+                userId, UserEvent.PAYMENT_VERIFIED,
+                mapOf("paymentId" to body.paymentId, "subscriptionId" to body.subscriptionId)
+            )
+            activated?.let {
+                userActivityService.record(userId, UserEvent.PLAN_ACTIVATED, mapOf("plan" to it.name))
+            }
             call.respond(ConfirmPaymentResponse(
                 verified = true,
                 paymentId = body.paymentId,
@@ -218,7 +234,8 @@ fun Route.configurePublicCheckoutRoute(
     razorpayService: RazorpayBillingService,
     userRepository: UserRepository,
     billingRepository: BillingRepository,
-    jwtSecret: String
+    jwtSecret: String,
+    userActivityService: UserActivityService
 ) {
     get("/transloom/billing/start-subscription") {
         val planParam = call.request.queryParameters["plan"]?.uppercase()
@@ -276,6 +293,10 @@ fun Route.configurePublicCheckoutRoute(
             log.error("Subscription creation failed for userId={} plan={}: {}", userId, plan.name, it.message, it)
             return@get call.respondRedirect("/transloom#pricing?billing_error=create_failed")
         }
+        userActivityService.record(
+            userId, UserEvent.SUBSCRIPTION_INITIATED,
+            mapOf("plan" to plan.name, "subscriptionId" to init.subscriptionId, "flow" to "public-checkout")
+        )
 
         call.respondHtml { checkoutPage(plan, init, user.email, user.githubUsername, user.avatarUrl) }
     }
@@ -310,6 +331,13 @@ fun Route.configurePublicCheckoutRoute(
         // shows the correct tier as soon as the user lands there after redirect.
         val activated = billingRepository.activatePendingPlan(sessionUserId)
         log.info("rp-callback: activated plan={} for userId={} sub={}", activated?.name, sessionUserId, subscriptionId)
+        userActivityService.record(
+            sessionUserId, UserEvent.PAYMENT_VERIFIED,
+            mapOf("paymentId" to paymentId, "subscriptionId" to subscriptionId, "flow" to "rp-callback")
+        )
+        activated?.let {
+            userActivityService.record(sessionUserId, UserEvent.PLAN_ACTIVATED, mapOf("plan" to it.name))
+        }
         // Remove the pending plan cookie so the user isn't re-routed on next visit.
         call.response.cookies.append(Cookie(
             name = PENDING_PLAN_COOKIE, value = "",
@@ -368,7 +396,8 @@ fun Route.configureRazorpayWebhook(dispatcher: RazorpayWebhookDispatcher) {
 fun Route.configureBillingReceiptRoute(
     jwtSecret: String,
     billingRepository: BillingRepository,
-    userRepository: UserRepository
+    userRepository: UserRepository,
+    userActivityService: UserActivityService
 ) {
     get("/transloom/api/billing/invoices/{id}/receipt") {
         val token = call.request.queryParameters["token"]
@@ -394,9 +423,53 @@ fun Route.configureBillingReceiptRoute(
                 amount = amount,
                 currency = invoice.currency.uppercase(),
                 status = invoice.status.replaceFirstChar { it.uppercase() },
-                userEmail = email
+                userEmail = email,
+                pdfUrl = "/transloom/api/billing/invoices/${invoice.razorpayPaymentId}/pdf?token=$token"
             )
         }
+    }
+
+    // Branded PDF download — used as the primary deliverable after a successful charge.
+    // Token-in-URL so the dashboard can serve it via <a download> without an Authorization header.
+    get("/transloom/api/billing/invoices/{id}/pdf") {
+        val token = call.request.queryParameters["token"]
+        val userId = token?.let { extractUserIdFromBearer(it, jwtSecret) }
+            ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+
+        val paymentId = call.parameters["id"]
+            ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing invoice id"))
+
+        val invoices = billingRepository.listInvoices(userId)
+        val invoice = invoices.find { it.razorpayPaymentId == paymentId }
+            ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("Invoice not found"))
+
+        val user = userRepository.findById(userId)
+        val subscription = billingRepository.getSubscription(userId)
+        val plan = subscription.plan
+        val userName = user?.githubUsername?.takeIf { it.isNotBlank() } ?: (user?.email ?: "Customer")
+
+        val pdfBytes = runCatching {
+            InvoicePdfGenerator.render(
+                InvoicePdfGenerator.InvoiceContext(
+                    invoice = invoice,
+                    userEmail = user?.email,
+                    userName = userName,
+                    plan = plan,
+                    subscription = subscription
+                )
+            )
+        }.getOrElse {
+            log.error("PDF render failed for paymentId={}: {}", paymentId, it.message, it)
+            return@get call.respond(HttpStatusCode.InternalServerError, ApiError("Failed to generate invoice PDF"))
+        }
+
+        val filename = "transloom-invoice-${invoice.razorpayPaymentId}.pdf"
+        call.response.header(HttpHeaders.ContentDisposition, """inline; filename="$filename"""")
+        userActivityService.record(
+            userId, UserEvent.INVOICE_DOWNLOADED,
+            mapOf("paymentId" to invoice.razorpayPaymentId)
+        )
+        call.respondBytes(pdfBytes, ContentType.Application.Pdf, HttpStatusCode.OK)
     }
 }
 
@@ -415,7 +488,8 @@ private fun buildInvoiceReceipt(
     amount: String,
     currency: String,
     status: String,
-    userEmail: String
+    userEmail: String,
+    pdfUrl: String
 ): String = """
 <!DOCTYPE html>
 <html lang="en">
@@ -466,7 +540,8 @@ private fun buildInvoiceReceipt(
 </div>
 <div class="footer">
   Transloom by Androidplay &nbsp;·&nbsp; support@androidplay.in<br>
-  <button onclick="window.print()" style="margin-top:12px;background:#111;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer">Print / Save as PDF</button>
+  <a href="$pdfUrl" style="display:inline-block;margin-top:12px;background:#00E5A0;color:#0a0a0a;text-decoration:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:600">Download branded PDF</a>
+  <button onclick="window.print()" style="margin-top:12px;margin-left:8px;background:transparent;color:#111;border:1px solid #d1d5db;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer">Print this page</button>
 </div>
 </body>
 </html>

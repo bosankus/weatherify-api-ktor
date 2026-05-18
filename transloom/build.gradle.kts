@@ -48,4 +48,9 @@ dependencies {
 
     // DateTime (for routes that use kotlinx.datetime directly)
     implementation(libs.kotlinx.datetime)
+
+    // PDF generation for branded invoices. Kept to kernel + layout only —
+    // we hand-draw the layout, so font-asian / forms / sign / svg aren't needed.
+    implementation("com.itextpdf:kernel:8.0.4")
+    implementation("com.itextpdf:layout:8.0.4")
 }

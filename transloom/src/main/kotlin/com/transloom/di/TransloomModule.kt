@@ -15,6 +15,7 @@ fun transloomModule(encryptionKey: String) = module {
     single<TranslationRepository> { MongoTranslationRepository(get()) }
     single<BillingRepository> { MongoBillingRepository(get(), get()) }
     single<TranslationMemoryRepository> { MongoTranslationMemoryRepository(get()) }
+    single<UserActivityRepository> { MongoUserActivityRepository(get()) }
 }
 
 fun transloomIndexes(): List<IndexSpec> {
@@ -36,5 +37,10 @@ fun transloomIndexes(): List<IndexSpec> {
         IndexSpec("usage_logs", Document(mapOf("userId" to 1, "yearMonth" to 1)), unique),
         IndexSpec("invoice_records", Document("razorpayPaymentId", 1), unique),
         IndexSpec("invoice_records", Document("userId", 1)),
+        // user_events powers activity feed + lifecycle queries. The compound
+        // (userId, occurredAt desc) index serves both per-user history and
+        // the abandoned-payment scan which filters by event then sorts by time.
+        IndexSpec("user_events", Document(mapOf("userId" to 1, "occurredAt" to -1))),
+        IndexSpec("user_events", Document(mapOf("event" to 1, "occurredAt" to -1))),
     )
 }

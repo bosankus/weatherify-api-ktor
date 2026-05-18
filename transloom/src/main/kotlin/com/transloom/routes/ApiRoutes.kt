@@ -9,8 +9,10 @@ import com.transloom.repository.ProjectRepository
 import com.transloom.repository.TranslationRepository
 import com.transloom.repository.UserRepository
 import com.transloom.model.*
+import com.transloom.domain.UserEvent
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
+import com.transloom.services.UserActivityService
 import com.transloom.queue.TranslationJobQueue
 import com.transloom.queue.WebhookPayload
 import com.transloom.services.PipelineEventBus
@@ -41,7 +43,8 @@ fun Route.configureApiRoutes(
     pipelineEventBus: PipelineEventBus,
     jwtSecret: String,
     jobQueue: TranslationJobQueue,
-    glossaryRepository: GlossaryRepository
+    glossaryRepository: GlossaryRepository,
+    userActivityService: UserActivityService
 ) {
 
     route("/transloom/api") {
@@ -109,10 +112,21 @@ fun Route.configureApiRoutes(
                     return@post call.respond(HttpStatusCode.InternalServerError, ApiError("Failed to create project"))
                 }
 
+                userActivityService.record(
+                    userId, UserEvent.PROJECT_CREATED,
+                    mapOf("projectId" to project.id, "repo" to project.githubRepo)
+                )
+
                 val user = userRepository.findById(userId)
                 val userToken = user?.githubToken
                 if (userToken != null) {
                     runCatching { githubService.createWebhook(project.githubRepo, userToken) }
+                        .onSuccess {
+                            userActivityService.record(
+                                userId, UserEvent.WEBHOOK_INSTALLED,
+                                mapOf("projectId" to project.id, "repo" to project.githubRepo)
+                            )
+                        }
                         .onFailure { apiLog.warn("Webhook auto-install failed for {}: {}", project.githubRepo, it.message) }
                 }
 
@@ -215,6 +229,10 @@ fun Route.configureApiRoutes(
                     return@delete call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
                 }
                 projectRepository.delete(projectId)
+                userActivityService.record(
+                    userId, UserEvent.PROJECT_DELETED,
+                    mapOf("projectId" to projectId, "repo" to project.githubRepo)
+                )
                 call.respond(HttpStatusCode.OK, mapOf("status" to "Project deleted", "id" to projectId))
             }
 
@@ -464,7 +482,13 @@ fun Route.configureApiRoutes(
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("No GitHub token on file. Re-authenticate."))
 
             runCatching { githubService.createWebhook(project.githubRepo, token) }
-                .onSuccess { call.respond(HttpStatusCode.OK, mapOf("status" to "Webhook installed for ${project.githubRepo}")) }
+                .onSuccess {
+                    userActivityService.record(
+                        userId, UserEvent.WEBHOOK_INSTALLED,
+                        mapOf("projectId" to project.id, "repo" to project.githubRepo)
+                    )
+                    call.respond(HttpStatusCode.OK, mapOf("status" to "Webhook installed for ${project.githubRepo}"))
+                }
                 .onFailure { call.respond(HttpStatusCode.InternalServerError, ApiError(it.message ?: "Failed to install webhook")) }
         }
     }

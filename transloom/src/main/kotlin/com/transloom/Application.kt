@@ -25,6 +25,7 @@ import com.transloom.repository.UserRepository
 import com.transloom.repository.TranslationRepository
 import com.transloom.repository.BillingRepository
 import com.transloom.repository.TranslationMemoryRepository
+import com.transloom.repository.UserActivityRepository
 import com.transloom.pipeline.TranslationPipeline
 import com.transloom.pipeline.buildConfigWithGlossary
 import com.transloom.repository.GlossaryRepository
@@ -35,6 +36,8 @@ import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
 import com.transloom.services.RazorpayBillingService
 import com.transloom.services.TranslationService
+import com.transloom.services.UserActivityService
+import com.transloom.services.UserLifecycleMonitor
 import com.androidplay.core.secrets.getSecretValue
 import com.androidplay.core.cache.CacheRepository
 import com.androidplay.core.queue.JobQueueRepository
@@ -113,12 +116,21 @@ fun Application.module() {
     val translationRepository: TranslationRepository by inject()
     val billingRepository: BillingRepository by inject()
     val memoryRepository: TranslationMemoryRepository by inject()
+    val userActivityRepository: UserActivityRepository by inject()
     val jobQueueRepository: JobQueueRepository by inject()
     val cacheRepository: CacheRepository by inject()
 
     val jobQueue = TranslationJobQueue(jobQueueRepository)
     val billingService = BillingService(billingRepository)
-    val razorpayService = RazorpayBillingService(billingRepository)
+    val userActivityService = UserActivityService(
+        userRepository = userRepository,
+        userActivityRepository = userActivityRepository,
+        billingRepository = billingRepository,
+        projectRepository = projectRepository
+    )
+    val razorpayService = RazorpayBillingService(billingRepository, userActivityService)
+    val lifecycleMonitor = UserLifecycleMonitor(userActivityService)
+    lifecycleMonitor.start()
     val webhookDispatcher = RazorpayWebhookDispatcher(
         webhookSecret = getSecretValue("razorpay-webhook-secret"),
         handlers = listOf(razorpayService)
@@ -172,20 +184,22 @@ fun Application.module() {
         githubService.close()
         translationService.close()
         razorpayService.close()
+        lifecycleMonitor.stop()
         log.info("All resources closed on application stop")
     }
 
     routing {
         configurePortalRoutes(jwtSecret)
         configureWebhookRoutes(jobQueue, projectRepository)
-        configureAuthRoutes(jwtSecret, userRepository)
+        configureAuthRoutes(jwtSecret, userRepository, userActivityService)
         configureRazorpayWebhook(webhookDispatcher)
-        configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret)
-        configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository)
+        configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
+        configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue, glossaryRepository)
+            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue, glossaryRepository, userActivityService)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
-            configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret)
+            configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
+            configureInsightsRoutes(userActivityService)
         }
     }
 }
