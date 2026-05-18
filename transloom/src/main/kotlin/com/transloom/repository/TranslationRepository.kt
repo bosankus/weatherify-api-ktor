@@ -34,4 +34,13 @@ interface TranslationRepository {
     suspend fun activeLanguageCount(ownerId: String): Int
 
     suspend fun revertToReview(translationId: String)
+
+    /** Returns all translations with status "approved" (manually approved, awaiting follow-up PR) for a project. */
+    suspend fun getApprovedForProject(projectId: String): List<Translation>
+
+    /**
+     * Atomically sets status "approved" → "auto" for the given IDs.
+     * Returns the number of documents actually modified (0 if another coroutine already claimed them).
+     */
+    suspend fun claimApproved(translationIds: List<String>): Int
 }

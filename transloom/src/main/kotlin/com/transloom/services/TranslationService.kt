@@ -13,15 +13,29 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 
 // Gemini API Models
 @Serializable
+data class ThinkingConfig(val thinkingBudget: Int)
+
+@Serializable
+data class GenerationConfig(
+    val temperature: Double = 0.1,
+    val maxOutputTokens: Int = 2048,
+    val thinkingConfig: ThinkingConfig? = null,
+    val responseMimeType: String? = null
+)
+
+@Serializable
 data class GeminiRequest(
     val systemInstruction: GeminiSystemInstruction? = null,
-    val contents: List<GeminiContent>
+    val contents: List<GeminiContent>,
+    val generationConfig: GenerationConfig = GenerationConfig(thinkingConfig = ThinkingConfig(0))
 )
 
 @Serializable
@@ -53,8 +67,9 @@ data class TranslationContext(
 class TranslationService(private val memoryStore: TranslationMemoryRepository) {
     private val log = LoggerFactory.getLogger(TranslationService::class.java)
 
-    // Fetched once at construction time; avoids a potential GCP metadata round-trip per translation.
     private val geminiApiKey: String = getSecretValue("gemini-api-key")
+    private val json = Json { ignoreUnknownKeys = true }
+    private val mapSerializer = MapSerializer(String.serializer(), String.serializer())
 
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
@@ -67,10 +82,7 @@ class TranslationService(private val memoryStore: TranslationMemoryRepository) {
     suspend fun translate(context: TranslationContext): String = translateWithFlags(context).text
 
     suspend fun translateWithFlags(context: TranslationContext): TranslationResult {
-        val regionSuffix = context.targetRegion?.let { "-$it" } ?: ""
-        val hashInput = "${context.sourceText}|${context.targetLanguage}${regionSuffix}|${context.appId}"
-        val hashKey = hashString(hashInput)
-
+        val hashKey = cacheKey(context)
         val cached = memoryStore.getTranslation(hashKey)
         if (cached != null) {
             memoryStore.incrementUsage(hashKey)
@@ -82,54 +94,161 @@ class TranslationService(private val memoryStore: TranslationMemoryRepository) {
             throw IllegalStateException("String is truncated, blocking translation.")
         }
 
-        val glossaryPrompt = context.glossary?.let { glossary ->
-            "Apply the following glossary exactly: " + glossary.entries.joinToString(", ") { (k, v) -> "[$k -> $v]" }
-        } ?: ""
+        val llmOutput = callGeminiApi(buildSystemPrompt(context), extraction.cleanText)
+        return processAndStore(context.sourceText, extraction, llmOutput, hashKey)
+    }
 
-        val systemPrompt = """
-            You are a professional mobile app translator for ${context.category} apps.
-            Translate English to ${context.targetLanguage}${if (context.targetRegion != null) " (${context.targetRegion})" else ""}.
-            Tone: ${context.tone}.
-            Rules: preserve ALL __PH_X__ and __ENT_X__ tokens exactly.
-            Never translate tokens. Output translated string only.
-            $glossaryPrompt
-        """.trimIndent()
+    // Translates a batch of strings in a single Gemini call.
+    // All contexts must share the same language, category, tone, and glossary.
+    // Returns a map of key → Result<TranslationResult>; cache hits are resolved before the API call.
+    suspend fun translateBatch(
+        keyedContexts: Map<String, TranslationContext>
+    ): Map<String, Result<TranslationResult>> {
+        if (keyedContexts.isEmpty()) return emptyMap()
 
-        val llmOutput = callGeminiApi(systemPrompt, extraction.cleanText)
+        val results = mutableMapOf<String, Result<TranslationResult>>()
+        val toTranslate = mutableMapOf<String, Pair<TranslationContext, ExtractionResult>>()
 
-        val guardResult = PlaceholderGuard.validateAndRestore(context.sourceText, llmOutput, extraction)
+        for ((key, ctx) in keyedContexts) {
+            val hashKey = cacheKey(ctx)
+            val cached = memoryStore.getTranslation(hashKey)
+            if (cached != null) {
+                memoryStore.incrementUsage(hashKey)
+                results[key] = Result.success(TranslationResult(cached, emptyList()))
+            } else {
+                val extraction = TokenExtractor.extract(ctx.sourceText)
+                if (extraction.isTruncated) {
+                    results[key] = Result.failure(IllegalStateException("String is truncated"))
+                } else {
+                    toTranslate[key] = ctx to extraction
+                }
+            }
+        }
 
-        when (guardResult) {
+        if (toTranslate.isEmpty()) return results
+
+        val firstCtx = keyedContexts.values.first()
+        val batchInput = toTranslate.mapValues { (_, pair) -> pair.second.cleanText }
+        val inputJson = json.encodeToString(mapSerializer, batchInput)
+
+        val llmOutput = try {
+            callGeminiApiJson(buildBatchSystemPrompt(firstCtx), inputJson)
+        } catch (e: Exception) {
+            log.warn("Batch Gemini call failed for {} strings: {}", toTranslate.size, e.message)
+            toTranslate.keys.forEach { key -> results[key] = Result.failure(e) }
+            return results
+        }
+
+        val parsed: Map<String, String> = try {
+            json.decodeFromString(mapSerializer, llmOutput.trim())
+        } catch (e: Exception) {
+            log.warn("Batch JSON parse failed for {} strings: {}", toTranslate.size, e.message)
+            toTranslate.keys.forEach { key -> results[key] = Result.failure(e) }
+            return results
+        }
+
+        for ((key, pair) in toTranslate) {
+            val (ctx, extraction) = pair
+            val translated = parsed[key]
+            if (translated == null) {
+                results[key] = Result.failure(IllegalStateException("Missing from batch response"))
+                continue
+            }
+            results[key] = try {
+                Result.success(processAndStore(ctx.sourceText, extraction, translated, cacheKey(ctx)))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+        return results
+    }
+
+    private suspend fun processAndStore(
+        sourceText: String, extraction: ExtractionResult, llmOutput: String, hashKey: String
+    ): TranslationResult {
+        return when (val guardResult = PlaceholderGuard.validateAndRestore(sourceText, llmOutput, extraction)) {
             is PlaceholderGuard.GuardResult.Success -> {
                 memoryStore.storeTranslation(hashKey, guardResult.restoredText)
-                return TranslationResult(guardResult.restoredText, guardResult.flags)
+                TranslationResult(guardResult.restoredText, guardResult.flags)
             }
-            is PlaceholderGuard.GuardResult.Rejected -> {
+            is PlaceholderGuard.GuardResult.Rejected ->
                 throw IllegalStateException("Validation rejected: ${guardResult.reason}")
-            }
         }
     }
 
+    private fun buildSystemPrompt(ctx: TranslationContext): String {
+        val glossaryLine = ctx.glossary?.entries?.joinToString(", ") { (k, v) -> "[$k -> $v]" }
+            ?.let { "Apply the following glossary exactly: $it" } ?: ""
+        return """
+            You are a professional mobile app translator for ${ctx.category} apps.
+            Translate English to ${ctx.targetLanguage}${ctx.targetRegion?.let { " ($it)" } ?: ""}.
+            Tone: ${ctx.tone}.
+            Rules: preserve ALL __PH_X__ and __ENT_X__ tokens exactly.
+            Never translate tokens. Output translated string only.
+            $glossaryLine
+        """.trimIndent()
+    }
+
+    private fun buildBatchSystemPrompt(ctx: TranslationContext): String {
+        val glossaryLine = ctx.glossary?.entries?.joinToString(", ") { (k, v) -> "[$k -> $v]" }
+            ?.let { "Apply the following glossary exactly: $it" } ?: ""
+        return """
+            You are a professional mobile app translator for ${ctx.category} apps.
+            Translate English to ${ctx.targetLanguage}${ctx.targetRegion?.let { " ($it)" } ?: ""}.
+            Tone: ${ctx.tone}.
+            Rules: preserve ALL __PH_X__ and __ENT_X__ tokens exactly. Never translate tokens.
+            Input: a JSON object mapping string keys to English source text.
+            Output: a JSON object mapping the SAME keys to their translations. No extra text.
+            $glossaryLine
+        """.trimIndent()
+    }
+
     private suspend fun callGeminiApi(systemPrompt: String, userPrompt: String): String {
-        val requestPayload = GeminiRequest(
+        val payload = GeminiRequest(
             systemInstruction = GeminiSystemInstruction(listOf(GeminiPart(systemPrompt))),
-            contents = listOf(GeminiContent(listOf(GeminiPart(userPrompt))))
+            contents = listOf(GeminiContent(listOf(GeminiPart(userPrompt)))),
+            generationConfig = GenerationConfig(thinkingConfig = ThinkingConfig(0), temperature = 0.1)
         )
+        return postToGemini(payload)
+    }
 
-        val response = client.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey") {
+    private suspend fun callGeminiApiJson(systemPrompt: String, userPrompt: String): String {
+        val payload = GeminiRequest(
+            systemInstruction = GeminiSystemInstruction(listOf(GeminiPart(systemPrompt))),
+            contents = listOf(GeminiContent(listOf(GeminiPart(userPrompt)))),
+            generationConfig = GenerationConfig(
+                thinkingConfig = ThinkingConfig(0),
+                temperature = 0.1,
+                responseMimeType = "application/json"
+            )
+        )
+        return postToGemini(payload)
+    }
+
+    private suspend fun postToGemini(payload: GeminiRequest): String {
+        val response = client.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey"
+        ) {
             contentType(ContentType.Application.Json)
-            setBody(requestPayload)
+            setBody(payload)
         }
-
         if (!response.status.isSuccess()) {
             throw Exception("Gemini API failed with status: ${response.status}")
         }
-
         val geminiResponse: GeminiResponse = response.body()
-        val translatedText = geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+        return geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
             ?: throw Exception("Empty response from Gemini API")
+    }
 
-        return translatedText.trim()
+    // Cache key includes glossary so a glossary update correctly bypasses the cache.
+    private fun cacheKey(ctx: TranslationContext): String {
+        val regionSuffix = ctx.targetRegion?.let { "-$it" } ?: ""
+        val glossaryPart = ctx.glossary?.entries
+            ?.sortedBy { it.key }
+            ?.joinToString(";") { "${it.key}=${it.value}" } ?: ""
+        val hashInput = "${ctx.sourceText}|${ctx.targetLanguage}${regionSuffix}|${ctx.appId}|${glossaryPart}"
+        return hashString(hashInput)
     }
 
     private fun hashString(input: String): String {

@@ -118,7 +118,7 @@ fun Route.configureAuthRoutes(
                 )
                 val mockToken = mintJwt(jwtSecret, mockUser.id, 12345L, "mock-developer")
                 call.issueSessionCookie(mockToken)
-                redirectAfterAuth(call, mockToken, pendingPlan, frontendRedirectUrl)
+                redirectAfterAuth(call, mockToken, pendingPlan, frontendRedirectUrl, mockResult.isNewUser)
                 return@get
             }
 
@@ -161,7 +161,7 @@ fun Route.configureAuthRoutes(
 
             val jwtToken = mintJwt(jwtSecret, user.id, githubUser.id, githubUser.login)
             call.issueSessionCookie(jwtToken)
-            redirectAfterAuth(call, jwtToken, pendingPlan, frontendRedirectUrl)
+            redirectAfterAuth(call, jwtToken, pendingPlan, frontendRedirectUrl, upsertResult.isNewUser)
         }
 
         get("/logout") {
@@ -175,13 +175,13 @@ private suspend fun redirectAfterAuth(
     call: ApplicationCall,
     jwtToken: String,
     pendingPlan: String?,
-    frontendRedirectUrl: String
+    frontendRedirectUrl: String,
+    isNewUser: Boolean
 ) {
-    if (!pendingPlan.isNullOrBlank()) {
-        // User came from a paid-plan CTA — drop them into the branded checkout page.
-        call.respondRedirect("/transloom/billing/checkout?plan=${pendingPlan.uppercase()}")
-    } else {
-        call.respondRedirect(frontendRedirectUrl + jwtToken)
+    when {
+        !pendingPlan.isNullOrBlank() -> call.respondRedirect("/transloom/billing/checkout?plan=${pendingPlan.uppercase()}")
+        isNewUser -> call.respondRedirect("/transloom/welcome")
+        else -> call.respondRedirect(frontendRedirectUrl + jwtToken)
     }
 }
 

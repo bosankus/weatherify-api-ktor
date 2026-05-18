@@ -126,7 +126,7 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
     override suspend fun approve(translationId: String, editedText: String?): Boolean {
         val now = System.currentTimeMillis()
         val updates = mutableListOf(
-            Updates.set("status", "auto"),
+            Updates.set("status", "approved"),  // "approved" = manually reviewed; follow-up PR will set to "auto"
             Updates.unset("blockReason"),
             Updates.set("updatedAt", now)
         )
@@ -165,9 +165,36 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         )
         translationsCol.aggregate<Document>(pipeline).toList().forEach { doc ->
             val status = doc.getString("_id") ?: return@forEach
-            result[status] = (doc["count"] as? Number)?.toInt() ?: 0
+            val count = (doc["count"] as? Number)?.toInt() ?: 0
+            // "approved" = manually reviewed but follow-up PR not yet created; counts as "auto" for stats
+            val key = if (status == "approved") "auto" else status
+            result[key] = (result[key] ?: 0) + count
         }
         return result
+    }
+
+    override suspend fun getApprovedForProject(projectId: String): List<Translation> {
+        val pipeline = listOf(
+            Aggregates.match(eq("status", "approved")),
+            Aggregates.lookup("strings", "stringId", "_id", "strDoc"),
+            Aggregates.unwind("\$strDoc"),
+            Aggregates.match(eq("strDoc.projectId", projectId)),
+            Aggregates.lookup("projects", "strDoc.projectId", "_id", "projDoc"),
+            Aggregates.unwind("\$projDoc")
+        )
+        return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
+    }
+
+    override suspend fun claimApproved(translationIds: List<String>): Int {
+        if (translationIds.isEmpty()) return 0
+        val result = translationsCol.updateMany(
+            and(`in`("_id", translationIds), eq("status", "approved")),
+            Updates.combine(
+                Updates.set("status", "auto"),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        )
+        return result.modifiedCount.toInt()
     }
 
     override suspend fun totalStringsTranslated(ownerId: String): Int {
