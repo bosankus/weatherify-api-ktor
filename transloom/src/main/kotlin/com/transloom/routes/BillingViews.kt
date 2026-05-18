@@ -230,7 +230,8 @@ private fun planFeatureRows(plan: BillingPlan): List<String> = when (plan) {
     else -> emptyList()
 }
 
-internal fun HTML.successPage(subscriptionId: String) {
+internal fun HTML.successPage(subscriptionId: String, token: String? = null) {
+    val dashUrl = if (!token.isNullOrBlank()) "/transloom/app?token=${token}" else "/transloom/app"
     head {
         meta { charset = "utf-8" }
         meta { name = "viewport"; content = "width=device-width,initial-scale=1" }
@@ -253,7 +254,7 @@ internal fun HTML.successPage(subscriptionId: String) {
                     +"Subscription "
                     code { +subscriptionId }
                 }
-                a("/transloom/app") { classes = setOf("co-pay-btn"); +"Open your dashboard →" }
+                a(dashUrl) { classes = setOf("co-pay-btn"); +"Open your dashboard →" }
                 p("co-success-foot") {
                     +"Redirecting in "
                     span { id = "co-countdown"; +"5" }
@@ -268,7 +269,7 @@ internal fun HTML.successPage(subscriptionId: String) {
                 var el = document.getElementById('co-countdown');
                 var t = setInterval(function(){
                   n--; if (el) el.textContent = String(n);
-                  if (n <= 0) { clearInterval(t); window.location.href = '/transloom/app'; }
+                  if (n <= 0) { clearInterval(t); window.location.href = ${quote(dashUrl)}; }
                 }, 1000);
                 """.trimIndent()
             }

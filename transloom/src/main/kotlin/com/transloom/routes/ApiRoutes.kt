@@ -27,7 +27,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
@@ -41,9 +40,9 @@ fun Route.configureApiRoutes(
     translationRepository: TranslationRepository,
     pipelineEventBus: PipelineEventBus,
     jwtSecret: String,
-    jobQueue: TranslationJobQueue
+    jobQueue: TranslationJobQueue,
+    glossaryRepository: GlossaryRepository
 ) {
-    val glossaryRepository: GlossaryRepository by inject()
 
     route("/transloom/api") {
 
@@ -174,6 +173,32 @@ fun Route.configureApiRoutes(
                         githubRepo = updated.githubRepo, watchBranch = updated.watchBranch,
                         sourceFilePath = updated.sourceFilePath, category = updated.category,
                         tone = updated.tone, targetCount = updated.targets.size
+                    )
+                )
+            }
+
+            get("/{id}") {
+                val userId = call.userId()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+                val projectId = call.parameters["id"]
+                    ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+
+                val project = projectRepository.findById(projectId)
+                if (project == null || project.ownerId != userId) {
+                    return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
+                }
+                call.respond(
+                    HttpStatusCode.OK,
+                    ProjectDetailResponse(
+                        id = project.id,
+                        name = project.name,
+                        githubRepo = project.githubRepo,
+                        watchBranch = project.watchBranch,
+                        sourceFilePath = project.sourceFilePath,
+                        category = project.category,
+                        tone = project.tone,
+                        targets = project.targets
                     )
                 )
             }

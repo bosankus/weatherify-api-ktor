@@ -24,17 +24,34 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
     route("/transloom") {
         get { call.respondHtml { landingPage() } }
         get("/app") {
-            // If the user is authenticated and has an incomplete checkout, route them back
-            // to the payment page rather than silently landing them on the free-tier dashboard.
             val pendingPlan = call.request.cookies[PENDING_PLAN_COOKIE]
             val sessionUserId = call.sessionUserId(jwtSecret)
+
+            // Incomplete checkout — route back to the payment page.
             if (!pendingPlan.isNullOrBlank() && sessionUserId != null) {
                 call.respondRedirect("/transloom/billing/checkout?plan=$pendingPlan")
                 return@get
             }
+
+            // If the dashboard JS has no token in localStorage it redirects to the
+            // landing page. Recover any user who arrived without a ?token= param but
+            // does have a valid tl_session cookie (e.g. came through the checkout flow
+            // or is trying to re-open the dashboard after the token expired from storage).
+            val urlToken = call.request.queryParameters["token"]
+            if (urlToken.isNullOrBlank() && sessionUserId != null) {
+                val sessionToken = call.request.cookies[SESSION_COOKIE]
+                if (!sessionToken.isNullOrBlank()) {
+                    call.respondRedirect(
+                        "/transloom/app?token=" + java.net.URLEncoder.encode(sessionToken, "UTF-8")
+                    )
+                    return@get
+                }
+            }
+
             call.respondHtml { dashboardApp() }
         }
         get("/billing") { call.respondHtml { billingApp() } }
+        get("/projects") { call.respondHtml { projectsApp() } }
         get("/review-portal") { call.respondHtml { reviewPortal() } }
         get("/favicon.svg") {
             call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
@@ -66,6 +83,40 @@ private const val LOGO_SVG = """
   <path class="weft" d="M10 18.5 Q13 16.5 16 18.5 T22 18.5" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.55"/>
 </svg>
 """
+
+// ─── Shared app sidebar HTML (raw, injected via unsafe{}) ────────────────────
+
+private fun appSidebar(active: String, reviewBadge: Boolean = false) = """
+<aside class="sidebar">
+  <div class="sidebar-logo brand">$LOGO_SVG<span>Transloom</span></div>
+  <nav class="sidebar-nav">
+    <a href="/transloom/app" class="nav-item${if (active=="dash") " active" else ""}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/transloom/projects" class="nav-item${if (active=="projects") " active" else ""}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      Projects
+    </a>
+    <a href="/transloom/review-portal" class="nav-item${if (active=="review") " active" else ""}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Review ${if (reviewBadge) """<span class="nav-badge review-badge" id="review-count"></span>""" else ""}
+    </a>
+    <a href="/transloom/billing" class="nav-item${if (active=="billing") " active" else ""}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+      Billing
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-chip" id="user-chip">Loading…</div>
+    <button class="btn btn-ghost logout-btn" onclick="logout()">Sign out</button>
+  </div>
+</aside>
+"""
+
+private val APP_SIDEBAR_DASH     get() = appSidebar("dash",     reviewBadge = true)
+private val APP_SIDEBAR_PROJECTS get() = appSidebar("projects")
+private val APP_SIDEBAR_BILLING  get() = appSidebar("billing")
 
 // ─── Shared CSS ───────────────────────────────────────────────────────────────
 
@@ -588,206 +639,101 @@ private fun HTML.dashboardApp() {
         title { +"Transloom — Dashboard" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
-        script { src = "https://checkout.razorpay.com/v1/checkout.js" }
         style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS" } }
     }
     body {
         div("app-layout") {
-            aside("sidebar") {
-                div("sidebar-logo brand") { unsafe { +LOGO_SVG }; span { +"Transloom" } }
-                nav("sidebar-nav") {
-                    a("/transloom/app") { classes = setOf("nav-item","active"); +"⬡ Dashboard" }
-                    a("#") { attributes["onclick"] = "document.getElementById('projects').scrollIntoView({behavior:'smooth'});return false;"; classes = setOf("nav-item"); +"◻ Projects" }
-                    a("#") { attributes["onclick"] = "document.getElementById('activity').scrollIntoView({behavior:'smooth'});return false;"; classes = setOf("nav-item")
-                        +"⟳ Activity "
-                        span("nav-badge activity-badge") { id = "activity-badge" }
-                    }
-                    a("/transloom/review-portal") {
-                        classes = setOf("nav-item")
-                        +"⚑ Review "
-                        span("nav-badge review-badge") { id = "review-count"; +"0" }
-                    }
-                    a("#") { attributes["onclick"] = "document.getElementById('glossary').scrollIntoView({behavior:'smooth'});return false;"; classes = setOf("nav-item"); +"📖 Glossary" }
-                    a("/transloom/billing") { classes = setOf("nav-item"); +"◈ Billing" }
-                }
-                div("sidebar-footer") {
-                    div("user-chip") { id = "user-chip"; +"Loading..." }
-                    button(classes = "btn btn-ghost logout-btn") {
-                        attributes["onclick"] = "logout()"
-                        +"Sign out"
-                    }
-                }
-            }
-
+            unsafe { +APP_SIDEBAR_DASH }
             main("main-content") {
-                div("stats-row") {
-                    statCard("total-translated", "Strings translated", "—")
-                    statCard("pending-review", "Pending review", "—", yellow = true)
-                    statCard("active-langs", "Active languages", "—")
-                    statCard("total-projects", "Projects", "—")
-                }
-
-                div("content-section") {
-                    id = "activity"
-                    div("section-header") {
-                        h2 { +"Pipeline Activity" }
-                        div {
-                            style = "display:flex;align-items:center;gap:8px"
-                            span("activity-live") { id = "activity-live-dot" }
-                            span {
-                                id = "sse-status"
-                                classes = setOf("sse-status", "connected")
-                                div { classes = setOf("sse-status-dot") }
-                                span { id = "sse-status-text"; +"Live" }
-                            }
-                        }
+                div("page-header") {
+                    div {
+                        h1("page-title") { +"Dashboard" }
+                        p("page-sub") { +"Live overview of your translation pipeline." }
                     }
-                    div("run-list") { id = "run-list"
-                        div("activity-empty") { id = "activity-empty"
-                            div("activity-empty-icon") {
-                                unsafe { +"""<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>""" }
-                            }
-                            p { +"No pipeline runs yet. Push a commit to see activity here." }
-                        }
+                    span {
+                        id = "sse-status"; classes = setOf("sse-status", "idle")
+                        div { classes = setOf("sse-status-dot") }
+                        span { id = "sse-status-text"; +"" }
                     }
                 }
 
-                div("content-section") {
-                    id = "projects"
-                    div("section-header") {
-                        h2 { +"Projects" }
-                        button(classes = "btn btn-primary") {
-                            attributes["onclick"] = "openNewProject()"
-                            +"+ New project"
-                        }
-                    }
-                    div("project-list") { id = "project-list"; div("empty-state") { +"Loading..." } }
+                div("stats-grid") {
+                    div("stat-card card") { p("stat-label") { +"Strings Translated" }; p("stat-value") { id = "total-translated"; +"—" } }
+                    div("stat-card card") { p("stat-label") { +"Pending Review" }; p("stat-value stat-yellow") { id = "pending-review"; +"—" } }
+                    div("stat-card card") { p("stat-label") { +"Blocked" }; p("stat-value stat-yellow") { id = "blocked-count"; +"—" } }
+                    div("stat-card card") { p("stat-label") { +"Languages" }; p("stat-value") { id = "active-langs"; +"—" } }
+                    div("stat-card card") { p("stat-label") { +"Projects" }; p("stat-value") { id = "total-projects"; +"—" } }
+                    div("stat-card card") { p("stat-label") { +"Current Plan" }; p("stat-value stat-plan") { id = "plan-stat"; +"—" } }
                 }
 
-                div("content-section") {
-                    id = "glossary"
-                    div("section-header") {
-                        h2 { +"Glossary" }
-                    }
-                    div("glossary-controls") {
-                        id = "glossary-controls"
-                        select {
-                            id = "glossary-project-select"
-                            attributes["onchange"] = "loadGlossary(this.value)"
-                            option { value = ""; +"— Select a project —" }
-                        }
-                    }
-                    div("glossary-add-row") {
-                        id = "glossary-add-row"
-                        attributes["style"] = "display:none"
-                        input { type = InputType.text; id = "gl-lang"; placeholder = "Language code (e.g. es)" }
-                        input { type = InputType.text; id = "gl-source"; placeholder = "Source term" }
-                        input { type = InputType.text; id = "gl-target"; placeholder = "Translation" }
-                        button(classes = "btn btn-primary") {
-                            attributes["onclick"] = "addGlossaryEntry()"
-                            +"Add"
-                        }
-                    }
-                    div("glossary-list") { id = "glossary-list"; div("empty-state") { +"Select a project to view its glossary." } }
-                }
-
-            }
-        }
-
-        // New project modal
-        div("modal-backdrop") {
-            id = "modal-backdrop"
-            div("modal card") {
-                div("modal-header") {
-                    h3 { +"New Project" }
-                    button(classes = "modal-close") { attributes["onclick"] = "closeModal()"; +"✕" }
-                }
-                div("modal-body") {
-                    p {
-                        style = "font-size:13px;color:var(--text-muted);padding:10px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);line-height:1.5"
-                        +"Transloom auto-installs a GitHub webhook on your repo. On every push, new strings are detected, translated by Gemini AI, and a pull request is opened automatically."
-                    }
-                    div("form-row") {
-                        label { +"Project name" }
-                        input { type = InputType.text; id = "proj-name"; placeholder = "My App" }
-                    }
-                    div("form-row") {
-                        label { +"GitHub repo (owner/repo)" }
-                        input { type = InputType.text; id = "proj-repo"; placeholder = "acme/my-app" }
-                    }
-                    // Fix 17: Platform selector drives source/target file path defaults
-                    div("form-row") {
-                        label { +"Platform" }
-                        div("plat-toggle") {
-                            label("plat-opt") {
-                                input { type = InputType.radio; name = "platform"; id = "plat-android"; value = "android" }
-                                span("plat-icon") {
-                                    unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16V8a7 7 0 0 1 14 0v8"/><line x1="2" y1="20" x2="22" y2="20"/><circle cx="9" cy="11" r=".8" fill="currentColor" stroke="none"/><circle cx="15" cy="11" r=".8" fill="currentColor" stroke="none"/><line x1="7" y1="5" x2="5.5" y2="3.5"/><line x1="17" y1="5" x2="18.5" y2="3.5"/></svg>""" }
-                                }
-                                +"Android"
+                div("dash-body") {
+                    div("dash-col-main") {
+                        div("content-section") {
+                            id = "activity"
+                            div("section-header") {
+                                h2 { +"Pipeline Activity" }
+                                span("activity-live") { id = "activity-live-dot" }
                             }
-                            label("plat-opt") {
-                                input { type = InputType.radio; name = "platform"; id = "plat-ios"; value = "ios" }
-                                span("plat-icon") {
-                                    unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/></svg>""" }
-                                }
-                                +"iOS"
-                            }
-                        }
-                    }
-                    div("form-row") {
-                        label { +"Source strings file" }
-                        input { type = InputType.text; id = "proj-source-path"; placeholder = "values/strings.xml" }
-                        p("field-hint") { id = "source-hint"; +"Android: values/strings.xml · iOS: en.lproj/Localizable.strings" }
-                    }
-                    div("form-row two-col") {
-                        div {
-                            label { +"Watch branch" }
-                            input { type = InputType.text; id = "proj-branch"; placeholder = "main"; value = "main" }
-                        }
-                        div {
-                            label { +"Category" }
-                            select { id = "proj-category"
-                                option { value = "productivity"; +"Productivity" }
-                                option { value = "gaming"; +"Gaming" }
-                                option { value = "fintech"; +"Fintech" }
-                                option { value = "social"; +"Social" }
-                                option { value = "health"; +"Health" }
-                                option { value = "ecommerce"; +"E-commerce" }
-                            }
-                        }
-                    }
-                    div("form-row") {
-                        label { +"Tone" }
-                        select { id = "proj-tone"
-                            option { value = "professional"; +"Professional" }
-                            option { value = "friendly"; +"Friendly" }
-                            option { value = "casual"; +"Casual" }
-                            option { value = "formal"; +"Formal" }
-                        }
-                    }
-                    div("form-row") {
-                        label { +"Target languages" }
-                        div("lang-picker") {
-                            mapOf("es" to "🇪🇸 Spanish","fr" to "🇫🇷 French","de" to "🇩🇪 German",
-                                "ja" to "🇯🇵 Japanese","ko" to "🇰🇷 Korean","zh" to "🇨🇳 Chinese",
-                                "pt" to "🇧🇷 Portuguese","it" to "🇮🇹 Italian","hi" to "🇮🇳 Hindi","ar" to "🇸🇦 Arabic"
-                            ).forEach { (code, label) ->
-                                label("lang-toggle") {
-                                    input { type = InputType.checkBox; id = "lang-$code"; value = code }
-                                    +label
+                            div("run-list") {
+                                id = "run-list"
+                                div("activity-empty") {
+                                    id = "activity-empty"
+                                    div("activity-empty-icon") {
+                                        unsafe { +"""<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>""" }
+                                    }
+                                    p { +"No pipeline runs yet. Push a commit to GitHub to trigger your first translation." }
                                 }
                             }
                         }
                     }
-                }
-                div("modal-footer") {
-                    button(classes = "btn btn-ghost") { attributes["onclick"] = "closeModal()"; +"Cancel" }
-                    button(classes = "btn btn-primary") { attributes["onclick"] = "createProject()"; +"Create project" }
+
+                    div("dash-col-side") {
+                        div("widget-card") {
+                            id = "plan-widget"
+                            div("widget-header") {
+                                span("widget-title") { +"Plan & Usage" }
+                                a("/transloom/billing") { classes = setOf("widget-link"); +"Manage →" }
+                            }
+                            div("widget-body") {
+                                div("plan-row-sm") {
+                                    span("plan-name-sm") { id = "w-plan-name"; +"—" }
+                                    span("status-badge status-free") { id = "w-plan-badge"; +"Free" }
+                                }
+                                div("usage-item-sm") {
+                                    div("usage-row-sm") { span { +"Strings this month" }; span("usage-val") { id = "w-strings"; +"—" } }
+                                    div("usage-track") { div("usage-fill") { id = "w-strings-bar" } }
+                                }
+                                div("usage-item-sm") {
+                                    div("usage-row-sm") { span { +"Projects" }; span("usage-val") { id = "w-projects"; +"—" } }
+                                    div("usage-track") { div("usage-fill") { id = "w-projects-bar" } }
+                                }
+                                p("widget-hint") { id = "w-trial-info" }
+                            }
+                        }
+
+                        div("widget-card") {
+                            div("widget-header") {
+                                span("widget-title") { +"Run Summary" }
+                                span("widget-badge") { id = "w-run-badge" }
+                            }
+                            div("widget-body") {
+                                div { id = "w-run-summary" }
+                            }
+                        }
+
+                        div("widget-card") {
+                            div("widget-header") { span("widget-title") { +"Quick Actions" } }
+                            div("widget-body qa-body") {
+                                a("/transloom/projects") { classes = setOf("qa-btn"); +"+ New project" }
+                                a("/transloom/review-portal") { classes = setOf("qa-btn"); +"Review translations" }
+                                a("/transloom/projects#glossary") { classes = setOf("qa-btn"); +"Edit glossary" }
+                                a("/transloom/billing") { classes = setOf("qa-btn"); +"Manage plan" }
+                            }
+                        }
+                    }
                 }
             }
         }
-
         div("toast") { id = "toast" }
         script { unsafe { +DASHBOARD_JS } }
     }
@@ -808,21 +754,57 @@ private const val DASHBOARD_CSS = """
 .user-chip{font-size:12px;color:var(--text-muted);padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .logout-btn{width:100%;font-size:12px;padding:7px 12px}
 .main-content{flex:1;overflow-y:auto;padding:28px 32px}
-.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
-.stat-card{padding:20px}
-.stat-label{font-size:12px;color:var(--text-muted);margin-bottom:6px}
-.stat-value{font-size:30px;font-weight:700;color:var(--accent);transition:opacity 0.2s}
-.stat-value.loading{opacity:0.5;animation:pulse 1.5s infinite}
-@keyframes pulse{0%{opacity:0.3}50%{opacity:0.7}100%{opacity:0.3}}
-.stat-yellow{color:var(--yellow)}
-.content-section{margin-bottom:40px}
+/* ── Page header ─────────────────────────────────────────────────────────── */
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:12px}
+.page-title{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:3px}
+.page-sub{font-size:13px;color:var(--text-muted)}
+/* ── Stats grid ──────────────────────────────────────────────────────────── */
+.stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:28px}
+@media(max-width:1200px){.stats-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+.stat-card{padding:18px 20px}
+.stat-label{font-size:11px;font-weight:600;letter-spacing:.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px}
+.stat-value{font-size:28px;font-weight:700;color:var(--accent);transition:opacity .2s;letter-spacing:-.5px}
+.stat-value.loading{opacity:.4;animation:pulse 1.4s infinite}
+@keyframes pulse{0%{opacity:.2}50%{opacity:.7}100%{opacity:.2}}
+.stat-yellow{color:var(--yellow)!important}
+.stat-plan{font-size:18px;font-weight:700;color:var(--accent)}
+/* ── Two-column dashboard body ───────────────────────────────────────────── */
+.dash-body{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start}
+@media(max-width:1100px){.dash-body{grid-template-columns:1fr}}
+.dash-col-main{min-width:0}
+.dash-col-side{display:flex;flex-direction:column;gap:16px}
+/* ── Widget cards (right column) ─────────────────────────────────────────── */
+.widget-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.widget-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
+.widget-title{font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--text-dim);text-transform:uppercase}
+.widget-link{font-size:12px;color:var(--text-muted);transition:color .15s}.widget-link:hover{color:var(--accent)}
+.widget-badge{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(0,229,160,.25);border-radius:20px;padding:2px 8px}
+.widget-body{padding:16px}
+.widget-hint{font-size:11px;color:var(--text-muted);margin-top:8px}
+.plan-row-sm{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.plan-name-sm{font-size:15px;font-weight:700;color:var(--text)}
+.usage-item-sm{margin-bottom:12px}
+.usage-row-sm{display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:5px}
+.usage-val{font-weight:600;color:var(--text-dim)}
+.usage-track{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.usage-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .5s ease;width:0%}
+.w-empty{font-size:12px;color:var(--text-muted);text-align:center;padding:16px 0}
+.w-run-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.w-run-row:last-child{border-bottom:none}
+.mini-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.mini-dot.running{background:var(--accent);animation:pulse 1.4s infinite}
+.mini-dot.done{background:var(--accent)}
+.mini-dot.error{background:var(--red)}
+.w-run-repo{flex:1;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.w-run-branch{color:var(--text-muted);font-family:monospace;font-size:11px}
+.qa-body{display:flex;flex-direction:column;gap:8px}
+.qa-btn{display:block;padding:9px 14px;font-size:13px;font-weight:500;color:var(--text-muted);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);transition:all .15s}
+.qa-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim2)}
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+.content-section{margin-bottom:32px}
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-.section-header h2{font-size:18px;font-weight:600}
-.project-list{display:flex;flex-direction:column;gap:12px}
-.project-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;transition:border-color .15s}
-.project-card:hover{border-color:rgba(0,229,160,.3)}
-.project-info h3{font-size:15px;font-weight:600;margin-bottom:3px}
-.project-meta{font-size:12px;color:var(--text-muted);display:flex;gap:12px}
+.section-header h2{font-size:17px;font-weight:600}
 .empty-state{text-align:center;padding:48px 24px;color:var(--text-muted);font-size:14px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius)}
 .glossary-list{display:flex;flex-direction:column;gap:8px}
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;opacity:0;pointer-events:none;transition:opacity .15s}
@@ -893,9 +875,9 @@ private const val DASHBOARD_CSS = """
 @keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(0,229,160,.5)}70%{box-shadow:0 0 0 8px rgba(0,229,160,0)}100%{box-shadow:0 0 0 0 rgba(0,229,160,0)}}
 .activity-badge{background:rgba(0,229,160,.15);color:var(--accent);display:none}
 .sse-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;letter-spacing:.5px;padding:3px 10px;border-radius:20px;transition:all .3s}
-.sse-status.connected{background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.2)}
-.sse-status.reconnecting{background:rgba(250,173,20,.1);color:var(--yellow);border:1px solid rgba(250,173,20,.2);animation:ssePulse 1.5s ease-in-out infinite}
-.sse-status.disconnected{background:rgba(255,77,79,.08);color:var(--red);border:1px solid rgba(255,77,79,.2)}
+.sse-status.idle,.sse-status.connected{display:none}
+.sse-status.reconnecting{display:inline-flex;background:rgba(250,173,20,.1);color:var(--yellow);border:1px solid rgba(250,173,20,.2);animation:ssePulse 1.5s ease-in-out infinite}
+.sse-status.disconnected{display:inline-flex;background:rgba(255,77,79,.08);color:var(--red);border:1px solid rgba(255,77,79,.2)}
 .sse-status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
 .sse-status.reconnecting .sse-status-dot{animation:sseDot 1.2s ease-in-out infinite}
 @keyframes ssePulse{0%,100%{opacity:1}50%{opacity:.65}}
@@ -974,14 +956,8 @@ const BASE='/transloom/api';
 let token=localStorage.getItem('transloom_token');
 const urlParams=new URLSearchParams(window.location.search);
 const urlToken=urlParams.get('token');
-const planFromUrl=urlParams.get('plan');
 if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;history.replaceState({},'','/transloom/app');}
 if(!token){window.location.href='/transloom';}
-if(planFromUrl&&planFromUrl!=='FREE'){setTimeout(()=>subscribe(planFromUrl),600);}
-
-// Show billing success/cancel toasts
-if(urlParams.get('billing')==='success')setTimeout(()=>toast('Subscription activated'),300);
-if(urlParams.get('billing')==='cancelled')setTimeout(()=>toast('Checkout cancelled','error'),300);
 
 function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
 async function api(path,opts={}){
@@ -996,15 +972,68 @@ function esc(s){if(!s)return '';const d=document.createElement('div');d.textCont
 async function loadStats(){
   document.querySelectorAll('.stat-value').forEach(el=>el.classList.add('loading'));
   const res=await api('/dashboard/stats');
-  if(!res||!res.ok){toast('Failed to load stats','error');document.querySelectorAll('.stat-value').forEach(el=>el.classList.remove('loading'));return;}
+  if(!res||!res.ok){document.querySelectorAll('.stat-value').forEach(el=>el.classList.remove('loading'));return;}
   const s=await res.json();
-  const elTotal=document.getElementById('total-translated');elTotal.textContent=s.totalStringsTranslated??0;elTotal.classList.remove('loading');
-  const elReview=document.getElementById('pending-review');elReview.textContent=s.pendingReview??0;elReview.classList.remove('loading');
-  const elLangs=document.getElementById('active-langs');elLangs.textContent=s.activeLanguages??0;elLangs.classList.remove('loading');
-  const elProj=document.getElementById('total-projects');elProj.textContent=s.totalProjects??0;elProj.classList.remove('loading');
+  const set=(id,v)=>{const el=document.getElementById(id);if(el){el.textContent=v??0;el.classList.remove('loading');}};
+  set('total-translated',s.totalStringsTranslated);
+  set('pending-review',s.pendingReview);
+  set('blocked-count',s.blockedCount);
+  set('active-langs',s.activeLanguages);
+  set('total-projects',s.totalProjects);
+  set('plan-stat',s.currentPlanDisplay||s.currentPlan||'—');
   const badge=document.getElementById('review-count');
-  if(s.pendingReview>0){badge.textContent=s.pendingReview;badge.style.display='inline';}
+  if(badge){if((s.pendingReview??0)>0){badge.textContent=s.pendingReview;badge.style.display='inline';}else{badge.style.display='none';}}
 }
+
+async function loadPlanWidget(){
+  const [subRes,usageRes]=await Promise.all([api('/billing/subscription'),api('/billing/usage')]);
+  if(!subRes?.ok||!usageRes?.ok)return;
+  const sub=await subRes.json();
+  const usage=await usageRes.json();
+  const setTxt=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  setTxt('w-plan-name',sub.displayName||sub.plan);
+  const badge=document.getElementById('w-plan-badge');
+  if(badge){
+    if(sub.cancelAtPeriodEnd){badge.className='status-badge status-cancelling';badge.textContent='Cancelling';}
+    else if(sub.plan==='FREE'){badge.className='status-badge status-free';badge.textContent='Free';}
+    else{badge.className='status-badge status-active';badge.textContent='Active';}
+  }
+  const setBar=(barId,valId,used,max)=>{
+    const bar=document.getElementById(barId);const val=document.getElementById(valId);if(!bar||!val)return;
+    if(max&&max>0){const pct=Math.min(100,Math.round(used/max*100));bar.style.width=pct+'%';if(pct>85)bar.style.background='var(--yellow)';val.textContent=used+' / '+max;}
+    else{bar.style.width='100%';bar.style.background='rgba(0,229,160,.25)';val.textContent=used+' (unlimited)';}
+  };
+  setBar('w-strings-bar','w-strings',usage.stringsTranslated,usage.stringLimit);
+  const pmax=sub.maxProjects>0?sub.maxProjects:null;
+  setBar('w-projects-bar','w-projects',usage.projectsUsed,pmax);
+  const hint=document.getElementById('w-trial-info');
+  if(hint&&sub.currentPeriodEnd&&sub.plan!=='FREE')hint.textContent=(sub.cancelAtPeriodEnd?'Cancels ':'Renews ')+sub.currentPeriodEnd;
+}
+
+function updateRunSummaryWidget(){
+  const runs=Object.values(runState);
+  const active=runs.filter(r=>!r.finishedAt).length;
+  const failed=runs.filter(r=>r.finishedAt&&r.error).length;
+  const done=runs.filter(r=>r.finishedAt&&!r.error&&r.prUrl).length;
+  const badge=document.getElementById('w-run-badge');
+  if(badge){
+    if(active>0){badge.textContent=active+' running';badge.style.display='inline';}
+    else if(failed>0){badge.textContent=failed+' failed';badge.style.background='rgba(255,77,79,.12)';badge.style.color='var(--red)';badge.style.display='inline';}
+    else{badge.style.display='none';}
+  }
+  const list=document.getElementById('w-run-summary');if(!list)return;
+  if(!runs.length){list.innerHTML='<div class="w-empty">No runs yet</div>';return;}
+  const recent=runs.sort((a,b)=>(b.startedAt||0)-(a.startedAt||0)).slice(0,5);
+  list.innerHTML=recent.map(r=>{
+    const st=!r.finishedAt?'running':(r.error?'error':'done');
+    return '<div class="w-run-row"><span class="mini-dot '+st+'"></span>'
+      +'<span class="w-run-repo">'+esc(r.repo)+'</span>'
+      +'<span class="w-run-branch">'+esc(r.branch)+'</span></div>';
+  }).join('');
+}
+
+const payload=jwtPayload(token);
+const userEl=document.getElementById('user-chip');if(userEl)userEl.textContent=payload.username?'@'+payload.username:(payload.email||'You');
 
 async function loadProjects(){
   const res=await api('/projects');
@@ -1365,18 +1394,18 @@ function handlePipelineEvent(evt){
       const parent=runState[d.snapshot.retriedFromRunId];
       if(parent){parent.retryPending=false;renderRunCard(d.snapshot.retriedFromRunId);}
     }
-    renderRunCard(d.runId);updateActivityBadge();maybeScrollToActivity();
+    renderRunCard(d.runId);updateActivityBadge();updateRunSummaryWidget();maybeScrollToActivity();
   }else if(d.type==='step'){
     const run=runState[d.runId];if(!run)return;
     if(!run.steps)run.steps={};
     run.steps[d.stepId]={status:d.status,detail:d.detail||null};
-    renderRunCard(d.runId);updateActivityBadge();
+    renderRunCard(d.runId);updateActivityBadge();updateRunSummaryWidget();
   }else if(d.type==='finish'){
     const run=runState[d.runId];if(!run)return;
     run.finishedAt=d.finishedAt||Date.now();
     if(d.prUrl)run.prUrl=d.prUrl;if(d.error)run.error=d.error;
     run.retryPending=false;
-    renderRunCard(d.runId);updateActivityBadge();loadStats();
+    renderRunCard(d.runId);updateActivityBadge();updateRunSummaryWidget();loadStats();
   }
 }
 
@@ -1401,6 +1430,8 @@ async function retriggerRun(runId){
 // ── SSE connection with exponential-backoff reconnect ─────────────────────────
 let sseBackoff=2000;
 let sseInstance=null;
+let sseRetries=0;
+const SSE_MAX_RETRIES=5;
 
 function setSseStatus(state,text){
   const el=document.getElementById('sse-status');
@@ -1418,12 +1449,18 @@ function connectPipelineSSE(){
 
   es.onopen=function(){
     sseBackoff=2000;
-    setSseStatus('connected','Live');
+    sseRetries=0;
+    setSseStatus('idle','');
   };
   es.onmessage=handlePipelineEvent;
   es.onerror=function(){
     es.close();
     sseInstance=null;
+    sseRetries++;
+    if(sseRetries>=SSE_MAX_RETRIES){
+      setSseStatus('disconnected','Live updates unavailable');
+      return;
+    }
     setSseStatus('reconnecting','Reconnecting…');
     setTimeout(connectPipelineSSE,sseBackoff);
     sseBackoff=Math.min(sseBackoff*2,30000);
@@ -1436,11 +1473,486 @@ async function loadPipelineRuns(){
   const runs=(data.runs||[]).slice(0,10);if(!runs.length)return;
   document.getElementById('activity-empty')?.remove();
   runs.forEach(function(s){applySnapshot(s);renderRunCard(s.runId);});
-  updateActivityBadge();
+  updateActivityBadge();updateRunSummaryWidget();
 }
 
-loadStats();loadProjects();loadPipelineRuns();connectPipelineSSE();
+loadStats();loadPlanWidget();loadPipelineRuns();connectPipelineSSE();
 """.trimIndent()
+
+// ─── Projects Page ────────────────────────────────────────────────────────────
+
+private const val PROJECTS_CSS = """
+.projects-page{padding:28px 32px;flex:1;overflow-y:auto}
+.proj-page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:16px;flex-wrap:wrap}
+.proj-page-header h1{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:3px}
+.proj-page-header p{font-size:13px;color:var(--text-muted)}
+.limit-indicator{display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;font-size:12px;color:var(--text-muted);margin-bottom:20px}
+.limit-indicator .li-used{font-weight:700;color:var(--text)}
+.limit-indicator .li-sep{color:var(--border)}
+.limit-banner{display:none;padding:12px 16px;border-radius:var(--radius);border:1px solid rgba(250,173,20,.3);background:rgba(250,173,20,.07);color:var(--yellow);font-size:13px;line-height:1.5;margin-bottom:20px}
+.limit-banner.visible{display:block}
+.limit-banner a{color:var(--yellow);text-decoration:underline;font-weight:600}
+.proj-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px}
+/* ── Project cards ──────────────────────────────────────────────────────────── */
+.project-grid{display:flex;flex-direction:column;gap:14px;margin-bottom:40px}
+.pc-pro{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.pc-pro:hover{border-color:rgba(0,229,160,.25);box-shadow:0 4px 24px -8px rgba(0,0,0,.4)}
+.pc-header{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 20px 14px;gap:12px}
+.pc-info{flex:1;min-width:0}
+.pc-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-repo{font-size:12px;color:var(--text-muted);font-family:ui-monospace,monospace}
+.pc-actions{display:flex;gap:8px;flex-shrink:0}
+.pc-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);font-size:12px;font-weight:500;padding:5px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s}
+.pc-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pc-btn.del:hover{border-color:var(--red);color:var(--red);background:rgba(255,77,79,.07)}
+.pc-divider{height:1px;background:var(--border);margin:0 20px}
+.pc-meta{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 20px}
+.pc-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;letter-spacing:.3px;padding:3px 9px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted)}
+.pc-tag.branch{background:var(--accent-dim);border-color:rgba(0,229,160,.25);color:var(--accent)}
+.pc-tag.plat{color:var(--text-dim)}
+.pc-tag.langs{color:var(--text-dim)}
+.pc-source{padding:0 20px 14px;font-size:11px;font-family:ui-monospace,monospace;color:var(--text-muted)}
+/* ── Edit modal ─────────────────────────────────────────────────────────────── */
+.edit-modal-title{font-size:16px;font-weight:700;letter-spacing:-.2px}
+.edit-modal-repo{font-size:12px;color:var(--text-muted);font-family:monospace;margin-top:2px}
+/* ── Glossary section ───────────────────────────────────────────────────────── */
+.glossary-section{margin-top:8px}
+.glossary-controls{margin-bottom:12px}
+.glossary-controls select{max-width:300px}
+.glossary-add-row{display:flex;gap:8px;margin-bottom:16px;align-items:flex-end}
+.glossary-add-row input{max-width:180px}
+.glossary-list{display:flex;flex-direction:column;gap:8px}
+.glossary-row{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px}
+.gl-lang{font-weight:700;color:var(--accent);min-width:32px;text-transform:uppercase;font-size:12px}
+.gl-source{color:var(--text)}
+.gl-arrow{color:var(--text-muted);font-size:11px}
+.gl-target{color:var(--accent);flex:1}
+.btn-gl-delete{background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:4px 8px;border-radius:var(--radius-sm);transition:all .15s;margin-left:auto}
+.btn-gl-delete:hover{color:var(--red);background:rgba(255,77,79,.1)}
+"""
+
+private val PROJECTS_JS = """
+const BASE='/transloom/api';
+let token=localStorage.getItem('transloom_token');
+if(!token){window.location.href='/transloom';}
+function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
+async function api(path,opts={}){
+  const res=await fetch(BASE+path,{...opts,headers:{...authHeaders(),...(opts.headers||{})}});
+  if(res.status===401){logout();return null;}return res;
+}
+function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom';}
+function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
+function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return{};}}
+
+const LANG_MAP={es:'Spanish',fr:'French',de:'German',ja:'Japanese',ko:'Korean',zh:'Chinese',pt:'Portuguese',it:'Italian',hi:'Hindi',ar:'Arabic'};
+const FILE_MAP_ANDROID={es:'values-es',fr:'values-fr',de:'values-de',ja:'values-ja',ko:'values-ko',zh:'values-zh',pt:'values-pt',it:'values-it',hi:'values-hi',ar:'values-ar'};
+const FILE_MAP_IOS={es:'es.lproj',fr:'fr.lproj',de:'de.lproj',ja:'ja.lproj',ko:'ko.lproj',zh:'zh-Hans.lproj',pt:'pt-BR.lproj',it:'it.lproj',hi:'hi.lproj',ar:'ar.lproj'};
+
+let currentSub=null;
+let currentProjects=[];
+let currentGlossaryProjectId=null;
+let glossaryFetchId=0;
+
+async function init(){
+  const [projRes,subRes]=await Promise.all([api('/projects'),api('/billing/subscription')]);
+  if(!projRes||!subRes)return;
+  const projData=await projRes.json();
+  currentSub=await subRes.json();
+  currentProjects=projData.projects||[];
+  renderPlanLimitUI();
+  renderProjects();
+  populateGlossarySelector();
+  const payload=jwtPayload(token);
+  const chip=document.getElementById('user-chip');
+  if(chip)chip.textContent=payload.username?'@'+payload.username:(payload.email||'You');
+}
+
+function renderPlanLimitUI(){
+  const used=currentProjects.length;
+  const max=currentSub?.maxProjects>0?currentSub.maxProjects:null;
+  const plan=currentSub?.displayName||currentSub?.plan||'Free';
+  const liUsed=document.getElementById('li-used');
+  const liMax=document.getElementById('li-max');
+  const liPlan=document.getElementById('li-plan');
+  if(liUsed)liUsed.textContent=used;
+  if(liMax)liMax.textContent=max?(' / '+max):'';
+  if(liPlan)liPlan.textContent=plan+' plan';
+  const btn=document.getElementById('new-proj-btn');
+  const banner=document.getElementById('limit-banner');
+  const bannerText=document.getElementById('limit-banner-msg');
+  const atLimit=max&&used>=max;
+  if(btn){btn.disabled=!!atLimit;btn.title=atLimit?'Project limit reached — upgrade your plan to add more':'';}
+  if(banner)banner.className='limit-banner'+(atLimit?' visible':'');
+  if(bannerText&&atLimit){
+    if(currentSub?.plan==='FREE')bannerText.innerHTML='Free plan allows 1 project. <a href="/transloom/billing">Upgrade to Solo (3 projects) or Team (10 projects)</a>.';
+    else if(currentSub?.plan==='SOLO')bannerText.innerHTML='Solo plan allows 3 projects. <a href="/transloom/billing">Upgrade to Team for up to 10 projects</a>.';
+    else bannerText.innerHTML='Project limit reached. <a href="/transloom/billing">View your plan</a>.';
+  }
+}
+
+function renderProjects(){
+  const list=document.getElementById('project-list');if(!list)return;
+  if(!currentProjects.length){
+    list.innerHTML=`<div class="ob-guide">
+      <div class="ob-intro"><h3>No projects yet</h3><p>Create your first project to start automating translations.</p></div>
+      <div class="ob-steps">
+        <div class="ob-step ob-done"><div class="ob-num">&#10003;</div><div class="ob-body"><strong>Connect GitHub</strong><span>Done — signed in with GitHub</span></div></div>
+        <div class="ob-step ob-active"><div class="ob-num">2</div><div class="ob-body"><strong>Create your first project</strong><span>Point Transloom at your repo and strings file. Webhook is auto-installed.</span></div>
+          <button class="btn btn-primary ob-cta" onclick="openNewProject()">+ Create project</button></div>
+        <div class="ob-step ob-pending"><div class="ob-num">3</div><div class="ob-body"><strong>Push a new string</strong><span>Transloom detects it and opens a PR in under 60 seconds.</span></div></div>
+      </div></div>`;
+    return;
+  }
+  list.innerHTML=currentProjects.map(p=>buildProjectCard(p)).join('');
+}
+
+function buildProjectCard(p){
+  const isIos=p.sourceFilePath&&p.sourceFilePath.includes('.strings');
+  const platform=isIos?'iOS':'Android';
+  return `<div class="pc-pro" id="pc-${'$'}{p.id}">
+    <div class="pc-header">
+      <div class="pc-info">
+        <div class="pc-name">${'$'}{esc(p.name)}</div>
+        <div class="pc-repo">${'$'}{esc(p.githubRepo)}</div>
+      </div>
+      <div class="pc-actions">
+        <button class="pc-btn" onclick="openEditModal('${'$'}{p.id}')">&#9998; Edit</button>
+        <button class="pc-btn del" onclick="confirmDeleteProject('${'$'}{p.id}','${'$'}{esc(p.name)}')">&#10005; Delete</button>
+      </div>
+    </div>
+    <div class="pc-divider"></div>
+    <div class="pc-meta">
+      <span class="pc-tag branch">&#x2387; ${'$'}{esc(p.watchBranch)}</span>
+      <span class="pc-tag plat">${'$'}{platform}</span>
+      <span class="pc-tag">${'$'}{esc(p.category)}</span>
+      <span class="pc-tag">${'$'}{esc(p.tone)}</span>
+      <span class="pc-tag langs">${'$'}{p.targetCount} language${'$'}{p.targetCount!==1?'s':''}</span>
+    </div>
+    <div class="pc-source">${'$'}{esc(p.sourceFilePath)}</div>
+  </div>`;
+}
+
+// ── New project modal ──────────────────────────────────────────────────────────
+function openNewProject(){
+  const max=currentSub?.maxProjects>0?currentSub.maxProjects:null;
+  if(max&&currentProjects.length>=max){
+    toast('Project limit reached — upgrade your plan','error');return;
+  }
+  document.getElementById('new-modal').classList.add('open');
+}
+function closeNewModal(){document.getElementById('new-modal').classList.remove('open');}
+
+document.querySelectorAll('[name="platform"]').forEach(r=>r.addEventListener('change',()=>{
+  const plat=document.querySelector('[name="platform"]:checked')?.value||'android';
+  const src=document.getElementById('proj-source-path');
+  if(plat==='ios'){src.value='en.lproj/Localizable.strings';}else{src.value='values/strings.xml';}
+}));
+document.getElementById('plat-android').checked=true;
+document.getElementById('proj-source-path').value='values/strings.xml';
+
+async function createProject(){
+  const name=document.getElementById('proj-name').value.trim();
+  const repo=document.getElementById('proj-repo').value.trim();
+  const branch=document.getElementById('proj-branch').value.trim()||'main';
+  const category=document.getElementById('proj-category').value;
+  const tone=document.getElementById('proj-tone').value;
+  const sourcePath=document.getElementById('proj-source-path').value.trim()||'values/strings.xml';
+  const platform=document.querySelector('[name="platform"]:checked')?.value||'android';
+  const fileMap=platform==='ios'?FILE_MAP_IOS:FILE_MAP_ANDROID;
+  const fileExt=platform==='ios'?'/Localizable.strings':'/strings.xml';
+  const selected=[...document.querySelectorAll('[id^="lang-"]:checked')].map(el=>el.value);
+  if(!name||!repo){toast('Name and GitHub repo are required','error');return;}
+  if(selected.length===0){toast('Select at least one target language','error');return;}
+  const targets=selected.map(code=>({code,name:LANG_MAP[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
+  const res=await api('/projects',{method:'POST',body:JSON.stringify({name,githubRepo:repo,watchBranch:branch,sourceFilePath:sourcePath,category,tone,targets})});
+  if(!res)return;
+  if(res.ok){toast('Project created! Webhook auto-installed.');closeNewModal();await init();}
+  else{const err=await res.json();toast(err.error||'Failed to create project','error');}
+}
+
+// ── Edit project modal ─────────────────────────────────────────────────────────
+async function openEditModal(projectId){
+  const res=await api('/projects/'+projectId);
+  if(!res||!res.ok){toast('Failed to load project','error');return;}
+  const p=await res.json();
+  document.getElementById('edit-proj-id').value=p.id;
+  document.getElementById('edit-proj-name').value=p.name;
+  document.getElementById('edit-proj-branch').value=p.watchBranch;
+  document.getElementById('edit-proj-source').value=p.sourceFilePath;
+  document.getElementById('edit-proj-category').value=p.category;
+  document.getElementById('edit-proj-tone').value=p.tone;
+  document.getElementById('edit-modal-repo').textContent=p.githubRepo;
+  const isIos=p.sourceFilePath&&p.sourceFilePath.includes('.strings');
+  const platRadio=document.getElementById(isIos?'edit-plat-ios':'edit-plat-android');
+  if(platRadio)platRadio.checked=true;
+  const selectedLangs=new Set((p.targets||[]).map(t=>t.code));
+  document.querySelectorAll('[id^="edit-lang-"]').forEach(cb=>{cb.checked=selectedLangs.has(cb.value);});
+  document.getElementById('edit-modal').classList.add('open');
+}
+function closeEditModal(){document.getElementById('edit-modal').classList.remove('open');}
+
+document.querySelectorAll('[name="edit-platform"]').forEach(r=>r.addEventListener('change',()=>{
+  const plat=document.querySelector('[name="edit-platform"]:checked')?.value||'android';
+  const src=document.getElementById('edit-proj-source');
+  if(plat==='ios'&&src.value==='values/strings.xml')src.value='en.lproj/Localizable.strings';
+  else if(plat==='android'&&src.value==='en.lproj/Localizable.strings')src.value='values/strings.xml';
+}));
+
+async function saveEdit(){
+  const projectId=document.getElementById('edit-proj-id').value;
+  const name=document.getElementById('edit-proj-name').value.trim();
+  const watchBranch=document.getElementById('edit-proj-branch').value.trim()||'main';
+  const sourceFilePath=document.getElementById('edit-proj-source').value.trim();
+  const category=document.getElementById('edit-proj-category').value;
+  const tone=document.getElementById('edit-proj-tone').value;
+  const platform=document.querySelector('[name="edit-platform"]:checked')?.value||'android';
+  const fileMap=platform==='ios'?FILE_MAP_IOS:FILE_MAP_ANDROID;
+  const fileExt=platform==='ios'?'/Localizable.strings':'/strings.xml';
+  const selected=[...document.querySelectorAll('[id^="edit-lang-"]:checked')].map(el=>el.value);
+  if(!name){toast('Name is required','error');return;}
+  if(!selected.length){toast('Select at least one language','error');return;}
+  const targets=selected.map(code=>({code,name:LANG_MAP[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
+  const res=await api('/projects/'+projectId,{method:'PUT',body:JSON.stringify({name,watchBranch,sourceFilePath,category,tone,targets})});
+  if(!res)return;
+  if(res.ok){toast('Project updated');closeEditModal();await init();}
+  else{const err=await res.json();toast(err.error||'Update failed','error');}
+}
+
+// ── Delete project ─────────────────────────────────────────────────────────────
+let projectToDelete=null;
+function confirmDeleteProject(id,name){
+  projectToDelete={id,name};
+  const modal=document.createElement('div');
+  modal.className='modal-backdrop open';modal.id='delete-modal';
+  modal.innerHTML=`<div class="modal card">
+    <div class="modal-header"><h3>Delete Project</h3><button class="modal-close" onclick="closeDeleteModal()">&#10005;</button></div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--text-muted)">Type <strong>${'$'}{esc(name)}</strong> to confirm. All strings, translations, and glossary entries will be removed permanently.</p>
+      <input type="text" id="delete-confirm-input" placeholder="${'$'}{esc(name)}" style="margin-top:12px">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--red);color:#fff" onclick="executeDeleteProject()">Delete</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+function closeDeleteModal(){document.getElementById('delete-modal')?.remove();projectToDelete=null;}
+async function executeDeleteProject(){
+  if(!projectToDelete)return;
+  if(document.getElementById('delete-confirm-input').value!==projectToDelete.name){toast('Name does not match','error');return;}
+  const {id}=projectToDelete;
+  closeDeleteModal();
+  const res=await api('/projects/'+id,{method:'DELETE'});
+  if(!res)return;
+  if(res.ok){toast('Project deleted');await init();}
+  else{const err=await res.json();toast(err.error||'Delete failed','error');}
+}
+
+// ── Glossary ───────────────────────────────────────────────────────────────────
+function populateGlossarySelector(){
+  const sel=document.getElementById('glossary-project-select');if(!sel)return;
+  sel.innerHTML='<option value="">— Select a project —</option>'+
+    currentProjects.map(p=>`<option value="${'$'}{p.id}">${'$'}{esc(p.name)}</option>`).join('');
+  if(currentGlossaryProjectId)sel.value=currentGlossaryProjectId;
+}
+async function loadGlossary(projectId){
+  const list=document.getElementById('glossary-list');
+  const addRow=document.getElementById('glossary-add-row');
+  if(!projectId){if(list)list.innerHTML='<div class="empty-state">Select a project to view its glossary.</div>';if(addRow)addRow.style.display='none';currentGlossaryProjectId=null;return;}
+  currentGlossaryProjectId=projectId;
+  const myId=++glossaryFetchId;
+  if(addRow)addRow.style.display='flex';
+  const res=await api('/glossary/'+projectId);
+  if(myId!==glossaryFetchId)return;
+  if(!res||!res.ok){toast('Failed to load glossary','error');return;}
+  const data=await res.json();
+  if(!list)return;
+  if(!data.glossary||!data.glossary.length){list.innerHTML='<div class="empty-state">No glossary entries yet.</div>';return;}
+  list.innerHTML=data.glossary.map(e=>`
+    <div class="glossary-row">
+      <span class="gl-lang">${'$'}{esc(e.languageCode)}</span>
+      <span class="gl-source">${'$'}{esc(e.sourceTerm)}</span>
+      <span class="gl-arrow">&#8594;</span>
+      <span class="gl-target">${'$'}{esc(e.targetTerm)}</span>
+      <button class="btn-gl-delete" onclick="deleteGlossaryEntry('${'$'}{e.id}')" title="Remove">&#10005;</button>
+    </div>`).join('');
+}
+async function addGlossaryEntry(){
+  const lang=document.getElementById('gl-lang').value.trim();
+  const source=document.getElementById('gl-source').value.trim();
+  const target=document.getElementById('gl-target').value.trim();
+  if(!lang||!source||!target){toast('All glossary fields are required','error');return;}
+  const res=await api('/glossary/'+currentGlossaryProjectId,{method:'POST',body:JSON.stringify({languageCode:lang,sourceTerm:source,targetTerm:target})});
+  if(!res)return;
+  if(res.ok){toast('Glossary updated');document.getElementById('gl-source').value='';document.getElementById('gl-target').value='';loadGlossary(currentGlossaryProjectId);}
+  else{const err=await res.json();toast(err.error||'Failed','error');}
+}
+async function deleteGlossaryEntry(entryId){
+  const res=await api('/glossary/'+currentGlossaryProjectId+'/'+entryId,{method:'DELETE'});
+  if(!res)return;
+  if(res.ok){toast('Entry removed');loadGlossary(currentGlossaryProjectId);}
+  else toast('Failed to delete','error');
+}
+
+// Handle #glossary anchor from external links
+if(window.location.hash==='#glossary'){
+  setTimeout(()=>document.getElementById('glossary-section')?.scrollIntoView({behavior:'smooth'}),400);
+}
+
+init();
+""".trimIndent()
+
+private fun HTML.projectsApp() {
+    head {
+        title { +"Transloom — Projects" }
+        meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        favicon()
+        style { unsafe { +"$SHARED_CSS$DASHBOARD_CSS$PROJECTS_CSS" } }
+    }
+    body {
+        div("app-layout") {
+            unsafe { +APP_SIDEBAR_PROJECTS }
+            main("projects-page") {
+                div("proj-page-header") {
+                    div {
+                        h1 { +"Projects" }
+                        p { +"Manage your repositories, branches, and translation settings." }
+                    }
+                    button(classes = "btn btn-primary") {
+                        id = "new-proj-btn"
+                        attributes["onclick"] = "openNewProject()"
+                        +"+ New project"
+                    }
+                }
+                div("limit-indicator") {
+                    span("li-used") { id = "li-used"; +"—" }
+                    span("li-max") { id = "li-max" }
+                    span("li-sep") { +" · " }
+                    span { id = "li-plan"; +"Loading…" }
+                }
+                div("limit-banner") {
+                    id = "limit-banner"
+                    span { id = "limit-banner-msg" }
+                }
+                div("project-grid") { id = "project-list"; div("empty-state") { +"Loading…" } }
+
+                div("content-section glossary-section") {
+                    id = "glossary-section"
+                    div("section-header") {
+                        h2 { +"Glossary" }
+                    }
+                    div("glossary-controls") {
+                        select {
+                            id = "glossary-project-select"
+                            attributes["onchange"] = "loadGlossary(this.value)"
+                            option { value = ""; +"— Select a project —" }
+                        }
+                    }
+                    div("glossary-add-row") {
+                        id = "glossary-add-row"
+                        style = "display:none"
+                        input { type = InputType.text; id = "gl-lang"; placeholder = "Language code (e.g. es)" }
+                        input { type = InputType.text; id = "gl-source"; placeholder = "Source term" }
+                        input { type = InputType.text; id = "gl-target"; placeholder = "Translation" }
+                        button(classes = "btn btn-primary") { attributes["onclick"] = "addGlossaryEntry()"; +"Add" }
+                    }
+                    div("glossary-list") { id = "glossary-list"; div("empty-state") { +"Select a project to view its glossary." } }
+                }
+            }
+        }
+
+        // ── New project modal ─────────────────────────────────────────────────
+        div("modal-backdrop") {
+            id = "new-modal"
+            div("modal card") {
+                div("modal-header") {
+                    h3 { +"New Project" }
+                    button(classes = "modal-close") { attributes["onclick"] = "closeNewModal()"; +"✕" }
+                }
+                div("modal-body") {
+                    p { style = "font-size:13px;color:var(--text-muted);padding:10px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);line-height:1.5"
+                        +"Transloom installs a GitHub webhook automatically. On every push, new strings are detected, translated, and a PR is opened."
+                    }
+                    div("form-row") { label { +"Project name" }; input { type = InputType.text; id = "proj-name"; placeholder = "My App" } }
+                    div("form-row") { label { +"GitHub repo (owner/repo)" }; input { type = InputType.text; id = "proj-repo"; placeholder = "acme/my-app" } }
+                    div("form-row") {
+                        label { +"Platform" }
+                        div("plat-toggle") {
+                            label("plat-opt") { input { type = InputType.radio; name = "platform"; id = "plat-android"; value = "android" }; span("plat-icon") { unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16V8a7 7 0 0 1 14 0v8"/><line x1="2" y1="20" x2="22" y2="20"/></svg>""" } }; +"Android" }
+                            label("plat-opt") { input { type = InputType.radio; name = "platform"; id = "plat-ios"; value = "ios" }; span("plat-icon") { unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/></svg>""" } }; +"iOS" }
+                        }
+                    }
+                    div("form-row") { label { +"Source strings file" }; input { type = InputType.text; id = "proj-source-path"; placeholder = "values/strings.xml" }; p("field-hint") { +"Android: values/strings.xml · iOS: en.lproj/Localizable.strings" } }
+                    div("form-row two-col") {
+                        div { label { +"Watch branch" }; input { type = InputType.text; id = "proj-branch"; placeholder = "main"; value = "main" } }
+                        div { label { +"Category" }; select { id = "proj-category"; option { value = "productivity"; +"Productivity" }; option { value = "gaming"; +"Gaming" }; option { value = "fintech"; +"Fintech" }; option { value = "social"; +"Social" }; option { value = "health"; +"Health" }; option { value = "ecommerce"; +"E-commerce" } } }
+                    }
+                    div("form-row") { label { +"Tone" }; select { id = "proj-tone"; option { value = "professional"; +"Professional" }; option { value = "friendly"; +"Friendly" }; option { value = "casual"; +"Casual" }; option { value = "formal"; +"Formal" } } }
+                    div("form-row") {
+                        label { +"Target languages" }
+                        div("lang-picker") {
+                            mapOf("es" to "🇪🇸 Spanish","fr" to "🇫🇷 French","de" to "🇩🇪 German","ja" to "🇯🇵 Japanese","ko" to "🇰🇷 Korean","zh" to "🇨🇳 Chinese","pt" to "🇧🇷 Portuguese","it" to "🇮🇹 Italian","hi" to "🇮🇳 Hindi","ar" to "🇸🇦 Arabic").forEach { (code, lbl) ->
+                                label("lang-toggle") { input { type = InputType.checkBox; id = "lang-$code"; value = code }; +lbl }
+                            }
+                        }
+                    }
+                }
+                div("modal-footer") {
+                    button(classes = "btn btn-ghost") { attributes["onclick"] = "closeNewModal()"; +"Cancel" }
+                    button(classes = "btn btn-primary") { attributes["onclick"] = "createProject()"; +"Create project" }
+                }
+            }
+        }
+
+        // ── Edit project modal ────────────────────────────────────────────────
+        div("modal-backdrop") {
+            id = "edit-modal"
+            div("modal card") {
+                div("modal-header") {
+                    div {
+                        p("edit-modal-title") { +"Edit Project" }
+                        p("edit-modal-repo") { id = "edit-modal-repo" }
+                    }
+                    button(classes = "modal-close") { attributes["onclick"] = "closeEditModal()"; +"✕" }
+                }
+                div("modal-body") {
+                    input { type = InputType.hidden; id = "edit-proj-id" }
+                    div("form-row") { label { +"Project name" }; input { type = InputType.text; id = "edit-proj-name" } }
+                    div("form-row") {
+                        label { +"Platform" }
+                        div("plat-toggle") {
+                            label("plat-opt") { input { type = InputType.radio; name = "edit-platform"; id = "edit-plat-android"; value = "android" }; span("plat-icon") { unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16V8a7 7 0 0 1 14 0v8"/><line x1="2" y1="20" x2="22" y2="20"/></svg>""" } }; +"Android" }
+                            label("plat-opt") { input { type = InputType.radio; name = "edit-platform"; id = "edit-plat-ios"; value = "ios" }; span("plat-icon") { unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/></svg>""" } }; +"iOS" }
+                        }
+                    }
+                    div("form-row") { label { +"Source strings file" }; input { type = InputType.text; id = "edit-proj-source" }; p("field-hint") { +"Android: values/strings.xml · iOS: en.lproj/Localizable.strings" } }
+                    div("form-row two-col") {
+                        div { label { +"Watch branch" }; input { type = InputType.text; id = "edit-proj-branch" } }
+                        div { label { +"Category" }; select { id = "edit-proj-category"; option { value = "productivity"; +"Productivity" }; option { value = "gaming"; +"Gaming" }; option { value = "fintech"; +"Fintech" }; option { value = "social"; +"Social" }; option { value = "health"; +"Health" }; option { value = "ecommerce"; +"E-commerce" } } }
+                    }
+                    div("form-row") { label { +"Tone" }; select { id = "edit-proj-tone"; option { value = "professional"; +"Professional" }; option { value = "friendly"; +"Friendly" }; option { value = "casual"; +"Casual" }; option { value = "formal"; +"Formal" } } }
+                    div("form-row") {
+                        label { +"Target languages" }
+                        div("lang-picker") {
+                            mapOf("es" to "🇪🇸 Spanish","fr" to "🇫🇷 French","de" to "🇩🇪 German","ja" to "🇯🇵 Japanese","ko" to "🇰🇷 Korean","zh" to "🇨🇳 Chinese","pt" to "🇧🇷 Portuguese","it" to "🇮🇹 Italian","hi" to "🇮🇳 Hindi","ar" to "🇸🇦 Arabic").forEach { (code, lbl) ->
+                                label("lang-toggle") { input { type = InputType.checkBox; id = "edit-lang-$code"; value = code }; +lbl }
+                            }
+                        }
+                    }
+                }
+                div("modal-footer") {
+                    button(classes = "btn btn-ghost") { attributes["onclick"] = "closeEditModal()"; +"Cancel" }
+                    button(classes = "btn btn-primary") { attributes["onclick"] = "saveEdit()"; +"Save changes" }
+                }
+            }
+        }
+
+        div("toast") { id = "toast" }
+        script { unsafe { +PROJECTS_JS } }
+    }
+}
 
 // ─── Billing Page ─────────────────────────────────────────────────────────────
 
@@ -1721,74 +2233,43 @@ async function startUpgrade(plan){
   });
   rzp.on('payment.failed',function(r){
     paymentPending=false;
-    toast('Payment failed: '+(r.error&&r.error.description?r.error.description:'Please retry'),'error');
+    const desc=r.error&&r.error.description?r.error.description:'Please try again.';
+    showInlineBanner('error','Payment failed',desc);
     loadBillingPage();
   });
   rzp.open();
 }
 
-// ── Post-payment: verify signature then poll until subscription syncs ──────────
+// ── Post-payment: verify + immediately activate plan (no webhook polling) ─────
 async function verifyAndSync(paymentId,subscriptionId,signature){
   showSyncState(true,'Verifying payment…');
-  // Optimistic: immediately show the upgraded plan name in the header
-  document.getElementById('plan-name').textContent='Solo';
-  document.getElementById('plan-status').className='status-badge status-active';
-  document.getElementById('plan-status').textContent='Active';
   const actionsEl=document.getElementById('plan-actions-billing');
-  if(actionsEl)actionsEl.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Updating…</span>';
+  if(actionsEl)actionsEl.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Activating…</span>';
 
-  // Server-side signature verification
   const vRes=await api('/billing/confirm-payment',{
     method:'POST',
     body:JSON.stringify({paymentId,subscriptionId,signature})
   });
 
+  showSyncState(false);
+  paymentPending=false;
+
   if(!vRes||!vRes.ok){
-    // Signature verification failed or network error
-    showSyncState(false);
-    paymentPending=false;
     showInlineBanner('warning',
-      'We received your payment and are checking your subscription.',
-      'This can take a minute. Please refresh in a moment — if you are still not upgraded, contact support@androidplay.in with reference: '+esc(paymentId)
+      'Payment received — verifying your subscription.',
+      'This can take a moment. If your plan has not updated after refreshing, contact support@androidplay.in with reference: '+esc(paymentId)
     );
     loadBillingPage();
     return;
   }
 
-  // Verification succeeded — now poll until webhook updates the DB
-  showSyncState(true,'Activating your plan…');
-  const upgraded=await pollUntilUpgraded(18,2000);
-
-  showSyncState(false);
-  paymentPending=false;
-
-  if(upgraded){
-    showInlineBanner('success',
-      'You are now on the '+esc(upgraded)+' plan.',
-      'Your subscription is active. Refresh the page to see your updated entitlements.'
-    );
-    loadBillingPage();
-  } else {
-    // Webhook hasn't fired yet — show a friendly recovery state, not the old pricing view
-    showInlineBanner('warning',
-      'Payment confirmed — subscription update in progress.',
-      'This usually takes under a minute. Refresh the page shortly or contact support@androidplay.in with reference: '+esc(paymentId)
-    );
-    // Still reload so UI reflects what we do know (we won't show upgrade prompts again)
-    loadBillingPage();
-  }
-}
-
-// ── Poll GET /billing/subscription until plan is no longer FREE ───────────────
-async function pollUntilUpgraded(maxRetries,intervalMs){
-  for(let i=0;i<maxRetries;i++){
-    await new Promise(r=>setTimeout(r,intervalMs));
-    const res=await api('/billing/subscription');
-    if(!res||!res.ok)continue;
-    const sub=await res.json();
-    if(sub.plan&&sub.plan!=='FREE')return sub.displayName||sub.plan;
-  }
-  return null;
+  const data=await vRes.json();
+  const planName=data.displayName||data.plan||'paid plan';
+  showInlineBanner('success',
+    'You are now on the '+esc(planName)+' plan.',
+    'Your subscription is active and all features are now unlocked.'
+  );
+  loadBillingPage();
 }
 
 async function downgradePlan(){
@@ -1824,23 +2305,7 @@ private fun HTML.billingApp() {
     }
     body {
         div("app-layout") {
-            aside("sidebar") {
-                div("sidebar-logo brand") { unsafe { +LOGO_SVG }; span { +"Transloom" } }
-                nav("sidebar-nav") {
-                    a("/transloom/app") { classes = setOf("nav-item"); +"⬡ Dashboard" }
-                    a("/transloom/app") { attributes["onclick"] = "event.preventDefault();window.location.href='/transloom/app#projects'"; classes = setOf("nav-item"); +"◻ Projects" }
-                    a("/transloom/review-portal") { classes = setOf("nav-item"); +"⚑ Review" }
-                    a("/transloom/billing") { classes = setOf("nav-item", "active"); +"◈ Billing" }
-                }
-                div("sidebar-footer") {
-                    div("user-chip") { id = "user-chip"; +"Loading..." }
-                    button(classes = "btn btn-ghost logout-btn") {
-                        attributes["onclick"] = "logout()"
-                        +"Sign out"
-                    }
-                }
-            }
-
+            unsafe { +APP_SIDEBAR_BILLING }
             main("billing-page") {
                 div("billing-page-header") {
                     h1 { +"Billing" }

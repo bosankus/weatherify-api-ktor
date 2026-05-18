@@ -27,6 +27,7 @@ import com.transloom.repository.BillingRepository
 import com.transloom.repository.TranslationMemoryRepository
 import com.transloom.pipeline.TranslationPipeline
 import com.transloom.pipeline.buildConfigWithGlossary
+import com.transloom.repository.GlossaryRepository
 import com.transloom.queue.TranslationJobQueue
 import com.androidplay.core.razorpay.RazorpayWebhookDispatcher
 import com.transloom.routes.*
@@ -108,6 +109,7 @@ fun Application.module() {
 
     val projectRepository: ProjectRepository by inject()
     val userRepository: UserRepository by inject()
+    val glossaryRepository: GlossaryRepository by inject()
     val translationRepository: TranslationRepository by inject()
     val billingRepository: BillingRepository by inject()
     val memoryRepository: TranslationMemoryRepository by inject()
@@ -178,10 +180,10 @@ fun Application.module() {
         configureWebhookRoutes(jobQueue, projectRepository)
         configureAuthRoutes(jwtSecret, userRepository)
         configureRazorpayWebhook(webhookDispatcher)
-        configurePublicCheckoutRoute(razorpayService, userRepository, jwtSecret)
+        configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret)
         configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue)
+            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue, glossaryRepository)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository)
         }

@@ -9,6 +9,7 @@ import com.transloom.di.transloomIndexes
 import com.transloom.pipeline.TranslationPipeline
 import com.transloom.pipeline.buildConfigWithGlossary
 import com.transloom.queue.TranslationJobQueue
+import com.transloom.repository.GlossaryRepository
 import com.transloom.repository.mongo.*
 import com.transloom.routes.*
 import com.transloom.services.BillingService
@@ -37,6 +38,7 @@ fun Application.configureTransloom(refundService: RefundService) {
 
     val userRepository = MongoUserRepository(db, encryptionKey)
     val projectRepository = MongoProjectRepository(db)
+    val glossaryRepository: GlossaryRepository = MongoGlossaryRepository(db)
     val translationRepository = MongoTranslationRepository(db)
     val billingRepository = MongoBillingRepository(db, projectRepository)
     val memoryRepository = MongoTranslationMemoryRepository(db)
@@ -95,9 +97,10 @@ fun Application.configureTransloom(refundService: RefundService) {
         configureWebhookRoutes(jobQueue, projectRepository)
         configureAuthRoutes(jwtSecret, userRepository)
         configureRazorpayWebhook(webhookDispatcher)
-        configurePublicCheckoutRoute(razorpayService, userRepository, jwtSecret)
+        configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret)
+        configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue)
+            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue, glossaryRepository)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository)
         }

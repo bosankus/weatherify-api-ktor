@@ -36,6 +36,7 @@ internal const val PENDING_PLAN_COOKIE = "pending_plan"
 @Serializable data class SubscribePlanBody(val plan: String = "SOLO")
 @Serializable data class ConfirmPaymentBody(val paymentId: String = "", val subscriptionId: String = "", val signature: String = "")
 @Serializable data class SubscribeResponse(val subscriptionId: String, val keyId: String, val plan: String)
+@Serializable data class ConfirmPaymentResponse(val verified: Boolean, val paymentId: String, val plan: String? = null, val displayName: String? = null)
 
 @Serializable
 data class SubscriptionResponse(
@@ -174,8 +175,16 @@ fun Route.configureBillingRoutes(
                 log.warn("confirm-payment: subscription ownership mismatch userId={} owner={}", userId, ownerId)
                 return@post call.respond(HttpStatusCode.Forbidden, ApiError("Subscription does not belong to this account"))
             }
-            log.info("confirm-payment: verified paymentId={} for userId={}", body.paymentId, userId)
-            call.respond(mapOf("verified" to true, "paymentId" to body.paymentId))
+            // Signature is valid — immediately promote pendingPlan → active plan so the user
+            // sees their upgraded tier right away without waiting for the Razorpay webhook.
+            val activated = billingRepository.activatePendingPlan(userId)
+            log.info("confirm-payment: verified paymentId={} userId={} activatedPlan={}", body.paymentId, userId, activated?.name)
+            call.respond(ConfirmPaymentResponse(
+                verified = true,
+                paymentId = body.paymentId,
+                plan = activated?.name,
+                displayName = activated?.displayName
+            ))
         }
 
         get("/usage") {
@@ -207,6 +216,7 @@ fun Route.configureBillingRoutes(
 fun Route.configurePublicCheckoutRoute(
     razorpayService: RazorpayBillingService,
     userRepository: UserRepository,
+    billingRepository: BillingRepository,
     jwtSecret: String
 ) {
     get("/transloom/billing/start-subscription") {
@@ -295,18 +305,35 @@ fun Route.configurePublicCheckoutRoute(
             log.warn("rp-callback ownership mismatch: sub-owner={} session={}", ownerId, sessionUserId)
             return@get call.respondRedirect("/transloom#pricing?billing_error=owner_mismatch")
         }
-        // Payment complete — remove the pending plan marker so the user isn't re-routed on next visit.
+        // Signature verified — immediately activate the pending plan so the dashboard
+        // shows the correct tier as soon as the user lands there after redirect.
+        val activated = billingRepository.activatePendingPlan(sessionUserId)
+        log.info("rp-callback: activated plan={} for userId={} sub={}", activated?.name, sessionUserId, subscriptionId)
+        // Remove the pending plan cookie so the user isn't re-routed on next visit.
         call.response.cookies.append(Cookie(
             name = PENDING_PLAN_COOKIE, value = "",
             path = "/", expires = GMTDate.START, maxAge = 0,
             httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
         ))
-        call.respondRedirect("/transloom/billing/success?sub=$subscriptionId")
+        // Thread the session token through to the success page so the dashboard can
+        // store it in localStorage — without this the dashboard redirects to the
+        // landing page because the token was never written during the checkout flow.
+        val sessionToken = call.request.cookies[SESSION_COOKIE]
+        val successUrl = buildString {
+            append("/transloom/billing/success?sub=")
+            append(subscriptionId)
+            if (!sessionToken.isNullOrBlank()) {
+                append("&token=")
+                append(java.net.URLEncoder.encode(sessionToken, "UTF-8"))
+            }
+        }
+        call.respondRedirect(successUrl)
     }
 
     get("/transloom/billing/success") {
         val subscriptionId = call.request.queryParameters["sub"].orEmpty()
-        call.respondHtml { successPage(subscriptionId) }
+        val token = call.request.queryParameters["token"]?.ifBlank { null }
+        call.respondHtml { successPage(subscriptionId, token) }
     }
 }
 
