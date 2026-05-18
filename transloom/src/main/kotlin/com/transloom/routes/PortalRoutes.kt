@@ -216,7 +216,7 @@ private fun HTML.landingPage() {
                     +"Developer adds "; span("accent") { +"one string" }; +". We handle"; br {}; +"the rest."
                 }
                 p("hero-sub fade-up d2") {
-                    +"Push to GitHub. Transloom detects new strings, translates them with Gemini AI,"; br {}
+                    +"Push to GitHub. Transloom detects new strings, translates them,"; br {}
                     +"respects your glossary, and opens a pull request — automatically."
                 }
                 div("hero-actions fade-up d3") {
@@ -384,7 +384,7 @@ private fun HTML.landingPage() {
                 p("section-label fade-up") { +"FEATURES" }
                 h2("fade-up d1") { +"Everything you need to ship globally. Nothing you don't." }
                 div("features-grid") {
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M9 2v2M15 20v2M9 20v2M2 15h2M2 9h2M20 15h2M20 9h2"/></svg>""","Context-aware AI","Gemini 2.5 Flash understands your app category and tone, producing natural-sounding translations.","fade-up")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M9 2v2M15 20v2M9 20v2M2 15h2M2 9h2M20 15h2M20 9h2"/></svg>""","Intelligent translations","Understands your app category and tone to produce natural-sounding translations.","fade-up")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""","Placeholder guard","Automatic detection of %1\$s, %d, %@, &#8211; — bad translations are blocked before they ship.","fade-up d1")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>""","Glossary enforcement","Define brand terms once per language. Applied consistently across every string, every time.","fade-up d2")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>""","Review portal","Flag anomalous translations for human review before they hit your main branch.","fade-up d3")
@@ -415,7 +415,7 @@ private fun HTML.landingPage() {
                     }
                     div("pricing-card recommended fade-up d1") {
                         span("rec-badge") { +"Best for Solo Developers" }
-                        span("trial-badge") { +"60-day free trial" }
+                        span("trial-badge") { +"7-day free trial" }
                         p("pricing-name") { +"Solo" }
                         p("pricing-price") { +"₹499"; span("price-mo") { +"/mo" } }
                         p("pricing-period") { +"after trial · Cancel anytime" }
@@ -427,10 +427,10 @@ private fun HTML.landingPage() {
                             li { +"Translation memory" }
                             li { +"Review portal" }
                         }
-                        a("/transloom/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 60-day free trial" }
+                        a("/transloom/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
                     }
                     div("pricing-card fade-up d2") {
-                        span("trial-badge") { +"60-day free trial" }
+                        span("trial-badge") { +"7-day free trial" }
                         p("pricing-name") { +"Team" }
                         p("pricing-price") { +"₹1,999"; span("price-mo") { +"/mo" } }
                         p("pricing-period") { +"after trial · Cancel anytime" }
@@ -441,10 +441,10 @@ private fun HTML.landingPage() {
                             li { +"Everything in Solo" }
                             li { +"Priority support" }
                         }
-                        a("/transloom/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 60-day free trial" }
+                        a("/transloom/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 7-day free trial" }
                     }
                 }
-                p("pricing-note") { +"All paid plans include a 60-day free trial. No charge until the trial ends — cancel any time." }
+                p("pricing-note") { +"All paid plans include a 7-day free trial. No charge until the trial ends — cancel any time." }
             }
         }
 
@@ -1090,7 +1090,7 @@ async function subscribe(plan){
     key:data.keyId,
     subscription_id:data.subscriptionId,
     name:'Transloom',
-    description:data.plan+' plan · 60-day free trial',
+    description:data.plan+' plan · 7-day free trial',
     image:'/transloom/favicon.svg',
     theme:{color:'#00E5A0',backdrop_color:'#000000'},
     handler:function(resp){
@@ -2214,7 +2214,7 @@ async function startUpgrade(plan){
     key:data.keyId,
     subscription_id:data.subscriptionId,
     name:'Transloom',
-    description:data.plan+' plan · 60-day free trial',
+    description:data.plan+' plan · 7-day free trial',
     image:'/transloom/favicon.svg',
     theme:{color:'#00E5A0',backdrop_color:'#000000'},
     modal:{escape:true,backdropclose:false,ondismiss:function(){

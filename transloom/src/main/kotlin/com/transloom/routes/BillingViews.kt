@@ -7,7 +7,7 @@ import kotlinx.html.*
 /**
  * Branded Razorpay checkout page. We render this on our own domain instead of
  * redirecting the user to Razorpay's hosted short_url, so we control the look,
- * the post-payment redirect, and the messaging around the 60-day trial.
+ * the post-payment redirect, and the messaging around the 7-day trial.
  */
 internal fun HTML.checkoutPage(
     plan: BillingPlan,
@@ -59,7 +59,7 @@ internal fun HTML.checkoutPage(
                     }
                     p("co-sub") {
                         +"You won't be charged today. Your card is authorized for the ${plan.displayName} plan and "
-                        +"billed only after the 60-day free trial ends. Cancel anytime from your dashboard."
+                        +"billed only after the 7-day free trial ends. Cancel anytime from your dashboard."
                     }
 
                     div("co-trust-row") {
@@ -78,7 +78,7 @@ internal fun HTML.checkoutPage(
                     }
 
                     ul("co-checks") {
-                        li { unsafe { +ICON_CHECK }; +"No charge for 60 days" }
+                        li { unsafe { +ICON_CHECK }; +"No charge for 7 days" }
                         li { unsafe { +ICON_CHECK }; +"Trial end date visible in your dashboard" }
                         li { unsafe { +ICON_CHECK }; +"Cancel any time — keep using free tier" }
                         li { unsafe { +ICON_CHECK }; +"GST-compliant invoices in your account" }
@@ -89,7 +89,7 @@ internal fun HTML.checkoutPage(
                     div("co-summary") {
                         div("co-summary-head") {
                             span("co-summary-label") { +"PLAN" }
-                            span("co-summary-badge") { +"60-day trial" }
+                            span("co-summary-badge") { +"7-day trial" }
                         }
                         h2("co-summary-plan") { +plan.displayName }
                         div("co-summary-price-row") {
@@ -149,7 +149,7 @@ internal fun HTML.checkoutPage(
                     key: ${quote(init.keyId)},
                     subscription_id: ${quote(init.subscriptionId)},
                     name: 'Transloom',
-                    description: ${quote("${plan.displayName} plan · 60-day free trial")},
+                    description: ${quote("${plan.displayName} plan · 7-day free trial")},
                     image: 'https://data.androidplay.in/transloom/favicon.svg',
                     prefill: { name: ${quote(userName)}, email: ${quote(userEmail ?: "")} },
                     theme: { color: '#00E5A0', backdrop_color: '#000000' },
@@ -245,9 +245,9 @@ internal fun HTML.successPage(subscriptionId: String, token: String? = null) {
             div("co-blob co-blob-2") {}
             div("co-success-card") {
                 div("co-success-check") { unsafe { +ICON_BIG_CHECK } }
-                h1 { +"Your 60-day trial is live." }
+                h1 { +"Your 7-day trial is live." }
                 p("co-success-sub") {
-                    +"We've authorized your card but won't bill you for 60 days. "
+                    +"We've authorized your card but won't bill you for 7 days. "
                     +"Your trial end date is shown in your dashboard — cancel anytime to stay on the free tier."
                 }
                 p("co-success-meta") {

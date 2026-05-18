@@ -23,7 +23,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 private const val RAZORPAY_API = "https://api.razorpay.com/v1"
-private const val TRIAL_DAYS = 60L
+private const val TRIAL_DAYS = 7L
 // Razorpay requires total_count >= 1. 120 monthly cycles = 10 years, effectively indefinite.
 private const val SUBSCRIPTION_CYCLES = 120
 
@@ -63,7 +63,7 @@ class RazorpayBillingService(
     override suspend fun handle(eventType: String, event: JsonObject): WebhookResult =
         when (eventType) {
             // Card saved for trial — upgrade the plan immediately so the user's dashboard
-            // reflects the correct plan during the 60-day trial before any charge fires.
+            // reflects the correct plan during the 7-day trial before any charge fires.
             "subscription.authenticated" -> handleSubscriptionAuthenticated(event)
             "subscription.activated", "subscription.charged" -> handleSubscriptionCharged(event)
             "subscription.cancelled", "subscription.completed" -> handleSubscriptionEnded(event)
@@ -145,7 +145,7 @@ class RazorpayBillingService(
     // ─── Activate trial subscription immediately ───────────────────────────────
 
     /**
-     * Ends the 60-day trial early by updating start_at to now so Razorpay charges
+     * Ends the 7-day trial early by updating start_at to now so Razorpay charges
      * the user immediately. Clears limitHitAt so the dashboard prompt disappears.
      * The subscription.activated / subscription.charged webhook will arrive shortly
      * and record the invoice + currentPeriodEnd as normal.
