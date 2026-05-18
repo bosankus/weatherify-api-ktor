@@ -102,7 +102,7 @@ fun Application.configureTransloom(refundService: RefundService) {
         authenticate("auth-jwt") {
             configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue, glossaryRepository)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
-            configureBillingRoutes(razorpayService, billingRepository, userRepository)
+            configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret)
         }
     }
 }

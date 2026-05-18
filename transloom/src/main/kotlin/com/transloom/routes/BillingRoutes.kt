@@ -76,7 +76,8 @@ data class UsageResponse(
 fun Route.configureBillingRoutes(
     razorpayService: RazorpayBillingService,
     billingRepository: BillingRepository,
-    userRepository: UserRepository
+    userRepository: UserRepository,
+    jwtSecret: String
 ) {
     route("/transloom/api/billing") {
 
@@ -318,13 +319,21 @@ fun Route.configurePublicCheckoutRoute(
         // Thread the session token through to the success page so the dashboard can
         // store it in localStorage — without this the dashboard redirects to the
         // landing page because the token was never written during the checkout flow.
-        val sessionToken = call.request.cookies[SESSION_COOKIE]
+        // If the session cookie is missing (e.g., after Razorpay redirect), mint a fresh token.
+        var token = call.request.cookies[SESSION_COOKIE]
+        if (token.isNullOrBlank()) {
+            val user = userRepository.findById(sessionUserId)
+            if (user != null) {
+                token = mintJwt(jwtSecret, user.id, user.githubId, user.githubUsername)
+                log.info("Minted fresh JWT for userId={} after payment (session cookie unavailable)", sessionUserId)
+            }
+        }
         val successUrl = buildString {
             append("/transloom/billing/success?sub=")
             append(subscriptionId)
-            if (!sessionToken.isNullOrBlank()) {
+            if (!token.isNullOrBlank()) {
                 append("&token=")
-                append(java.net.URLEncoder.encode(sessionToken, "UTF-8"))
+                append(java.net.URLEncoder.encode(token, "UTF-8"))
             }
         }
         call.respondRedirect(successUrl)
@@ -487,4 +496,14 @@ internal fun ApplicationCall.clearSession() {
         path = "/", expires = GMTDate.START, maxAge = 0,
         httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
     ))
+}
+
+private fun mintJwt(jwtSecret: String, userId: String, githubId: Long, username: String): String {
+    val ttlMs = 7L * 24 * 60 * 60 * 1000
+    return JWT.create()
+        .withAudience("transloom-app").withIssuer("transloom-backend")
+        .withClaim("userId", userId).withClaim("githubId", githubId)
+        .withClaim("username", username)
+        .withExpiresAt(java.util.Date(System.currentTimeMillis() + ttlMs))
+        .sign(Algorithm.HMAC256(jwtSecret))
 }
