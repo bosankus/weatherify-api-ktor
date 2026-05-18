@@ -1361,8 +1361,8 @@ document.querySelectorAll('[name="platform"]').forEach(r=>r.addEventListener('ch
   else{srcInput.value='values/strings.xml';srcInput.placeholder='values/strings.xml';}
 }));
 // Set Android as default
-document.getElementById('plat-android').checked=true;
-document.getElementById('proj-source-path').value='values/strings.xml';
+const _platAndroid=document.getElementById('plat-android');if(_platAndroid)_platAndroid.checked=true;
+const _projSource=document.getElementById('proj-source-path');if(_projSource)_projSource.value='values/strings.xml';
 
 async function createProject(){
   const name=document.getElementById('proj-name').value.trim();
@@ -1926,8 +1926,8 @@ document.querySelectorAll('[name="platform"]').forEach(r=>r.addEventListener('ch
   const src=document.getElementById('proj-source-path');
   if(plat==='ios'){src.value='en.lproj/Localizable.strings';}else{src.value='values/strings.xml';}
 }));
-document.getElementById('plat-android').checked=true;
-document.getElementById('proj-source-path').value='values/strings.xml';
+const _pa=document.getElementById('plat-android');if(_pa)_pa.checked=true;
+const _ps=document.getElementById('proj-source-path');if(_ps)_ps.value='values/strings.xml';
 
 async function createProject(){
   const name=document.getElementById('proj-name').value.trim();
