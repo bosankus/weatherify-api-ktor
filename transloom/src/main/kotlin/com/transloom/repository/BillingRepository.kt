@@ -16,8 +16,12 @@ interface BillingRepository {
         razorpayCustomerId: String? = null,
         razorpaySubscriptionId: String? = null,
         cancelAtPeriodEnd: Boolean = false,
-        currentPeriodEnd: Instant? = null
+        currentPeriodEnd: Instant? = null,
+        pendingPlan: BillingPlan? = null
     )
+
+    /** Promotes pendingPlan → plan atomically. Returns the activated plan, or null if none was pending. */
+    suspend fun activatePendingPlan(userId: String): BillingPlan?
 
     suspend fun downgradeToFree(razorpaySubscriptionId: String)
 

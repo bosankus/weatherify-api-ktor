@@ -112,12 +112,13 @@ class RazorpayBillingService(
         val subscriptionId = response["id"]?.jsonPrimitive?.contentOrNull
             ?: throw IllegalStateException("Razorpay did not return subscription id: $response")
 
-        // Pre-record the subscription so the webhook fallback lookup (findByRazorpaySubscription)
-        // works even if notes parsing fails. Plan stays unchanged until subscription.authenticated fires.
+        // Pre-record the subscription so webhook fallback lookup works even if notes parsing fails.
+        // Store pendingPlan so confirm-payment can immediately activate it without waiting for the webhook.
         val currentSub = billingRepository.getSubscription(userId)
         billingRepository.upsertSubscription(
             userId = userId, plan = currentSub.plan,
-            razorpaySubscriptionId = subscriptionId
+            razorpaySubscriptionId = subscriptionId,
+            pendingPlan = plan
         )
         log.info("Created Razorpay subscription {} for userId={} plan={}", subscriptionId, userId, plan.name)
         return SubscriptionInit(subscriptionId, keyId, plan)

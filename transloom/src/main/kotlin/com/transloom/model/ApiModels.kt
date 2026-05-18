@@ -75,4 +75,16 @@ data class UpdateProjectBody(
 )
 
 @Serializable
+data class ProjectDetailResponse(
+    val id: String,
+    val name: String,
+    val githubRepo: String,
+    val watchBranch: String,
+    val sourceFilePath: String,
+    val category: String,
+    val tone: String,
+    val targets: List<TargetConfig>
+)
+
+@Serializable
 data class ApiError(val error: String)

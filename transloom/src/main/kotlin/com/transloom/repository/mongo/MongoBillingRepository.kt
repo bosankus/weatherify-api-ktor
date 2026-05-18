@@ -43,7 +43,8 @@ class MongoBillingRepository(
         razorpayCustomerId: String?,
         razorpaySubscriptionId: String?,
         cancelAtPeriodEnd: Boolean,
-        currentPeriodEnd: Instant?
+        currentPeriodEnd: Instant?,
+        pendingPlan: BillingPlan?
     ) {
         val now = System.currentTimeMillis()
         val setUpdates = mutableListOf(
@@ -54,6 +55,7 @@ class MongoBillingRepository(
         razorpayCustomerId?.let { setUpdates += Updates.set("razorpayCustomerId", it) }
         razorpaySubscriptionId?.let { setUpdates += Updates.set("razorpaySubscriptionId", it) }
         currentPeriodEnd?.let { setUpdates += Updates.set("currentPeriodEnd", it.toEpochMilliseconds()) }
+        pendingPlan?.let { setUpdates += Updates.set("pendingPlan", it.name) }
 
         val update = Updates.combine(
             Updates.setOnInsert("_id", UUID.randomUUID().toString()),
@@ -62,6 +64,21 @@ class MongoBillingRepository(
             *setUpdates.toTypedArray()
         )
         subscriptions.findOneAndUpdate(eq("userId", userId), update, FindOneAndUpdateOptions().upsert(true))
+    }
+
+    override suspend fun activatePendingPlan(userId: String): BillingPlan? {
+        val doc = subscriptions.find(eq("userId", userId)).firstOrNull() ?: return null
+        val pendingStr = doc.getString("pendingPlan") ?: return null
+        val plan = runCatching { BillingPlan.valueOf(pendingStr) }.getOrNull() ?: return null
+        subscriptions.updateOne(
+            eq("userId", userId),
+            Updates.combine(
+                Updates.set("plan", plan.name),
+                Updates.unset("pendingPlan"),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        )
+        return plan
     }
 
     override suspend fun downgradeToFree(razorpaySubscriptionId: String) {
