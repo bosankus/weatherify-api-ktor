@@ -159,6 +159,16 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         )
     }
 
+    override suspend fun updateSourceFileHash(projectId: String, hash: String) {
+        projects.updateOne(
+            eq("_id", projectId),
+            Updates.combine(
+                Updates.set("lastSourceFileHash", hash),
+                Updates.set("updatedAt", Clock.System.now().toEpochMilliseconds())
+            )
+        )
+    }
+
     override suspend fun getGlossary(projectId: String): Map<String, Map<String, String>> {
         val entries = glossary
             .find(and(eq("projectId", projectId), eq("isActive", true)))
@@ -206,7 +216,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             tone = getString("tone") ?: "",
             targets = targets,
             culturalSensitivityEnabled = getBoolean("culturalSensitivityEnabled") ?: false,
-            webhookVerifiedAt = webhookVerifiedAt
+            webhookVerifiedAt = webhookVerifiedAt,
+            lastSourceFileHash = getString("lastSourceFileHash")
         )
     }
 }

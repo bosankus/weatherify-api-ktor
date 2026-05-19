@@ -41,4 +41,7 @@ interface ProjectRepository {
 
     /** Records a successful webhook verification so the project is excluded from future heal passes. */
     suspend fun markWebhookVerified(projectId: String)
+
+    /** Stores the SHA-256 of the source file after a fully successful pipeline run. */
+    suspend fun updateSourceFileHash(projectId: String, hash: String)
 }

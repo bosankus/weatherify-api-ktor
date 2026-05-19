@@ -23,8 +23,10 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -128,10 +130,12 @@ fun Route.configureApiRoutes(
                     return@post call.respond(HttpStatusCode.InternalServerError, ApiError("Failed to create project"))
                 }
 
-                userActivityService.record(
-                    userId, UserEvent.PROJECT_CREATED,
-                    mapOf("projectId" to project.id, "repo" to project.githubRepo)
-                )
+                call.application.launch {
+                    userActivityService.record(
+                        userId, UserEvent.PROJECT_CREATED,
+                        mapOf("projectId" to project.id, "repo" to project.githubRepo)
+                    )
+                }
 
                 val user = userRepository.findById(userId)
                 val userToken = user?.githubToken
@@ -139,10 +143,12 @@ fun Route.configureApiRoutes(
                     runCatching { githubService.createWebhook(project.githubRepo, userToken) }
                         .onSuccess {
                             runCatching { projectRepository.markWebhookVerified(project.id) }
-                            userActivityService.record(
-                                userId, UserEvent.WEBHOOK_INSTALLED,
-                                mapOf("projectId" to project.id, "repo" to project.githubRepo)
-                            )
+                            call.application.launch {
+                                userActivityService.record(
+                                    userId, UserEvent.WEBHOOK_INSTALLED,
+                                    mapOf("projectId" to project.id, "repo" to project.githubRepo)
+                                )
+                            }
                         }
                         .onFailure { apiLog.warn("Webhook auto-install failed for {}: {}", project.githubRepo, it.message) }
                 }
@@ -249,10 +255,12 @@ fun Route.configureApiRoutes(
                     return@delete call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
                 }
                 projectRepository.delete(projectId)
-                userActivityService.record(
-                    userId, UserEvent.PROJECT_DELETED,
-                    mapOf("projectId" to projectId, "repo" to project.githubRepo)
-                )
+                call.application.launch {
+                    userActivityService.record(
+                        userId, UserEvent.PROJECT_DELETED,
+                        mapOf("projectId" to projectId, "repo" to project.githubRepo)
+                    )
+                }
                 call.respond(HttpStatusCode.OK, mapOf("status" to "Project deleted", "id" to projectId))
             }
 
@@ -431,15 +439,28 @@ fun Route.configureApiRoutes(
                     val heartbeat = launch {
                         while (isActive) {
                             delay(25_000)
-                            writeStringUtf8(": ping\n\n")
-                            flush()
+                            try {
+                                writeStringUtf8(": ping\n\n")
+                                flush()
+                            } catch (_: Exception) {
+                                // Channel closed (client disconnected or Cloud Run cut the connection)
+                                cancel()
+                                break
+                            }
                         }
                     }
                     try {
                         pipelineEventBus.eventsFor(userId).collect { json ->
-                            writeStringUtf8("data: $json\n\n")
-                            flush()
+                            try {
+                                writeStringUtf8("data: $json\n\n")
+                                flush()
+                            } catch (_: Exception) {
+                                cancel()
+                                return@collect
+                            }
                         }
+                    } catch (_: CancellationException) {
+                        // Normal shutdown when heartbeat detected disconnect
                     } finally {
                         heartbeat.cancel()
                     }
@@ -497,10 +518,12 @@ fun Route.configureApiRoutes(
             runCatching { githubService.createWebhook(project.githubRepo, token) }
                 .onSuccess {
                     runCatching { projectRepository.markWebhookVerified(project.id) }
-                    userActivityService.record(
-                        userId, UserEvent.WEBHOOK_INSTALLED,
-                        mapOf("projectId" to project.id, "repo" to project.githubRepo)
-                    )
+                    call.application.launch {
+                        userActivityService.record(
+                            userId, UserEvent.WEBHOOK_INSTALLED,
+                            mapOf("projectId" to project.id, "repo" to project.githubRepo)
+                        )
+                    }
                     call.respond(HttpStatusCode.OK, mapOf("status" to "Webhook installed for ${project.githubRepo}"))
                 }
                 .onFailure { call.respond(HttpStatusCode.InternalServerError, ApiError(it.message ?: "Failed to install webhook")) }

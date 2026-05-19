@@ -19,6 +19,7 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.date.GMTDate
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.util.*
@@ -111,11 +112,13 @@ fun Route.configureAuthRoutes(
                 log.info("Mocking GitHub OAuth (no GITHUB_CLIENT_ID set)")
                 val mockResult = userRepository.upsert(12345L, "mock-developer", "mock@transloom.dev", null, null)
                 val mockUser = mockResult.user
-                userActivityService.record(
-                    mockUser.id,
-                    if (mockResult.isNewUser) UserEvent.SIGNED_UP else UserEvent.LOGGED_IN,
-                    mapOf("flow" to "mock")
-                )
+                call.application.launch {
+                    userActivityService.record(
+                        mockUser.id,
+                        if (mockResult.isNewUser) UserEvent.SIGNED_UP else UserEvent.LOGGED_IN,
+                        mapOf("flow" to "mock")
+                    )
+                }
                 val mockToken = mintJwt(jwtSecret, mockUser.id, 12345L, "mock-developer")
                 call.issueSessionCookie(mockToken)
                 redirectAfterAuth(call, mockToken, pendingPlan, frontendRedirectUrl, mockResult.isNewUser)
@@ -150,14 +153,16 @@ fun Route.configureAuthRoutes(
             val user = upsertResult.user
             log.info("OAuth success: user={} id={} new={}", githubUser.login, user.id, upsertResult.isNewUser)
 
-            userActivityService.record(
-                user.id,
-                if (upsertResult.isNewUser) UserEvent.SIGNED_UP else UserEvent.LOGGED_IN,
-                mapOf(
-                    "githubLogin" to githubUser.login,
-                    "pendingPlan" to (pendingPlan ?: "")
+            call.application.launch {
+                userActivityService.record(
+                    user.id,
+                    if (upsertResult.isNewUser) UserEvent.SIGNED_UP else UserEvent.LOGGED_IN,
+                    mapOf(
+                        "githubLogin" to githubUser.login,
+                        "pendingPlan" to (pendingPlan ?: "")
+                    )
                 )
-            )
+            }
 
             val jwtToken = mintJwt(jwtSecret, user.id, githubUser.id, githubUser.login)
             call.issueSessionCookie(jwtToken)

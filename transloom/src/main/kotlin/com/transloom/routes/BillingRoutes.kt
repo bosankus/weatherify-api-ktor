@@ -22,6 +22,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.date.GMTDate
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.html.*
@@ -114,10 +115,12 @@ fun Route.configureBillingRoutes(
                 log.error("Subscription creation failed for userId={}: {}", userId, it.message)
                 return@post call.respond(HttpStatusCode.InternalServerError, ApiError(it.message ?: "Razorpay error"))
             }
-            userActivityService.record(
-                userId, UserEvent.SUBSCRIPTION_INITIATED,
-                mapOf("plan" to plan.name, "subscriptionId" to init.subscriptionId, "flow" to "authenticated")
-            )
+            call.application.launch {
+                userActivityService.record(
+                    userId, UserEvent.SUBSCRIPTION_INITIATED,
+                    mapOf("plan" to plan.name, "subscriptionId" to init.subscriptionId, "flow" to "authenticated")
+                )
+            }
             call.respond(SubscribeResponse(init.subscriptionId, init.keyId, init.plan.name))
         }
 
@@ -141,7 +144,9 @@ fun Route.configureBillingRoutes(
             runCatching { razorpayService.cancelSubscription(userId) }.getOrElse {
                 return@post call.respond(HttpStatusCode.BadRequest, ApiError(it.message ?: "Cancel failed"))
             }
-            userActivityService.record(userId, UserEvent.SUBSCRIPTION_CANCELLED, mapOf("source" to "user"))
+            call.application.launch {
+                userActivityService.record(userId, UserEvent.SUBSCRIPTION_CANCELLED, mapOf("source" to "user"))
+            }
             call.respond(mapOf("status" to "Subscription will cancel at end of billing period"))
         }
 
@@ -182,12 +187,14 @@ fun Route.configureBillingRoutes(
             // sees their upgraded tier right away without waiting for the Razorpay webhook.
             val activated = billingRepository.activatePendingPlan(userId)
             log.info("confirm-payment: verified paymentId={} userId={} activatedPlan={}", body.paymentId, userId, activated?.name)
-            userActivityService.record(
-                userId, UserEvent.PAYMENT_VERIFIED,
-                mapOf("paymentId" to body.paymentId, "subscriptionId" to body.subscriptionId)
-            )
-            activated?.let {
-                userActivityService.record(userId, UserEvent.PLAN_ACTIVATED, mapOf("plan" to it.name))
+            call.application.launch {
+                userActivityService.record(
+                    userId, UserEvent.PAYMENT_VERIFIED,
+                    mapOf("paymentId" to body.paymentId, "subscriptionId" to body.subscriptionId)
+                )
+                activated?.let {
+                    userActivityService.record(userId, UserEvent.PLAN_ACTIVATED, mapOf("plan" to it.name))
+                }
             }
             call.respond(ConfirmPaymentResponse(
                 verified = true,
@@ -296,10 +303,12 @@ fun Route.configurePublicCheckoutRoute(
             log.error("Subscription creation failed for userId={} plan={}: {}", userId, plan.name, it.message, it)
             return@get call.respondRedirect("/transloom#pricing?billing_error=create_failed")
         }
-        userActivityService.record(
-            userId, UserEvent.SUBSCRIPTION_INITIATED,
-            mapOf("plan" to plan.name, "subscriptionId" to init.subscriptionId, "flow" to "public-checkout")
-        )
+        call.application.launch {
+            userActivityService.record(
+                userId, UserEvent.SUBSCRIPTION_INITIATED,
+                mapOf("plan" to plan.name, "subscriptionId" to init.subscriptionId, "flow" to "public-checkout")
+            )
+        }
 
         call.respondHtml { checkoutPage(plan, init, user.email, user.githubUsername, user.avatarUrl) }
     }
@@ -334,12 +343,14 @@ fun Route.configurePublicCheckoutRoute(
         // shows the correct tier as soon as the user lands there after redirect.
         val activated = billingRepository.activatePendingPlan(sessionUserId)
         log.info("rp-callback: activated plan={} for userId={} sub={}", activated?.name, sessionUserId, subscriptionId)
-        userActivityService.record(
-            sessionUserId, UserEvent.PAYMENT_VERIFIED,
-            mapOf("paymentId" to paymentId, "subscriptionId" to subscriptionId, "flow" to "rp-callback")
-        )
-        activated?.let {
-            userActivityService.record(sessionUserId, UserEvent.PLAN_ACTIVATED, mapOf("plan" to it.name))
+        call.application.launch {
+            userActivityService.record(
+                sessionUserId, UserEvent.PAYMENT_VERIFIED,
+                mapOf("paymentId" to paymentId, "subscriptionId" to subscriptionId, "flow" to "rp-callback")
+            )
+            activated?.let {
+                userActivityService.record(sessionUserId, UserEvent.PLAN_ACTIVATED, mapOf("plan" to it.name))
+            }
         }
         // Remove the pending plan cookie so the user isn't re-routed on next visit.
         call.response.cookies.append(Cookie(
@@ -459,10 +470,12 @@ fun Route.configureBillingReceiptRoute(
 
         val filename = "transloom-invoice-${invoice.razorpayPaymentId}.pdf"
         call.response.header(HttpHeaders.ContentDisposition, """inline; filename="$filename"""")
-        userActivityService.record(
-            userId, UserEvent.INVOICE_DOWNLOADED,
-            mapOf("paymentId" to invoice.razorpayPaymentId)
-        )
+        call.application.launch {
+            userActivityService.record(
+                userId, UserEvent.INVOICE_DOWNLOADED,
+                mapOf("paymentId" to invoice.razorpayPaymentId)
+            )
+        }
         call.respondBytes(pdfBytes, ContentType.Application.Pdf, HttpStatusCode.OK)
     }
 }

@@ -15,7 +15,9 @@ data class Project(
     val targets: List<TargetConfig> = emptyList(),
     val culturalSensitivityEnabled: Boolean = false,
     /** Timestamp of the last successful webhook verification. Null means never verified. */
-    val webhookVerifiedAt: Instant? = null
+    val webhookVerifiedAt: Instant? = null,
+    /** SHA-256 of the source file content from the last fully successful pipeline run. */
+    val lastSourceFileHash: String? = null
 )
 
 @Serializable

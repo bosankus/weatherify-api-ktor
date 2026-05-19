@@ -24,6 +24,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.slf4j.LoggerFactory
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -92,6 +93,19 @@ class TranslationPipeline(
         }
         eventBus.stepDone(userId, runId, "FETCHING_STRINGS")
 
+        // Hash-based fast skip: if the source file is byte-for-byte identical to the last
+        // successfully processed version, skip all DB reads and AI calls entirely.
+        val incomingHash = sha256(sourceContent)
+        if (incomingHash == project.lastSourceFileHash) {
+            listOf("DETECTING_CHANGES", "BILLING_CHECK", "TRANSLATING", "CREATING_PR").forEach {
+                eventBus.stepSkipped(userId, runId, it)
+            }
+            eventBus.finishRun(userId, runId)
+            log.info("Source file unchanged (hash match) for repo={} commit={} — pipeline skipped",
+                payload.repositoryFullName, payload.commitHash.take(7))
+            return
+        }
+
         // ── Step: Detect changes ───────────────────────────────────────────────
         eventBus.stepRunning(userId, runId, "DETECTING_CHANGES")
         val allSourceStrings = when {
@@ -114,6 +128,7 @@ class TranslationPipeline(
                 eventBus.stepSkipped(userId, runId, it)
             }
             eventBus.finishRun(userId, runId)
+            projectRepository.updateSourceFileHash(project.id, incomingHash)
             log.info("No new/modified strings in {} — skipping", payload.commitHash.take(7))
             return
         }
@@ -144,6 +159,7 @@ class TranslationPipeline(
                 eventBus.stepSkipped(userId, runId, it)
             }
             eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size)
+            projectRepository.updateSourceFileHash(project.id, incomingHash)
             return
         }
 
@@ -228,10 +244,12 @@ class TranslationPipeline(
             }
             eventBus.stepDone(userId, runId, "CREATING_PR", pr.prUrl)
             eventBus.finishRun(userId, runId, prUrl = pr.prUrl, surfaceSkipped = surfaceKeys.size)
+            projectRepository.updateSourceFileHash(project.id, incomingHash)
             log.info("Translation PR created: {}", pr.prUrl)
         } else {
             eventBus.stepSkipped(userId, runId, "CREATING_PR", "No translatable strings approved")
             eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size)
+            projectRepository.updateSourceFileHash(project.id, incomingHash)
         }
 
         val total = translatedCounts.values.sum()
@@ -356,6 +374,12 @@ class TranslationPipeline(
 
     companion object {
         private const val BATCH_SIZE = 10
+
+        private fun sha256(content: String): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            return digest.digest(content.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+        }
     }
 
     private fun buildPrBody(newCount: Int, semanticCount: Int, surfaceSkipped: Int, languageCount: Int): String {
