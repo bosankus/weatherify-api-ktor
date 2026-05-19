@@ -2,15 +2,7 @@ package com.transloom.domain
 
 import kotlinx.datetime.Instant
 
-/**
- * Categorical user events captured into the `user_events` MongoDB collection.
- * The set is intentionally small and stable — adding a new variant is fine,
- * but renaming or removing one will silently break historical analytics.
- *
- * Recorded at the *boundary* of state changes (auth callback, payment confirm,
- * webhook handler) rather than inside business logic, so the activity stream
- * is a faithful audit trail of what actually happened on the platform.
- */
+/** Categorical events recorded into the `user_events` collection. Never rename or remove a variant — it breaks historical analytics. */
 enum class UserEvent {
     SIGNED_UP,                    // first OAuth callback success
     LOGGED_IN,                    // returning OAuth callback (existing user)
@@ -30,11 +22,7 @@ enum class UserEvent {
     PLAN_EXPIRY_NOTIFIED,         // monitor flagged user for upcoming renewal
 }
 
-/**
- * Onboarding milestones — denormalised onto the User document so the dashboard
- * can answer "who's stuck where?" without aggregating across user_events.
- * Always advances forward; we never roll it back.
- */
+/** Onboarding milestones denormalised on the User document. Always advances forward via [advance]. */
 enum class OnboardingStep {
     SIGNED_UP,
     PROJECT_CREATED,
@@ -43,7 +31,6 @@ enum class OnboardingStep {
     PLAN_ACTIVATED,
     COMPLETED;
 
-    /** Higher ordinal = further along. Use [advance] to monotonically move forward. */
     fun advance(to: OnboardingStep): OnboardingStep = if (to.ordinal > this.ordinal) to else this
 }
 
@@ -55,10 +42,7 @@ data class UserActivity(
     val metadata: Map<String, String> = emptyMap()
 )
 
-/**
- * Read model returned by the insights endpoint. Computed at request time from
- * the user document, subscription, and recent activity — never persisted.
- */
+/** Computed at request time from user, subscription, and activity — never persisted. */
 data class UserInsights(
     val userId: String,
     val onboardingStep: OnboardingStep,

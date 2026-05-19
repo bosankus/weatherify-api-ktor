@@ -15,14 +15,6 @@ import kotlinx.datetime.Instant
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.hours
 
-/**
- * Single entry point for everything user-lifecycle: activity recording, onboarding
- * advancement, and the analytical queries that power the dashboard + monitor.
- *
- * Why one service instead of letting routes call the repos directly?
- * Recording an event almost always implies *also* touching lastActiveAt and possibly
- * advancing onboardingStep. Centralising the rule avoids drift between callers.
- */
 class UserActivityService(
     private val userRepository: UserRepository,
     private val userActivityRepository: UserActivityRepository,
@@ -31,7 +23,6 @@ class UserActivityService(
 ) {
     private val log = LoggerFactory.getLogger(UserActivityService::class.java)
 
-    // Heuristic thresholds — tuned conservatively so we surface signal, not noise.
     private val STUCK_AFTER_SIGNUP_HOURS = 48
     private val STUCK_AFTER_PROJECT_HOURS = 72
     private val PLAN_EXPIRING_SOON_DAYS = 5L
@@ -54,11 +45,6 @@ class UserActivityService(
         return activity
     }
 
-    /**
-     * Combines user, subscription, and recent activity into the read model the
-     * dashboard renders. Suggestions are computed last so they can reference any
-     * field already derived above.
-     */
     suspend fun insightsFor(userId: String): UserInsights? {
         val user = userRepository.findById(userId) ?: return null
         val subscription = billingRepository.getSubscription(userId)
@@ -101,11 +87,6 @@ class UserActivityService(
     data class StuckUser(val user: User, val reason: String)
     data class ExpiringPlan(val user: User, val daysLeft: Long, val plan: BillingPlan)
 
-    /**
-     * Heuristic scan for users who need a nudge:
-     *  - Signed up > 48h ago but never created a project
-     *  - Created a project > 72h ago but never installed a webhook
-     */
     suspend fun findStuckUsers(): List<StuckUser> {
         val now = Clock.System.now()
         val users = userRepository.listAll()
@@ -115,7 +96,6 @@ class UserActivityService(
         }
     }
 
-    /** Users with a paid plan that will renew within [PLAN_EXPIRING_SOON_DAYS] — used for retention nudges. */
     suspend fun findExpiringPlans(): List<ExpiringPlan> {
         val now = Clock.System.now()
         val users = userRepository.listAll()
@@ -128,7 +108,6 @@ class UserActivityService(
         }
     }
 
-    /** Users whose Razorpay subscription was created but they never finished payment. */
     suspend fun findAbandonedPayments(): List<User> {
         val cutoffMs = PAYMENT_ABANDONED_MINUTES * 60 * 1000
         return userActivityRepository.findUsersWithAbandonedPayments(cutoffMs)

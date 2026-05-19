@@ -1,7 +1,5 @@
 package com.transloom.routes
 
-import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
 import com.transloom.domain.CreateProjectInput
 import com.transloom.domain.Translation
 import com.transloom.repository.GlossaryRepository
@@ -43,7 +41,6 @@ fun Route.configureApiRoutes(
     userRepository: UserRepository,
     translationRepository: TranslationRepository,
     pipelineEventBus: PipelineEventBus,
-    jwtSecret: String,
     jobQueue: TranslationJobQueue,
     glossaryRepository: GlossaryRepository,
     userActivityService: UserActivityService
@@ -121,7 +118,7 @@ fun Route.configureApiRoutes(
                     category = body.category,
                     tone = body.tone,
                     targets = body.targets,
-                    culturalSensitivityEnabled = false  // always off at creation; user opts in via Edit
+                    culturalSensitivityEnabled = false
                 )
                 val project = runCatching { projectRepository.create(userId, input) }.getOrElse {
                     if (it.message?.contains("E11000") == true || it.message?.contains("duplicate") == true) {
@@ -141,6 +138,7 @@ fun Route.configureApiRoutes(
                 if (userToken != null) {
                     runCatching { githubService.createWebhook(project.githubRepo, userToken) }
                         .onSuccess {
+                            runCatching { projectRepository.markWebhookVerified(project.id) }
                             userActivityService.record(
                                 userId, UserEvent.WEBHOOK_INSTALLED,
                                 mapOf("projectId" to project.id, "repo" to project.githubRepo)
@@ -197,6 +195,7 @@ fun Route.configureApiRoutes(
                 val userToken = owner?.githubToken
                 if (userToken != null) {
                     runCatching { githubService.ensureWebhook(updated.githubRepo, userToken) }
+                        .onSuccess { runCatching { projectRepository.markWebhookVerified(updated.id) } }
                         .onFailure { apiLog.warn("Webhook re-install failed on project update for {}: {}", updated.githubRepo, it.message) }
                 }
 
@@ -419,16 +418,10 @@ fun Route.configureApiRoutes(
         }
 
         // SSE stream of real-time pipeline events. EventSource can't send Authorization headers,
-        // so the JWT is accepted as ?token= and verified manually here.
+        // so clients must use fetch() with Authorization: Bearer — see connectPipelineSSE() in DASHBOARD_JS.
         get("/pipeline/events") {
-            val token = call.request.queryParameters["token"]
-                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Missing token"))
-            val userId = runCatching {
-                JWT.require(Algorithm.HMAC256(jwtSecret))
-                    .withAudience("transloom-app").withIssuer("transloom-backend")
-                    .build().verify(token).getClaim("userId")?.asString()
-                    ?.let { UUID.fromString(it).toString() }
-            }.getOrNull() ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val userId = call.userId()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
 
             call.response.header(HttpHeaders.CacheControl, "no-cache, no-transform")
             call.response.header(HttpHeaders.Connection, "keep-alive")
@@ -503,6 +496,7 @@ fun Route.configureApiRoutes(
 
             runCatching { githubService.createWebhook(project.githubRepo, token) }
                 .onSuccess {
+                    runCatching { projectRepository.markWebhookVerified(project.id) }
                     userActivityService.record(
                         userId, UserEvent.WEBHOOK_INSTALLED,
                         mapOf("projectId" to project.id, "repo" to project.githubRepo)
@@ -514,13 +508,7 @@ fun Route.configureApiRoutes(
     }
 }
 
-/**
- * Launches a batched follow-up PR for all manually-approved translations in a project.
- *
- * A 2-second delay collects simultaneous approvals so they land in one PR instead of many.
- * An atomic "claim" (status "approved" → "auto") ensures only one concurrent coroutine
- * builds and submits the PR even when multiple approvals fire at the same time.
- */
+// 2s delay collects simultaneous approvals into one PR. Atomic claim (approved → auto) prevents duplicate PRs.
 private fun launchFollowUpPr(
     application: Application,
     githubService: GitHubService,
@@ -582,6 +570,8 @@ private fun launchFollowUpPr(
                             val merged = when {
                                 filePath.endsWith(".xml")     -> StringParserService.mergeAndroidXml(existing, translations)
                                 filePath.endsWith(".strings") -> StringParserService.mergeIosStrings(existing, translations)
+                                filePath.endsWith(".json") || filePath.endsWith(".arb") ->
+                                    StringParserService.mergeJsonStrings(existing, translations)
                                 else -> return@async null
                             }
                             filePath to merged

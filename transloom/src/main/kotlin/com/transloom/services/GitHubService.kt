@@ -16,7 +16,6 @@ import org.slf4j.LoggerFactory
 
 data class PrSummary(val status: String, val prUrl: String)
 
-// GitHub API Models
 @Serializable
 data class GitRefResponse(
     @SerialName("object") val gitObject: GitObject
@@ -81,27 +80,6 @@ class GitHubService {
         header("X-GitHub-Api-Version", "2022-11-28")
     }
 
-    suspend fun getCommitDiff(repo: String, commitHash: String, token: String): String {
-        if (token == "dummy-token") {
-            log.info("Mocking GitHub diff fetch (no GITHUB_TOKEN set)")
-            return """
-                diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-                +    <string name="payment_error">Payment failed. Try again.</string>
-                +    <string name="welcome_user">Welcome, %1${'$'}s!</string>
-            """.trimIndent()
-        }
-        
-        val response = client.get("https://api.github.com/repos/$repo/commits/$commitHash") {
-            gitHubAuth(token)
-            header(HttpHeaders.Accept, "application/vnd.github.v3.diff")
-        }
-        if (!response.status.isSuccess()) {
-            log.warn("Could not fetch diff for commit {}: {}", commitHash.take(7), response.status)
-            return ""
-        }
-        return response.bodyAsText()
-    }
-
     suspend fun fetchFileContent(repo: String, branch: String, filePath: String, token: String): String {
 
         val response = client.get("https://api.github.com/repos/$repo/contents/$filePath?ref=$branch") {
@@ -110,9 +88,7 @@ class GitHubService {
         }
         return when {
             response.status.isSuccess() -> response.bodyAsText()
-            // Fix E2: 404 means the file genuinely doesn't exist yet — start from an empty file.
-            // Any other failure (401 expired token, 403 no access, 5xx GitHub outage) must throw
-            // so the pipeline fails cleanly rather than silently dropping all existing translations.
+            // 404 = file doesn't exist yet; start from empty. Any other error must throw so the pipeline fails cleanly.
             response.status == io.ktor.http.HttpStatusCode.NotFound -> ""
             else -> throw Exception(
                 "GitHub file fetch failed for '$filePath' in $repo@$branch: HTTP ${response.status.value} ${response.status.description}"
@@ -132,14 +108,12 @@ class GitHubService {
         val timestamp = System.currentTimeMillis()
         var newBranchName = "transloom/translations-$timestamp"
 
-        // 1. Get SHA of base branch
         val refResponse: GitRefResponse = client.get("https://api.github.com/repos/$repo/git/ref/heads/$baseBranch") {
             gitHubAuth(token)
             header(HttpHeaders.Accept, "application/vnd.github+json")
         }.body()
         val baseSha = refResponse.gitObject.sha
 
-        // 2. Create new branch reference
         var createRefResponse = client.post("https://api.github.com/repos/$repo/git/refs") {
             gitHubAuth(token)
             header(HttpHeaders.Accept, "application/vnd.github+json")
@@ -147,7 +121,7 @@ class GitHubService {
             setBody(mapOf("ref" to "refs/heads/$newBranchName", "sha" to baseSha))
         }
         
-        // E3: If a branch with the same timestamp already exists, GitHub returns 422. Retry once.
+        // GitHub returns 422 if the branch name already exists; retry once with +1 timestamp.
         if (createRefResponse.status == io.ktor.http.HttpStatusCode.UnprocessableEntity) {
             newBranchName = "transloom/translations-${timestamp + 1}"
             createRefResponse = client.post("https://api.github.com/repos/$repo/git/refs") {
@@ -162,7 +136,6 @@ class GitHubService {
             throw Exception("Failed to create branch $newBranchName. Status: ${createRefResponse.status}")
         }
 
-        // 3. Create blob for each file
         val treeItems = mutableListOf<TreeItem>()
         for ((path, content) in files) {
             val blobResp: BlobResponse = client.post("https://api.github.com/repos/$repo/git/blobs") {
@@ -175,7 +148,6 @@ class GitHubService {
             treeItems.add(TreeItem(path = path, mode = "100644", type = "blob", sha = blobResp.sha))
         }
 
-        // 4. Create Tree
         val treeResp: TreeResponse = client.post("https://api.github.com/repos/$repo/git/trees") {
             gitHubAuth(token)
             header(HttpHeaders.Accept, "application/vnd.github+json")
@@ -183,7 +155,6 @@ class GitHubService {
             setBody(TreeRequest(base_tree = baseSha, tree = treeItems))
         }.body()
 
-        // 5. Create Commit
         val commitResp: CommitResponse = client.post("https://api.github.com/repos/$repo/git/commits") {
             gitHubAuth(token)
             header(HttpHeaders.Accept, "application/vnd.github+json")
@@ -191,7 +162,6 @@ class GitHubService {
             setBody(CommitRequest(message = commitMessage, tree = treeResp.sha, parents = listOf(baseSha)))
         }.body()
 
-        // 6. Update Branch Ref
         client.patch("https://api.github.com/repos/$repo/git/refs/heads/$newBranchName") {
             gitHubAuth(token)
             header(HttpHeaders.Accept, "application/vnd.github+json")
@@ -199,7 +169,6 @@ class GitHubService {
             setBody(RefUpdateRequest(sha = commitResp.sha))
         }
 
-        // 7. Open Pull Request
         val prResp: PullRequestResponse = client.post("https://api.github.com/repos/$repo/pulls") {
             gitHubAuth(token)
             header(HttpHeaders.Accept, "application/vnd.github+json")

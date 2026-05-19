@@ -3,7 +3,6 @@ package com.transloom.pipeline
 import com.transloom.domain.ChangeType
 import com.transloom.domain.CulturalAnalysis
 import com.transloom.domain.Project
-import com.transloom.domain.SemanticChangeRecord
 import com.transloom.domain.TargetConfig
 import com.transloom.repository.ProjectRepository
 import com.transloom.repository.TranslationRepository
@@ -28,23 +27,12 @@ import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-fun buildConfig(project: Project): TransloomConfig {
-    val glossary = null // glossary loaded separately when needed
-    val fileType = if (project.sourceFilePath.endsWith(".strings")) "ios" else "android"
-    return TransloomConfig(
-        app = AppConfig(name = project.name, category = project.category, tone = project.tone),
-        source = SourceConfig(
-            language = "en",
-            files = mapOf(fileType to project.sourceFilePath),
-            watch_branch = project.watchBranch
-        ),
-        targets = project.targets,
-        glossary = glossary
-    )
-}
-
 fun buildConfigWithGlossary(project: Project, glossary: Map<String, Map<String, String>>): TransloomConfig {
-    val fileType = if (project.sourceFilePath.endsWith(".strings")) "ios" else "android"
+    val fileType = when {
+        project.sourceFilePath.endsWith(".strings") -> "ios"
+        project.sourceFilePath.endsWith(".json") || project.sourceFilePath.endsWith(".arb") -> "json"
+        else -> "android"
+    }
     return TransloomConfig(
         app = AppConfig(name = project.name, category = project.category, tone = project.tone),
         source = SourceConfig(
@@ -108,8 +96,14 @@ class TranslationPipeline(
         eventBus.stepRunning(userId, runId, "DETECTING_CHANGES")
         val allSourceStrings = when {
             sourceFilePath.endsWith(".xml") -> StringParserService.parseAndroidXml(sourceContent)
+                .filterValues { !it.startsWith("@") }  // skip @string/ref, @drawable/ref etc.
             sourceFilePath.endsWith(".strings") -> StringParserService.parseIosStrings(sourceContent)
-            else -> emptyMap()
+            sourceFilePath.endsWith(".json") || sourceFilePath.endsWith(".arb") ->
+                StringParserService.parseJsonStrings(sourceContent)
+            else -> {
+                log.warn("Unsupported source file format: {} — no strings extracted", sourceFilePath)
+                emptyMap()
+            }
         }
         val existingDbStrings = translationRepository.getStringKeysAndTexts(project.id)
         val allChangedStrings = allSourceStrings.filter { (key, text) -> existingDbStrings[key] != text }
@@ -201,6 +195,8 @@ class TranslationPipeline(
                         val merged = when {
                             target.file.endsWith(".xml") -> StringParserService.mergeAndroidXml(existing, approved)
                             target.file.endsWith(".strings") -> StringParserService.mergeIosStrings(existing, approved)
+                            target.file.endsWith(".json") || target.file.endsWith(".arb") ->
+                                StringParserService.mergeJsonStrings(existing, approved)
                             else -> existing
                         }
                         updatedFiles[target.file] = merged
@@ -309,35 +305,32 @@ class TranslationPipeline(
         }
 
         // ── Phase 2: Cultural sensitivity check (only when opted in per-project) ──
-        // Runs concurrently; any string that fails the cultural check is moved to
-        // "review" with a "Cultural: ..." blockReason visible in the review portal.
+        // All auto-approved strings for this target are sent in one batched Gemini call.
+        // Any string that fails the cultural check is moved to "review" with a
+        // "Cultural: ..." blockReason visible in the review portal.
         // Defaults to "no issues" on any error — never floods the review queue.
-        val culturalSemaphore = Semaphore(4)
-        val finalResults: List<StringResult?> = if (!project.culturalSensitivityEnabled) results else coroutineScope {
+        val finalResults: List<StringResult?> = if (!project.culturalSensitivityEnabled) results else {
+            val autoResults = results.filterNotNull().filter { it.status == "auto" }
+            val analysisInputs = autoResults.mapNotNull { r ->
+                val srcText = addedStrings[r.key] ?: return@mapNotNull null
+                r.key to (r.text to srcText)
+            }.toMap()
+
+            val analyses = culturalSensitivityAnalyzer.analyzeBatch(
+                analysisInputs, target.name, target.region, config.app.category, config.app.tone
+            )
+
             results.map { r ->
-                async {
-                    if (r == null || r.status != "auto") return@async r
-                    val srcText = addedStrings[r.key] ?: return@async r
-                    culturalSemaphore.withPermit {
-                        val analysis = runCatching {
-                            culturalSensitivityAnalyzer.analyze(
-                                r.text, srcText, target.name, target.region,
-                                config.app.category, config.app.tone
-                            )
-                        }.getOrElse { e ->
-                            log.debug("Cultural analysis error key='{}': {}", r.key, e.message)
-                            CulturalAnalysis(emptyList(), false)
-                        }
-                        if (analysis.needsReview) {
-                            val notes = "Cultural: ${analysis.issues.joinToString("; ")}"
-                            val stringId = translationRepository.upsertString(project.id, r.key, srcText)
-                            translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, "review", notes)
-                            log.info("Cultural flag key='{}' lang={}: {}", r.key, target.code, analysis.issues)
-                            StringResult(r.key, r.text, "review")
-                        } else r
-                    }
-                }
-            }.awaitAll()
+                if (r == null || r.status != "auto") return@map r
+                val analysis = analyses[r.key] ?: return@map r
+                if (!analysis.needsReview) return@map r
+                val srcText = addedStrings[r.key] ?: return@map r
+                val notes = "Cultural: ${analysis.issues.joinToString("; ")}"
+                val stringId = translationRepository.upsertString(project.id, r.key, srcText)
+                translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, "review", notes)
+                log.info("Cultural flag key='{}' lang={}: {}", r.key, target.code, analysis.issues)
+                StringResult(r.key, r.text, "review")
+            }
         }
 
         val approved = finalResults.filterNotNull()
@@ -347,41 +340,17 @@ class TranslationPipeline(
         return approved to count
     }
 
-    /**
-     * Classifies each modified string as SURFACE (cosmetic rewrite, skip retranslation) or
-     * SEMANTIC (meaning changed, must retranslate). Runs analyses concurrently up to the
-     * semaphore cap and always defaults to SEMANTIC on any error.
-     */
     private suspend fun classifyModifiedStrings(
         modifiedStrings: Map<String, String>,
         existingDbStrings: Map<String, String>
     ): Pair<Set<String>, Set<String>> {
         if (modifiedStrings.isEmpty()) return emptySet<String>() to emptySet()
 
-        val semaphore = Semaphore(4)
-        val results: List<Pair<String, ChangeType>> = coroutineScope {
-            modifiedStrings.entries.map { (key, newText) ->
-                async {
-                    semaphore.withPermit {
-                        val oldText = existingDbStrings.getValue(key)
-                        val record = runCatching { semanticChangeAnalyzer.analyze(oldText, newText) }
-                            .getOrElse { e ->
-                                log.warn("Semantic analysis failed for key='{}' — defaulting to SEMANTIC: {}", key, e.message)
-                                SemanticChangeRecord(ChangeType.SEMANTIC, "Analysis error")
-                            }
-                        if (record.changeType == ChangeType.SURFACE) {
-                            log.debug("Surface change key='{}': {}", key, record.reasoning)
-                        } else {
-                            log.debug("Semantic change key='{}': {}", key, record.reasoning)
-                        }
-                        key to record.changeType
-                    }
-                }
-            }.awaitAll()
-        }
+        val inputPairs = modifiedStrings.mapValues { (key, newText) -> existingDbStrings.getValue(key) to newText }
+        val batchResults = semanticChangeAnalyzer.analyzeBatch(inputPairs)
 
-        val surfaceKeys = results.filter { it.second == ChangeType.SURFACE }.map { it.first }.toSet()
-        val semanticKeys = results.filter { it.second == ChangeType.SEMANTIC }.map { it.first }.toSet()
+        val surfaceKeys = batchResults.filter { it.value.changeType == ChangeType.SURFACE }.keys
+        val semanticKeys = batchResults.filter { it.value.changeType == ChangeType.SEMANTIC }.keys
         return surfaceKeys to semanticKeys
     }
 

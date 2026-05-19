@@ -20,6 +20,8 @@ import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
+import kotlin.time.Duration.Companion.days
 import com.transloom.repository.ProjectRepository
 import com.transloom.repository.UserRepository
 import com.transloom.repository.TranslationRepository
@@ -46,6 +48,8 @@ import com.androidplay.core.queue.JobQueueRepository
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.slf4j.LoggerFactory
+
+private val WEBHOOK_HEAL_STALENESS = 7.days
 
 fun main(args: Array<String>): Unit = EngineMain.main(args)
 
@@ -165,21 +169,37 @@ fun Application.module() {
 
     launch {
         delay(10_000)
-        log.info("Webhook self-heal: checking all projects...")
-        val allProjects = runCatching { projectRepository.listAll() }.getOrElse {
-            log.error("Webhook self-heal: failed to list projects — {}", it.message); emptyList()
+        val staleBefore = Clock.System.now() - WEBHOOK_HEAL_STALENESS
+        val staleProjects = runCatching { projectRepository.listProjectsNeedingWebhookHeal(staleBefore) }.getOrElse {
+            log.error("Webhook self-heal: failed to query stale projects — {}", it.message); emptyList()
         }
+        if (staleProjects.isEmpty()) {
+            log.info("Webhook self-heal: all webhooks verified within the last {} days", WEBHOOK_HEAL_STALENESS.inWholeDays)
+            return@launch
+        }
+        log.info("Webhook self-heal: {} project(s) need webhook verification", staleProjects.size)
+
+        // Fetch each unique owner's token once — many projects may share the same owner.
+        val ownerTokens: Map<String, String?> = staleProjects.map { it.ownerId }.distinct()
+            .associateWith { ownerId -> userRepository.findById(ownerId)?.githubToken }
+
         var healed = 0
-        for (project in allProjects) {
-            val owner = userRepository.findById(project.ownerId)
-            val token = owner?.githubToken
-            if (token == null) continue
+        for (project in staleProjects) {
+            val token = ownerTokens[project.ownerId]
+            if (token == null) {
+                log.debug("Webhook self-heal: skipping project {} — owner has no GitHub token", project.id)
+                continue
+            }
             runCatching { githubService.ensureWebhook(project.githubRepo, token) }
-                .onSuccess { if (it) healed++ }
+                .onSuccess { changed ->
+                    runCatching { projectRepository.markWebhookVerified(project.id) }
+                    if (changed) healed++
+                }
                 .onFailure { log.warn("Webhook self-heal failed for {}: {}", project.githubRepo, it.message) }
             delay(500)
         }
-        log.info("Webhook self-heal complete: {}/{} webhooks updated", healed, allProjects.size)
+        log.info("Webhook self-heal complete: {}/{} project(s) processed, {} webhook(s) updated",
+            staleProjects.size, staleProjects.size, healed)
     }
 
     environment.monitor.subscribe(ApplicationStopped) {
@@ -202,7 +222,7 @@ fun Application.module() {
         configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
         configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jwtSecret, jobQueue, glossaryRepository, userActivityService)
+            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
             configureInsightsRoutes(userActivityService)

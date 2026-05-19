@@ -1,5 +1,6 @@
 package com.transloom.services
 
+import kotlinx.serialization.json.*
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 import org.w3c.dom.Node
@@ -16,12 +17,15 @@ import javax.xml.transform.stream.StreamResult
 object StringParserService {
     private val log = LoggerFactory.getLogger(StringParserService::class.java)
 
-    // Thread-safe via ThreadLocal — DocumentBuilderFactory and TransformerFactory
-    // are NOT guaranteed thread-safe per Java docs. With the pipeline processing
-    // languages in parallel, concurrent access from coroutines on different threads
-    // could cause race conditions. ThreadLocal gives each thread its own cached factory.
-    private val builderFactory = ThreadLocal.withInitial { DocumentBuilderFactory.newInstance() }
+    // Thread-safe via ThreadLocal — DocumentBuilderFactory and TransformerFactory are NOT
+    // thread-safe per Java docs. Coalescing disabled so CDATA sections remain as distinct
+    // child nodes and can be round-tripped without being converted to escaped text.
+    private val builderFactory = ThreadLocal.withInitial {
+        DocumentBuilderFactory.newInstance().also { it.isCoalescing = false }
+    }
     private val transformerFactory = ThreadLocal.withInitial { TransformerFactory.newInstance() }
+
+    private val jsonFormat = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
     // Handles escaped quotes in values: "key" = "say \"hello\"";
     private val iosStringRegex = Regex(""""((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)";""")
@@ -67,7 +71,6 @@ object StringParserService {
                 }
             }
 
-            // Fix 16: Parse <string-array> elements — keys are stored as "arrayName[0]", "arrayName[1]" etc.
             val arrayNodes = doc.getElementsByTagName("string-array")
             for (i in 0 until arrayNodes.length) {
                 val node = arrayNodes.item(i)
@@ -90,6 +93,22 @@ object StringParserService {
         return result
     }
 
+    // Sets an element's text content, preserving a CDATA section if the original used one.
+    // Without this, translated strings that originally used <![CDATA[<b>bold</b>]]> would be
+    // written back as escaped text (&lt;b&gt;bold&lt;/b&gt;), breaking HTML rendering.
+    private fun setElementText(element: Element, value: String) {
+        val hasCdata = (0 until element.childNodes.length).any {
+            element.childNodes.item(it).nodeType == Node.CDATA_SECTION_NODE
+        }
+        // Clear all existing child nodes, then append appropriate node type
+        while (element.hasChildNodes()) element.removeChild(element.firstChild)
+        if (hasCdata) {
+            element.appendChild(element.ownerDocument.createCDATASection(value))
+        } else {
+            element.appendChild(element.ownerDocument.createTextNode(value))
+        }
+    }
+
     fun mergeAndroidXml(originalXml: String, translations: Map<String, String>): String {
         if (originalXml.isBlank()) return generateNewAndroidXml(translations)
         try {
@@ -108,7 +127,7 @@ object StringParserService {
                     val key = element.getAttribute("name")
                     existingStringKeys.add(key)
                     if (translations.containsKey(key)) {
-                        element.textContent = translations[key]
+                        setElementText(element, translations.getValue(key))
                     }
                 }
             }
@@ -129,14 +148,13 @@ object StringParserService {
                             val fullKey = "$key.$quantity"
                             existingPluralKeys.add(fullKey)
                             if (translations.containsKey(fullKey)) {
-                                itemElement.textContent = translations[fullKey]
+                                setElementText(itemElement, translations.getValue(fullKey))
                             }
                         }
                     }
                 }
             }
 
-            // Fix 16: Track existing string-array elements for update/append
             val arrayNodes = doc.getElementsByTagName("string-array")
             val existingArrayItemKeys = mutableSetOf<String>()
             for (i in 0 until arrayNodes.length) {
@@ -148,8 +166,9 @@ object StringParserService {
                     for (j in 0 until items.length) {
                         val fullKey = "$key[$j]"
                         existingArrayItemKeys.add(fullKey)
-                        if (translations.containsKey(fullKey)) {
-                            (items.item(j) as? Element)?.textContent = translations[fullKey]
+                        val itemEl = items.item(j) as? Element
+                        if (itemEl != null && translations.containsKey(fullKey)) {
+                            setElementText(itemEl, translations.getValue(fullKey))
                         }
                     }
                 }
@@ -267,6 +286,80 @@ object StringParserService {
         }
 
         return serializeDoc(doc)
+    }
+
+    // ── JSON strings (flat or nested, including Flutter ARB) ──────────────────────
+
+    // Parses a flat or nested JSON strings file into a flat key→value map.
+    // Nested objects are flattened with "." separator: {"a":{"b":"v"}} → {"a.b": "v"}.
+    // ARB metadata keys starting with "@" are skipped.
+    // Non-string values (numbers, booleans, arrays, null) are skipped — they aren't translatable.
+    fun parseJsonStrings(content: String): Map<String, String> {
+        if (content.isBlank()) return emptyMap()
+        return try {
+            flattenJsonObject(jsonFormat.parseToJsonElement(content).jsonObject)
+        } catch (e: Exception) {
+            log.error("Failed to parse JSON strings: {}", e.message)
+            emptyMap()
+        }
+    }
+
+    private fun flattenJsonObject(obj: JsonObject, prefix: String = ""): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        for ((k, v) in obj) {
+            if (k.startsWith("@")) continue  // ARB metadata / description keys
+            val key = if (prefix.isEmpty()) k else "$prefix.$k"
+            when (v) {
+                is JsonObject -> result.putAll(flattenJsonObject(v, key))
+                is JsonPrimitive -> if (v.isString) result[key] = v.content
+                else -> {}
+            }
+        }
+        return result
+    }
+
+    // Merges translations back into the original JSON, preserving structure and key order.
+    // Nested JSON is navigated using the same "." flattening used by parseJsonStrings.
+    // New keys (not present in the original) are appended at the top level.
+    fun mergeJsonStrings(originalContent: String, translations: Map<String, String>): String {
+        if (originalContent.isBlank()) {
+            val obj = JsonObject(translations.mapValues { JsonPrimitive(it.value) })
+            return jsonFormat.encodeToString(JsonObject.serializer(), obj)
+        }
+        return try {
+            val root = jsonFormat.parseToJsonElement(originalContent).jsonObject
+            val updated = updateJsonObject(root, translations, "")
+            jsonFormat.encodeToString(JsonObject.serializer(), updated)
+        } catch (e: Exception) {
+            log.error("Failed to merge JSON strings: {}", e.message)
+            originalContent
+        }
+    }
+
+    private fun updateJsonObject(
+        obj: JsonObject,
+        translations: Map<String, String>,
+        prefix: String
+    ): JsonObject {
+        val result = linkedMapOf<String, JsonElement>()
+        for ((k, v) in obj) {
+            val key = if (prefix.isEmpty()) k else "$prefix.$k"
+            result[k] = when (v) {
+                is JsonObject -> updateJsonObject(v, translations, key)
+                is JsonPrimitive -> if (v.isString && translations.containsKey(key))
+                    JsonPrimitive(translations.getValue(key)) else v
+                else -> v
+            }
+        }
+        // Append new flat keys (no ".") that don't exist anywhere in the original
+        if (prefix.isEmpty()) {
+            for ((key, value) in translations) {
+                if (!key.contains(".") && !result.containsKey(key)) {
+                    result[key] = JsonPrimitive(value)
+                }
+            }
+        }
+        return JsonObject(result)
     }
 
     private fun serializeDoc(doc: Document): String {

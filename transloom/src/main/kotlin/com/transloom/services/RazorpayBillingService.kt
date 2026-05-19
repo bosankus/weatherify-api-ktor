@@ -40,8 +40,6 @@ data class SubscriptionInit(
 
 class RazorpayBillingService(
     private val billingRepository: BillingRepository,
-    // Nullable so this service can be constructed standalone in tests / smaller deployments
-    // that don't enable activity tracking. When null, webhook events are not recorded.
     private val userActivityService: UserActivityService? = null
 ) : RazorpayEventHandler {
 
@@ -81,15 +79,21 @@ class RazorpayBillingService(
 
     // ─── Subscription creation (authenticated only) ───────────────────────────
 
-    /**
-     * Creates a Razorpay subscription for an already-known userId and pre-records the
-     * subscription against the user so webhooks land on the right account even before
-     * the first charge fires. Returns the IDs the embedded Checkout.js modal needs.
-     */
     suspend fun createSubscriptionForUser(userId: String, plan: BillingPlan): SubscriptionInit {
         require(plan != BillingPlan.FREE && plan != BillingPlan.ENTERPRISE) {
             "Cannot create Razorpay subscription for plan ${plan.name}"
         }
+
+        // Idempotency: if a subscription was already created for this exact plan and hasn't
+        // been activated or cancelled yet, return it rather than creating a new object on
+        // every checkout page load/refresh.
+        val existing = billingRepository.getSubscription(userId)
+        if (existing.pendingPlan == plan && existing.razorpaySubscriptionId != null) {
+            log.info("Returning existing pending subscription {} for userId={} plan={}",
+                existing.razorpaySubscriptionId, userId, plan.name)
+            return SubscriptionInit(existing.razorpaySubscriptionId, keyId, plan)
+        }
+
         val planId = plan.razorpayPlanId()
             ?: throw IllegalArgumentException("No Razorpay plan ID configured for ${plan.name}")
 
@@ -130,30 +134,17 @@ class RazorpayBillingService(
 
     // ─── Checkout.js handler signature verification ───────────────────────────
 
-    /**
-     * Verifies the signature the embedded Checkout.js modal returns in its `handler`
-     * callback after a successful payment. Formula:
-     *   HMAC-SHA256("$paymentId|$subscriptionId", keySecret) == signature
-     * For trial-only subscriptions (no payment yet), Checkout.js still produces a payment
-     * id for the first auth-charge of ₹0 / ₹1, so this single path covers both.
-     */
+    // HMAC-SHA256("$paymentId|$subscriptionId", keySecret) == signature
     fun verifyCheckoutHandler(paymentId: String, subscriptionId: String, signature: String): Boolean {
         val expected = hmac256("$paymentId|$subscriptionId", keySecret)
         return timingSafeEquals(expected, signature)
     }
 
-    /** Resolves the userId that owns this subscription (set at create time). */
     suspend fun ownerOf(subscriptionId: String): String? =
         billingRepository.findByRazorpaySubscription(subscriptionId)
 
     // ─── Activate trial subscription immediately ───────────────────────────────
 
-    /**
-     * Ends the 7-day trial early by updating start_at to now so Razorpay charges
-     * the user immediately. Clears limitHitAt so the dashboard prompt disappears.
-     * The subscription.activated / subscription.charged webhook will arrive shortly
-     * and record the invoice + currentPeriodEnd as normal.
-     */
     suspend fun activateNow(userId: String) {
         val sub = billingRepository.getSubscription(userId)
         val subscriptionId = sub.razorpaySubscriptionId

@@ -241,13 +241,16 @@ class TranslationService(private val memoryStore: TranslationMemoryRepository) {
             ?: throw Exception("Empty response from Gemini API")
     }
 
-    // Cache key includes glossary so a glossary update correctly bypasses the cache.
+    // Cache key covers every input that changes the Gemini output: source text, target
+    // language/region, app category, tone, and glossary. appId (the repo name) is
+    // intentionally excluded — it does not appear in the system prompt, so identical
+    // strings across different projects with the same category/tone share one cache entry.
     private fun cacheKey(ctx: TranslationContext): String {
         val regionSuffix = ctx.targetRegion?.let { "-$it" } ?: ""
         val glossaryPart = ctx.glossary?.entries
             ?.sortedBy { it.key }
             ?.joinToString(";") { "${it.key}=${it.value}" } ?: ""
-        val hashInput = "${ctx.sourceText}|${ctx.targetLanguage}${regionSuffix}|${ctx.appId}|${glossaryPart}"
+        val hashInput = "${ctx.sourceText}|${ctx.targetLanguage}${regionSuffix}|${ctx.category}|${ctx.tone}|${glossaryPart}"
         return hashString(hashInput)
     }
 

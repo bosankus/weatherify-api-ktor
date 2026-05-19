@@ -813,7 +813,6 @@ private fun HTML.dashboardApp() {
                             id = "activity"
                             div("section-header") {
                                 h2 { +"Pipeline Activity" }
-                                span("activity-live") { id = "activity-live-dot" }
                             }
                             div("run-list") {
                                 id = "run-list"
@@ -1027,8 +1026,6 @@ private const val DASHBOARD_CSS = """
 .btn-gl-delete{background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:4px 8px;border-radius:var(--radius-sm);transition:all .15s;margin-left:auto}
 .btn-gl-delete:hover{color:var(--red);background:rgba(255,77,79,.1)}
 /* ─── Pipeline Activity ───────────────────────────────────────────────────── */
-.activity-live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)}
-.activity-live::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(0,229,160,.4);animation:livePulse 2s infinite}
 @keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(0,229,160,.5)}70%{box-shadow:0 0 0 8px rgba(0,229,160,0)}100%{box-shadow:0 0 0 0 rgba(0,229,160,0)}}
 .activity-badge{background:rgba(0,229,160,.15);color:var(--accent);display:none}
 .sse-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;letter-spacing:.5px;padding:3px 10px;border-radius:20px;transition:all .3s}
@@ -1618,8 +1615,6 @@ function updateActivityBadge(){
   const active=Object.values(runState).filter(function(r){return !r.finishedAt;}).length;
   const badge=document.getElementById('activity-badge');
   if(badge){if(active>0){badge.textContent=active;badge.style.display='inline';}else{badge.style.display='none';}}
-  const dot=document.getElementById('activity-live-dot');
-  if(dot)dot.style.display=active>0?'inline-flex':'none';
 }
 
 // ── Smart scroll: only auto-scroll when user hasn't scrolled past first card ──
@@ -1686,9 +1681,9 @@ async function retriggerRun(runId){
   // The SSE "start" event for the new run will arrive shortly and clear retryPending via handlePipelineEvent
 }
 
-// ── SSE connection with exponential-backoff reconnect ─────────────────────────
+// ── SSE connection via fetch (Bearer auth — no token in URL) ──────────────────
 let sseBackoff=2000;
-let sseInstance=null;
+let sseInstance=null;  // holds {abort: fn} to cancel the current stream
 let sseRetries=0;
 const SSE_MAX_RETRIES=5;
 
@@ -1700,30 +1695,45 @@ function setSseStatus(state,text){
   if(txt)txt.textContent=text;
 }
 
+function scheduleReconnect(){
+  sseInstance=null;
+  sseRetries++;
+  if(sseRetries>=SSE_MAX_RETRIES){setSseStatus('disconnected','Live updates unavailable');return;}
+  setSseStatus('reconnecting','Reconnecting…');
+  setTimeout(connectPipelineSSE,sseBackoff);
+  sseBackoff=Math.min(sseBackoff*2,30000);
+}
+
 function connectPipelineSSE(){
   if(!token)return;
-  if(sseInstance){try{sseInstance.close();}catch(e){}}
-  const es=new EventSource(BASE+'/pipeline/events?token='+encodeURIComponent(token));
-  sseInstance=es;
-
-  es.onopen=function(){
-    sseBackoff=2000;
-    sseRetries=0;
-    setSseStatus('idle','');
-  };
-  es.onmessage=handlePipelineEvent;
-  es.onerror=function(){
-    es.close();
-    sseInstance=null;
-    sseRetries++;
-    if(sseRetries>=SSE_MAX_RETRIES){
-      setSseStatus('disconnected','Live updates unavailable');
-      return;
-    }
-    setSseStatus('reconnecting','Reconnecting…');
-    setTimeout(connectPipelineSSE,sseBackoff);
-    sseBackoff=Math.min(sseBackoff*2,30000);
-  };
+  if(sseInstance){sseInstance.abort();sseInstance=null;}
+  const controller=new AbortController();
+  sseInstance={abort:function(){controller.abort();}};
+  fetch(BASE+'/pipeline/events',{headers:{'Authorization':'Bearer '+token},signal:controller.signal})
+    .then(function(res){
+      if(!res.ok){throw new Error('HTTP '+res.status);}
+      sseBackoff=2000;sseRetries=0;setSseStatus('idle','');
+      const reader=res.body.getReader();
+      const dec=new TextDecoder();
+      let buf='';
+      function read(){
+        reader.read().then(function(r){
+          if(r.done){scheduleReconnect();return;}
+          buf+=dec.decode(r.value,{stream:true});
+          const lines=buf.split('\n');
+          buf=lines.pop();
+          let data='';
+          for(let i=0;i<lines.length;i++){
+            const l=lines[i];
+            if(l.startsWith('data: ')){data=l.slice(6);}
+            else if(l===''&&data){handlePipelineEvent({data:data});data='';}
+          }
+          read();
+        }).catch(function(e){if(e.name!=='AbortError')scheduleReconnect();});
+      }
+      read();
+    })
+    .catch(function(e){if(e.name!=='AbortError')scheduleReconnect();});
 }
 
 async function loadPipelineRuns(){
@@ -2442,7 +2452,7 @@ async function loadBillingPage(){
           <span class="invoice-id">${'$'}{esc(inv.id)}</span>
           <span class="invoice-amount">${'$'}{esc(inv.amount)}</span>
           <span class="invoice-status-${'$'}{esc(inv.status.toLowerCase())}">${'$'}{esc(inv.status)}</span>
-          <a class="invoice-download" href="/transloom/api/billing/invoices/${'$'}{encodeURIComponent(inv.id)}/receipt?token=${'$'}{encodeURIComponent(token)}" target="_blank">
+          <a class="invoice-download" href="/transloom/api/billing/invoices/${'$'}{encodeURIComponent(inv.id)}/receipt" target="_blank">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download
           </a>

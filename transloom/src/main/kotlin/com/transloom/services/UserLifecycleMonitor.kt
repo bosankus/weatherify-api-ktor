@@ -14,17 +14,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
-/**
- * Background loop that periodically scans the user base for actionable lifecycle
- * signals — stuck onboarding, expiring plans, abandoned payment sessions — and
- * logs them at WARN level. The output is structured so a future shipper (Slack
- * webhook, email queue, GrowthBook flag) can be bolted on without touching the
- * detection logic here.
- *
- * Why log-only for now: the platform has no email/Slack integration yet. Logging
- * gives ops the same insight today without committing to a delivery channel.
- * Once those exist, replace the log calls in [scan] with notifier hooks.
- */
+/** Periodically scans for stuck onboarding, expiring plans, and abandoned payment sessions. Logs at WARN; plug in a notifier to [scan] when email/Slack is ready. */
 class UserLifecycleMonitor(
     private val userActivityService: UserActivityService,
     private val interval: Duration = 6.hours,

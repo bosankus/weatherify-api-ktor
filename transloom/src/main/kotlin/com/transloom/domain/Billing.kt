@@ -17,8 +17,8 @@ enum class BillingPlan(
 
     fun razorpayPlanId(): String? = when (this) {
         FREE, ENTERPRISE -> null
-        SOLO -> getSecretValue("razorpay-plan-id-solo")
-        TEAM -> getSecretValue("razorpay-plan-id-team")
+        SOLO -> getSecretValue("razorpay-plan-solo").takeIf { it.isNotBlank() }
+        TEAM -> getSecretValue("razorpay-plan-team").takeIf { it.isNotBlank() }
     }
 }
 
@@ -29,7 +29,9 @@ data class Subscription(
     val razorpaySubscriptionId: String?,
     val cancelAtPeriodEnd: Boolean,
     val currentPeriodEnd: Instant?,
-    val limitHitAt: Instant? = null
+    val limitHitAt: Instant? = null,
+    /** Plan the user is moving to; set on subscription creation, cleared on payment confirmation. */
+    val pendingPlan: BillingPlan? = null
 ) {
     val inTrial: Boolean get() =
         plan != BillingPlan.FREE && plan != BillingPlan.ENTERPRISE &&

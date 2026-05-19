@@ -2,7 +2,10 @@ package com.transloom.repository.mongo
 
 import com.mongodb.client.model.Filters.and
 import com.mongodb.client.model.Filters.eq
+import com.mongodb.client.model.Filters.exists
 import com.mongodb.client.model.Filters.`in`
+import com.mongodb.client.model.Filters.lt
+import com.mongodb.client.model.Filters.or
 import com.mongodb.client.model.Sorts
 import com.mongodb.client.model.Updates
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
@@ -13,6 +16,7 @@ import com.transloom.repository.ProjectRepository
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.bson.Document
 import java.util.UUID
 
@@ -134,6 +138,27 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         return projects.find().sort(Sorts.descending("createdAt")).toList().map { it.toProject() }
     }
 
+    override suspend fun listProjectsNeedingWebhookHeal(staleBefore: Instant): List<Project> {
+        val threshold = staleBefore.toEpochMilliseconds()
+        val filter = or(
+            exists("webhookVerifiedAt", false),
+            eq("webhookVerifiedAt", null),
+            lt("webhookVerifiedAt", threshold)
+        )
+        return projects.find(filter).sort(Sorts.ascending("webhookVerifiedAt")).toList().map { it.toProject() }
+    }
+
+    override suspend fun markWebhookVerified(projectId: String) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        projects.updateOne(
+            eq("_id", projectId),
+            Updates.combine(
+                Updates.set("webhookVerifiedAt", now),
+                Updates.set("updatedAt", now)
+            )
+        )
+    }
+
     override suspend fun getGlossary(projectId: String): Map<String, Map<String, String>> {
         val entries = glossary
             .find(and(eq("projectId", projectId), eq("isActive", true)))
@@ -168,6 +193,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
                 file = t.getString("file") ?: ""
             )
         }
+        val webhookVerifiedAt = (get("webhookVerifiedAt") as? Number)?.toLong()
+            ?.let { Instant.fromEpochMilliseconds(it) }
         return Project(
             id = getString("_id"),
             ownerId = getString("ownerId") ?: "",
@@ -178,7 +205,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             category = getString("category") ?: "",
             tone = getString("tone") ?: "",
             targets = targets,
-            culturalSensitivityEnabled = getBoolean("culturalSensitivityEnabled") ?: false
+            culturalSensitivityEnabled = getBoolean("culturalSensitivityEnabled") ?: false,
+            webhookVerifiedAt = webhookVerifiedAt
         )
     }
 }

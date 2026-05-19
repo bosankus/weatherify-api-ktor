@@ -31,8 +31,6 @@ import java.util.UUID
 
 private val log = LoggerFactory.getLogger("BillingRoutes")
 
-// Name of the httpOnly session cookie set after OAuth completion. Lets server-side
-// routes (like the checkout page) resolve the user without an Authorization header.
 internal const val SESSION_COOKIE = "tl_session"
 internal const val PENDING_PLAN_COOKIE = "pending_plan"
 
@@ -103,8 +101,6 @@ fun Route.configureBillingRoutes(
             )
         }
 
-        // Authenticated upgrade — user is already logged in via dashboard.
-        // Returns Checkout.js init payload so the SPA can open the modal in-app.
         post("/subscribe") {
             val userId = call.userId() ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
             val body = runCatching { call.receive<SubscribePlanBody>() }.getOrElse { SubscribePlanBody() }
@@ -125,8 +121,6 @@ fun Route.configureBillingRoutes(
             call.respond(SubscribeResponse(init.subscriptionId, init.keyId, init.plan.name))
         }
 
-        // Ends the trial immediately and starts the paid plan now (Razorpay PATCH start_at).
-        // Dashboard shows this option when GET /subscription returns trialLimitHit = true.
         post("/activate-now") {
             val userId = call.userId() ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
             runCatching { razorpayService.activateNow(userId) }.getOrElse {
@@ -136,7 +130,6 @@ fun Route.configureBillingRoutes(
             call.respond(mapOf("status" to "Plan activated — billing starts now"))
         }
 
-        // Dismisses the trial limit prompt without starting the plan (translation stays paused).
         post("/dismiss-limit") {
             val userId = call.userId() ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
             billingRepository.setLimitHitAt(userId, null)
@@ -354,32 +347,26 @@ fun Route.configurePublicCheckoutRoute(
             path = "/", expires = GMTDate.START, maxAge = 0,
             httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
         ))
-        // Thread the session token through to the success page so the dashboard can
-        // store it in localStorage — without this the dashboard redirects to the
-        // landing page because the token was never written during the checkout flow.
-        // If the session cookie is missing (e.g., after Razorpay redirect), mint a fresh token.
-        var token = call.request.cookies[SESSION_COOKIE]
-        if (token.isNullOrBlank()) {
+        // Ensure the session cookie is present so the success page and dashboard can
+        // authenticate without putting the JWT in the URL.
+        if (call.request.cookies[SESSION_COOKIE].isNullOrBlank()) {
             val user = userRepository.findById(sessionUserId)
             if (user != null) {
-                token = mintJwt(jwtSecret, user.id, user.githubId, user.githubUsername)
-                log.info("Minted fresh JWT for userId={} after payment (session cookie unavailable)", sessionUserId)
+                val freshToken = mintJwt(jwtSecret, user.id, user.githubId, user.githubUsername)
+                call.response.cookies.append(Cookie(
+                    name = SESSION_COOKIE, value = freshToken,
+                    path = "/", maxAge = 7 * 24 * 3600,
+                    httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
+                ))
+                log.info("Minted and set fresh session cookie for userId={} after payment", sessionUserId)
             }
         }
-        val successUrl = buildString {
-            append("/transloom/billing/success?sub=")
-            append(subscriptionId)
-            if (!token.isNullOrBlank()) {
-                append("&token=")
-                append(java.net.URLEncoder.encode(token, "UTF-8"))
-            }
-        }
-        call.respondRedirect(successUrl)
+        call.respondRedirect("/transloom/billing/success?sub=$subscriptionId")
     }
 
     get("/transloom/billing/success") {
         val subscriptionId = call.request.queryParameters["sub"].orEmpty()
-        val token = call.request.queryParameters["token"]?.ifBlank { null }
+        val token = call.request.cookies[SESSION_COOKIE]?.ifBlank { null }
         call.respondHtml { successPage(subscriptionId, token) }
     }
 }
@@ -401,7 +388,7 @@ fun Route.configureRazorpayWebhook(dispatcher: RazorpayWebhookDispatcher) {
     }
 }
 
-// ─── Invoice receipt (token-in-URL, no Authorization header needed for downloads) ──
+// ─── Invoice receipt — authenticated via httpOnly session cookie, no token in URL ──
 
 fun Route.configureBillingReceiptRoute(
     jwtSecret: String,
@@ -410,9 +397,8 @@ fun Route.configureBillingReceiptRoute(
     userActivityService: UserActivityService
 ) {
     get("/transloom/api/billing/invoices/{id}/receipt") {
-        val token = call.request.queryParameters["token"]
-        val userId = token?.let { extractUserIdFromBearer(it, jwtSecret) }
-            ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+        val userId = call.sessionUserId(jwtSecret)
+            ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid session"))
 
         val paymentId = call.parameters["id"]
             ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing invoice id"))
@@ -434,17 +420,15 @@ fun Route.configureBillingReceiptRoute(
                 currency = invoice.currency.uppercase(),
                 status = invoice.status.replaceFirstChar { it.uppercase() },
                 userEmail = email,
-                pdfUrl = "/transloom/api/billing/invoices/${invoice.razorpayPaymentId}/pdf?token=$token"
+                pdfUrl = "/transloom/api/billing/invoices/${invoice.razorpayPaymentId}/pdf"
             )
         }
     }
 
-    // Branded PDF download — used as the primary deliverable after a successful charge.
-    // Token-in-URL so the dashboard can serve it via <a download> without an Authorization header.
+    // Branded PDF download — authenticated via httpOnly session cookie sent automatically by the browser.
     get("/transloom/api/billing/invoices/{id}/pdf") {
-        val token = call.request.queryParameters["token"]
-        val userId = token?.let { extractUserIdFromBearer(it, jwtSecret) }
-            ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+        val userId = call.sessionUserId(jwtSecret)
+            ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid session"))
 
         val paymentId = call.parameters["id"]
             ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing invoice id"))

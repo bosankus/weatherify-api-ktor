@@ -1,7 +1,6 @@
 package com.transloom.di
 
 import com.androidplay.core.mongo.IndexSpec
-import com.androidplay.core.mongo.MongoIndexer
 import com.transloom.repository.*
 import com.transloom.repository.mongo.*
 import com.transloom.services.CulturalSensitivityAnalyzer

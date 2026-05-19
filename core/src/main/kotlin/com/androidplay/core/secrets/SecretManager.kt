@@ -70,12 +70,6 @@ private fun fetchFromSecretManager(secretName: String): String? {
     }
 }
 
-/**
- * Resolves a secret value with the following priority:
- * 1. Environment variable (instant — preferred on Cloud Run)
- * 2. GCP Secret Manager REST API (project ID and access token cached per process)
- * 3. Local development fallback
- */
 fun getSecretValue(secretName: String): String {
     val envKey = toEnvKey(secretName)
     val envValue = System.getenv(envKey)
@@ -101,11 +95,7 @@ fun getSecretValue(secretName: String): String {
     }
 }
 
-/**
- * Converts a kebab-case secret name to its environment variable name.
- * Most names map directly via uppercasing and replacing hyphens with underscores.
- * The only non-standard mapping is weather-data-secret → WEATHER_API_KEY.
- */
+// Non-standard: weather-data-secret → WEATHER_API_KEY (all others follow UPPER_SNAKE convention).
 private fun toEnvKey(secretName: String): String = when (secretName) {
     "weather-data-secret" -> "WEATHER_API_KEY"
     else -> secretName.uppercase().replace("-", "_")

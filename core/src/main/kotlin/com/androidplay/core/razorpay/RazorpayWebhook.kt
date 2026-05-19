@@ -1,6 +1,5 @@
 package com.androidplay.core.razorpay
 
-import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -19,39 +18,17 @@ sealed class WebhookResult {
 
 // ─── Handler interface ────────────────────────────────────────────────────────
 
-/**
- * Implement this interface to handle a family of Razorpay webhook events.
- * Register with [RazorpayWebhookDispatcher]; the dispatcher verifies the
- * signature once and calls every matching handler.
- *
- * Example — subscription handler declares: eventPrefixes = listOf("subscription.")
- * Example — refund handler declares:       eventPrefixes = listOf("refund.")
- * Example — payment handler would declare: eventPrefixes = listOf("payment.")
- */
 interface RazorpayEventHandler {
-    /** Prefixes of event types this handler wants to receive (e.g. "subscription."). */
+    /** Prefixes of Razorpay event types to receive (e.g. "subscription."). */
     val eventPrefixes: List<String>
 
-    /** Called after the dispatcher has verified the webhook signature. */
+    /** Called after signature verification. */
     suspend fun handle(eventType: String, event: JsonObject): WebhookResult
 }
 
 // ─── Central dispatcher ───────────────────────────────────────────────────────
 
-/**
- * Single entry point for all Razorpay webhooks.
- *
- * Responsibilities:
- *  1. Verify the HMAC-SHA256 signature once.
- *  2. Parse the event body.
- *  3. Fan out to every registered [RazorpayEventHandler] whose [eventPrefixes]
- *     match the event type.
- *  4. Return the first error if any handler fails; otherwise Ok.
- *
- * Adding support for a new event family (e.g. payment.captured) requires only:
- *  - A new [RazorpayEventHandler] implementation.
- *  - Registering it here via [handlers].
- */
+/** Verifies the HMAC-SHA256 signature once and fans out to every matching [RazorpayEventHandler]. */
 class RazorpayWebhookDispatcher(
     private val webhookSecret: String,
     private val handlers: List<RazorpayEventHandler>
@@ -97,8 +74,6 @@ class RazorpayWebhookDispatcher(
                 is WebhookResult.Ok      -> {}
             }
         }
-        // Aggregate all failures so Razorpay sees a single failure response containing every handler's error.
-        // Returning Ok would mask earlier errors and prevent Razorpay from redelivering the event.
         return if (errors.isEmpty()) WebhookResult.Ok else WebhookResult.Error(errors.joinToString("; "))
     }
 

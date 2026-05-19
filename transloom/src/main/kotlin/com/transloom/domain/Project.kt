@@ -1,5 +1,6 @@
 package com.transloom.domain
 
+import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 
 data class Project(
@@ -12,7 +13,9 @@ data class Project(
     val category: String,
     val tone: String,
     val targets: List<TargetConfig> = emptyList(),
-    val culturalSensitivityEnabled: Boolean = false
+    val culturalSensitivityEnabled: Boolean = false,
+    /** Timestamp of the last successful webhook verification. Null means never verified. */
+    val webhookVerifiedAt: Instant? = null
 )
 
 @Serializable

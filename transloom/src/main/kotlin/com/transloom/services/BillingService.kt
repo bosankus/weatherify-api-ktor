@@ -3,15 +3,8 @@ package com.transloom.services
 import com.transloom.domain.BillingPlan
 import com.transloom.domain.UsageStats
 import com.transloom.repository.BillingRepository
-import com.androidplay.core.secrets.getSecretValue
 import kotlinx.datetime.Clock
 import org.slf4j.LoggerFactory
-
-fun BillingPlan.razorpayPlanId(): String? = when (this) {
-    BillingPlan.SOLO -> getSecretValue("razorpay-plan-solo").takeIf { it.isNotBlank() }
-    BillingPlan.TEAM -> getSecretValue("razorpay-plan-team").takeIf { it.isNotBlank() }
-    else -> null
-}
 
 class BillingService(private val billingRepository: BillingRepository) {
     private val log = LoggerFactory.getLogger(BillingService::class.java)
