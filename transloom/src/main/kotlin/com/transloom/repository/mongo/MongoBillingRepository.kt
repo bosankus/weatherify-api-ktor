@@ -175,6 +175,18 @@ class MongoBillingRepository(
         }
     }
 
+    override suspend fun getInvoicePdf(paymentId: String): ByteArray? {
+        val doc = invoices.find(eq("razorpayPaymentId", paymentId)).firstOrNull()
+        return (doc?.get("pdfBytes") as? org.bson.types.Binary)?.data
+    }
+
+    override suspend fun storeInvoicePdf(paymentId: String, bytes: ByteArray) {
+        invoices.updateOne(
+            eq("razorpayPaymentId", paymentId),
+            Updates.set("pdfBytes", org.bson.types.Binary(bytes))
+        )
+    }
+
     override suspend fun listInvoices(userId: String, limit: Int): List<InvoiceRecord> =
         invoices.find(eq("userId", userId))
             .sort(Sorts.descending("createdAt"))

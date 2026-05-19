@@ -87,19 +87,19 @@ fun Route.configureApiRoutes(
                     return@post call.respond(HttpStatusCode.BadRequest, ApiError("At least one target language is required"))
                 }
 
-                val currentProjectCount = projectRepository.countForUser(userId)
-                val plan = billingService.getPlan(userId)
+                // Fetch count, plan, and user token in parallel — all are independent reads.
+                val (currentProjectCount, plan, preflightUser) = coroutineScope {
+                    val count = async { projectRepository.countForUser(userId) }
+                    val plan  = async { billingService.getPlan(userId) }
+                    val user  = async { userRepository.findById(userId) }
+                    Triple(count.await(), plan.await(), user.await())
+                }
                 if (currentProjectCount >= plan.maxProjects) {
                     return@post call.respond(
                         HttpStatusCode.Forbidden,
                         ApiError("Project limit (${plan.maxProjects}) reached for ${plan.displayName} plan. Please upgrade.")
                     )
                 }
-
-                // Pre-flight: a missing GitHub token will silently break webhook auto-install,
-                // leaving the user stuck at WEBHOOK_INSTALLED. Catch it here and route them
-                // straight back through OAuth so they don't create an orphaned project.
-                val preflightUser = userRepository.findById(userId)
                 if (preflightUser?.githubToken.isNullOrBlank()) {
                     return@post call.respond(
                         HttpStatusCode.UnprocessableEntity,
@@ -137,8 +137,7 @@ fun Route.configureApiRoutes(
                     )
                 }
 
-                val user = userRepository.findById(userId)
-                val userToken = user?.githubToken
+                val userToken = preflightUser?.githubToken
                 if (userToken != null) {
                     runCatching { githubService.createWebhook(project.githubRepo, userToken) }
                         .onSuccess {

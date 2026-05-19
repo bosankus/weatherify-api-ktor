@@ -39,27 +39,48 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
                 return@get
             }
 
-            // If the dashboard JS has no token in localStorage it redirects to the
-            // landing page. Recover any user who arrived without a ?token= param but
-            // does have a valid tl_session cookie (e.g. came through the checkout flow
-            // or is trying to re-open the dashboard after the token expired from storage).
-            val urlToken = call.request.queryParameters["token"]
-            if (urlToken.isNullOrBlank() && sessionUserId != null) {
-                val sessionToken = call.request.cookies[SESSION_COOKIE]
-                if (!sessionToken.isNullOrBlank()) {
-                    call.respondRedirect(
-                        "/transloom/app?token=" + java.net.URLEncoder.encode(sessionToken, "UTF-8")
-                    )
-                    return@get
-                }
+            // Set a short-lived JS-readable bootstrap cookie so the app can recover the JWT
+            // into localStorage without ever putting the token in the URL (avoids proxy log leaks).
+            call.request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
+                call.response.cookies.append(Cookie(
+                    name = "tl_token_bootstrap", value = tok,
+                    path = "/transloom", maxAge = 15,
+                    httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
+                ))
             }
-
             call.respondHtml { dashboardApp() }
         }
         get("/welcome") { call.respondHtml { welcomePage() } }
-        get("/billing") { call.respondHtml { billingApp() } }
-        get("/projects") { call.respondHtml { projectsApp() } }
-        get("/review-portal") { call.respondHtml { reviewPortal() } }
+        get("/billing") {
+            call.request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
+                call.response.cookies.append(Cookie(
+                    name = "tl_token_bootstrap", value = tok,
+                    path = "/transloom", maxAge = 15,
+                    httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
+                ))
+            }
+            call.respondHtml { billingApp() }
+        }
+        get("/projects") {
+            call.request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
+                call.response.cookies.append(Cookie(
+                    name = "tl_token_bootstrap", value = tok,
+                    path = "/transloom", maxAge = 15,
+                    httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
+                ))
+            }
+            call.respondHtml { projectsApp() }
+        }
+        get("/review-portal") {
+            call.request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
+                call.response.cookies.append(Cookie(
+                    name = "tl_token_bootstrap", value = tok,
+                    path = "/transloom", maxAge = 15,
+                    httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
+                ))
+            }
+            call.respondHtml { reviewPortal() }
+        }
         get("/favicon.svg") {
             call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
         }
@@ -1148,18 +1169,9 @@ private const val DASHBOARD_CSS = """
 private val DASHBOARD_JS = """
 const BASE='/transloom/api';
 let token=localStorage.getItem('transloom_token');
-const urlParams=new URLSearchParams(window.location.search);
-const urlToken=urlParams.get('token');
-if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;history.replaceState({},'','/transloom/app');}
-if(!token){window.location.href='/transloom/app';throw new Error('no token');}
-// Carry the JWT through portal-internal navigation so Safari ITP / private mode /
-// fresh tabs that may lose localStorage still arrive authenticated.
-document.addEventListener('click',function(e){
-  var a=e.target.closest&&e.target.closest('a[href^="/transloom/"]');
-  if(!a||a.target==='_blank'||a.hasAttribute('download'))return;
-  if(a.getAttribute('href').startsWith('/transloom/auth/'))return;
-  try{var u=new URL(a.href,location.origin);if(!u.searchParams.get('token')){u.searchParams.set('token',token);a.href=u.toString();}}catch(_){}
-},true);
+if(!token){var _bc=(document.cookie.match(/(?:^|;\s*)tl_token_bootstrap=([^;]*)/))||[];if(_bc[1]){token=decodeURIComponent(_bc[1]);localStorage.setItem('transloom_token',token);}}
+document.cookie='tl_token_bootstrap=;path=/transloom;max-age=0;secure;samesite=lax';
+if(!token){window.location.href='/transloom';throw new Error('no token');}
 
 function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
 async function api(path,opts={}){
@@ -1813,16 +1825,9 @@ private const val PROJECTS_CSS = """
 private val PROJECTS_JS = """
 const BASE='/transloom/api';
 let token=localStorage.getItem('transloom_token');
-const urlParams=new URLSearchParams(location.search);
-const urlToken=urlParams.get('token');
-if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;urlParams.delete('token');const qs=urlParams.toString();history.replaceState({},'','/transloom/projects'+(qs?'?'+qs:'')+location.hash);}
-if(!token){window.location.href='/transloom/app';throw new Error('no token');}
-document.addEventListener('click',function(e){
-  var a=e.target.closest&&e.target.closest('a[href^="/transloom/"]');
-  if(!a||a.target==='_blank'||a.hasAttribute('download'))return;
-  if(a.getAttribute('href').startsWith('/transloom/auth/'))return;
-  try{var u=new URL(a.href,location.origin);if(!u.searchParams.get('token')){u.searchParams.set('token',token);a.href=u.toString();}}catch(_){}
-},true);
+if(!token){var _bc=(document.cookie.match(/(?:^|;\s*)tl_token_bootstrap=([^;]*)/))||[];if(_bc[1]){token=decodeURIComponent(_bc[1]);localStorage.setItem('transloom_token',token);}}
+document.cookie='tl_token_bootstrap=;path=/transloom;max-age=0;secure;samesite=lax';
+if(!token){window.location.href='/transloom';throw new Error('no token');}
 function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
 async function api(path,opts={}){
   const res=await fetch(BASE+path,{...opts,headers:{...authHeaders(),...(opts.headers||{})}});
@@ -2330,16 +2335,9 @@ private const val BILLING_CSS = """
 private val BILLING_JS = """
 const BASE='/transloom/api';
 let token=localStorage.getItem('transloom_token');
-const urlParams=new URLSearchParams(location.search);
-const urlToken=urlParams.get('token');
-if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;urlParams.delete('token');const qs=urlParams.toString();history.replaceState({},'','/transloom/billing'+(qs?'?'+qs:''));}
-if(!token){window.location.href='/transloom/app';throw new Error('no token');}
-document.addEventListener('click',function(e){
-  var a=e.target.closest&&e.target.closest('a[href^="/transloom/"]');
-  if(!a||a.target==='_blank'||a.hasAttribute('download'))return;
-  if(a.getAttribute('href').startsWith('/transloom/auth/'))return;
-  try{var u=new URL(a.href,location.origin);if(!u.searchParams.get('token')){u.searchParams.set('token',token);a.href=u.toString();}}catch(_){}
-},true);
+if(!token){var _bc=(document.cookie.match(/(?:^|;\s*)tl_token_bootstrap=([^;]*)/))||[];if(_bc[1]){token=decodeURIComponent(_bc[1]);localStorage.setItem('transloom_token',token);}}
+document.cookie='tl_token_bootstrap=;path=/transloom;max-age=0;secure;samesite=lax';
+if(!token){window.location.href='/transloom';throw new Error('no token');}
 function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
 async function api(path,opts={}){
   const res=await fetch(BASE+path,{...opts,headers:{...authHeaders(),...(opts.headers||{})}});
@@ -2872,16 +2870,9 @@ private const val REVIEW_CSS = """
 private val REVIEW_JS = """
 const BASE='/transloom/api';
 let token=localStorage.getItem('transloom_token');
-const urlParams=new URLSearchParams(location.search);
-const urlToken=urlParams.get('token');
-if(urlToken){localStorage.setItem('transloom_token',urlToken);token=urlToken;history.replaceState({},'','/transloom/review-portal');}
-if(!token){window.location.href='/transloom/app';throw new Error('no token');}
-document.addEventListener('click',function(e){
-  var a=e.target.closest&&e.target.closest('a[href^="/transloom/"]');
-  if(!a||a.target==='_blank'||a.hasAttribute('download'))return;
-  if(a.getAttribute('href').startsWith('/transloom/auth/'))return;
-  try{var u=new URL(a.href,location.origin);if(!u.searchParams.get('token')){u.searchParams.set('token',token);a.href=u.toString();}}catch(_){}
-},true);
+if(!token){var _bc=(document.cookie.match(/(?:^|;\s*)tl_token_bootstrap=([^;]*)/))||[];if(_bc[1]){token=decodeURIComponent(_bc[1]);localStorage.setItem('transloom_token',token);}}
+document.cookie='tl_token_bootstrap=;path=/transloom;max-age=0;secure;samesite=lax';
+if(!token){window.location.href='/transloom';throw new Error('no token');}
 function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
 function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom/auth/logout';}
 function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}

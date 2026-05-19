@@ -45,4 +45,10 @@ interface BillingRepository {
     )
 
     suspend fun listInvoices(userId: String, limit: Int = 12): List<InvoiceRecord>
+
+    /** Returns a previously cached PDF render for this paymentId, or null if not yet cached. */
+    suspend fun getInvoicePdf(paymentId: String): ByteArray?
+
+    /** Stores the rendered PDF bytes on the invoice document so future requests skip iText7. */
+    suspend fun storeInvoicePdf(paymentId: String, bytes: ByteArray)
 }

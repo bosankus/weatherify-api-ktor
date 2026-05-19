@@ -9,9 +9,11 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.CORS
+import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.netty.EngineMain
+import kotlin.time.Duration.Companion.seconds
 import com.androidplay.core.di.coreInfraModule
 import com.transloom.di.transloomModule
 import com.transloom.di.transloomIndexes
@@ -93,6 +95,25 @@ fun Application.module() {
             } else {
                 log.error("ALLOWED_ORIGIN '{}' is malformed — cross-origin requests will be blocked", allowedOrigin)
             }
+        }
+    }
+
+    val clientIp: (ApplicationCall) -> Any = { call ->
+        call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+            ?: call.request.origin.remoteHost
+    }
+    install(RateLimit) {
+        register(RateLimitName("auth")) {
+            rateLimiter(limit = 5, refillPeriod = 60.seconds)
+            requestKey { clientIp(it) }
+        }
+        register(RateLimitName("github_webhook")) {
+            rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { clientIp(it) }
+        }
+        register(RateLimitName("razorpay_webhook")) {
+            rateLimiter(limit = 30, refillPeriod = 60.seconds)
+            requestKey { clientIp(it) }
         }
     }
 
@@ -216,9 +237,15 @@ fun Application.module() {
 
     routing {
         configurePortalRoutes(jwtSecret)
-        configureWebhookRoutes(jobQueue, projectRepository)
-        configureAuthRoutes(jwtSecret, userRepository, userActivityService)
-        configureRazorpayWebhook(webhookDispatcher)
+        rateLimit(RateLimitName("github_webhook")) {
+            configureWebhookRoutes(jobQueue, projectRepository)
+        }
+        rateLimit(RateLimitName("auth")) {
+            configureAuthRoutes(jwtSecret, userRepository, userActivityService)
+        }
+        rateLimit(RateLimitName("razorpay_webhook")) {
+            configureRazorpayWebhook(webhookDispatcher)
+        }
         configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
         configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
         authenticate("auth-jwt") {

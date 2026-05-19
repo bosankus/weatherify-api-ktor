@@ -453,19 +453,25 @@ fun Route.configureBillingReceiptRoute(
         val plan = subscription.plan
         val userName = user?.githubUsername?.takeIf { it.isNotBlank() } ?: (user?.email ?: "Customer")
 
-        val pdfBytes = runCatching {
-            InvoicePdfGenerator.render(
-                InvoicePdfGenerator.InvoiceContext(
-                    invoice = invoice,
-                    userEmail = user?.email,
-                    userName = userName,
-                    plan = plan,
-                    subscription = subscription
+        val cached = billingRepository.getInvoicePdf(invoice.razorpayPaymentId)
+        val pdfBytes = if (cached != null) cached else {
+            val rendered = runCatching {
+                InvoicePdfGenerator.render(
+                    InvoicePdfGenerator.InvoiceContext(
+                        invoice = invoice,
+                        userEmail = user?.email,
+                        userName = userName,
+                        plan = plan,
+                        subscription = subscription
+                    )
                 )
-            )
-        }.getOrElse {
-            log.error("PDF render failed for paymentId={}: {}", paymentId, it.message, it)
-            return@get call.respond(HttpStatusCode.InternalServerError, ApiError("Failed to generate invoice PDF"))
+            }.getOrElse {
+                log.error("PDF render failed for paymentId={}: {}", paymentId, it.message, it)
+                return@get call.respond(HttpStatusCode.InternalServerError, ApiError("Failed to generate invoice PDF"))
+            }
+            runCatching { billingRepository.storeInvoicePdf(invoice.razorpayPaymentId, rendered) }
+                .onFailure { log.warn("PDF cache write failed for paymentId={}: {}", paymentId, it.message) }
+            rendered
         }
 
         val filename = "transloom-invoice-${invoice.razorpayPaymentId}.pdf"
