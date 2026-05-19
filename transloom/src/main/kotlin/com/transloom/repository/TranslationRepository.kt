@@ -19,7 +19,10 @@ interface TranslationRepository {
 
     suspend fun getStringKeysAndTexts(projectId: String): Map<String, String>
 
-    suspend fun listPendingReviews(ownerId: String): List<Translation>
+    suspend fun listPendingReviews(ownerId: String, limit: Int = 50, offset: Int = 0): List<Translation>
+
+    /** Total count of pending reviews for the user — run in parallel with listPendingReviews for pagination. */
+    suspend fun countPendingReviews(ownerId: String): Int
 
     suspend fun approve(translationId: String, editedText: String? = null): Boolean
 

@@ -1,6 +1,9 @@
 package com.transloom.repository.mongo
 
+import com.mongodb.client.model.Filters.and
 import com.mongodb.client.model.Filters.eq
+import com.mongodb.client.model.Filters.`in`
+import com.mongodb.client.model.Filters.lt
 import com.mongodb.client.model.FindOneAndUpdateOptions
 import com.mongodb.client.model.ReturnDocument
 import com.mongodb.client.model.Sorts
@@ -142,6 +145,14 @@ class MongoUserRepository(
             .limit(limit)
             .toList()
             .map { it.toUser() }
+
+    override suspend fun findStuckOnboarding(signedUpBefore: Instant): List<User> =
+        collection.find(
+            and(
+                `in`("onboardingStep", listOf(OnboardingStep.SIGNED_UP.name, OnboardingStep.PROJECT_CREATED.name)),
+                lt("signupAt", signedUpBefore.toEpochMilliseconds())
+            )
+        ).toList().map { it.toUser() }
 
     private fun Document.toUser(): User {
         val rawToken = getString("githubToken")

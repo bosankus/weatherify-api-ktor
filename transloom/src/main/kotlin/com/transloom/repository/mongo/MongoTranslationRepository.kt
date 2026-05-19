@@ -118,9 +118,16 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             .associate { it.getString("stringKey") to (it.getString("sourceText") ?: "") }
     }
 
-    override suspend fun listPendingReviews(ownerId: String): List<Translation> {
-        return translationsCol.aggregate<Document>(ownerPipeline(ownerId, extraMatch = `in`("status", listOf("review", "blocked"))))
-            .toList().map { it.toTranslation() }
+    override suspend fun listPendingReviews(ownerId: String, limit: Int, offset: Int): List<Translation> {
+        val pipeline = ownerPipeline(ownerId, extraMatch = `in`("status", listOf("review", "blocked"))) +
+            listOf(Aggregates.skip(offset), Aggregates.limit(limit))
+        return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
+    }
+
+    override suspend fun countPendingReviews(ownerId: String): Int {
+        val pipeline = ownerPipeline(ownerId, extraMatch = `in`("status", listOf("review", "blocked"))) +
+            listOf(Aggregates.count("total"))
+        return (translationsCol.aggregate<Document>(pipeline).firstOrNull()?.get("total") as? Number)?.toInt() ?: 0
     }
 
     override suspend fun approve(translationId: String, editedText: String?): Boolean {

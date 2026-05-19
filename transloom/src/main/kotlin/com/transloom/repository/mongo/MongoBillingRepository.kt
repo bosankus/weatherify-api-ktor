@@ -2,6 +2,9 @@ package com.transloom.repository.mongo
 
 import com.mongodb.client.model.Filters.and
 import com.mongodb.client.model.Filters.eq
+import com.mongodb.client.model.Filters.gte
+import com.mongodb.client.model.Filters.lte
+import com.mongodb.client.model.Filters.nin
 import com.mongodb.client.model.FindOneAndUpdateOptions
 import com.mongodb.client.model.Sorts
 import com.mongodb.client.model.Updates
@@ -174,6 +177,15 @@ class MongoBillingRepository(
             if (e.error.code != 11000) throw e
         }
     }
+
+    override suspend fun findExpiringSubscriptions(from: Instant, to: Instant): List<Subscription> =
+        subscriptions.find(
+            and(
+                gte("currentPeriodEnd", from.toEpochMilliseconds()),
+                lte("currentPeriodEnd", to.toEpochMilliseconds()),
+                nin("plan", listOf(BillingPlan.FREE.name, BillingPlan.ENTERPRISE.name))
+            )
+        ).toList().map { it.toSubscription() }
 
     override suspend fun getInvoicePdf(paymentId: String): ByteArray? {
         val doc = invoices.find(eq("razorpayPaymentId", paymentId)).firstOrNull()

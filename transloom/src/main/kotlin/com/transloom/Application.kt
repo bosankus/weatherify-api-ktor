@@ -47,6 +47,7 @@ import com.transloom.services.UserLifecycleMonitor
 import com.androidplay.core.secrets.getSecretValue
 import com.androidplay.core.cache.CacheRepository
 import com.androidplay.core.queue.JobQueueRepository
+import io.ktor.server.plugins.origin
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.slf4j.LoggerFactory
@@ -164,7 +165,7 @@ fun Application.module() {
     )
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
-    val pipelineEventBus = com.transloom.services.PipelineEventBus()
+    val pipelineEventBus = com.transloom.services.PipelineEventBus(redisUrl)
     val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
     val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
     val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer)
@@ -225,6 +226,7 @@ fun Application.module() {
 
     environment.monitor.subscribe(ApplicationStopped) {
         jobQueue.close()
+        pipelineEventBus.close()
         cacheRepository.close()
         githubService.close()
         translationService.close()

@@ -13,6 +13,7 @@ import com.transloom.repository.UserRepository
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.slf4j.LoggerFactory
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 
 class UserActivityService(
@@ -89,22 +90,25 @@ class UserActivityService(
 
     suspend fun findStuckUsers(): List<StuckUser> {
         val now = Clock.System.now()
-        val users = userRepository.listAll()
-        return users.mapNotNull { u ->
-            val (stuck, reason) = evaluateStuck(u, recent = emptyList(), now = now)
+        // Query only users who are at early onboarding steps AND signed up long enough ago
+        // to be considered stuck. Avoids loading all users into memory.
+        val threshold = now - STUCK_AFTER_SIGNUP_HOURS.hours
+        return userRepository.findStuckOnboarding(threshold).mapNotNull { u ->
+            val (stuck, reason) = evaluateStuck(u, emptyList(), now)
             if (stuck && reason != null) StuckUser(u, reason) else null
         }
     }
 
     suspend fun findExpiringPlans(): List<ExpiringPlan> {
         val now = Clock.System.now()
-        val users = userRepository.listAll()
-        return users.mapNotNull { u ->
-            val sub = billingRepository.getSubscription(u.id)
+        // Query subscriptions directly by period-end window — no full user scan, no N+1.
+        val windowEnd = now + PLAN_EXPIRING_SOON_DAYS.days
+        val expiring = billingRepository.findExpiringSubscriptions(from = now, to = windowEnd)
+        return expiring.mapNotNull { sub ->
+            val user = userRepository.findById(sub.userId) ?: return@mapNotNull null
             val end = sub.currentPeriodEnd ?: return@mapNotNull null
-            if (sub.plan == BillingPlan.FREE || sub.plan == BillingPlan.ENTERPRISE) return@mapNotNull null
             val daysLeft = (end.toEpochMilliseconds() - now.toEpochMilliseconds()) / (1000 * 60 * 60 * 24)
-            if (daysLeft in 0..PLAN_EXPIRING_SOON_DAYS) ExpiringPlan(u, daysLeft, sub.plan) else null
+            ExpiringPlan(user, daysLeft, sub.plan)
         }
     }
 

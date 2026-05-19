@@ -288,7 +288,14 @@ fun Route.configureApiRoutes(
                 val userId = call.userId()
                     ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
 
-                val items = translationRepository.listPendingReviews(userId)
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
+                val offset = call.request.queryParameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+
+                val (items, total) = coroutineScope {
+                    val itemsDeferred = async { translationRepository.listPendingReviews(userId, limit, offset) }
+                    val totalDeferred = async { translationRepository.countPendingReviews(userId) }
+                    itemsDeferred.await() to totalDeferred.await()
+                }
                 val response = items.map { t ->
                     ReviewItemResponse(
                         id = t.id,
@@ -303,7 +310,7 @@ fun Route.configureApiRoutes(
                         projectName = t.projectName
                     )
                 }
-                call.respond(HttpStatusCode.OK, ReviewListResponse(response, response.size))
+                call.respond(HttpStatusCode.OK, ReviewListResponse(response, total))
             }
 
             post("/{id}/approve") {

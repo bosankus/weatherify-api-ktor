@@ -46,6 +46,12 @@ interface BillingRepository {
 
     suspend fun listInvoices(userId: String, limit: Int = 12): List<InvoiceRecord>
 
+    /**
+     * Returns subscriptions on paid plans whose currentPeriodEnd falls in [[from], [to]].
+     * Used by the lifecycle monitor instead of scanning all users N+1 style.
+     */
+    suspend fun findExpiringSubscriptions(from: Instant, to: Instant): List<Subscription>
+
     /** Returns a previously cached PDF render for this paymentId, or null if not yet cached. */
     suspend fun getInvoicePdf(paymentId: String): ByteArray?
 
