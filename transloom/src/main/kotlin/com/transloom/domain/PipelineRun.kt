@@ -15,7 +15,8 @@ data class PipelineRunState(
     val error: String? = null,
     val projectId: String? = null,
     val retriedFromRunId: String? = null,
-    val surfaceSkipped: Int = 0
+    val surfaceSkipped: Int = 0,
+    val retryCount: Int = 0
 )
 
 @Serializable

@@ -141,7 +141,7 @@ class CulturalSensitivityAnalyzer(private val cache: CulturalAnalysisCacheReposi
         )
 
         val response = client.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey"
+            "$GEMINI_ENDPOINT?key=$geminiApiKey"
         ) {
             contentType(ContentType.Application.Json)
             setBody(payload)

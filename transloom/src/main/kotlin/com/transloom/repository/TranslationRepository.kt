@@ -26,6 +26,9 @@ interface TranslationRepository {
 
     suspend fun approve(translationId: String, editedText: String? = null): Boolean
 
+    /** Bulk-approve a list of review-status translations. Returns the number actually modified. */
+    suspend fun approveMany(translationIds: List<String>): Int
+
     suspend fun reject(translationId: String, reason: String): Boolean
 
     suspend fun getTranslation(translationId: String): Translation?
@@ -46,4 +49,10 @@ interface TranslationRepository {
      * Returns the number of documents actually modified (0 if another coroutine already claimed them).
      */
     suspend fun claimApproved(translationIds: List<String>): Int
+
+    /**
+     * Returns all confirmed translations (status "auto" or "approved") for a project, used when
+     * building a CDN locale bundle. Excludes "review" (unconfirmed) and "blocked" (rejected).
+     */
+    suspend fun getPublishableTranslations(projectId: String): List<Translation>
 }

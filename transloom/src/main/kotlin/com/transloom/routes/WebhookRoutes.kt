@@ -1,5 +1,6 @@
 package com.transloom.routes
 
+import com.transloom.repository.BillingRepository
 import com.transloom.repository.ProjectRepository
 import com.androidplay.core.secrets.getSecretValue
 import com.transloom.queue.TranslationJobQueue
@@ -43,7 +44,11 @@ private fun verifySignature(body: ByteArray, signatureHeader: String?): Boolean 
     return MessageDigest.isEqual(expected.toByteArray(), signatureHeader.toByteArray())
 }
 
-fun Route.configureWebhookRoutes(jobQueue: TranslationJobQueue, projectRepository: ProjectRepository) {
+fun Route.configureWebhookRoutes(
+    jobQueue: TranslationJobQueue,
+    projectRepository: ProjectRepository,
+    billingRepository: BillingRepository
+) {
     if (webhookSecret == null) {
         log.warn("GITHUB_WEBHOOK_SECRET not set — webhook signature verification is DISABLED (dev mode only, never run this in production)")
     }
@@ -136,6 +141,15 @@ fun Route.configureWebhookRoutes(jobQueue: TranslationJobQueue, projectRepositor
             if (!sourceModified) {
                 log.info("Webhook ignored: '{}' not modified in push to {}", project.sourceFilePath, repo)
                 call.respond(HttpStatusCode.Accepted, "Ignored: source file not modified")
+                return@post
+            }
+
+            // Fast-fail before touching GitHub API: if the project owner already hit their plan limit,
+            // drop the webhook immediately — no file fetch, no queue slot, no Gemini cost.
+            val subscription = billingRepository.getSubscription(project.ownerId)
+            if (subscription.limitHitAt != null) {
+                log.info("Webhook ignored: project={} owner={} has hit usage limit", project.id, project.ownerId)
+                call.respond(HttpStatusCode.Accepted, "Ignored: usage limit reached — upgrade your plan to resume translations")
                 return@post
             }
 

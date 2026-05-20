@@ -44,6 +44,9 @@ import com.transloom.services.SemanticChangeAnalyzer
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import com.transloom.services.UserLifecycleMonitor
+import com.transloom.services.CloudflareKvService
+import com.transloom.services.CdnPublishService
+import com.transloom.repository.CdnPublishRepository
 import com.androidplay.core.secrets.getSecretValue
 import com.androidplay.core.cache.CacheRepository
 import com.androidplay.core.queue.JobQueueRepository
@@ -147,14 +150,25 @@ fun Application.module() {
     val userActivityRepository: UserActivityRepository by inject()
     val jobQueueRepository: JobQueueRepository by inject()
     val cacheRepository: CacheRepository by inject()
+    val cdnPublishRepository: CdnPublishRepository by inject()
+
+    val cfAccountId = getSecretValue("cloudflare-account-id")
+    val cfNamespaceId = getSecretValue("cloudflare-kv-namespace-id")
+    val cfApiToken = getSecretValue("cloudflare-api-token")
+    val cfKvService = CloudflareKvService(cfAccountId, cfNamespaceId, cfApiToken)
+    val cdnPublishService = CdnPublishService(translationRepository, cfKvService, cdnPublishRepository)
 
     val jobQueue = TranslationJobQueue(jobQueueRepository)
     val billingService = BillingService(billingRepository)
+    // PipelineEventBus created first so it can be injected into UserActivityService
+    // for SSE-driven onboarding step advancement.
+    val pipelineEventBus = com.transloom.services.PipelineEventBus(redisUrl)
     val userActivityService = UserActivityService(
         userRepository = userRepository,
         userActivityRepository = userActivityRepository,
         billingRepository = billingRepository,
-        projectRepository = projectRepository
+        projectRepository = projectRepository,
+        eventBus = pipelineEventBus
     )
     val razorpayService = RazorpayBillingService(billingRepository, userActivityService)
     val lifecycleMonitor = UserLifecycleMonitor(userActivityService)
@@ -165,7 +179,6 @@ fun Application.module() {
     )
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
-    val pipelineEventBus = com.transloom.services.PipelineEventBus(redisUrl)
     val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
     val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
     val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer)
@@ -234,13 +247,14 @@ fun Application.module() {
         culturalSensitivityAnalyzer.close()
         razorpayService.close()
         lifecycleMonitor.stop()
+        cfKvService.close()
         log.info("All resources closed on application stop")
     }
 
     routing {
         configurePortalRoutes(jwtSecret)
         rateLimit(RateLimitName("github_webhook")) {
-            configureWebhookRoutes(jobQueue, projectRepository)
+            configureWebhookRoutes(jobQueue, projectRepository, billingRepository)
         }
         rateLimit(RateLimitName("auth")) {
             configureAuthRoutes(jwtSecret, userRepository, userActivityService)
@@ -251,11 +265,12 @@ fun Application.module() {
         configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
         configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService)
+            configureApiRoutes(billingService, billingRepository, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService, cdnPublishService)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
             configureInsightsRoutes(userActivityService)
             configureOnboardingRoutes(userRepository, billingRepository, projectRepository)
+            configureCdnPublishRoute(projectRepository, cdnPublishService)
         }
     }
 }

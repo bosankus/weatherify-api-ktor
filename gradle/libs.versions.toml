@@ -5,6 +5,7 @@ logback-version = "1.5.25"
 kotlin-mongo-driver-version = "5.5.1"
 
 jedis-version = "5.1.0"
+lettuce-version = "6.3.2.RELEASE"
 bcrypt-version = "0.10.2"
 koin-version = "4.0.3"
 firebase-admin-version = "9.2.0"
@@ -40,6 +41,7 @@ ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor-ve
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-version" }
 auth0-jwt = { module = "com.auth0:java-jwt", version.ref = "auth0-jwt-version" }
 jedis = { module = "redis.clients:jedis", version.ref = "jedis-version" }
+lettuce-core = { module = "io.lettuce:lettuce-core", version.ref = "lettuce-version" }
 stripe-java = { module = "com.stripe:stripe-java", version.ref = "stripe-version" }
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt-version" }
 

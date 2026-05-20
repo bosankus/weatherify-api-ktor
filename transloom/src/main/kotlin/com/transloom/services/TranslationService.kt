@@ -19,6 +19,11 @@ import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 
+// Single source of truth for the Gemini model — change here to upgrade everywhere.
+internal const val GEMINI_MODEL = "gemini-3.1-flash-lite"
+internal const val GEMINI_ENDPOINT =
+    "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
+
 // Gemini API Models
 @Serializable
 data class ThinkingConfig(val thinkingBudget: Int)
@@ -228,7 +233,7 @@ class TranslationService(private val memoryStore: TranslationMemoryRepository) {
 
     private suspend fun postToGemini(payload: GeminiRequest): String {
         val response = client.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey"
+            "$GEMINI_ENDPOINT?key=$geminiApiKey"
         ) {
             contentType(ContentType.Application.Json)
             setBody(payload)

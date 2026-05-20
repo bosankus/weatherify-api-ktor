@@ -1,0 +1,8 @@
+name = "transloom-cdn"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "BUNDLES"
+id = "<your-kv-namespace-id>"        # prod namespace id
+preview_id = "<your-preview-kv-id>"  # staging namespace id

@@ -84,6 +84,16 @@ class MongoBillingRepository(
         return plan
     }
 
+    override suspend fun clearPendingPlan(userId: String) {
+        subscriptions.updateOne(
+            eq("userId", userId),
+            Updates.combine(
+                Updates.unset("pendingPlan"),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        )
+    }
+
     override suspend fun downgradeToFree(razorpaySubscriptionId: String) {
         subscriptions.updateOne(
             eq("razorpaySubscriptionId", razorpaySubscriptionId),

@@ -32,6 +32,13 @@ internal fun HTML.checkoutPage(
             div("co-blob co-blob-1") {}
             div("co-blob co-blob-2") {}
 
+            // 15-minute session countdown bar — shrinks left-to-right as time runs out.
+            div("co-timer-bar") { div { id = "co-timer-fill"; classes = setOf("co-timer-fill") } }
+            div("co-timer-label") {
+                span { +"Session expires in " }
+                span { id = "co-timer-text"; +"15:00" }
+            }
+
             header("co-header") {
                 a {
                     href = "/transloom"
@@ -139,11 +146,51 @@ internal fun HTML.checkoutPage(
                 div("co-spinner") {}
                 p { +"Preparing secure checkout…" }
             }
+
+            // Session-expiry overlay — displayed when the 15-minute checkout window closes.
+            div {
+                id = "co-expired"
+                classes = setOf("co-expired-overlay")
+                div("co-expired-card") {
+                    p("co-expired-title") { +"Session expired" }
+                    p("co-expired-body") { +"Your 15-minute checkout window closed. Your card was not charged." }
+                    a("/transloom#pricing") {
+                        classes = setOf("co-pay-btn", "co-expired-btn")
+                        +"Restart checkout"
+                    }
+                }
+            }
         }
 
         script {
             unsafe {
                 +"""
+                // ── 15-minute session countdown ────────────────────────────────────────
+                (function(){
+                  var TIMEOUT = 15 * 60 * 1000;
+                  var startedAt = Date.now();
+                  var timerText = document.getElementById('co-timer-text');
+                  var timerFill = document.getElementById('co-timer-fill');
+                  var expired = false;
+                  function pad(n){ return n < 10 ? '0' + n : '' + n; }
+                  function tick(){
+                    if (expired) return;
+                    var left = Math.max(0, TIMEOUT - (Date.now() - startedAt));
+                    if (timerText) timerText.textContent = pad(Math.floor(left/60000)) + ':' + pad(Math.floor((left%60000)/1000));
+                    if (timerFill) timerFill.style.transform = 'scaleX(' + (left/TIMEOUT) + ')';
+                    if (left === 0) {
+                      expired = true;
+                      fetch('/transloom/billing/cancel-pending', { method: 'POST', credentials: 'include' });
+                      var el = document.getElementById('co-expired');
+                      if (el) el.classList.add('co-expired-overlay-show');
+                      return;
+                    }
+                    setTimeout(tick, 1000);
+                  }
+                  tick();
+                })();
+
+                // ── Razorpay Checkout.js ───────────────────────────────────────────────
                 (function(){
                   var cfg = {
                     key: ${quote(init.keyId)},
@@ -230,8 +277,14 @@ private fun planFeatureRows(plan: BillingPlan): List<String> = when (plan) {
     else -> emptyList()
 }
 
-internal fun HTML.successPage(subscriptionId: String, token: String? = null) {
+internal fun HTML.successPage(
+    subscriptionId: String,
+    token: String? = null,
+    plan: BillingPlan? = null,
+    trialEndsOn: String? = null
+) {
     val dashUrl = if (!token.isNullOrBlank()) "/transloom/app?token=${token}" else "/transloom/app"
+    val planName = plan?.displayName ?: "your plan"
     head {
         meta { charset = "utf-8" }
         meta { name = "viewport"; content = "width=device-width,initial-scale=1" }
@@ -245,32 +298,88 @@ internal fun HTML.successPage(subscriptionId: String, token: String? = null) {
             div("co-blob co-blob-2") {}
             div("co-success-card") {
                 div("co-success-check") { unsafe { +ICON_BIG_CHECK } }
-                h1 { +"Your 7-day trial is live." }
-                p("co-success-sub") {
-                    +"We've authorized your card but won't bill you for 7 days. "
-                    +"Your trial end date is shown in your dashboard — cancel anytime to stay on the free tier."
+                h1 { +"Payment confirmed — $planName is active." }
+
+                if (trialEndsOn != null) {
+                    p("co-success-sub") {
+                        +"Your 7-day free trial has started. We'll send a reminder before charging your card. "
+                        +"First payment: "
+                        strong { +trialEndsOn }
+                        +". Cancel anytime from your dashboard."
+                    }
+                } else {
+                    p("co-success-sub") {
+                        +"Your 7-day free trial is live. We won't charge your card until the trial ends. "
+                        +"Cancel anytime from your dashboard."
+                    }
                 }
+
+                // "What happens next" — three steps guide the user toward first value
+                div("co-success-steps") {
+                    div("co-success-step") {
+                        span("co-step-num") { +"1" }
+                        div("co-step-body") {
+                            strong { +"Create your project" }
+                            p { +"Connect a GitHub repo and choose your source strings file." }
+                        }
+                    }
+                    div("co-success-step") {
+                        span("co-step-num") { +"2" }
+                        div("co-step-body") {
+                            strong { +"Install the GitHub webhook" }
+                            p { +"One click from the project settings — takes 10 seconds." }
+                        }
+                    }
+                    div("co-success-step") {
+                        span("co-step-num") { +"3" }
+                        div("co-step-body") {
+                            strong { +"Push a commit" }
+                            p { +"Transloom opens a PR with every language translated automatically." }
+                        }
+                    }
+                }
+
+                // Primary CTA — takes user straight to the dashboard
+                a(dashUrl) { classes = setOf("co-pay-btn", "co-success-cta"); +"Go to dashboard →" }
+
+                // Secondary CTA — activate the trial immediately so the billing cycle starts now
+                // rather than waiting for the Razorpay-scheduled start date.
+                if (!token.isNullOrBlank()) {
+                    button {
+                        id = "co-activate-now"
+                        classes = setOf("co-activate-btn")
+                        type = ButtonType.button
+                        +"Start trial now — don't wait"
+                    }
+                    p("co-activate-hint") {
+                        +"Starts your 7-day trial clock immediately so you know the exact end date."
+                    }
+                }
+
                 p("co-success-meta") {
-                    +"Subscription "
+                    +"Subscription ref: "
                     code { +subscriptionId }
-                }
-                a(dashUrl) { classes = setOf("co-pay-btn"); +"Open your dashboard →" }
-                p("co-success-foot") {
-                    +"Redirecting in "
-                    span { id = "co-countdown"; +"5" }
-                    +"s…"
                 }
             }
         }
         script {
             unsafe {
                 +"""
-                var n = 5;
-                var el = document.getElementById('co-countdown');
-                var t = setInterval(function(){
-                  n--; if (el) el.textContent = String(n);
-                  if (n <= 0) { clearInterval(t); window.location.href = ${quote(dashUrl)}; }
-                }, 1000);
+                var dashUrl = ${quote(dashUrl)};
+                var token   = ${if (token.isNullOrBlank()) "null" else quote(token)};
+
+                // Activate-now button: starts the billing trial immediately.
+                var activateBtn = document.getElementById('co-activate-now');
+                if (activateBtn && token) {
+                  activateBtn.addEventListener('click', function(){
+                    activateBtn.disabled = true;
+                    activateBtn.textContent = 'Activating…';
+                    fetch('/transloom/api/billing/activate-now', {
+                      method: 'POST',
+                      headers: { 'Authorization': 'Bearer ' + token }
+                    }).finally(function(){ window.location.href = dashUrl; });
+                  });
+                }
                 """.trimIndent()
             }
         }
@@ -384,4 +493,23 @@ ul{list-style:none}
 .co-success-meta code{background:rgba(255,255,255,.05);padding:3px 8px;border-radius:4px;color:var(--text-dim);font-size:11px;font-family:ui-monospace,Menlo,monospace}
 .co-success-foot{margin-top:18px;font-size:12px;color:var(--text-muted)}
 .co-success-foot span{color:var(--accent);font-weight:600}
+.co-success-cta{margin-bottom:12px}
+.co-success-steps{display:flex;flex-direction:column;gap:16px;margin:24px 0;text-align:left}
+.co-success-step{display:flex;align-items:flex-start;gap:14px}
+.co-step-num{flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--accent-soft);border:1px solid rgba(0,229,160,.3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent)}
+.co-step-body strong{display:block;font-size:14px;color:var(--text);margin-bottom:2px}
+.co-step-body p{font-size:13px;color:var(--text-dim);margin:0}
+.co-activate-btn{width:100%;margin-top:4px;padding:12px 20px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text-dim);font-size:14px;font-weight:500;cursor:pointer;transition:border-color .2s,color .2s}
+.co-activate-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.co-activate-btn:disabled{opacity:.5;cursor:wait}
+.co-activate-hint{margin-top:8px;font-size:12px;color:var(--text-muted);text-align:center}
+.co-timer-bar{position:relative;z-index:3;height:3px;background:rgba(255,255,255,.06);overflow:hidden}
+.co-timer-fill{position:absolute;inset:0;background:linear-gradient(90deg,#00E5A0,#00A87A);transform-origin:left;transition:transform 1s linear}
+.co-timer-label{position:relative;z-index:3;padding:6px 40px;font-size:11px;color:var(--text-muted);background:rgba(0,229,160,.04);border-bottom:1px solid rgba(0,229,160,.08)}
+.co-expired-overlay{position:fixed;inset:0;background:rgba(8,8,8,.92);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;z-index:9998;opacity:0;pointer-events:none;transition:opacity .3s ease}
+.co-expired-overlay.co-expired-overlay-show{opacity:1;pointer-events:auto}
+.co-expired-card{max-width:380px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:40px 36px;text-align:center}
+.co-expired-title{font-size:20px;font-weight:700;margin-bottom:12px;color:var(--text)}
+.co-expired-body{font-size:14px;color:var(--text-dim);margin-bottom:28px;line-height:1.5}
+.co-expired-btn{display:inline-flex;width:auto;padding:12px 28px;text-decoration:none}
 """

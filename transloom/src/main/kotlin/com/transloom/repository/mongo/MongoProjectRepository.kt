@@ -44,6 +44,7 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             put("tone", input.tone)
             put("targets", targetsDocuments)
             put("culturalSensitivityEnabled", input.culturalSensitivityEnabled)
+            put("autoApproveEnabled", input.autoApproveEnabled)
             put("createdAt", now)
             put("updatedAt", now)
         }
@@ -92,7 +93,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         watchBranch: String?,
         sourceFilePath: String?,
         targets: List<TargetConfig>?,
-        culturalSensitivityEnabled: Boolean?
+        culturalSensitivityEnabled: Boolean?,
+        autoApproveEnabled: Boolean?
     ): Boolean {
         val updates = mutableListOf<org.bson.conversions.Bson>()
 
@@ -103,6 +105,7 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         sourceFilePath?.let { updates.add(Updates.set("sourceFilePath", it)) }
         targets?.let { updates.add(Updates.set("targets", it.map { t -> t.toDocument() })) }
         culturalSensitivityEnabled?.let { updates.add(Updates.set("culturalSensitivityEnabled", it)) }
+        autoApproveEnabled?.let { updates.add(Updates.set("autoApproveEnabled", it)) }
 
         if (updates.isEmpty()) return false
 
@@ -216,6 +219,7 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             tone = getString("tone") ?: "",
             targets = targets,
             culturalSensitivityEnabled = getBoolean("culturalSensitivityEnabled") ?: false,
+            autoApproveEnabled = getBoolean("autoApproveEnabled") ?: false,
             webhookVerifiedAt = webhookVerifiedAt,
             lastSourceFileHash = getString("lastSourceFileHash")
         )

@@ -3,6 +3,9 @@ package com.transloom.services
 import com.transloom.domain.PipelineRunState
 import com.transloom.domain.PipelineStepState
 import com.transloom.domain.initialSteps
+import io.lettuce.core.RedisClient
+import io.lettuce.core.pubsub.RedisPubSubAdapter
+import io.lettuce.core.pubsub.StatefulRedisPubSubConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,25 +20,25 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import redis.clients.jedis.Jedis
 import redis.clients.jedis.JedisPool
 import redis.clients.jedis.JedisPoolConfig
-import redis.clients.jedis.JedisPubSub
 import java.net.URI
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 @Serializable
 data class PipelineEvent(
-    val type: String,            // start | step | finish
-    val runId: String,
+    val type: String,            // start | step | finish | onboarding
+    val runId: String = "",
     val stepId: String? = null,
     val status: String? = null,
     val detail: String? = null,
     val prUrl: String? = null,
     val error: String? = null,
     val snapshot: PipelineRunState? = null,
-    val surfaceSkipped: Int? = null
+    val surfaceSkipped: Int? = null,
+    val onboardingStep: String? = null  // populated for type="onboarding"
 )
 
 /**
@@ -56,8 +59,34 @@ class PipelineEventBus(private val redisUrl: String? = null) {
         runCatching {
             JedisPool(JedisPoolConfig().apply { maxTotal = 6; maxIdle = 3 }, URI(url))
                 .also { p -> p.resource.use { j -> j.ping() } }
-        }.onSuccess { log.info("PipelineEventBus: Redis pub/sub enabled") }
+        }.onSuccess { log.info("PipelineEventBus: Redis pool enabled") }
          .onFailure { log.warn("PipelineEventBus: Redis unavailable ({}), using in-memory fallback", it.message) }
+         .getOrNull()
+    }
+
+    // Lettuce reactive pub/sub — one connection handles all SSE subscribers, zero blocking threads.
+    private val lettuceClient: RedisClient? = redisUrl?.takeIf { it.isNotBlank() }?.let { url ->
+        runCatching { RedisClient.create(url) }
+            .onFailure { log.warn("PipelineEventBus: Lettuce client init failed: {}", it.message) }
+            .getOrNull()
+    }
+
+    // Per-user SharedFlows that the single Lettuce listener dispatches into.
+    private val subFlows = ConcurrentHashMap<String, MutableSharedFlow<String>>()
+    private val subCounts = ConcurrentHashMap<String, AtomicInteger>()
+
+    private val pubSubConn: StatefulRedisPubSubConnection<String, String>? = lettuceClient?.let { c ->
+        runCatching {
+            c.connectPubSub().also { conn ->
+                conn.addListener(object : RedisPubSubAdapter<String, String>() {
+                    override fun message(channel: String, message: String) {
+                        val userId = channel.removePrefix("tl:events:")
+                        subFlows[userId]?.tryEmit(message)
+                    }
+                })
+            }
+        }.onSuccess { log.info("PipelineEventBus: Lettuce reactive pub/sub connected") }
+         .onFailure { log.warn("PipelineEventBus: Lettuce pub/sub connect failed: {}", it.message) }
          .getOrNull()
     }
 
@@ -84,22 +113,28 @@ class PipelineEventBus(private val redisUrl: String? = null) {
     // ── Public API ─────────────────────────────────────────────────────────────
 
     fun eventsFor(userId: String): Flow<String> {
-        if (!inRedis) return memFlowFor(userId).asSharedFlow()
+        // Fall back to in-memory if Redis is unavailable or Lettuce failed to connect.
+        if (!inRedis || pubSubConn == null) return memFlowFor(userId).asSharedFlow()
+
+        // Get-or-create a shared flow for this user. All concurrent SSE connections for
+        // the same user share one flow and one Redis channel subscription (ref-counted).
+        val flow = subFlows.getOrPut(userId) { MutableSharedFlow(replay = 0, extraBufferCapacity = 64) }
+        val count = subCounts.getOrPut(userId) { AtomicInteger(0) }
+        if (count.getAndIncrement() == 0) {
+            // First subscriber — open the Redis channel subscription. Non-blocking.
+            pubSubConn.async().subscribe(channelKey(userId))
+        }
+
         return callbackFlow {
-            // Dedicated Jedis connection per SSE subscriber — subscribe() blocks the thread
-            // indefinitely, so it must NOT come from the shared pool (would exhaust it).
-            val jedis = Jedis(URI(redisUrl!!))
-            val sub = object : JedisPubSub() {
-                override fun onMessage(channel: String, message: String) { trySend(message) }
-            }
-            val subJob = ioScope.launch {
-                runCatching { jedis.subscribe(sub, channelKey(userId)) }
-                    .onFailure { log.warn("Redis subscribe error userId={}: {}", userId, it.message) }
-            }
+            val job = ioScope.launch { flow.collect { trySend(it) } }
             awaitClose {
-                runCatching { sub.unsubscribe() }
-                runCatching { jedis.close() }
-                subJob.cancel()
+                job.cancel()
+                if (count.decrementAndGet() == 0) {
+                    // Last subscriber disconnected — release the Redis channel subscription.
+                    subFlows.remove(userId)
+                    subCounts.remove(userId)
+                    runCatching { pubSubConn.async().unsubscribe(channelKey(userId)) }
+                }
             }
         }
     }
@@ -124,7 +159,8 @@ class PipelineEventBus(private val redisUrl: String? = null) {
         branch: String,
         commitShort: String,
         projectId: String? = null,
-        retriedFromRunId: String? = null
+        retriedFromRunId: String? = null,
+        retryCount: Int = 0
     ): String {
         val runId = UUID.randomUUID().toString()
         val steps = initialSteps().toMutableList()
@@ -132,11 +168,17 @@ class PipelineEventBus(private val redisUrl: String? = null) {
         val snapshot = PipelineRunState(
             runId = runId, repo = repo, branch = branch,
             commitShort = commitShort, startedAt = System.currentTimeMillis(),
-            steps = steps.toList(), projectId = projectId, retriedFromRunId = retriedFromRunId
+            steps = steps.toList(), projectId = projectId, retriedFromRunId = retriedFromRunId,
+            retryCount = retryCount
         )
         storeRun(userId, snapshot)
         emit(userId, PipelineEvent(type = "start", runId = runId, snapshot = snapshot))
         return runId
+    }
+
+    /** Pushes an onboarding step change to any open dashboard SSE connection for this user. */
+    fun emitOnboardingStep(userId: String, step: String) {
+        emit(userId, PipelineEvent(type = "onboarding", onboardingStep = step))
     }
 
     fun stepRunning(userId: String, runId: String, stepId: String, detail: String? = null) =
@@ -170,6 +212,8 @@ class PipelineEventBus(private val redisUrl: String? = null) {
     }
 
     fun close() {
+        runCatching { pubSubConn?.close() }
+        runCatching { lettuceClient?.shutdown() }
         runCatching { pool?.close() }
     }
 

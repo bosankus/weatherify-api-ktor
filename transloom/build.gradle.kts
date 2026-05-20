@@ -32,6 +32,7 @@ dependencies {
     implementation(libs.ktor.server.rate.limit)
     implementation(libs.ktor.server.auth)
     implementation(libs.jedis)
+    implementation(libs.lettuce.core)
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.auth0.jwt)
     implementation(libs.logback.classic)

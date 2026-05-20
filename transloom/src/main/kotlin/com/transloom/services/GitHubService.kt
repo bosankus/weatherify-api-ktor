@@ -9,6 +9,9 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -80,6 +83,26 @@ class GitHubService {
         header("X-GitHub-Api-Version", "2022-11-28")
     }
 
+    /**
+     * Checks that [repo] exists and the [token] has at least read access to it.
+     * Returns null on success, or a human-readable error string the API can surface directly.
+     */
+    suspend fun validateRepo(repo: String, token: String): String? {
+        if (token == "dummy-token") return null
+        val response = client.get("https://api.github.com/repos/$repo") {
+            gitHubAuth(token)
+            header(HttpHeaders.Accept, "application/vnd.github+json")
+        }
+        return when (response.status) {
+            io.ktor.http.HttpStatusCode.OK -> null
+            io.ktor.http.HttpStatusCode.NotFound ->
+                "Repository '$repo' not found. Check the name and make sure it exists."
+            io.ktor.http.HttpStatusCode.Forbidden, io.ktor.http.HttpStatusCode.Unauthorized ->
+                "No access to '$repo'. Re-authenticate with GitHub to grant the required 'repo' scope."
+            else -> "GitHub returned ${response.status.value} for '$repo'. Check your token and repo name."
+        }
+    }
+
     suspend fun fetchFileContent(repo: String, branch: String, filePath: String, token: String): String {
 
         val response = client.get("https://api.github.com/repos/$repo/contents/$filePath?ref=$branch") {
@@ -136,16 +159,19 @@ class GitHubService {
             throw Exception("Failed to create branch $newBranchName. Status: ${createRefResponse.status}")
         }
 
-        val treeItems = mutableListOf<TreeItem>()
-        for ((path, content) in files) {
-            val blobResp: BlobResponse = client.post("https://api.github.com/repos/$repo/git/blobs") {
-                gitHubAuth(token)
-                header(HttpHeaders.Accept, "application/vnd.github+json")
-                contentType(ContentType.Application.Json)
-                setBody(BlobRequest(content = content))
-            }.body()
-            
-            treeItems.add(TreeItem(path = path, mode = "100644", type = "blob", sha = blobResp.sha))
+        // Upload all blobs in parallel — each POST /git/blobs is independent.
+        val treeItems = coroutineScope {
+            files.map { (path, content) ->
+                async {
+                    val blobResp: BlobResponse = client.post("https://api.github.com/repos/$repo/git/blobs") {
+                        gitHubAuth(token)
+                        header(HttpHeaders.Accept, "application/vnd.github+json")
+                        contentType(ContentType.Application.Json)
+                        setBody(BlobRequest(content = content))
+                    }.body()
+                    TreeItem(path = path, mode = "100644", type = "blob", sha = blobResp.sha)
+                }
+            }.awaitAll()
         }
 
         val treeResp: TreeResponse = client.post("https://api.github.com/repos/$repo/git/trees") {

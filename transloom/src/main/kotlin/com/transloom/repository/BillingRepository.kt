@@ -23,6 +23,9 @@ interface BillingRepository {
     /** Promotes pendingPlan → plan atomically. Returns the activated plan, or null if none was pending. */
     suspend fun activatePendingPlan(userId: String): BillingPlan?
 
+    /** Discards pendingPlan without activating — used when checkout session expires or user abandons. */
+    suspend fun clearPendingPlan(userId: String)
+
     suspend fun downgradeToFree(razorpaySubscriptionId: String)
 
     suspend fun setLimitHitAt(userId: String, at: Instant?)

@@ -72,7 +72,8 @@ data class UpdateProjectBody(
     val watchBranch: String? = null,
     val sourceFilePath: String? = null,
     val targets: List<TargetConfig>? = null,
-    val culturalSensitivityEnabled: Boolean? = null
+    val culturalSensitivityEnabled: Boolean? = null,
+    val autoApproveEnabled: Boolean? = null
 )
 
 @Serializable
@@ -85,8 +86,14 @@ data class ProjectDetailResponse(
     val category: String,
     val tone: String,
     val targets: List<TargetConfig>,
-    val culturalSensitivityEnabled: Boolean = false
+    val culturalSensitivityEnabled: Boolean = false,
+    val autoApproveEnabled: Boolean = false,
+    /** ISO-8601 date-time of the last successful webhook verification, or null if never verified. */
+    val webhookVerifiedAt: String? = null
 )
+
+@Serializable
+data class BatchApproveBody(val ids: List<String>)
 
 @Serializable
 data class ApiError(val error: String)

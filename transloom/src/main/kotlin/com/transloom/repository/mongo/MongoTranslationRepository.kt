@@ -142,6 +142,20 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         return result.modifiedCount > 0
     }
 
+    override suspend fun approveMany(translationIds: List<String>): Int {
+        if (translationIds.isEmpty()) return 0
+        val now = System.currentTimeMillis()
+        val result = translationsCol.updateMany(
+            and(`in`("_id", translationIds), eq("status", "review")),
+            Updates.combine(
+                Updates.set("status", "approved"),
+                Updates.unset("blockReason"),
+                Updates.set("updatedAt", now)
+            )
+        )
+        return result.modifiedCount.toInt()
+    }
+
     override suspend fun reject(translationId: String, reason: String): Boolean {
         val result = translationsCol.updateOne(
             eq("_id", translationId),
@@ -217,6 +231,18 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             Aggregates.group("\$targetLanguage")
         )
         return translationsCol.aggregate<Document>(pipeline).toList().size
+    }
+
+    override suspend fun getPublishableTranslations(projectId: String): List<Translation> {
+        val pipeline = listOf(
+            Aggregates.match(`in`("status", listOf("auto", "approved"))),
+            Aggregates.lookup("strings", "stringId", "_id", "strDoc"),
+            Aggregates.unwind("\$strDoc"),
+            Aggregates.match(eq("strDoc.projectId", projectId)),
+            Aggregates.lookup("projects", "strDoc.projectId", "_id", "projDoc"),
+            Aggregates.unwind("\$projDoc")
+        )
+        return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
     }
 
     override suspend fun revertToReview(translationId: String) {

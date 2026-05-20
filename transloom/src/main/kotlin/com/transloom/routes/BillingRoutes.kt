@@ -23,8 +23,10 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.date.GMTDate
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Duration.Companion.days
 import kotlinx.html.*
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
@@ -378,7 +380,35 @@ fun Route.configurePublicCheckoutRoute(
     get("/transloom/billing/success") {
         val subscriptionId = call.request.queryParameters["sub"].orEmpty()
         val token = call.request.cookies[SESSION_COOKIE]?.ifBlank { null }
-        call.respondHtml { successPage(subscriptionId, token) }
+
+        // Fetch plan info so the success page can show a meaningful "what's next" view.
+        val userId = call.sessionUserId(jwtSecret)
+        val plan: BillingPlan?
+        val trialEndsOn: String?
+        if (userId != null) {
+            val sub = billingRepository.getSubscription(userId)
+            plan = sub.plan
+            // Trial is 7 days; we show the earliest possible first-charge date.
+            val firstCharge = Clock.System.now() + 7.days
+            trialEndsOn = firstCharge.toLocalDateTime(TimeZone.UTC).date.toString()
+        } else {
+            plan = null
+            trialEndsOn = null
+        }
+
+        call.respondHtml { successPage(subscriptionId, token, plan, trialEndsOn) }
+    }
+
+    // Called by the checkout page's 15-minute session timer when it expires.
+    // Clears pendingPlan so the next checkout attempt starts fresh.
+    post("/transloom/billing/cancel-pending") {
+        val userId = call.sessionUserId(jwtSecret) ?: run {
+            call.respond(HttpStatusCode.Unauthorized, "No session")
+            return@post
+        }
+        billingRepository.clearPendingPlan(userId)
+        log.info("cancel-pending: cleared pendingPlan for userId={}", userId)
+        call.respond(HttpStatusCode.OK, "ok")
     }
 }
 

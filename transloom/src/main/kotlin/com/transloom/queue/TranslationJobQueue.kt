@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
+import java.util.concurrent.ConcurrentHashMap
 
 @Serializable
 data class WebhookPayload(
@@ -26,7 +27,17 @@ class TranslationJobQueue(private val jobQueue: JobQueueRepository) {
     private val fallbackChannel = Channel<WebhookPayload>(Channel.UNLIMITED)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Tracks project IDs currently enqueued or being processed. Prevents back-to-back
+    // webhooks (e.g. force-push, rapid commits) from stacking redundant jobs for the
+    // same project — the second webhook is dropped until the first job finishes.
+    private val inFlightProjects = ConcurrentHashMap.newKeySet<String>()
+
     suspend fun enqueueJob(payload: WebhookPayload) {
+        if (!inFlightProjects.add(payload.projectId)) {
+            log.info("Dedup: project {} already in-flight, skipping commit={}", payload.projectId, payload.commitHash.take(7))
+            return
+        }
+
         val json = Json.encodeToString(payload)
         if (jobQueue.isConnected()) {
             try {
@@ -42,12 +53,16 @@ class TranslationJobQueue(private val jobQueue: JobQueueRepository) {
     }
 
     fun startWorker(processor: suspend (WebhookPayload) -> Unit) {
+        // Wrap the processor so the in-flight lock is always released, even on failure.
+        val tracked: suspend (WebhookPayload) -> Unit = { payload ->
+            try { processor(payload) } finally { inFlightProjects.remove(payload.projectId) }
+        }
         scope.launch {
             log.info("Worker started (backend: {})", if (jobQueue.isConnected()) "redis" else "in-memory")
             if (jobQueue.isConnected()) {
-                startRedisWorker(processor)
+                startRedisWorker(tracked)
             } else {
-                startInMemoryWorker(processor)
+                startInMemoryWorker(tracked)
             }
         }
     }

@@ -24,7 +24,8 @@ interface ProjectRepository {
         watchBranch: String? = null,
         sourceFilePath: String? = null,
         targets: List<TargetConfig>? = null,
-        culturalSensitivityEnabled: Boolean? = null
+        culturalSensitivityEnabled: Boolean? = null,
+        autoApproveEnabled: Boolean? = null
     ): Boolean
 
     suspend fun delete(projectId: String)

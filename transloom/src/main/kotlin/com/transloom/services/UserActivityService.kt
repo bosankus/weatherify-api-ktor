@@ -21,6 +21,7 @@ class UserActivityService(
     private val userActivityRepository: UserActivityRepository,
     private val billingRepository: BillingRepository,
     private val projectRepository: ProjectRepository,
+    private val eventBus: PipelineEventBus? = null
 ) {
     private val log = LoggerFactory.getLogger(UserActivityService::class.java)
 
@@ -40,6 +41,7 @@ class UserActivityService(
             .onFailure { log.warn("touchLastActive failed for userId={}: {}", userId, it.message) }
         onboardingStepFor(event)?.let { step ->
             runCatching { userRepository.advanceOnboarding(userId, step, now) }
+                .onSuccess { eventBus?.emitOnboardingStep(userId, step.name) }
                 .onFailure { log.warn("advanceOnboarding failed for userId={}: {}", userId, it.message) }
         }
         log.debug("Activity recorded: userId={} event={} meta={}", userId, event, metadata)

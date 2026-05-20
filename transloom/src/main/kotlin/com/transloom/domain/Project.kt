@@ -14,6 +14,8 @@ data class Project(
     val tone: String,
     val targets: List<TargetConfig> = emptyList(),
     val culturalSensitivityEnabled: Boolean = false,
+    /** When true, translations that pass cultural sensitivity checks are approved automatically without human review. */
+    val autoApproveEnabled: Boolean = false,
     /** Timestamp of the last successful webhook verification. Null means never verified. */
     val webhookVerifiedAt: Instant? = null,
     /** SHA-256 of the source file content from the last fully successful pipeline run. */
@@ -36,5 +38,6 @@ data class CreateProjectInput(
     val category: String,
     val tone: String,
     val targets: List<TargetConfig>,
-    val culturalSensitivityEnabled: Boolean = false
+    val culturalSensitivityEnabled: Boolean = false,
+    val autoApproveEnabled: Boolean = false
 )

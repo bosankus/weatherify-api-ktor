@@ -20,6 +20,7 @@ enum class UserEvent {
     INVOICE_DOWNLOADED,
     TRIAL_LIMIT_HIT,
     PLAN_EXPIRY_NOTIFIED,         // monitor flagged user for upcoming renewal
+    PIPELINE_RETRIED,             // user triggered manual retry on a failed run
 }
 
 /** Onboarding milestones denormalised on the User document. Always advances forward via [advance]. */

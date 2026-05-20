@@ -114,13 +114,13 @@ fun Application.configureTransloom(refundService: RefundService) {
 
     routing {
         configurePortalRoutes(jwtSecret)
-        configureWebhookRoutes(jobQueue, projectRepository)
+        configureWebhookRoutes(jobQueue, projectRepository, billingRepository)
         configureAuthRoutes(jwtSecret, userRepository, userActivityService)
         configureRazorpayWebhook(webhookDispatcher)
         configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
         configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
         authenticate("auth-jwt") {
-            configureApiRoutes(billingService, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService)
+            configureApiRoutes(billingService, billingRepository, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
             configureInsightsRoutes(userActivityService)

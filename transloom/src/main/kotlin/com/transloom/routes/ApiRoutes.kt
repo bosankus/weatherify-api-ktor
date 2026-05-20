@@ -1,7 +1,9 @@
 package com.transloom.routes
 
 import com.transloom.domain.CreateProjectInput
+import com.transloom.domain.PipelineRunState
 import com.transloom.domain.Translation
+import com.transloom.repository.BillingRepository
 import com.transloom.repository.GlossaryRepository
 import com.transloom.repository.ProjectRepository
 import com.transloom.repository.TranslationRepository
@@ -10,11 +12,15 @@ import com.transloom.model.*
 import com.transloom.domain.UserEvent
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
+import com.transloom.services.CdnPublishService
 import com.transloom.services.UserActivityService
 import com.transloom.queue.TranslationJobQueue
 import com.transloom.queue.WebhookPayload
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.StringParserService
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.Serializable
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -36,8 +42,22 @@ import java.util.UUID
 
 private val apiLog = LoggerFactory.getLogger("ApiRoutes")
 
+// Tracks how many times each runId has been retried. In-memory, single-instance.
+private val retryAttempts = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
+private const val MAX_RETRIES = 3
+
+@Serializable
+data class BootstrapResponse(
+    val onboarding: OnboardingStateResponse,
+    val stats: DashboardStats,
+    val subscription: SubscriptionResponse,
+    val usage: UsageResponse,
+    val runs: List<PipelineRunState>
+)
+
 fun Route.configureApiRoutes(
     billingService: BillingService,
+    billingRepository: BillingRepository,
     githubService: GitHubService,
     projectRepository: ProjectRepository,
     userRepository: UserRepository,
@@ -45,10 +65,84 @@ fun Route.configureApiRoutes(
     pipelineEventBus: PipelineEventBus,
     jobQueue: TranslationJobQueue,
     glossaryRepository: GlossaryRepository,
-    userActivityService: UserActivityService
+    userActivityService: UserActivityService,
+    cdnPublishService: CdnPublishService? = null
 ) {
 
     route("/transloom/api") {
+
+        // Single endpoint that replaces the 5 separate page-load calls. All queries run in
+        // parallel (9 concurrent coroutines) — total latency equals the slowest single query.
+        get("/me/bootstrap") {
+            val userId = call.userId()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+
+            coroutineScope {
+                val userD          = async { userRepository.findById(userId) }
+                val subD           = async { billingRepository.getSubscription(userId) }
+                val projectCountD  = async { projectRepository.countForUser(userId) }
+                val statusCountsD  = async { translationRepository.countByStatus(userId) }
+                val totalStringsD  = async { translationRepository.totalStringsTranslated(userId) }
+                val activeLangsD   = async { translationRepository.activeLanguageCount(userId) }
+                val usageD         = async { billingRepository.getUsage(userId) }
+                val historyD       = async { billingRepository.getHistoricalUsage(userId) }
+                val runsD          = async { pipelineEventBus.recentRuns(userId) }
+
+                val user         = userD.await()
+                val sub          = subD.await()
+                val projectCount = projectCountD.await()
+                val statusCounts = statusCountsD.await()
+                val totalStrings = totalStringsD.await()
+                val activeLangs  = activeLangsD.await()
+                val usage        = usageD.await()
+                val history      = historyD.await()
+                val runs         = runsD.await()
+
+                val plan = sub.plan
+
+                val onboarding = OnboardingStateResponse(
+                    step = user?.onboardingStep?.name ?: "SIGNED_UP",
+                    dismissed = user?.onboardingDismissedAt != null,
+                    completed = user?.onboardingStep?.name == "COMPLETED",
+                    plan = plan.name,
+                    inTrial = sub.inTrial,
+                    trialLimitHit = sub.inTrial && sub.limitHitAt != null,
+                    hasProject = projectCount > 0,
+                    showTour = user?.onboardingStep?.name != "COMPLETED" && user?.onboardingDismissedAt == null
+                )
+
+                val stats = DashboardStats(
+                    totalStringsTranslated = totalStrings,
+                    pendingReview = statusCounts["review"] ?: 0,
+                    blockedCount = statusCounts["blocked"] ?: 0,
+                    activeLanguages = activeLangs,
+                    totalProjects = projectCount,
+                    currentPlan = plan.name,
+                    currentPlanDisplay = plan.displayName
+                )
+
+                val subscription = SubscriptionResponse(
+                    plan = plan.name,
+                    displayName = plan.displayName,
+                    monthlyPricePaise = plan.monthlyPricePaise,
+                    stringLimit = plan.stringLimit,
+                    maxProjects = if (plan.maxProjects == Int.MAX_VALUE) -1 else plan.maxProjects,
+                    cancelAtPeriodEnd = sub.cancelAtPeriodEnd,
+                    currentPeriodEnd = sub.currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString(),
+                    trialLimitHit = sub.inTrial && sub.limitHitAt != null
+                )
+
+                val usageResp = UsageResponse(
+                    stringsTranslated = usage.stringsTranslated,
+                    stringLimit = plan.stringLimit,
+                    projectsUsed = usage.projectsUsed,
+                    projectLimit = if (plan.maxProjects == Int.MAX_VALUE) null else plan.maxProjects,
+                    history = history.map { HistoryEntry(it.yearMonth, it.stringsTranslated) }
+                )
+
+                call.respond(HttpStatusCode.OK, BootstrapResponse(onboarding, stats, subscription, usageResp, runs))
+            }
+        }
 
         // --- Projects ---
         route("/projects") {
@@ -109,6 +203,17 @@ fun Route.configureApiRoutes(
                             actionHint = "Reconnect your GitHub account to continue.",
                             reauthUrl = "/transloom/auth/github"
                         )
+                    )
+                }
+
+                // Validate the repo exists and the token has access before writing to DB.
+                val repoError = preflightUser?.githubToken?.let {
+                    githubService.validateRepo(body.githubRepo, it)
+                }
+                if (repoError != null) {
+                    return@post call.respond(
+                        HttpStatusCode.UnprocessableEntity,
+                        StructuredApiError(error = repoError, code = "REPO_NOT_ACCESSIBLE")
                     )
                 }
 
@@ -190,7 +295,8 @@ fun Route.configureApiRoutes(
                     watchBranch = body.watchBranch,
                     sourceFilePath = body.sourceFilePath,
                     targets = body.targets,
-                    culturalSensitivityEnabled = body.culturalSensitivityEnabled
+                    culturalSensitivityEnabled = body.culturalSensitivityEnabled,
+                    autoApproveEnabled = body.autoApproveEnabled
                 )
 
                 val updated = projectRepository.findById(projectId)
@@ -206,11 +312,14 @@ fun Route.configureApiRoutes(
 
                 call.respond(
                     HttpStatusCode.OK,
-                    ProjectResponse(
+                    ProjectDetailResponse(
                         id = updated.id, name = updated.name,
                         githubRepo = updated.githubRepo, watchBranch = updated.watchBranch,
                         sourceFilePath = updated.sourceFilePath, category = updated.category,
-                        tone = updated.tone, targetCount = updated.targets.size
+                        tone = updated.tone, targets = updated.targets,
+                        culturalSensitivityEnabled = updated.culturalSensitivityEnabled,
+                        autoApproveEnabled = updated.autoApproveEnabled,
+                        webhookVerifiedAt = updated.webhookVerifiedAt?.toString()
                     )
                 )
             }
@@ -237,7 +346,9 @@ fun Route.configureApiRoutes(
                         category = project.category,
                         tone = project.tone,
                         targets = project.targets,
-                        culturalSensitivityEnabled = project.culturalSensitivityEnabled
+                        culturalSensitivityEnabled = project.culturalSensitivityEnabled,
+                        autoApproveEnabled = project.autoApproveEnabled,
+                        webhookVerifiedAt = project.webhookVerifiedAt?.toString()
                     )
                 )
             }
@@ -331,9 +442,48 @@ fun Route.configureApiRoutes(
                 val editedText = body.editedText?.takeIf { it.isNotBlank() }
                 translationRepository.approve(translationId, editedText)
 
-                launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, translation.projectId)
+                launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, translation.projectId, cdnPublishService)
 
                 call.respond(HttpStatusCode.OK, mapOf("status" to "approved", "id" to translationId))
+            }
+
+            post("/batch-approve") {
+                val userId = call.userId()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+
+                val body = runCatching { call.receive<BatchApproveBody>() }.getOrElse {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
+                }
+                if (body.ids.isEmpty()) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("ids must not be empty"))
+                }
+                if (body.ids.size > 200) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("Batch size cannot exceed 200"))
+                }
+
+                // Validate IDs are UUIDs and verify the caller owns all projects referenced.
+                val validIds = body.ids.mapNotNull { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                if (validIds.size != body.ids.size) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("One or more invalid translation ids"))
+                }
+
+                // Fetch translations to group by project and verify ownership.
+                val translations = validIds.mapNotNull { translationRepository.getTranslation(it) }
+                val projectIds = translations.map { it.projectId }.distinct()
+                val projects = projectIds.mapNotNull { projectRepository.findById(it) }
+                if (projects.any { it.ownerId != userId }) {
+                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied to one or more translations"))
+                }
+
+                val approved = translationRepository.approveMany(validIds)
+
+                // Trigger a follow-up PR per affected project (existing claim+PR logic).
+                projectIds.forEach { projectId ->
+                    launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, projectId, cdnPublishService)
+                }
+
+                apiLog.info("Batch approve: userId={} approved={} of {}", userId, approved, validIds.size)
+                call.respond(HttpStatusCode.OK, mapOf("approved" to approved, "total" to validIds.size))
             }
 
             post("/{id}/reject") {
@@ -481,6 +631,15 @@ fun Route.configureApiRoutes(
             val runId = call.parameters["runId"]
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Missing runId"))
 
+            // Rate-limit: max 3 retries per original run to prevent runaway retry loops.
+            val count = retryAttempts.getOrPut(runId) { java.util.concurrent.atomic.AtomicInteger(0) }
+            if (count.get() >= MAX_RETRIES) {
+                return@post call.respond(
+                    HttpStatusCode.TooManyRequests,
+                    ApiError("Maximum $MAX_RETRIES retries reached for this run. Fix the underlying issue before trying again.")
+                )
+            }
+
             val run = pipelineEventBus.recentRuns(userId).find { it.runId == runId }
                 ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Run not found"))
 
@@ -493,16 +652,23 @@ fun Route.configureApiRoutes(
                 return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
             }
 
+            val attempt = count.incrementAndGet()
             val payload = WebhookPayload(
                 repositoryFullName = run.repo,
-                commitHash = run.branch,   // re-run against branch HEAD
+                commitHash = run.branch,
                 branchName = run.branch,
                 projectId = projectId,
                 retriedFromRunId = runId
             )
             jobQueue.enqueueJob(payload)
-            apiLog.info("Retry enqueued: originalRunId={} project={} repo={}", runId, projectId, run.repo)
-            call.respond(mapOf("queued" to true, "originalRunId" to runId))
+            call.application.launch {
+                userActivityService.record(
+                    userId, UserEvent.PIPELINE_RETRIED,
+                    mapOf("originalRunId" to runId, "attempt" to attempt.toString(), "repo" to run.repo)
+                )
+            }
+            apiLog.info("Retry enqueued: originalRunId={} attempt={}/{} project={} repo={}", runId, attempt, MAX_RETRIES, projectId, run.repo)
+            call.respond(mapOf("queued" to true, "originalRunId" to runId, "attempt" to attempt, "maxRetries" to MAX_RETRIES))
         }
 
         // --- Webhook Install ---
@@ -544,7 +710,8 @@ private fun launchFollowUpPr(
     projectRepository: ProjectRepository,
     userRepository: UserRepository,
     translationRepository: TranslationRepository,
-    projectId: String
+    projectId: String,
+    cdnPublishService: CdnPublishService? = null
 ) {
     application.launch {
         // Brief window: collect any simultaneous approvals so they land in one PR.
@@ -618,6 +785,11 @@ private fun launchFollowUpPr(
                     token         = githubToken
                 )
                 apiLog.info("Batch follow-up PR created: {} ({} translations, {} languages)", pr.prUrl, pending.size, langCount)
+                if (cdnPublishService != null) {
+                    runCatching { cdnPublishService.publish(projectId) }
+                        .onSuccess { receipt -> apiLog.info("CDN auto-publish after PR: project={} locales={} version={}", projectId, receipt.locales, receipt.bundleVersion) }
+                        .onFailure { e -> apiLog.warn("CDN auto-publish failed after PR for project={}: {}", projectId, e.message) }
+                }
                 return@launch
             } catch (e: Exception) {
                 lastError = e

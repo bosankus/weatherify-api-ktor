@@ -3,11 +3,13 @@ package com.transloom.di
 import com.androidplay.core.mongo.IndexSpec
 import com.transloom.repository.*
 import com.transloom.repository.mongo.*
+import com.transloom.repository.mongo.MongoCdnPublishRepository
 import com.transloom.services.CulturalSensitivityAnalyzer
 import com.transloom.services.SemanticChangeAnalyzer
 import org.bson.Document
 import org.koin.dsl.module
 import com.mongodb.client.model.IndexOptions
+import java.util.concurrent.TimeUnit
 
 fun transloomModule(encryptionKey: String) = module {
     single<UserRepository> { MongoUserRepository(get(), encryptionKey) }
@@ -21,6 +23,7 @@ fun transloomModule(encryptionKey: String) = module {
     single { SemanticChangeAnalyzer(get()) }
     single<CulturalAnalysisCacheRepository> { MongoCulturalAnalysisCacheRepository(get()) }
     single { CulturalSensitivityAnalyzer(get()) }
+    single<CdnPublishRepository> { MongoCdnPublishRepository(get()) }
 }
 
 fun transloomIndexes(): List<IndexSpec> {
@@ -48,8 +51,13 @@ fun transloomIndexes(): List<IndexSpec> {
         IndexSpec("user_events", Document(mapOf("userId" to 1, "occurredAt" to -1))),
         IndexSpec("user_events", Document(mapOf("event" to 1, "occurredAt" to -1))),
         IndexSpec("semantic_change_cache", Document("hashKey", 1)),
-        IndexSpec("semantic_change_cache", Document("createdAt", 1)),
+        // TTL: purge semantic-change cache entries after 90 days — source text semantics are stable
+        IndexSpec("semantic_change_cache", Document("createdAt", 1), IndexOptions().expireAfter(90, TimeUnit.DAYS)),
         IndexSpec("cultural_analysis_cache", Document("hashKey", 1)),
-        IndexSpec("cultural_analysis_cache", Document("createdAt", 1)),
+        // TTL: purge cultural-analysis cache entries after 30 days — cultural norms shift slowly
+        IndexSpec("cultural_analysis_cache", Document("createdAt", 1), IndexOptions().expireAfter(30, TimeUnit.DAYS)),
+        IndexSpec("cdn_publish_log", Document("projectId", 1)),
+        IndexSpec("cdn_publish_log", Document(mapOf("projectId" to 1, "bundleVersion" to 1)), unique),
+        IndexSpec("cdn_publish_log", Document("publishedAt", -1)),
     )
 }
