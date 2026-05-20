@@ -311,110 +311,144 @@ private const val WELCOME_CSS = """
 // ─── Landing Page ─────────────────────────────────────────────────────────────
 
 private const val CDN_ARCH_SVG = """
-<div class="arch-viz">
-  <div class="av-pipeline-row">
-    <div class="av-node">
-      <div class="av-node-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-      </div>
-      <div class="av-node-label">GitHub Push</div>
-    </div>
-    <div class="av-wire"><div class="av-pkt"></div></div>
-    <div class="av-node">
-      <div class="av-node-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M22 2L12 12"/><circle cx="12" cy="12" r="3"/></svg>
-      </div>
-      <div class="av-node-label">AI Translate</div>
-    </div>
-    <div class="av-wire"><div class="av-pkt" style="animation-delay:.7s"></div></div>
-    <div class="av-node">
-      <div class="av-node-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-      </div>
-      <div class="av-node-label">Validate</div>
-    </div>
-    <div class="av-wire"><div class="av-pkt" style="animation-delay:1.4s"></div></div>
-    <div class="av-node">
-      <div class="av-node-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      </div>
-      <div class="av-node-label">CDN Publish</div>
-    </div>
-  </div>
-  <div class="av-vert-wire"><div class="av-vert-pkt"></div></div>
-  <div class="av-cdn-hub">
-    <div class="av-cdn-ring"></div>
-    <div class="av-node-icon" style="width:56px;height:56px;background:rgba(0,229,160,.15)">
-      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-    </div>
-    <div class="av-node-label" style="font-size:13px;font-weight:700;color:#f0f0f0">Cloudflare Global KV</div>
-  </div>
-  <div class="av-fan-row">
-    <div style="display:flex;flex-direction:column;align-items:center">
-      <div class="av-fan-wire"><div class="av-fan-pkt"></div></div>
-      <div class="av-edge-node">
-        <div class="av-node-icon" style="width:32px;height:32px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </div>
-        <div class="av-node-label">Mumbai</div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center">
-      <div class="av-fan-wire"><div class="av-fan-pkt" style="animation-delay:.36s"></div></div>
-      <div class="av-edge-node">
-        <div class="av-node-icon" style="width:32px;height:32px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </div>
-        <div class="av-node-label">Singapore</div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center">
-      <div class="av-fan-wire"><div class="av-fan-pkt" style="animation-delay:.72s"></div></div>
-      <div class="av-edge-node">
-        <div class="av-node-icon" style="width:32px;height:32px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </div>
-        <div class="av-node-label">Frankfurt</div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center">
-      <div class="av-fan-wire"><div class="av-fan-pkt" style="animation-delay:1.08s"></div></div>
-      <div class="av-edge-node">
-        <div class="av-node-icon" style="width:32px;height:32px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </div>
-        <div class="av-node-label">New York</div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center">
-      <div class="av-fan-wire"><div class="av-fan-pkt" style="animation-delay:1.44s"></div></div>
-      <div class="av-edge-node">
-        <div class="av-node-icon" style="width:32px;height:32px">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </div>
-        <div class="av-node-label">Tokyo</div>
-      </div>
-    </div>
-  </div>
-  <div class="av-sdk-row">
-    <div class="av-sdk-node">
-      <div class="av-node-icon" style="background:rgba(61,220,132,.12);color:#3DDC84">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-      </div>
-      <div class="av-node-label">Android SDK</div>
-    </div>
-    <div class="av-sdk-node">
-      <div class="av-node-icon" style="background:rgba(150,150,160,.12);color:#a0a0b0">
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-      </div>
-      <div class="av-node-label">iOS SDK</div>
-    </div>
-  </div>
-</div>
+<svg viewBox="0 0 780 236" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" aria-label="CDN Architecture Diagram">
+  <defs>
+    <marker id="arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,0.5 L5,3 L0,5.5 Z" fill="rgba(0,229,160,.55)"/>
+    </marker>
+    <marker id="arrFan" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+      <path d="M0,0.5 L4,2.5 L0,4.5 Z" fill="rgba(0,229,160,.35)"/>
+    </marker>
+    <filter id="cfGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── Zone labels ───────────────────────────────────── -->
+  <text x="118" y="14" text-anchor="middle" font-size="8.5" font-weight="700" letter-spacing="2.5" fill="rgba(0,229,160,.45)">YOUR PIPELINE</text>
+  <text x="550" y="14" text-anchor="middle" font-size="8.5" font-weight="700" letter-spacing="2.5" fill="rgba(0,229,160,.45)">GLOBAL EDGE DELIVERY</text>
+  <line x1="248" y1="4" x2="248" y2="228" stroke="#1e1e1e" stroke-width="1" stroke-dasharray="3 4"/>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- LEFT PIPELINE — 3 stacked nodes                    -->
+  <!-- ═══════════════════════════════════════════════════ -->
+
+  <!-- Node: GitHub Push -->
+  <rect x="18" y="24" width="138" height="50" rx="8" fill="#111" stroke="rgba(0,229,160,.28)" stroke-width="1"/>
+  <circle cx="44" cy="49" r="12" fill="rgba(0,229,160,.1)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
+  <text x="44" y="53.5" text-anchor="middle" font-size="11" fill="rgba(0,229,160,.8)">&lt;/&gt;</text>
+  <text x="64" y="44" font-size="11.5" font-weight="600" fill="#e8e8e8">GitHub Push</text>
+  <text x="64" y="60" font-size="10" fill="#555">Webhook fires</text>
+
+  <!-- Arrow down 1 -->
+  <line x1="87" y1="74" x2="87" y2="100" stroke="rgba(0,229,160,.35)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.9s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- Node: AI Translate -->
+  <rect x="18" y="100" width="138" height="50" rx="8" fill="#111" stroke="rgba(0,229,160,.28)" stroke-width="1"/>
+  <circle cx="44" cy="125" r="12" fill="rgba(0,229,160,.1)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
+  <text x="44" y="129.5" text-anchor="middle" font-size="12" fill="rgba(0,229,160,.8)">✦</text>
+  <text x="64" y="120" font-size="11.5" font-weight="600" fill="#e8e8e8">AI Translate</text>
+  <text x="64" y="136" font-size="10" fill="#555">Glossary · validated</text>
+
+  <!-- Arrow down 2 -->
+  <line x1="87" y1="150" x2="87" y2="176" stroke="rgba(0,229,160,.35)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.9s" repeatCount="indefinite" begin="0.3s"/>
+  </line>
+
+  <!-- Node: CDN Publish -->
+  <rect x="18" y="176" width="138" height="50" rx="8" fill="#111" stroke="rgba(0,229,160,.45)" stroke-width="1.5"/>
+  <circle cx="44" cy="201" r="12" fill="rgba(0,229,160,.14)" stroke="rgba(0,229,160,.5)" stroke-width="1"/>
+  <text x="44" y="205.5" text-anchor="middle" font-size="13" fill="rgba(0,229,160,.9)">↑</text>
+  <text x="64" y="196" font-size="11.5" font-weight="600" fill="#e8e8e8">CDN Publish</text>
+  <text x="64" y="212" font-size="10" fill="rgba(0,229,160,.55)">~45 sec end-to-end</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- HORIZONTAL MAIN PIPE — CDN Publish → Cloudflare   -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <path d="M156,201 H224 V128 H282" fill="none" stroke="rgba(0,229,160,.6)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.75s" repeatCount="indefinite"/>
+  </path>
+  <rect x="186" y="193" width="26" height="14" rx="3" fill="#0d0d0d"/>
+  <text x="199" y="203.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="rgba(0,229,160,.7)">PUSH</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CLOUDFLARE KV HUB                                  -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="282" y="92" width="168" height="72" rx="10" fill="#0f0f0f" stroke="rgba(0,229,160,.65)" stroke-width="1.5" filter="url(#cfGlow)"/>
+  <!-- Pulsing outer ring -->
+  <rect x="277" y="87" width="178" height="82" rx="13" fill="none" stroke="rgba(0,229,160,.2)" stroke-width="1">
+    <animate attributeName="opacity" values="0.8;0;0.8" dur="2.8s" repeatCount="indefinite"/>
+    <animate attributeName="stroke-width" values="1;2;1" dur="2.8s" repeatCount="indefinite"/>
+  </rect>
+  <!-- Globe icon -->
+  <circle cx="310" cy="128" r="16" fill="none" stroke="rgba(0,229,160,.5)" stroke-width="1.2"/>
+  <ellipse cx="310" cy="128" rx="7" ry="16" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
+  <line x1="294" y1="128" x2="326" y2="128" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
+  <line x1="295" y1="118" x2="325" y2="118" stroke="rgba(0,229,160,.2)" stroke-width="0.8"/>
+  <line x1="295" y1="138" x2="325" y2="138" stroke="rgba(0,229,160,.2)" stroke-width="0.8"/>
+  <!-- Labels -->
+  <text x="334" y="118" font-size="12" font-weight="700" fill="#f0f0f0">Cloudflare</text>
+  <text x="334" y="132" font-size="12" font-weight="700" fill="#f0f0f0">Global KV</text>
+  <text x="334" y="147" font-size="9.5" fill="rgba(0,229,160,.6)">250+ PoPs worldwide</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- FAN LINES — Cloudflare → 4 Edge Nodes              -->
+  <!-- Source point: right edge of CF KV box (450, 128)  -->
+  <!-- ═══════════════════════════════════════════════════ -->
+
+  <!-- → Mumbai (far left edge node) -->
+  <path d="M450,128 Q480,128 490,190" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite"/>
+  </path>
+  <!-- → Frankfurt -->
+  <path d="M450,128 Q530,128 560,190" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite" begin="0.27s"/>
+  </path>
+  <!-- → New York -->
+  <path d="M450,128 Q610,128 630,190" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite" begin="0.54s"/>
+  </path>
+  <!-- → Tokyo -->
+  <path d="M450,128 Q690,100 700,190" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite" begin="0.81s"/>
+  </path>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- EDGE NODES (y=190, h=38)                           -->
+  <!-- ═══════════════════════════════════════════════════ -->
+
+  <!-- Mumbai -->
+  <rect x="458" y="190" width="86" height="38" rx="7" fill="#111" stroke="rgba(0,229,160,.2)" stroke-width="1"/>
+  <text x="501" y="207" text-anchor="middle" font-size="10" font-weight="600" fill="#bbb">⚡ Mumbai</text>
+  <text x="501" y="221" text-anchor="middle" font-size="9" fill="rgba(0,229,160,.6)">40ms</text>
+
+  <!-- Frankfurt -->
+  <rect x="528" y="190" width="86" height="38" rx="7" fill="#111" stroke="rgba(0,229,160,.2)" stroke-width="1"/>
+  <text x="571" y="207" text-anchor="middle" font-size="10" font-weight="600" fill="#bbb">⚡ Frankfurt</text>
+  <text x="571" y="221" text-anchor="middle" font-size="9" fill="rgba(0,229,160,.6)">35ms</text>
+
+  <!-- New York -->
+  <rect x="598" y="190" width="86" height="38" rx="7" fill="#111" stroke="rgba(0,229,160,.2)" stroke-width="1"/>
+  <text x="641" y="207" text-anchor="middle" font-size="10" font-weight="600" fill="#bbb">⚡ New York</text>
+  <text x="641" y="221" text-anchor="middle" font-size="9" fill="rgba(0,229,160,.6)">22ms</text>
+
+  <!-- Tokyo -->
+  <rect x="668" y="190" width="86" height="38" rx="7" fill="#111" stroke="rgba(0,229,160,.2)" stroke-width="1"/>
+  <text x="711" y="207" text-anchor="middle" font-size="10" font-weight="600" fill="#bbb">⚡ Tokyo</text>
+  <text x="711" y="221" text-anchor="middle" font-size="9" fill="rgba(0,229,160,.6)">31ms</text>
+
+  <!-- ── SDK label row ─── -->
+  <text x="598" y="236" text-anchor="middle" font-size="9" fill="#444">↓</text>
+  <text x="598" y="248" text-anchor="middle" font-size="9" font-weight="600" fill="#555">Android SDK · iOS SDK</text>
+</svg>
 """
 
 private const val LANDING_JS = """
 (function(){
+  /* ── billing-error banner ── */
   var params=new URLSearchParams(window.location.search);
   if(params.get('billing_error')==='link_failed'){
     var sub=params.get('sub')||'';
@@ -426,52 +460,139 @@ private const val LANDING_JS = """
   } else {
     var t=localStorage.getItem('transloom_token');if(t){window.location.href='/transloom/app';}
   }
+
+  /* ── scroll reveal ── */
   var io=new IntersectionObserver(function(entries){
     entries.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in-view');io.unobserve(e.target);}});
-  },{threshold:0.12,rootMargin:'0px 0px -40px 0px'});
+  },{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
   document.querySelectorAll('.fade-up').forEach(function(el){io.observe(el);});
 
-  var translations={es:'Bienvenido a Transloom',fr:'Bienvenue sur Transloom',de:'Willkommen bei Transloom',ja:'Transloomへようこそ',ko:'Transloom에 오신 것을 환영합니다',hi:'Transloom में आपका स्वागत है',pt:'Bem-vindo ao Transloom',zh:'欢迎使用 Transloom'};
+  /* ── CDN demo data ── */
+  var TR={
+    onboarding_welcome_title:{es:'Bienvenido a Transloom',fr:'Bienvenue sur Transloom',de:'Willkommen bei Transloom',ja:'Transloomへようこそ',ko:'Transloom에 오신 것을 환영합니다',hi:'Transloom में आपका स्वागत है',pt:'Bem-vindo ao Transloom',zh:'欢迎使用 Transloom'},
+    settings_save_button:{es:'Guardar cambios',fr:'Enregistrer',de:'Speichern',ja:'保存',ko:'저장',hi:'सहेजें',pt:'Salvar',zh:'保存'},
+    error_network_unavailable:{es:'Red no disponible. Intenta de nuevo.',fr:'Réseau indisponible. Réessayez.',de:'Netzwerk nicht verfügbar.',ja:'ネットワークに接続できません。',ko:'네트워크를 사용할 수 없습니다.',hi:'नेटवर्क उपलब्ध नहीं है।',pt:'Rede indisponível. Tente novamente.',zh:'网络不可用，请重试。'},
+    checkout_confirm_purchase:{es:'Confirmar compra',fr:'Confirmer l'+String.fromCharCode(39)+'achat',de:'Kauf bestätigen',ja:'購入を確認する',ko:'구매 확인',hi:'खरीदारी की पुष्टि करें',pt:'Confirmar compra',zh:'确认购买'}
+  };
+  var SDK_SNIPPET={
+    android:'// Android — drop-in usage\nval text = Transloom.string("KEY")\n// served from edge in LATENCY',
+    ios:'// iOS — SwiftUI\nText(Transloom.string("KEY"))\n// served from edge in LATENCY'
+  };
 
   var fetchBtn=document.getElementById('cdn-fetch-btn');
-  if(fetchBtn){
-    fetchBtn.addEventListener('click',function(){
-      var lang=document.getElementById('cdn-lang').value;
-      var regionEl=document.getElementById('cdn-region');
-      var regionName=regionEl.options[regionEl.selectedIndex].text;
-      var lat=regionEl.options[regionEl.selectedIndex].getAttribute('data-lat');
-      var edgeLabel=document.getElementById('cdn-edge-label');
-      if(edgeLabel) edgeLabel.textContent=regionName;
-      var pkt1=document.getElementById('pkt1');
+  if(!fetchBtn) return;
+
+  var busy=false;
+  fetchBtn.addEventListener('click',function(){
+    if(busy) return;
+    busy=true;
+
+    var keyEl=document.getElementById('cdn-key');
+    var langEl=document.getElementById('cdn-lang');
+    var regionEl=document.getElementById('cdn-region');
+    var key=keyEl?keyEl.value:'onboarding_welcome_title';
+    var lang=langEl?langEl.value:'es';
+    var opt=regionEl?regionEl.options[regionEl.selectedIndex]:null;
+    var regionName=opt?opt.value:'Mumbai';
+    var lat=opt?parseInt(opt.getAttribute('data-lat'),10):40;
+    var flag=opt?opt.getAttribute('data-flag'):'';
+
+    /* update flight visualization */
+    var edgeLbl=document.getElementById('cdn-edge-label2');
+    if(edgeLbl) edgeLbl.textContent=flag+' '+regionName;
+    var reqLbl=document.getElementById('cdp-req-label');
+    if(reqLbl) reqLbl.textContent='GET /v1/strings/'+lang+'/'+key;
+    var resLbl=document.getElementById('cdp-res-label');
+    if(resLbl) resLbl.textContent='';
+
+    /* loading state */
+    var btnText=document.getElementById('cdn-btn-text');
+    if(btnText) btnText.textContent='Fetching…';
+    fetchBtn.disabled=true;
+
+    var statusDot=document.getElementById('cdn-status-dot');
+    var statusLbl=document.getElementById('cdn-status-label');
+    var latBadge=document.getElementById('cdn-latency-badge');
+    var responseEl=document.getElementById('cdn-response');
+    var metricsEl=document.getElementById('cdn-metrics');
+    var snippetEl=document.getElementById('cdn-sdk-snippet');
+
+    if(statusDot){statusDot.style.background='#faad14';statusDot.style.boxShadow='0 0 8px #faad14';}
+    if(statusLbl) statusLbl.textContent='Connecting to '+regionName+'…';
+    if(latBadge) latBadge.textContent='';
+    if(responseEl) responseEl.innerHTML='<span class="cdp-loading">⬤ ⬤ ⬤</span>';
+    if(metricsEl) metricsEl.innerHTML='';
+    if(snippetEl) snippetEl.innerHTML='';
+
+    /* animate request packet */
+    var pkt1=document.getElementById('pkt1');
+    if(pkt1){pkt1.classList.remove('pkt-moving');void pkt1.offsetWidth;pkt1.classList.add('pkt-moving');}
+
+    setTimeout(function(){
+      if(statusLbl) statusLbl.textContent='Cache lookup…';
+      /* animate response packet */
       var pkt2=document.getElementById('pkt2');
-      var statusDot=document.getElementById('cdn-status-dot');
-      var statusLabel=document.getElementById('cdn-status-label');
-      var responseEl=document.getElementById('cdn-response');
-      var metricsEl=document.getElementById('cdn-metrics');
-      if(pkt1){pkt1.classList.remove('pkt-moving');void pkt1.offsetWidth;pkt1.classList.add('pkt-moving');}
+      if(pkt2){pkt2.classList.remove('pkt-moving-back');void pkt2.offsetWidth;pkt2.classList.add('pkt-moving-back');}
+      if(resLbl) resLbl.textContent='200 OK · HIT';
+    },450);
+
+    setTimeout(function(){
+      var map=TR[key]||TR['onboarding_welcome_title'];
+      var val=map[lang]||'(translation not found)';
+      var ttfb=Math.round(lat*0.4);
+      var transfer=Math.round(lat*0.15);
+      var total=lat;
+
+      /* status */
+      if(statusDot){statusDot.style.background='#00E5A0';statusDot.style.boxShadow='0 0 10px #00E5A0';}
+      if(statusLbl) statusLbl.textContent='200 OK — edge cache hit';
+      if(latBadge) latBadge.textContent=total+'ms';
+
+      /* JSON response with syntax highlight */
+      if(responseEl){
+        responseEl.innerHTML='<pre class="cdp-json">'
+          +'<span class="cj-b">{</span>\n'
+          +'  <span class="cj-k">"key"</span><span class="cj-p">:</span> <span class="cj-s">"'+key+'"</span>,\n'
+          +'  <span class="cj-k">"lang"</span><span class="cj-p">:</span> <span class="cj-s">"'+lang+'"</span>,\n'
+          +'  <span class="cj-k">"value"</span><span class="cj-p">:</span> <span class="cj-s">"'+val+'"</span>,\n'
+          +'  <span class="cj-k">"source"</span><span class="cj-p">:</span> <span class="cj-em">"edge-cache"</span>,\n'
+          +'  <span class="cj-k">"pop"</span><span class="cj-p">:</span> <span class="cj-s">"'+regionName+'"</span>,\n'
+          +'  <span class="cj-k">"ttl"</span><span class="cj-p">:</span> <span class="cj-n">3600</span>\n'
+          +'<span class="cj-b">}</span></pre>';
+      }
+
+      /* metrics with latency bar breakdown */
+      if(metricsEl){
+        metricsEl.innerHTML=''
+          +'<div class="cdm-row"><span class="cdm-k">Cache</span><span class="cdm-v hit">HIT</span></div>'
+          +'<div class="cdm-row"><span class="cdm-k">Edge PoP</span><span class="cdm-v">'+flag+' '+regionName+'</span></div>'
+          +'<div class="cdm-row cdm-lat-row"><span class="cdm-k">Latency</span>'
+          +'<span class="cdm-lat-bars">'
+          +'<span class="cdm-bar-wrap"><span class="cdm-bar-lbl">TTFB</span><span class="cdm-bar-track"><span class="cdm-bar" style="width:'+Math.round((ttfb/total)*100)+'%"></span></span><span class="cdm-bar-val">'+ttfb+'ms</span></span>'
+          +'<span class="cdm-bar-wrap"><span class="cdm-bar-lbl">Transfer</span><span class="cdm-bar-track"><span class="cdm-bar cdm-bar-dim" style="width:'+Math.round((transfer/total)*100)+'%"></span></span><span class="cdm-bar-val">'+transfer+'ms</span></span>'
+          +'<span class="cdm-bar-wrap cdm-bar-total"><span class="cdm-bar-lbl">Total</span><span class="cdm-bar-track"><span class="cdm-bar" style="width:100%"></span></span><span class="cdm-bar-val cdm-bar-val-accent">'+total+'ms</span></span>'
+          +'</span></div>'
+          +'<div class="cdm-row"><span class="cdm-k">TTL</span><span class="cdm-v">3600s</span></div>';
+      }
+
+      /* SDK snippet */
+      if(snippetEl){
+        var snip=SDK_SNIPPET.android.replace(/KEY/g,key).replace(/LATENCY/g,total+'ms');
+        snippetEl.innerHTML='<div class="cdp-snip-label">Usage in your app</div>'
+          +'<pre class="cdp-snip-code">'+snip+'</pre>';
+      }
+
+      /* cleanup */
       setTimeout(function(){
-        if(pkt2){pkt2.classList.remove('pkt-moving-back');void pkt2.offsetWidth;pkt2.classList.add('pkt-moving-back');}
-      },400);
-      setTimeout(function(){
-        var val=translations[lang]||'Welcome to Transloom';
-        if(responseEl){
-          responseEl.innerHTML='<pre>{\n  "key": "onboarding_welcome_title",\n  "lang": "'+lang+'",\n  "value": "'+val+'",\n  "source": "edge-cache"\n}</pre>';
-        }
-        if(metricsEl){
-          metricsEl.innerHTML='<div class="cdp-metric-row"><span>Cache</span><span class="cdp-metric-val hit">HIT</span></div>'
-            +'<div class="cdp-metric-row"><span>Edge</span><span class="cdp-metric-val">'+regionName+'</span></div>'
-            +'<div class="cdp-metric-row"><span>Latency</span><span class="cdp-metric-val">'+lat+'</span></div>'
-            +'<div class="cdp-metric-row"><span>TTL</span><span class="cdp-metric-val">3600s</span></div>';
-        }
-        if(statusDot){statusDot.style.background='#00E5A0';statusDot.style.boxShadow='0 0 8px #00E5A0';}
-        if(statusLabel){statusLabel.textContent='200 OK · from edge';}
-        setTimeout(function(){
-          if(pkt1) pkt1.classList.remove('pkt-moving');
-          if(pkt2) pkt2.classList.remove('pkt-moving-back');
-        },700);
-      },800);
-    });
-  }
+        if(pkt1) pkt1.classList.remove('pkt-moving');
+        var pkt2b=document.getElementById('pkt2');
+        if(pkt2b) pkt2b.classList.remove('pkt-moving-back');
+        if(btnText) btnText.textContent='Fetch from CDN';
+        fetchBtn.disabled=false;
+        busy=false;
+      },600);
+    },900);
+  });
 })();
 """
 
@@ -543,58 +664,100 @@ private fun HTML.landingPage() {
             id = "cdn-demo"
             div("section-inner") {
                 p("section-label fade-up") { +"LIVE DEMO" }
-                h2("fade-up d1") { +"Experience edge delivery." }
-                p("arch-sub fade-up d2") { +"Simulate a real SDK fetch from any edge region. Watch your translation arrive in milliseconds." }
-                div("cdn-demo-panel fade-up d3") {
-                    div("cdp-side cdp-request") {
-                        div("cdp-label-row") {
-                            div("cdp-dot cdp-dot-g") {}
-                            span("cdp-label") { +"SDK Request" }
+                h2("fade-up d1") { +"Fetch a translation from the edge." }
+                p("arch-sub fade-up d2") { +"Pick a string key, language, and edge region. Hit fetch — watch the request travel from your SDK to the nearest Cloudflare PoP and back in milliseconds." }
+
+                div("cdn-demo-wrap fade-up d3") {
+                    // Left: Request configurator
+                    div("cdp-panel cdp-req-panel") {
+                        // Panel chrome
+                        div("cdp-chrome") {
+                            div("cdp-chrome-dots") {
+                                span("cdp-chrome-dot r") {}; span("cdp-chrome-dot y") {}; span("cdp-chrome-dot g") {}
+                            }
+                            span("cdp-chrome-title") { +"SDK Request" }
                         }
-                        div("cdp-field") {
-                            label { +"Key" }
-                            unsafe { +"""<input type="text" value="onboarding_welcome_title" readonly style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text-dim);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;width:100%;box-sizing:border-box"/>""" }
-                        }
-                        div("cdp-field") {
-                            label { +"Language" }
-                            unsafe { +"""<select id="cdn-lang" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;width:100%;box-sizing:border-box"><option value="es">es — Spanish</option><option value="fr">fr — French</option><option value="de">de — German</option><option value="ja">ja — Japanese</option><option value="ko">ko — Korean</option><option value="hi">hi — Hindi</option><option value="pt">pt — Portuguese</option><option value="zh">zh — Chinese</option></select>""" }
-                        }
-                        div("cdp-field") {
-                            label { +"Region" }
-                            unsafe { +"""<select id="cdn-region" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;width:100%;box-sizing:border-box"><option value="mum" data-lat="40ms">Mumbai — 40ms</option><option value="sin" data-lat="28ms">Singapore — 28ms</option><option value="fra" data-lat="35ms">Frankfurt — 35ms</option><option value="nyc" data-lat="22ms">New York — 22ms</option><option value="tyo" data-lat="31ms">Tokyo — 31ms</option><option value="gru" data-lat="45ms">São Paulo — 45ms</option></select>""" }
-                        }
-                        button {
-                            id = "cdn-fetch-btn"
-                            classes = setOf("btn", "btn-primary", "cdn-fetch-btn")
-                            +"Fetch from CDN"
+                        div("cdp-panel-body") {
+                            div("cdp-field") {
+                                label { +"String key" }
+                                unsafe { +"""<select id="cdn-key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 11px;color:var(--accent);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;width:100%;box-sizing:border-box">
+  <option value="onboarding_welcome_title">onboarding_welcome_title</option>
+  <option value="settings_save_button">settings_save_button</option>
+  <option value="error_network_unavailable">error_network_unavailable</option>
+  <option value="checkout_confirm_purchase">checkout_confirm_purchase</option>
+</select>""" }
+                            }
+                            div("cdp-field") {
+                                label { +"Target language" }
+                                unsafe { +"""<select id="cdn-lang" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 11px;color:var(--text);font-size:13px;width:100%;box-sizing:border-box">
+  <option value="es">🇪🇸  Spanish (es)</option>
+  <option value="fr">🇫🇷  French (fr)</option>
+  <option value="de">🇩🇪  German (de)</option>
+  <option value="ja">🇯🇵  Japanese (ja)</option>
+  <option value="ko">🇰🇷  Korean (ko)</option>
+  <option value="hi">🇮🇳  Hindi (hi)</option>
+  <option value="pt">🇧🇷  Portuguese (pt)</option>
+  <option value="zh">🇨🇳  Chinese (zh)</option>
+</select>""" }
+                            }
+                            div("cdp-field") {
+                                label { +"Edge region" }
+                                unsafe { +"""<select id="cdn-region" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 11px;color:var(--text);font-size:13px;width:100%;box-sizing:border-box">
+  <option value="Mumbai" data-lat="40" data-flag="🇮🇳">🇮🇳  Mumbai, IN — 40ms</option>
+  <option value="Singapore" data-lat="28" data-flag="🇸🇬">🇸🇬  Singapore, SG — 28ms</option>
+  <option value="Frankfurt" data-lat="35" data-flag="🇩🇪">🇩🇪  Frankfurt, DE — 35ms</option>
+  <option value="New York" data-lat="22" data-flag="🇺🇸">🇺🇸  New York, US — 22ms</option>
+  <option value="Tokyo" data-lat="31" data-flag="🇯🇵">🇯🇵  Tokyo, JP — 31ms</option>
+  <option value="São Paulo" data-lat="45" data-flag="🇧🇷">🇧🇷  São Paulo, BR — 45ms</option>
+</select>""" }
+                            }
+                            button {
+                                id = "cdn-fetch-btn"
+                                classes = setOf("btn", "btn-primary", "cdn-fetch-btn")
+                                unsafe { +"""<svg id="cdn-btn-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>""" }
+                                span { id = "cdn-btn-text"; +"Fetch from CDN" }
+                            }
                         }
                     }
-                    div("cdp-flow") {
-                        div("cdp-flow-inner") {
-                            div("cdp-node cdp-node-sdk") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""" }
-                                span("cdp-node-label") { +"App SDK" }
-                            }
+
+                    // Center: animated flight path
+                    div("cdp-flight") {
+                        div("cdp-flight-node") {
+                            unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""" }
+                            span { +"SDK" }
+                        }
+                        div("cdp-wire-wrap") {
                             div("cdp-wire") { div("cdp-packet") { id = "pkt1" } }
-                            div("cdp-node cdp-node-edge") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""" }
-                                span("cdp-node-label") { +"Edge Node" }
-                                span("cdp-node-sub") { id = "cdn-edge-label" }
-                            }
-                            div("cdp-wire") { div("cdp-packet cdp-packet-back") { id = "pkt2" } }
-                            div("cdp-node cdp-node-cdn") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""" }
-                                span("cdp-node-label") { +"Cloudflare KV" }
-                            }
+                            span("cdp-wire-label") { id = "cdp-req-label"; +"GET /v1/strings" }
+                        }
+                        div("cdp-flight-node cdp-node-edge-f") {
+                            unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""" }
+                            span { id = "cdn-edge-label2"; +"Edge PoP" }
+                        }
+                        div("cdp-wire-wrap") {
+                            div("cdp-wire cdp-wire-ret") { div("cdp-packet cdp-packet-back") { id = "pkt2" } }
+                            span("cdp-wire-label cdp-wire-label-ret") { id = "cdp-res-label"; +"200 OK · HIT" }
+                        }
+                        div("cdp-flight-node cdp-node-cf-f") {
+                            unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""" }
+                            span { +"CF KV" }
                         }
                     }
-                    div("cdp-side cdp-response") {
-                        div("cdp-label-row") {
-                            div("cdp-dot cdp-dot-dim") { id = "cdn-status-dot" }
-                            span("cdp-label") { id = "cdn-status-label"; +"Waiting…" }
+
+                    // Right: response panel
+                    div("cdp-panel cdp-res-panel") {
+                        div("cdp-chrome") {
+                            div("cdp-status-row") {
+                                div("cdp-dot cdp-dot-dim") { id = "cdn-status-dot" }
+                                span("cdp-chrome-title") { id = "cdn-status-label"; +"Waiting for request…" }
+                            }
+                            span("cdp-latency-badge") { id = "cdn-latency-badge" }
                         }
-                        div("cdp-response-body") { id = "cdn-response" }
-                        div("cdp-metrics") { id = "cdn-metrics" }
+                        div("cdp-panel-body") {
+                            div("cdp-response-body") { id = "cdn-response"; +"" }
+                            div("cdp-metrics") { id = "cdn-metrics" }
+                            div("cdp-sdk-snippet") { id = "cdn-sdk-snippet" }
+                        }
                     }
                 }
             }
@@ -677,68 +840,32 @@ Text(Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>))<
             id = "how"
             div("section-inner") {
                 p("section-label fade-up") { +"HOW IT WORKS" }
-                h2("fade-up d1") { +"Push code. We do the rest." }
-                p("how-sub fade-up d2") { +"Five automated stages — from your commit to a translated, cached, globally-served string." }
+                h2("fade-up d1") { +"Five steps. Fully automatic." }
+                p("how-sub fade-up d2") { +"From your git push to a globally-served, edge-cached translation — nothing to configure." }
 
-                div("flow fade-up d3") {
-                    div("flow-step") {
-                        div("flow-icon-wrap") {
-                            div("flow-icon") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>""" }
+                div("how-steps fade-up d3") {
+                    data class Step(val num: String, val icon: String, val title: String, val desc: String, val tag: String)
+                    listOf(
+                        Step("01", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>""", "Push to GitHub", "Add a new string to your strings.xml or .strings file and push. Transloom's webhook fires within seconds.", "Webhook"),
+                        Step("02", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg>""", "AI detects changes", "Our semantic classifier decides if strings need retranslation or just a surface update. Only real changes bill API quota.", "Smart diff"),
+                        Step("03", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""", "Translate + validate", "Claude translates into every target language. Placeholders are guarded, glossary terms enforced, cultural flags checked.", "AI pipeline"),
+                        Step("04", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""", "Publish to CDN", "Translations are compiled into a versioned bundle and written to Cloudflare KV — replicated to 250+ PoPs instantly.", "~45 sec total"),
+                        Step("05", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""", "SDK serves from edge", "Your Android or iOS SDK fetches from the nearest PoP. First hit is cached locally — subsequent calls are instant.", "<20ms")
+                    ).forEach { s ->
+                        div("how-step-card") {
+                            div("hsc-left") {
+                                span("hsc-num") { +s.num }
+                                div("hsc-line") {}
                             }
-                            div("flow-ring") {}
-                        }
-                        p("flow-num") { +"01" }
-                        h4("flow-title") { +"You push code" }
-                        p("flow-desc") { +"Add a string. Push to GitHub. That's it." }
-                    }
-                    div("flow-connector") { div("flow-dot") {} }
-                    div("flow-step") {
-                        div("flow-icon-wrap") {
-                            div("flow-icon") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M22 2L12 12"/><circle cx="12" cy="12" r="3"/></svg>""" }
+                            div("hsc-body") {
+                                div("hsc-head") {
+                                    div("hsc-icon") { unsafe { +s.icon } }
+                                    h4("hsc-title") { +s.title }
+                                    span("hsc-tag") { +s.tag }
+                                }
+                                p("hsc-desc") { +s.desc }
                             }
-                            div("flow-ring") {}
                         }
-                        p("flow-num") { +"02" }
-                        h4("flow-title") { +"AI translates" }
-                        p("flow-desc") { +"Context-aware. Glossary-enforced. Culturally validated." }
-                    }
-                    div("flow-connector") { div("flow-dot") {} }
-                    div("flow-step") {
-                        div("flow-icon-wrap") {
-                            div("flow-icon") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""" }
-                            }
-                            div("flow-ring") {}
-                        }
-                        p("flow-num") { +"03" }
-                        h4("flow-title") { +"CDN publish" }
-                        p("flow-desc") { +"Compiled and pushed to Cloudflare's global KV store." }
-                    }
-                    div("flow-connector") { div("flow-dot") {} }
-                    div("flow-step") {
-                        div("flow-icon-wrap") {
-                            div("flow-icon") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""" }
-                            }
-                            div("flow-ring") {}
-                        }
-                        p("flow-num") { +"04" }
-                        h4("flow-title") { +"Edge delivery" }
-                        p("flow-desc") { +"Nearest PoP serves strings in <20ms. Zero origin requests." }
-                    }
-                    div("flow-connector") { div("flow-dot") {} }
-                    div("flow-step") {
-                        div("flow-icon-wrap") {
-                            div("flow-icon") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""" }
-                            }
-                            div("flow-ring") {}
-                        }
-                        p("flow-num") { +"05" }
-                        h4("flow-title") { +"SDK delivers" }
-                        p("flow-desc") { +"Android + iOS show localized content. Zero latency for cached hits." }
                     }
                 }
 
@@ -881,91 +1008,85 @@ section{padding:80px 24px}
 h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bottom:48px}
 /* ─── Architecture section ─── */
 .arch-section{padding:80px 24px;background:var(--bg);border-top:1px solid var(--border)}
-.arch-diagram{max-width:1000px;margin:0 auto;overflow-x:auto}
+.arch-diagram{max-width:800px;margin:0 auto;overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 24px}
 .arch-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:48px;max-width:600px;line-height:1.6}
-/* arch viz */
-.arch-viz{display:flex;flex-direction:column;align-items:center;gap:32px;padding:32px;background:var(--surface);border:1px solid var(--border);border-radius:16px}
-.av-pipeline-row{display:flex;align-items:center;gap:0;flex-wrap:wrap;justify-content:center}
-.av-node{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 20px;background:var(--surface2);border:1px solid rgba(0,229,160,.25);border-radius:10px;min-width:110px;text-align:center;transition:transform .3s,border-color .3s}
-.av-node:hover{transform:translateY(-2px);border-color:rgba(0,229,160,.6)}
-.av-node-icon{width:44px;height:44px;border-radius:50%;background:rgba(0,229,160,.1);color:var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto}
-.av-node-label{font-size:12px;color:var(--text-dim);margin-top:4px;font-weight:500}
-.av-wire{flex:0 0 60px;height:2px;background:linear-gradient(90deg,rgba(0,229,160,.4),rgba(0,229,160,.15));position:relative;overflow:hidden;align-self:center}
-.av-pkt{position:absolute;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);opacity:0;animation:avPktMove 2.2s ease-in-out infinite}
-@keyframes avPktMove{0%{left:-8px;opacity:0}15%{opacity:1}85%{opacity:1}100%{left:calc(100% + 8px);opacity:0}}
-.av-cdn-hub{display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;background:var(--surface2);border:1px solid rgba(0,229,160,.5);border-radius:10px;width:160px;text-align:center;box-shadow:0 0 40px rgba(0,229,160,.12);position:relative}
-.av-cdn-hub:hover{transform:translateY(-2px)}
-.av-cdn-ring{position:absolute;inset:-8px;border-radius:16px;border:1px solid rgba(0,229,160,.2);animation:avRingPulse 3s ease-in-out infinite;pointer-events:none}
-@keyframes avRingPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:0;transform:scale(1.1)}}
-.av-fan-row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
-.av-edge-node{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 14px;background:var(--surface2);border:1px solid rgba(0,229,160,.15);border-radius:10px;min-width:80px;text-align:center;transition:transform .3s,border-color .3s}
-.av-edge-node:hover{transform:translateY(-2px);border-color:rgba(0,229,160,.4)}
-.av-fan-wire{width:2px;height:32px;background:linear-gradient(180deg,rgba(0,229,160,.4),rgba(0,229,160,.15));margin:0 auto;position:relative}
-.av-fan-pkt{position:absolute;left:50%;transform:translateX(-50%);width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);opacity:0;animation:avFanPkt 1.8s ease-in-out infinite}
-@keyframes avFanPkt{0%{top:-6px;opacity:0}15%{opacity:1}85%{opacity:1}100%{top:calc(100% + 6px);opacity:0}}
-.av-sdk-row{display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
-.av-sdk-node{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 20px;background:rgba(0,229,160,.05);border:1px solid rgba(0,229,160,.3);border-radius:10px;min-width:110px;text-align:center;transition:transform .3s}
-.av-sdk-node:hover{transform:translateY(-2px)}
-.av-vert-wire{width:2px;height:40px;background:linear-gradient(180deg,rgba(0,229,160,.5),rgba(0,229,160,.2));position:relative;overflow:hidden}
-.av-vert-pkt{position:absolute;left:50%;transform:translateX(-50%);width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);opacity:0;animation:avVertPkt 2s ease-in-out infinite .5s}
-@keyframes avVertPkt{0%{top:-8px;opacity:0}20%{opacity:1}80%{opacity:1}100%{top:calc(100% + 8px);opacity:0}}
 /* ─── CDN Demo section ─── */
 .cdn-demo-section{padding:80px 24px;background:var(--surface2);border-top:1px solid var(--border)}
-.cdn-demo-panel{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:20px;align-items:start;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;max-width:960px;margin:0 auto}
-.cdp-side{display:flex;flex-direction:column;gap:16px}
-.cdp-label-row{display:flex;align-items:center;gap:8px}
-.cdp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.cdp-dot-g{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.cdn-demo-wrap{display:grid;grid-template-columns:280px 1fr 320px;gap:16px;align-items:start;max-width:1060px;margin:0 auto}
+.cdp-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.cdp-chrome{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.cdp-chrome-dots{display:flex;gap:5px;flex-shrink:0}
+.cdp-chrome-dot{width:10px;height:10px;border-radius:50%}
+.cdp-chrome-dot.r{background:#ff5f56}.cdp-chrome-dot.y{background:#ffbd2e}.cdp-chrome-dot.g{background:#27c93f}
+.cdp-chrome-title{font-size:11px;font-weight:600;letter-spacing:.8px;color:var(--text-muted);text-transform:uppercase}
+.cdp-status-row{display:flex;align-items:center;gap:8px}
+.cdp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .3s,box-shadow .3s}
 .cdp-dot-dim{background:var(--text-muted)}
-.cdp-label{font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase}
-.cdp-field{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text-muted)}
-.cdn-fetch-btn{width:100%;padding:11px;font-size:14px;font-weight:600}
-.cdp-flow{display:flex;align-items:center;justify-content:center;padding:20px 0}
-.cdp-flow-inner{display:flex;align-items:center;gap:0;width:100%}
-.cdp-node{display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto}
-.cdp-node-label{font-size:11px;color:var(--text-dim);font-weight:600;text-align:center}
-.cdp-node-sub{font-size:10px;color:var(--accent);margin-top:-4px;text-align:center}
-.cdp-node-sdk .cdp-node-label,.cdp-node-cdn .cdp-node-label{color:var(--text-muted)}
-.cdp-node-edge{position:relative}
-.cdp-node svg{width:28px;height:28px;padding:6px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--accent)}
-.cdp-wire{flex:1;height:2px;background:linear-gradient(90deg,rgba(0,229,160,.3),rgba(0,229,160,.1));position:relative;overflow:hidden;min-width:40px}
+.cdp-latency-badge{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(0,229,160,.25);border-radius:20px;padding:2px 8px;min-width:40px;text-align:center}
+.cdp-panel-body{padding:16px;display:flex;flex-direction:column;gap:12px}
+.cdp-field{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-muted)}
+.cdn-fetch-btn{width:100%;padding:11px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
+.cdn-fetch-btn:disabled{opacity:.6;cursor:not-allowed;transform:none!important}
+/* Flight visualization (center column) */
+.cdp-flight{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;min-height:240px;justify-content:center}
+.cdp-flight-node{display:flex;flex-direction:column;align-items:center;gap:5px}
+.cdp-flight-node svg{padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--accent);width:36px;height:36px}
+.cdp-flight-node span{font-size:10px;font-weight:600;color:var(--text-muted);letter-spacing:.5px}
+.cdp-node-edge-f svg{border-color:rgba(0,229,160,.4);background:rgba(0,229,160,.08)}
+.cdp-node-cf-f svg{border-color:rgba(0,229,160,.25)}
+.cdp-wire-wrap{width:100%;display:flex;flex-direction:column;align-items:stretch;gap:3px}
+.cdp-wire{height:2px;background:linear-gradient(90deg,rgba(0,229,160,.3),rgba(0,229,160,.08));position:relative;overflow:hidden}
+.cdp-wire-ret{background:linear-gradient(270deg,rgba(0,229,160,.3),rgba(0,229,160,.08))}
+.cdp-wire-label{font-size:9.5px;color:var(--text-muted);font-family:ui-monospace,'SF Mono',Menlo,monospace;text-align:center;opacity:.7}
+.cdp-wire-label-ret{color:rgba(0,229,160,.7)}
 .cdp-packet{position:absolute;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);opacity:0}
-.cdp-packet.pkt-moving{animation:cdpPktFwd .6s ease-in-out forwards}
-.cdp-packet-back.pkt-moving-back{animation:cdpPktBack .6s ease-in-out forwards}
-@keyframes cdpPktFwd{from{left:-8px;opacity:0}20%{opacity:1}80%{opacity:1}to{left:calc(100% + 8px);opacity:0}}
-@keyframes cdpPktBack{from{right:-8px;opacity:0}20%{opacity:1}80%{opacity:1}to{right:calc(100% + 8px);opacity:0}}
-.cdp-response-body{min-height:140px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;line-height:1.7;color:var(--text-dim)}
-.cdp-response-body pre{white-space:pre-wrap;word-break:break-all}
-.cdp-metrics{display:flex;flex-direction:column;gap:6px;font-size:12px}
-.cdp-metric-row{display:flex;justify-content:space-between;color:var(--text-muted)}
-.cdp-metric-val{color:var(--text)}
-.cdp-metric-val.hit{color:var(--accent)}
-/* ─── How it works ─── */
+.cdp-packet.pkt-moving{animation:cdpPktFwd .55s ease-in-out forwards}
+.cdp-packet-back.pkt-moving-back{animation:cdpPktBack .55s ease-in-out forwards}
+@keyframes cdpPktFwd{0%{left:-8px;opacity:0}25%{opacity:1}75%{opacity:1}100%{left:calc(100% + 8px);opacity:0}}
+@keyframes cdpPktBack{0%{right:-8px;opacity:0}25%{opacity:1}75%{opacity:1}100%{right:calc(100% + 8px);opacity:0}}
+/* Response panel */
+.cdp-loading{color:var(--accent);font-size:16px;letter-spacing:4px;animation:cdpDotPulse 1s ease-in-out infinite}
+@keyframes cdpDotPulse{0%,100%{opacity:.3}50%{opacity:1}}
+.cdp-response-body{min-height:110px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;line-height:1.75;color:var(--text-dim);overflow:auto}
+.cdp-json{margin:0;white-space:pre}
+.cj-k{color:#7ec8e3}.cj-s{color:#a8d8a8}.cj-n{color:#f0a878}.cj-b{color:#888}.cj-p{color:#666}.cj-em{color:var(--accent)}
+/* Metrics */
+.cdp-metrics{display:flex;flex-direction:column;gap:7px;font-size:12px}
+.cdm-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cdm-k{color:var(--text-muted);flex-shrink:0;width:72px}
+.cdm-v{color:var(--text);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px}
+.cdm-v.hit{color:var(--accent);font-weight:700}
+.cdm-lat-row{align-items:flex-start}
+.cdm-lat-bars{display:flex;flex-direction:column;gap:4px;flex:1}
+.cdm-bar-wrap{display:flex;align-items:center;gap:6px}
+.cdm-bar-lbl{font-size:9.5px;color:#555;width:46px;text-align:right;flex-shrink:0}
+.cdm-bar-track{flex:1;height:4px;background:#1a1a1a;border-radius:2px;overflow:hidden}
+.cdm-bar{height:100%;background:var(--accent);border-radius:2px;transition:width .5s ease}
+.cdm-bar-dim{background:rgba(0,229,160,.4)}
+.cdm-bar-val{font-size:10px;color:var(--text-dim);width:30px;text-align:right;flex-shrink:0;font-family:ui-monospace,'SF Mono',Menlo,monospace}
+.cdm-bar-val-accent{color:var(--accent);font-weight:700}
+/* SDK snippet */
+.cdp-sdk-snippet{margin-top:2px}
+.cdp-snip-label{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
+.cdp-snip-code{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.65;color:var(--text-dim);white-space:pre;overflow-x:auto;margin:0}
+/* ─── How it works — numbered step cards ─── */
 .how-section{padding:88px 24px 100px}
-.how-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:56px;max-width:580px;line-height:1.6}
-.flow{display:flex;align-items:flex-start;justify-content:center;gap:0;max-width:1100px;margin:0 auto 80px;flex-wrap:wrap;position:relative}
-.flow-step{flex:1;min-width:160px;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 8px;position:relative}
-.flow-icon-wrap{position:relative;width:72px;height:72px;display:flex;align-items:center;justify-content:center;margin-bottom:18px}
-.flow-icon{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,rgba(0,229,160,.12) 0%,rgba(0,229,160,.04) 100%);border:1.5px solid rgba(0,229,160,.35);color:var(--accent);display:flex;align-items:center;justify-content:center;position:relative;z-index:2;transition:transform .4s ease}
-.flow-ring{position:absolute;inset:-6px;border-radius:50%;border:1.5px solid rgba(0,229,160,.25);opacity:0}
-.flow.in-view .flow-step:nth-child(1) .flow-ring{animation:flowRingPulse 2.6s ease-out infinite}
-.flow.in-view .flow-step:nth-child(3) .flow-ring{animation:flowRingPulse 2.6s ease-out infinite .65s}
-.flow.in-view .flow-step:nth-child(5) .flow-ring{animation:flowRingPulse 2.6s ease-out infinite 1.3s}
-.flow.in-view .flow-step:nth-child(7) .flow-ring{animation:flowRingPulse 2.6s ease-out infinite 1.95s}
-.flow.in-view .flow-step:nth-child(9) .flow-ring{animation:flowRingPulse 2.6s ease-out infinite 2.6s}
-.flow-step:hover .flow-icon{transform:scale(1.06)}
-@keyframes flowRingPulse{0%{opacity:.6;transform:scale(1)}100%{opacity:0;transform:scale(1.6)}}
-.flow-num{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:1.5px;margin-bottom:6px}
-.flow-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;letter-spacing:-.2px}
-.flow-desc{font-size:13px;color:var(--text-muted);line-height:1.55;max-width:180px}
-.flow-connector{flex:0 0 48px;height:2px;background:linear-gradient(90deg,rgba(0,229,160,.4) 0%,rgba(0,229,160,.15) 100%);margin-top:35px;position:relative;overflow:hidden;border-radius:1px}
-.flow-dot{position:absolute;top:50%;left:0;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);opacity:0}
-.flow.in-view .flow-dot{animation:flowDotMove 2.4s ease-in-out infinite}
-.flow.in-view .flow-connector:nth-child(4) .flow-dot{animation-delay:.65s}
-.flow.in-view .flow-connector:nth-child(6) .flow-dot{animation-delay:1.3s}
-.flow.in-view .flow-connector:nth-child(8) .flow-dot{animation-delay:1.95s}
-@keyframes flowDotMove{0%{left:-8px;opacity:0}15%{opacity:1}85%{opacity:1}100%{left:calc(100% + 8px);opacity:0}}
-.how-footer{margin-top:56px;display:flex;justify-content:center}
+.how-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:48px;max-width:580px;line-height:1.6}
+.how-steps{display:flex;flex-direction:column;gap:0;max-width:760px;margin:0 auto 64px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface)}
+.how-step-card{display:flex;gap:0;border-bottom:1px solid var(--border);transition:background .2s}
+.how-step-card:last-child{border-bottom:none}
+.how-step-card:hover{background:var(--surface2)}
+.hsc-left{display:flex;flex-direction:column;align-items:center;padding:24px 20px;min-width:64px;border-right:1px solid var(--border)}
+.hsc-num{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:.5px;line-height:1}
+.hsc-line{flex:1;width:1px;background:var(--border);margin-top:10px}
+.how-step-card:last-child .hsc-line{display:none}
+.hsc-body{padding:20px 24px;display:flex;flex-direction:column;gap:8px;flex:1}
+.hsc-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hsc-icon{color:var(--accent);display:flex;align-items:center;flex-shrink:0}
+.hsc-title{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.2px}
+.hsc-tag{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,229,160,.2);border-radius:20px;padding:1px 9px;font-size:11px;font-weight:600;margin-left:auto}
+.hsc-desc{font-size:13.5px;color:var(--text-muted);line-height:1.65;max-width:580px}
+.how-footer{display:flex;justify-content:center}
 .time-pill{display:inline-flex;align-items:center;gap:10px;background:var(--surface);border:1px solid rgba(0,229,160,.3);border-radius:30px;padding:10px 22px;font-size:13.5px;color:var(--text-dim);box-shadow:0 8px 24px -12px rgba(0,229,160,.2)}
 .time-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:livePulse 1.4s ease-in-out infinite}
 .time-pill strong{color:var(--accent);font-weight:700;margin:0 2px}
@@ -1033,17 +1154,20 @@ footer{padding:28px 24px;border-top:1px solid var(--border)}
 .footer-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
 .text-muted{color:var(--text-muted)}
 /* ─── Responsive ─── */
-@media(max-width:760px){
-  .cdn-demo-panel{grid-template-columns:1fr}
-  .cdp-flow{display:none}
-  .av-pipeline-row{flex-wrap:wrap;gap:12px}
-  .av-fan-row{flex-wrap:wrap;gap:12px}
+@media(max-width:900px){
+  .cdn-demo-wrap{grid-template-columns:1fr 1fr}
+  .cdp-res-panel{grid-column:1 / -1}
+  .cdp-flight{flex-direction:row;min-height:auto;padding:16px;justify-content:space-around;flex-wrap:wrap;gap:6px}
+  .cdp-wire-wrap{width:60px}
+}
+@media(max-width:640px){
+  .cdn-demo-wrap{grid-template-columns:1fr}
+  .cdp-flight{display:none}
   .sdk-grid{grid-template-columns:1fr}
-  .flow{gap:24px}
-  .flow-connector{flex:0 0 100%;height:2px;width:60%;max-width:200px;margin:0 auto;transform:rotate(90deg);transform-origin:center}
-  .flow-step{min-width:200px}
+  .hsc-tag{display:none}
   .hero-stats{gap:8px;padding:12px 16px}
-  .hero-stat{padding:0 12px}
+  .hero-stat{padding:0 10px}
+  .arch-diagram{padding:16px 12px}
 }
 """
 
