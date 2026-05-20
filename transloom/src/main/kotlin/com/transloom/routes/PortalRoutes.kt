@@ -1297,6 +1297,20 @@ private fun HTML.dashboardApp() {
                         }
 
                         div("widget-card") {
+                            id = "cdn-widget"
+                            div("widget-header") {
+                                span("widget-title") { +"CDN Status" }
+                                span("cdn-widget-badge") { id = "cdn-widget-badge" }
+                            }
+                            div("widget-body") {
+                                div {
+                                    id = "cdn-widget-body"
+                                    div("cdnw-empty") { +"Loading…" }
+                                }
+                            }
+                        }
+
+                        div("widget-card") {
                             div("widget-header") { span("widget-title") { +"Quick Actions" } }
                             div("widget-body qa-body") {
                                 a("/transloom/projects") {
@@ -1511,6 +1525,33 @@ private const val DASHBOARD_CSS = """
 .step-detail.done{color:var(--text-dim)}
 .step-detail.error{color:var(--red)}
 .run-savings-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.25);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;flex-shrink:0}
+.run-cdn-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(0,229,160,.08);color:var(--accent);border:1px solid rgba(0,229,160,.22);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;flex-shrink:0}
+/* ── CDN Status Widget ───────────────────────────────────────────────────── */
+.cdn-widget-badge{font-size:11px;font-weight:700;border-radius:20px;padding:2px 8px;transition:all .3s}
+.cdn-widget-badge.live{color:var(--accent);background:var(--accent-dim);border:1px solid rgba(0,229,160,.25)}
+.cdnw-empty{font-size:12px;color:var(--text-muted);padding:4px 0}
+.cdnw-stat-row{display:flex;gap:0;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.cdnw-stat{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 8px;border-right:1px solid var(--border)}
+.cdnw-stat:last-child{border-right:none}
+.cdnw-stat-val{font-size:15px;font-weight:700;color:var(--accent);line-height:1.1}
+.cdnw-stat-lbl{font-size:10px;color:var(--text-muted);margin-top:3px;letter-spacing:.3px}
+.cdnw-mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px!important}
+.cdnw-locales{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.cdnw-locale-chip{font-size:10px;font-weight:600;padding:2px 7px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text-muted)}
+.cdnw-locale-more{color:var(--accent);background:var(--accent-dim);border-color:rgba(0,229,160,.2)}
+.cdnw-propagation{margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.cdnw-prop-row{display:flex;flex-direction:column;gap:6px}
+.cdnw-prop-nodes{display:flex;flex-wrap:wrap;gap:6px}
+.cdnw-pop{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text-dim)}
+.cdnw-pop-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);flex-shrink:0;animation:cdnPopPulse 2.4s ease-in-out infinite}
+.cdnw-pop:nth-child(2) .cdnw-pop-dot{animation-delay:.48s}
+.cdnw-pop:nth-child(3) .cdnw-pop-dot{animation-delay:.96s}
+.cdnw-pop:nth-child(4) .cdnw-pop-dot{animation-delay:1.44s}
+.cdnw-pop:nth-child(5) .cdnw-pop-dot{animation-delay:1.92s}
+@keyframes cdnPopPulse{0%,100%{opacity:1}50%{opacity:.35}}
+.cdnw-prop-label{font-size:10px;color:var(--text-muted);margin-top:2px}
+.cdnw-sdk-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:var(--text-muted);line-height:1.55;padding-top:10px;border-top:1px solid var(--border)}
+.cdnw-sdk-note svg{flex-shrink:0;margin-top:1px;opacity:.6}
 .run-no-retranslation{font-size:12px;color:var(--accent);opacity:.8}
 .run-footer{padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pr-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);font-weight:500}
@@ -1907,7 +1948,7 @@ document.getElementById('user-chip').textContent=jwtPayload(token).username?'@'+
 
 // ─── Pipeline Activity ─────────────────────────────────────────────────────
 
-const STEP_ORDER=['WEBHOOK_RECEIVED','FETCHING_STRINGS','DETECTING_CHANGES','BILLING_CHECK','TRANSLATING','CREATING_PR'];
+const STEP_ORDER=['WEBHOOK_RECEIVED','FETCHING_STRINGS','DETECTING_CHANGES','BILLING_CHECK','TRANSLATING','CREATING_PR','CDN_PUBLISH'];
 const STEP_ICONS={
   pending:'<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
   running:'<svg class="step-spin" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M2.5 9.5l1.4-1.4M8.1 3.9l1.4-1.4"/></svg>',
@@ -1961,6 +2002,14 @@ function buildRunHtml(runId){
       +' '+skipped+' '+(skipped===1?'string':'strings')+' saved</span>'
     :'';
 
+  // CDN chip — shown when CDN publish completed for this run
+  const cdnStep=run.steps&&run.steps['CDN_PUBLISH'];
+  const cdnDone=cdnStep&&cdnStep.status==='done';
+  const cdnChip=cdnDone
+    ?'<span class="run-cdn-chip"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'
+      +' '+(cdnStep.detail||'CDN live')+'</span>'
+    :'';
+
   // Footer: error + retry button, or PR link, or no-changes message
   let left='',right='';
   if(run.prUrl){
@@ -1984,7 +2033,7 @@ function buildRunHtml(runId){
   }
   if(run.finishedAt) right='<span class="run-duration">'+runDuration(run.startedAt,run.finishedAt)+'</span>';
 
-  const footParts=[savingsChip,left,right].filter(Boolean);
+  const footParts=[savingsChip,cdnChip,left,right].filter(Boolean);
   const footHtml=footParts.length?('<div class="run-footer">'+footParts.join('')+'</div>'):'';
 
   const dot=isActive?'active':(isRetrying?'retrying':(hasError?'error':'done'));
@@ -2085,6 +2134,13 @@ function handlePipelineEvent(evt){
     if(d.surfaceSkipped)run.surfaceSkipped=d.surfaceSkipped;
     run.retryPending=false;
     renderRunCard(d.runId);updateActivityBadge();updateRunSummaryWidget();loadStats();
+  }else if(d.type==='cdn_ready'){
+    const run=runState[d.runId];
+    if(run){renderRunCard(d.runId);}
+    if(d.cdnBundleVersion){
+      updateCdnWidget([{bundleVersion:d.cdnBundleVersion,locales:d.cdnLocales||[],publishedAt:Date.now(),status:'success'}]);
+    }
+    toast('Translations live on edge — SDK consumers will refresh on next launch');
   }
 }
 
@@ -2170,7 +2226,49 @@ async function loadPipelineRuns(){
   updateActivityBadge();updateRunSummaryWidget();
 }
 
-loadStats();loadPlanWidget();loadPipelineRuns();connectPipelineSSE();
+async function loadCdnStatus(){
+  const res=await api('/dashboard/cdn-status');
+  if(!res||!res.ok)return;
+  const data=await res.json();
+  updateCdnWidget(data.publishes||[]);
+}
+
+function updateCdnWidget(publishes){
+  const body=document.getElementById('cdn-widget-body');
+  const badge=document.getElementById('cdn-widget-badge');
+  if(!body)return;
+  if(!publishes||!publishes.length){
+    body.innerHTML='<div class="cdnw-empty">No CDN publish yet &mdash; push a commit to start.</div>';
+    if(badge){badge.textContent='';badge.className='cdn-widget-badge';}
+    return;
+  }
+  const sorted=publishes.slice().sort(function(a,b){return(b.publishedAt||0)-(a.publishedAt||0);});
+  const latest=sorted[0];
+  if(badge){badge.textContent='&#9679; Live';badge.className='cdn-widget-badge live';}
+  const ver=esc((latest.bundleVersion||'').substring(0,12));
+  const ago=timeAgo(latest.publishedAt||Date.now());
+  const locales=latest.locales||[];
+  const localeChips=locales.slice(0,8).map(function(l){return '<span class="cdnw-locale-chip">'+esc(l)+'</span>';}).join('');
+  const moreLocales=locales.length>8?'<span class="cdnw-locale-chip cdnw-locale-more">+'+( locales.length-8)+'</span>':'';
+  body.innerHTML=''
+    +'<div class="cdnw-stat-row">'
+    +'<div class="cdnw-stat"><span class="cdnw-stat-val">'+locales.length+'</span><span class="cdnw-stat-lbl">locales</span></div>'
+    +'<div class="cdnw-stat"><span class="cdnw-stat-val cdnw-mono">'+ver+'</span><span class="cdnw-stat-lbl">bundle</span></div>'
+    +'<div class="cdnw-stat"><span class="cdnw-stat-val">'+esc(ago)+'</span><span class="cdnw-stat-lbl">published</span></div>'
+    +'</div>'
+    +(localeChips?'<div class="cdnw-locales">'+localeChips+moreLocales+'</div>':'')
+    +'<div class="cdnw-propagation">'
+    +'<div class="cdnw-prop-row"><div class="cdnw-prop-nodes">'
+    +['Mumbai','Singapore','Frankfurt','New York','Tokyo'].map(function(n){return '<span class="cdnw-pop"><span class="cdnw-pop-dot"></span>'+esc(n)+'</span>';}).join('')
+    +'</div><div class="cdnw-prop-label">Cloudflare PoPs &mdash; translations replicated</div></div>'
+    +'</div>'
+    +'<div class="cdnw-sdk-note">'
+    +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>'
+    +' SDK consumers receive updated translations on next app launch or background refresh'
+    +'</div>';
+}
+
+loadStats();loadPlanWidget();loadPipelineRuns();loadCdnStatus();connectPipelineSSE();
 """.trimIndent()
 
 // ─── Projects Page ────────────────────────────────────────────────────────────

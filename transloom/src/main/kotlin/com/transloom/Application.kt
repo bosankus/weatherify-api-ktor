@@ -181,7 +181,7 @@ fun Application.module() {
     val translationService = TranslationService(memoryRepository)
     val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
     val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
-    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer)
+    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService)
 
     jobQueue.startWorker { payload ->
         val projectUuid = runCatching { java.util.UUID.fromString(payload.projectId) }.getOrElse {
@@ -266,7 +266,7 @@ fun Application.module() {
         configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
         authenticate("auth-jwt") {
             configureApiRoutes(billingService, billingRepository, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService, cdnPublishService)
-            configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
+            configureDashboardRoutes(projectRepository, translationRepository, billingRepository, cdnPublishRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
             configureInsightsRoutes(userActivityService)
             configureOnboardingRoutes(userRepository, billingRepository, projectRepository)

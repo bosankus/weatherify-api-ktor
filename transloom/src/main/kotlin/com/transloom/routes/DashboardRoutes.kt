@@ -47,7 +47,8 @@ data class InvoiceItem(
 fun Route.configureDashboardRoutes(
     projectRepository: ProjectRepository,
     translationRepository: TranslationRepository,
-    billingRepository: BillingRepository
+    billingRepository: BillingRepository,
+    cdnPublishRepository: com.transloom.repository.CdnPublishRepository
 ) {
     route("/transloom/api/dashboard") {
 
@@ -121,6 +122,39 @@ fun Route.configureDashboardRoutes(
                 )
             }
             call.respond(invoices)
+        }
+
+        get("/cdn-status") {
+            val userId = call.userId()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+
+            val projects = projectRepository.listForUser(userId)
+
+            @kotlinx.serialization.Serializable
+            data class CdnPublishInfo(
+                val projectId: String,
+                val bundleVersion: String,
+                val publishedAt: Long,
+                val locales: List<String>,
+                val status: String
+            )
+
+            @kotlinx.serialization.Serializable
+            data class CdnStatusResponse(val publishes: List<CdnPublishInfo>)
+
+            val publishes = projects.mapNotNull { proj ->
+                runCatching { cdnPublishRepository.lastPublish(proj.id) }.getOrNull()
+                    ?.let { log ->
+                        CdnPublishInfo(
+                            projectId = proj.id,
+                            bundleVersion = log.bundleVersion,
+                            publishedAt = log.publishedAt,
+                            locales = log.locales,
+                            status = log.status
+                        )
+                    }
+            }
+            call.respond(CdnStatusResponse(publishes))
         }
     }
 }

@@ -38,7 +38,9 @@ data class PipelineEvent(
     val error: String? = null,
     val snapshot: PipelineRunState? = null,
     val surfaceSkipped: Int? = null,
-    val onboardingStep: String? = null  // populated for type="onboarding"
+    val onboardingStep: String? = null,  // populated for type="onboarding"
+    val cdnBundleVersion: String? = null,
+    val cdnLocales: List<String>? = null
 )
 
 /**
@@ -179,6 +181,15 @@ class PipelineEventBus(private val redisUrl: String? = null) {
     /** Pushes an onboarding step change to any open dashboard SSE connection for this user. */
     fun emitOnboardingStep(userId: String, step: String) {
         emit(userId, PipelineEvent(type = "onboarding", onboardingStep = step))
+    }
+
+    fun emitCdnReady(userId: String, runId: String, bundleVersion: String, locales: List<String>) {
+        emit(userId, PipelineEvent(
+            type = "cdn_ready",
+            runId = runId,
+            cdnBundleVersion = bundleVersion,
+            cdnLocales = locales
+        ))
     }
 
     fun stepRunning(userId: String, runId: String, stepId: String, detail: String? = null) =

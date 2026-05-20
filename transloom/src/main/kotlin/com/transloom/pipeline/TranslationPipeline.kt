@@ -54,7 +54,8 @@ class TranslationPipeline(
     private val translationRepository: TranslationRepository,
     private val eventBus: PipelineEventBus,
     private val semanticChangeAnalyzer: SemanticChangeAnalyzer,
-    private val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer
+    private val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer,
+    private val cdnPublishService: com.transloom.services.CdnPublishService
 ) {
     private val log = LoggerFactory.getLogger(TranslationPipeline::class.java)
 
@@ -246,14 +247,36 @@ class TranslationPipeline(
             eventBus.finishRun(userId, runId, prUrl = pr.prUrl, surfaceSkipped = surfaceKeys.size)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             log.info("Translation PR created: {}", pr.prUrl)
+            runCatching { runCdnPublish(userId, runId, project.id) }
+                .onFailure { log.warn("CDN publish failed after PR for project={}: {}", project.id, it.message) }
         } else {
             eventBus.stepSkipped(userId, runId, "CREATING_PR", "No translatable strings approved")
             eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
+            runCatching { runCdnPublish(userId, runId, project.id) }
+                .onFailure { log.warn("CDN publish failed (no-PR path) for project={}: {}", project.id, it.message) }
         }
 
         val total = translatedCounts.values.sum()
         if (total > 0) billingService.recordUsage(project.ownerId, total)
+    }
+
+    private suspend fun runCdnPublish(userId: String, runId: String, projectId: String) {
+        eventBus.stepRunning(userId, runId, "CDN_PUBLISH", "Compiling bundles…")
+        val receipt = cdnPublishService.publish(projectId)
+        if (receipt.skipped) {
+            val reason = when (receipt.skipReason) {
+                "bundle_unchanged" -> "Bundle unchanged — already live"
+                "no_approved_strings" -> "No approved strings to publish"
+                else -> "Skipped"
+            }
+            eventBus.stepSkipped(userId, runId, "CDN_PUBLISH", reason)
+        } else {
+            val detail = "${receipt.locales.size} locale${if (receipt.locales.size != 1) "s" else ""} live on edge"
+            eventBus.stepDone(userId, runId, "CDN_PUBLISH", detail)
+            eventBus.emitCdnReady(userId, runId, receipt.bundleVersion, receipt.locales)
+        }
+        log.info("CDN publish done: project={} locales={} version={}", projectId, receipt.locales, receipt.bundleVersion)
     }
 
     private fun humanizeBillingError(msg: String): String = when {
