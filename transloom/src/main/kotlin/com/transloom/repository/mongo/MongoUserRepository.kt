@@ -149,7 +149,7 @@ class MongoUserRepository(
     override suspend fun findStuckOnboarding(signedUpBefore: Instant): List<User> =
         collection.find(
             and(
-                `in`("onboardingStep", listOf(OnboardingStep.SIGNED_UP.name, OnboardingStep.PROJECT_CREATED.name)),
+                `in`("onboardingStep", listOf(OnboardingStep.SIGNED_UP.name, OnboardingStep.PROJECT_CREATED.name, OnboardingStep.WEBHOOK_INSTALLED.name)),
                 lt("signupAt", signedUpBefore.toEpochMilliseconds())
             )
         ).toList().map { it.toUser() }

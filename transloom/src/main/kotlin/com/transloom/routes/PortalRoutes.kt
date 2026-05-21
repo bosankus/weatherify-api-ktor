@@ -311,138 +311,182 @@ private const val WELCOME_CSS = """
 // ─── Landing Page ─────────────────────────────────────────────────────────────
 
 private const val CDN_ARCH_SVG = """
-<svg viewBox="0 0 780 236" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;display:block;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" aria-label="CDN Architecture Diagram">
+<svg viewBox="0 0 1060 296" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1060px;display:block;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" aria-label="Transloom Pipeline Architecture">
   <defs>
-    <marker id="arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-      <path d="M0,0.5 L5,3 L0,5.5 Z" fill="rgba(0,229,160,.55)"/>
+    <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,1 L6,3.5 L0,6 Z" fill="rgba(0,229,160,.6)"/>
     </marker>
-    <marker id="arrFan" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
-      <path d="M0,0.5 L4,2.5 L0,4.5 Z" fill="rgba(0,229,160,.35)"/>
+    <marker id="arrBypass" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,1 L6,3.5 L0,6 Z" fill="rgba(0,229,160,.28)"/>
     </marker>
-    <filter id="cfGlow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
+    <marker id="arrFan" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,0.5 L5,3 L0,5.5 Z" fill="rgba(0,229,160,.4)"/>
+    </marker>
+    <filter id="brandGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="edgeGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <!-- ── Zone labels ───────────────────────────────────── -->
-  <text x="118" y="14" text-anchor="middle" font-size="8.5" font-weight="700" letter-spacing="2.5" fill="rgba(0,229,160,.45)">YOUR PIPELINE</text>
-  <text x="550" y="14" text-anchor="middle" font-size="8.5" font-weight="700" letter-spacing="2.5" fill="rgba(0,229,160,.45)">GLOBAL EDGE DELIVERY</text>
-  <line x1="248" y1="4" x2="248" y2="228" stroke="#1e1e1e" stroke-width="1" stroke-dasharray="3 4"/>
+  <!-- ── Zone backgrounds ──────────────────────────── -->
+  <rect x="10" y="24" width="115" height="246" rx="10" fill="rgba(255,255,255,.015)" stroke="#1e1e1e" stroke-width="1"/>
+  <rect x="133" y="24" width="692" height="246" rx="10" fill="rgba(0,229,160,.012)" stroke="rgba(0,229,160,.18)" stroke-width="1"/>
+  <rect x="833" y="24" width="217" height="246" rx="10" fill="rgba(100,130,255,.015)" stroke="rgba(100,130,255,.2)" stroke-width="1"/>
 
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- LEFT PIPELINE — 3 stacked nodes                    -->
-  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- ── Zone labels ────────────────────────────────── -->
+  <text x="67" y="16" text-anchor="middle" font-size="7.5" font-weight="700" letter-spacing="2" fill="rgba(255,255,255,.22)">YOUR CODE</text>
+  <text x="479" y="16" text-anchor="middle" font-size="7.5" font-weight="700" letter-spacing="2.5" fill="rgba(0,229,160,.5)">TRANSLOOM PIPELINE</text>
+  <text x="941" y="16" text-anchor="middle" font-size="7.5" font-weight="700" letter-spacing="2" fill="rgba(110,130,255,.5)">GLOBAL DELIVERY</text>
 
-  <!-- Node: GitHub Push -->
-  <rect x="18" y="24" width="138" height="50" rx="8" fill="#111" stroke="rgba(0,229,160,.28)" stroke-width="1"/>
-  <circle cx="44" cy="49" r="12" fill="rgba(0,229,160,.1)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
-  <text x="44" y="53.5" text-anchor="middle" font-size="11" fill="rgba(0,229,160,.8)">&lt;/&gt;</text>
-  <text x="64" y="44" font-size="11.5" font-weight="600" fill="#e8e8e8">GitHub Push</text>
-  <text x="64" y="60" font-size="10" fill="#555">Webhook fires</text>
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N1 — GitHub                                      -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="12" y="116" width="110" height="58" rx="8" fill="#111" stroke="#252525" stroke-width="1"/>
+  <circle cx="38" cy="145" r="12" fill="#1a1a1a" stroke="#333" stroke-width="1"/>
+  <text x="38" y="149.5" text-anchor="middle" font-size="11" fill="#666">&lt;/&gt;</text>
+  <text x="60" y="139" font-size="11" font-weight="600" fill="#ccc">GitHub</text>
+  <text x="60" y="155" font-size="9.5" fill="#555">commit push</text>
 
-  <!-- Arrow down 1 -->
-  <line x1="87" y1="74" x2="87" y2="100" stroke="rgba(0,229,160,.35)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.9s" repeatCount="indefinite"/>
+  <!-- Arrow N1→N2 -->
+  <line x1="122" y1="145" x2="150" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite"/>
   </line>
 
-  <!-- Node: AI Translate -->
-  <rect x="18" y="100" width="138" height="50" rx="8" fill="#111" stroke="rgba(0,229,160,.28)" stroke-width="1"/>
-  <circle cx="44" cy="125" r="12" fill="rgba(0,229,160,.1)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
-  <text x="44" y="129.5" text-anchor="middle" font-size="12" fill="rgba(0,229,160,.8)">✦</text>
-  <text x="64" y="120" font-size="11.5" font-weight="600" fill="#e8e8e8">AI Translate</text>
-  <text x="64" y="136" font-size="10" fill="#555">Glossary · validated</text>
-
-  <!-- Arrow down 2 -->
-  <line x1="87" y1="150" x2="87" y2="176" stroke="rgba(0,229,160,.35)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.9s" repeatCount="indefinite" begin="0.3s"/>
-  </line>
-
-  <!-- Node: CDN Publish -->
-  <rect x="18" y="176" width="138" height="50" rx="8" fill="#111" stroke="rgba(0,229,160,.45)" stroke-width="1.5"/>
-  <circle cx="44" cy="201" r="12" fill="rgba(0,229,160,.14)" stroke="rgba(0,229,160,.5)" stroke-width="1"/>
-  <text x="44" y="205.5" text-anchor="middle" font-size="13" fill="rgba(0,229,160,.9)">↑</text>
-  <text x="64" y="196" font-size="11.5" font-weight="600" fill="#e8e8e8">CDN Publish</text>
-  <text x="64" y="212" font-size="10" fill="rgba(0,229,160,.55)">~45 sec end-to-end</text>
-
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- HORIZONTAL MAIN PIPE — CDN Publish → Cloudflare   -->
-  <!-- ═══════════════════════════════════════════════════ -->
-  <path d="M156,201 H224 V128 H282" fill="none" stroke="rgba(0,229,160,.6)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.75s" repeatCount="indefinite"/>
-  </path>
-  <rect x="186" y="193" width="26" height="14" rx="3" fill="#0d0d0d"/>
-  <text x="199" y="203.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="rgba(0,229,160,.7)">PUSH</text>
-
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- CLOUDFLARE KV HUB                                  -->
-  <!-- ═══════════════════════════════════════════════════ -->
-  <rect x="282" y="92" width="168" height="72" rx="10" fill="#0f0f0f" stroke="rgba(0,229,160,.65)" stroke-width="1.5" filter="url(#cfGlow)"/>
-  <!-- Pulsing outer ring -->
-  <rect x="277" y="87" width="178" height="82" rx="13" fill="none" stroke="rgba(0,229,160,.2)" stroke-width="1">
-    <animate attributeName="opacity" values="0.8;0;0.8" dur="2.8s" repeatCount="indefinite"/>
-    <animate attributeName="stroke-width" values="1;2;1" dur="2.8s" repeatCount="indefinite"/>
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N2 — Transloom Hub (brand node)                  -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="152" y="108" width="110" height="74" rx="9" fill="#061210" stroke="rgba(0,229,160,.7)" stroke-width="1.5" filter="url(#brandGlow)"/>
+  <rect x="148" y="104" width="118" height="82" rx="12" fill="none" stroke="rgba(0,229,160,.1)" stroke-width="2">
+    <animate attributeName="opacity" values="0.9;0.1;0.9" dur="3s" repeatCount="indefinite"/>
   </rect>
-  <!-- Globe icon -->
-  <circle cx="310" cy="128" r="16" fill="none" stroke="rgba(0,229,160,.5)" stroke-width="1.2"/>
-  <ellipse cx="310" cy="128" rx="7" ry="16" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
-  <line x1="294" y1="128" x2="326" y2="128" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
-  <line x1="295" y1="118" x2="325" y2="118" stroke="rgba(0,229,160,.2)" stroke-width="0.8"/>
-  <line x1="295" y1="138" x2="325" y2="138" stroke="rgba(0,229,160,.2)" stroke-width="0.8"/>
-  <!-- Labels -->
-  <text x="334" y="118" font-size="12" font-weight="700" fill="#f0f0f0">Cloudflare</text>
-  <text x="334" y="132" font-size="12" font-weight="700" fill="#f0f0f0">Global KV</text>
-  <text x="334" y="147" font-size="9.5" fill="rgba(0,229,160,.6)">250+ PoPs worldwide</text>
+  <circle cx="179" cy="145" r="14" fill="rgba(0,229,160,.12)" stroke="rgba(0,229,160,.55)" stroke-width="1.2"/>
+  <line x1="172" y1="138" x2="186" y2="138" stroke="rgba(0,229,160,.9)" stroke-width="2.2" stroke-linecap="round"/>
+  <line x1="179" y1="138" x2="179" y2="152" stroke="rgba(0,229,160,.9)" stroke-width="2.2" stroke-linecap="round"/>
+  <text x="202" y="136" font-size="12" font-weight="700" fill="#00E5A0">Transloom</text>
+  <text x="202" y="150" font-size="9.5" fill="rgba(0,229,160,.65)">Webhook trigger</text>
+  <text x="202" y="164" font-size="9" fill="rgba(0,229,160,.35)">pipeline queue</text>
 
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- FAN LINES — Cloudflare → 4 Edge Nodes              -->
-  <!-- Source point: right edge of CF KV box (450, 128)  -->
-  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- Arrow N2→N3 -->
+  <line x1="262" y1="145" x2="280" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite" begin="0.2s"/>
+  </line>
 
-  <!-- → Mumbai (far left edge node) -->
-  <path d="M450,128 Q480,128 490,190" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite"/>
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N3 — Semantic AI                                 -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="282" y="116" width="110" height="58" rx="8" fill="#111" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
+  <circle cx="308" cy="145" r="12" fill="rgba(0,229,160,.08)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
+  <text x="308" y="149.5" text-anchor="middle" font-size="13" fill="rgba(0,229,160,.75)">✦</text>
+  <text x="330" y="138" font-size="10.5" font-weight="600" fill="#ccc">Semantic AI</text>
+  <text x="330" y="153" font-size="9" fill="#555">change detect</text>
+
+  <!-- Arrow N3→N4 -->
+  <line x1="392" y1="145" x2="410" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite" begin="0.4s"/>
+  </line>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N4 — AI Translate                                -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="412" y="116" width="110" height="58" rx="8" fill="#111" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
+  <circle cx="438" cy="145" r="12" fill="rgba(0,229,160,.08)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
+  <text x="438" y="149.5" text-anchor="middle" font-size="12" fill="rgba(0,229,160,.8)">◆</text>
+  <text x="460" y="138" font-size="10.5" font-weight="600" fill="#ccc">AI Translate</text>
+  <text x="460" y="153" font-size="9" fill="#555">Claude · 10+ langs</text>
+
+  <!-- Arrow N4→N5 -->
+  <line x1="522" y1="145" x2="540" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite" begin="0.6s"/>
+  </line>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N5 — Review Portal                               -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="542" y="116" width="110" height="58" rx="8" fill="#111" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
+  <circle cx="568" cy="145" r="12" fill="rgba(0,229,160,.08)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
+  <text x="568" y="149.5" text-anchor="middle" font-size="12" fill="rgba(0,229,160,.8)">✓</text>
+  <text x="590" y="138" font-size="10.5" font-weight="600" fill="#ccc">Review Portal</text>
+  <text x="590" y="153" font-size="9" fill="#555">validate · approve</text>
+
+  <!-- Arrow N5→N6 -->
+  <line x1="652" y1="145" x2="670" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite" begin="0.8s"/>
+  </line>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N6 — CDN Publish                                 -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="672" y="116" width="110" height="58" rx="8" fill="#111" stroke="rgba(0,229,160,.5)" stroke-width="1.5"/>
+  <circle cx="698" cy="145" r="12" fill="rgba(0,229,160,.12)" stroke="rgba(0,229,160,.55)" stroke-width="1"/>
+  <text x="698" y="150" text-anchor="middle" font-size="13" fill="rgba(0,229,160,.9)">↑</text>
+  <text x="720" y="138" font-size="10.5" font-weight="600" fill="#d0d0d0">CDN Publish</text>
+  <text x="720" y="153" font-size="9" fill="rgba(0,229,160,.5)">~45s total</text>
+
+  <!-- Arrow N6→N7 (zone boundary) -->
+  <line x1="782" y1="145" x2="841" y2="145" stroke="rgba(0,229,160,.65)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.7s" repeatCount="indefinite" begin="1s"/>
+  </line>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N7 — Cloudflare Global Edge KV                   -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="843" y="95" width="130" height="100" rx="10" fill="#0b0b18" stroke="rgba(110,130,255,.5)" stroke-width="1.5" filter="url(#edgeGlow)"/>
+  <rect x="838" y="90" width="140" height="110" rx="13" fill="none" stroke="rgba(110,130,255,.1)" stroke-width="2">
+    <animate attributeName="opacity" values="0.9;0.1;0.9" dur="2.8s" repeatCount="indefinite"/>
+  </rect>
+  <circle cx="869" cy="145" r="16" fill="none" stroke="rgba(110,130,255,.5)" stroke-width="1.2"/>
+  <ellipse cx="869" cy="145" rx="7" ry="16" fill="none" stroke="rgba(110,130,255,.3)" stroke-width="1"/>
+  <line x1="853" y1="145" x2="885" y2="145" stroke="rgba(110,130,255,.3)" stroke-width="1"/>
+  <line x1="854" y1="136" x2="884" y2="136" stroke="rgba(110,130,255,.2)" stroke-width="0.8"/>
+  <line x1="854" y1="154" x2="884" y2="154" stroke="rgba(110,130,255,.2)" stroke-width="0.8"/>
+  <text x="894" y="134" font-size="11" font-weight="700" fill="#8898e8">Cloudflare</text>
+  <text x="894" y="148" font-size="11" font-weight="700" fill="#8898e8">Global KV</text>
+  <text x="894" y="162" font-size="9" fill="rgba(110,130,255,.55)">250+ PoPs</text>
+  <text x="894" y="175" font-size="8.5" fill="rgba(110,130,255,.35)">worldwide</text>
+
+  <!-- Fan arrows CF → SDKs -->
+  <path d="M 879,195 L 879,213" fill="none" stroke="rgba(0,229,160,.4)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.9s" repeatCount="indefinite"/>
   </path>
-  <!-- → Frankfurt -->
-  <path d="M450,128 Q530,128 560,190" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite" begin="0.27s"/>
-  </path>
-  <!-- → New York -->
-  <path d="M450,128 Q610,128 630,190" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite" begin="0.54s"/>
-  </path>
-  <!-- → Tokyo -->
-  <path d="M450,128 Q690,100 700,190" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite" begin="0.81s"/>
+  <path d="M 971,195 L 971,213" fill="none" stroke="rgba(0,229,160,.4)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.9s" repeatCount="indefinite" begin="0.3s"/>
   </path>
 
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- EDGE NODES (y=190, h=38)                           -->
-  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N8 — Android SDK output                          -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="840" y="213" width="78" height="36" rx="7" fill="#0f110f" stroke="rgba(61,220,132,.3)" stroke-width="1"/>
+  <text x="879" y="229" text-anchor="middle" font-size="9.5" font-weight="600" fill="#3DDC84">Android SDK</text>
+  <text x="879" y="243" text-anchor="middle" font-size="8.5" fill="rgba(0,229,160,.55)">&lt;20ms</text>
 
-  <!-- Mumbai -->
-  <rect x="458" y="190" width="86" height="38" rx="7" fill="#111" stroke="rgba(0,229,160,.2)" stroke-width="1"/>
-  <text x="501" y="207" text-anchor="middle" font-size="10" font-weight="600" fill="#bbb">⚡ Mumbai</text>
-  <text x="501" y="221" text-anchor="middle" font-size="9" fill="rgba(0,229,160,.6)">40ms</text>
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- N9 — iOS SDK output                              -->
+  <!-- ════════════════════════════════════════════════ -->
+  <rect x="932" y="213" width="78" height="36" rx="7" fill="#0e0e14" stroke="rgba(140,140,200,.3)" stroke-width="1"/>
+  <text x="971" y="229" text-anchor="middle" font-size="9.5" font-weight="600" fill="#a0a0c8">iOS SDK</text>
+  <text x="971" y="243" text-anchor="middle" font-size="8.5" fill="rgba(110,130,255,.55)">&lt;20ms</text>
 
-  <!-- Frankfurt -->
-  <rect x="528" y="190" width="86" height="38" rx="7" fill="#111" stroke="rgba(0,229,160,.2)" stroke-width="1"/>
-  <text x="571" y="207" text-anchor="middle" font-size="10" font-weight="600" fill="#bbb">⚡ Frankfurt</text>
-  <text x="571" y="221" text-anchor="middle" font-size="9" fill="rgba(0,229,160,.6)">35ms</text>
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- BYPASS — no semantic change skip path            -->
+  <!-- ════════════════════════════════════════════════ -->
+  <path d="M 337,174 L 337,213 L 727,213 L 727,174" fill="none" stroke="rgba(0,229,160,.18)" stroke-width="1.2" stroke-dasharray="6 4" marker-end="url(#arrBypass)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="2.2s" repeatCount="indefinite"/>
+  </path>
+  <rect x="448" y="206" width="118" height="14" rx="3" fill="#090909" stroke="rgba(0,229,160,.08)" stroke-width="0.5"/>
+  <text x="507" y="217" text-anchor="middle" font-size="8.5" fill="rgba(0,229,160,.32)">no semantic change → skip</text>
 
-  <!-- New York -->
-  <rect x="598" y="190" width="86" height="38" rx="7" fill="#111" stroke="rgba(0,229,160,.2)" stroke-width="1"/>
-  <text x="641" y="207" text-anchor="middle" font-size="10" font-weight="600" fill="#bbb">⚡ New York</text>
-  <text x="641" y="221" text-anchor="middle" font-size="9" fill="rgba(0,229,160,.6)">22ms</text>
-
-  <!-- Tokyo -->
-  <rect x="668" y="190" width="86" height="38" rx="7" fill="#111" stroke="rgba(0,229,160,.2)" stroke-width="1"/>
-  <text x="711" y="207" text-anchor="middle" font-size="10" font-weight="600" fill="#bbb">⚡ Tokyo</text>
-  <text x="711" y="221" text-anchor="middle" font-size="9" fill="rgba(0,229,160,.6)">31ms</text>
-
-  <!-- ── SDK label row ─── -->
-  <text x="598" y="236" text-anchor="middle" font-size="9" fill="#444">↓</text>
-  <text x="598" y="248" text-anchor="middle" font-size="9" font-weight="600" fill="#555">Android SDK · iOS SDK</text>
+  <!-- ── Bottom step labels ──────────────────────── -->
+  <text x="67"  y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">INGEST</text>
+  <text x="207" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="rgba(0,229,160,.3)">PROCESS</text>
+  <text x="337" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">DETECT</text>
+  <text x="467" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">TRANSLATE</text>
+  <text x="597" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">REVIEW</text>
+  <text x="727" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">PUBLISH</text>
+  <text x="908" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="rgba(110,130,255,.3)">DELIVER</text>
 </svg>
 """
 
@@ -467,132 +511,25 @@ private const val LANDING_JS = """
   },{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
   document.querySelectorAll('.fade-up').forEach(function(el){io.observe(el);});
 
-  /* ── CDN demo data ── */
-  var TR={
-    onboarding_welcome_title:{es:'Bienvenido a Transloom',fr:'Bienvenue sur Transloom',de:'Willkommen bei Transloom',ja:'Transloomへようこそ',ko:'Transloom에 오신 것을 환영합니다',hi:'Transloom में आपका स्वागत है',pt:'Bem-vindo ao Transloom',zh:'欢迎使用 Transloom'},
-    settings_save_button:{es:'Guardar cambios',fr:'Enregistrer',de:'Speichern',ja:'保存',ko:'저장',hi:'सहेजें',pt:'Salvar',zh:'保存'},
-    error_network_unavailable:{es:'Red no disponible. Intenta de nuevo.',fr:'Réseau indisponible. Réessayez.',de:'Netzwerk nicht verfügbar.',ja:'ネットワークに接続できません。',ko:'네트워크를 사용할 수 없습니다.',hi:'नेटवर्क उपलब्ध नहीं है।',pt:'Rede indisponível. Tente novamente.',zh:'网络不可用，请重试。'},
-    checkout_confirm_purchase:{es:'Confirmar compra',fr:'Confirmer l'+String.fromCharCode(39)+'achat',de:'Kauf bestätigen',ja:'購入を確認する',ko:'구매 확인',hi:'खरीदारी की पुष्टि करें',pt:'Confirmar compra',zh:'确认购买'}
-  };
-  var SDK_SNIPPET={
-    android:'// Android — drop-in usage\nval text = Transloom.string("KEY")\n// served from edge in LATENCY',
-    ios:'// iOS — SwiftUI\nText(Transloom.string("KEY"))\n// served from edge in LATENCY'
-  };
-
-  var fetchBtn=document.getElementById('cdn-fetch-btn');
-  if(!fetchBtn) return;
-
-  var busy=false;
-  fetchBtn.addEventListener('click',function(){
-    if(busy) return;
-    busy=true;
-
-    var keyEl=document.getElementById('cdn-key');
-    var langEl=document.getElementById('cdn-lang');
-    var regionEl=document.getElementById('cdn-region');
-    var key=keyEl?keyEl.value:'onboarding_welcome_title';
-    var lang=langEl?langEl.value:'es';
-    var opt=regionEl?regionEl.options[regionEl.selectedIndex]:null;
-    var regionName=opt?opt.value:'Mumbai';
-    var lat=opt?parseInt(opt.getAttribute('data-lat'),10):40;
-    var flag=opt?opt.getAttribute('data-flag'):'';
-
-    /* update flight visualization */
-    var edgeLbl=document.getElementById('cdn-edge-label2');
-    if(edgeLbl) edgeLbl.textContent=flag+' '+regionName;
-    var reqLbl=document.getElementById('cdp-req-label');
-    if(reqLbl) reqLbl.textContent='GET /v1/strings/'+lang+'/'+key;
-    var resLbl=document.getElementById('cdp-res-label');
-    if(resLbl) resLbl.textContent='';
-
-    /* loading state */
-    var btnText=document.getElementById('cdn-btn-text');
-    if(btnText) btnText.textContent='Fetching…';
-    fetchBtn.disabled=true;
-
-    var statusDot=document.getElementById('cdn-status-dot');
-    var statusLbl=document.getElementById('cdn-status-label');
-    var latBadge=document.getElementById('cdn-latency-badge');
-    var responseEl=document.getElementById('cdn-response');
-    var metricsEl=document.getElementById('cdn-metrics');
-    var snippetEl=document.getElementById('cdn-sdk-snippet');
-
-    if(statusDot){statusDot.style.background='#faad14';statusDot.style.boxShadow='0 0 8px #faad14';}
-    if(statusLbl) statusLbl.textContent='Connecting to '+regionName+'…';
-    if(latBadge) latBadge.textContent='';
-    if(responseEl) responseEl.innerHTML='<span class="cdp-loading">⬤ ⬤ ⬤</span>';
-    if(metricsEl) metricsEl.innerHTML='';
-    if(snippetEl) snippetEl.innerHTML='';
-
-    /* animate request packet */
-    var pkt1=document.getElementById('pkt1');
-    if(pkt1){pkt1.classList.remove('pkt-moving');void pkt1.offsetWidth;pkt1.classList.add('pkt-moving');}
-
-    setTimeout(function(){
-      if(statusLbl) statusLbl.textContent='Cache lookup…';
-      /* animate response packet */
-      var pkt2=document.getElementById('pkt2');
-      if(pkt2){pkt2.classList.remove('pkt-moving-back');void pkt2.offsetWidth;pkt2.classList.add('pkt-moving-back');}
-      if(resLbl) resLbl.textContent='200 OK · HIT';
-    },450);
-
-    setTimeout(function(){
-      var map=TR[key]||TR['onboarding_welcome_title'];
-      var val=map[lang]||'(translation not found)';
-      var ttfb=Math.round(lat*0.4);
-      var transfer=Math.round(lat*0.15);
-      var total=lat;
-
-      /* status */
-      if(statusDot){statusDot.style.background='#00E5A0';statusDot.style.boxShadow='0 0 10px #00E5A0';}
-      if(statusLbl) statusLbl.textContent='200 OK — edge cache hit';
-      if(latBadge) latBadge.textContent=total+'ms';
-
-      /* JSON response with syntax highlight */
-      if(responseEl){
-        responseEl.innerHTML='<pre class="cdp-json">'
-          +'<span class="cj-b">{</span>\n'
-          +'  <span class="cj-k">"key"</span><span class="cj-p">:</span> <span class="cj-s">"'+key+'"</span>,\n'
-          +'  <span class="cj-k">"lang"</span><span class="cj-p">:</span> <span class="cj-s">"'+lang+'"</span>,\n'
-          +'  <span class="cj-k">"value"</span><span class="cj-p">:</span> <span class="cj-s">"'+val+'"</span>,\n'
-          +'  <span class="cj-k">"source"</span><span class="cj-p">:</span> <span class="cj-em">"edge-cache"</span>,\n'
-          +'  <span class="cj-k">"pop"</span><span class="cj-p">:</span> <span class="cj-s">"'+regionName+'"</span>,\n'
-          +'  <span class="cj-k">"ttl"</span><span class="cj-p">:</span> <span class="cj-n">3600</span>\n'
-          +'<span class="cj-b">}</span></pre>';
-      }
-
-      /* metrics with latency bar breakdown */
-      if(metricsEl){
-        metricsEl.innerHTML=''
-          +'<div class="cdm-row"><span class="cdm-k">Cache</span><span class="cdm-v hit">HIT</span></div>'
-          +'<div class="cdm-row"><span class="cdm-k">Edge PoP</span><span class="cdm-v">'+flag+' '+regionName+'</span></div>'
-          +'<div class="cdm-row cdm-lat-row"><span class="cdm-k">Latency</span>'
-          +'<span class="cdm-lat-bars">'
-          +'<span class="cdm-bar-wrap"><span class="cdm-bar-lbl">TTFB</span><span class="cdm-bar-track"><span class="cdm-bar" style="width:'+Math.round((ttfb/total)*100)+'%"></span></span><span class="cdm-bar-val">'+ttfb+'ms</span></span>'
-          +'<span class="cdm-bar-wrap"><span class="cdm-bar-lbl">Transfer</span><span class="cdm-bar-track"><span class="cdm-bar cdm-bar-dim" style="width:'+Math.round((transfer/total)*100)+'%"></span></span><span class="cdm-bar-val">'+transfer+'ms</span></span>'
-          +'<span class="cdm-bar-wrap cdm-bar-total"><span class="cdm-bar-lbl">Total</span><span class="cdm-bar-track"><span class="cdm-bar" style="width:100%"></span></span><span class="cdm-bar-val cdm-bar-val-accent">'+total+'ms</span></span>'
-          +'</span></div>'
-          +'<div class="cdm-row"><span class="cdm-k">TTL</span><span class="cdm-v">3600s</span></div>';
-      }
-
-      /* SDK snippet */
-      if(snippetEl){
-        var snip=SDK_SNIPPET.android.replace(/KEY/g,key).replace(/LATENCY/g,total+'ms');
-        snippetEl.innerHTML='<div class="cdp-snip-label">Usage in your app</div>'
-          +'<pre class="cdp-snip-code">'+snip+'</pre>';
-      }
-
-      /* cleanup */
-      setTimeout(function(){
-        if(pkt1) pkt1.classList.remove('pkt-moving');
-        var pkt2b=document.getElementById('pkt2');
-        if(pkt2b) pkt2b.classList.remove('pkt-moving-back');
-        if(btnText) btnText.textContent='Fetch from CDN';
-        fetchBtn.disabled=false;
-        busy=false;
-      },600);
-    },900);
-  });
+  /* ── mobile nav toggle ── */
+  var navToggle=document.getElementById('nav-toggle');
+  var navMenu=document.getElementById('nav-menu');
+  if(navToggle&&navMenu){
+    navToggle.addEventListener('click',function(){
+      var open=navMenu.classList.toggle('open');
+      navToggle.setAttribute('aria-expanded',String(open));
+      navToggle.innerHTML=open
+        ?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+        :'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+    });
+    navMenu.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click',function(){
+        navMenu.classList.remove('open');
+        navToggle.setAttribute('aria-expanded','false');
+        navToggle.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+      });
+    });
+  }
 })();
 """
 
@@ -608,9 +545,16 @@ private fun HTML.landingPage() {
         nav {
             div("nav-inner") {
                 div("brand") { unsafe { +LOGO_SVG }; span { +"Transloom" } }
+                button {
+                    id = "nav-toggle"
+                    classes = setOf("nav-hamburger")
+                    attributes["aria-label"] = "Open menu"
+                    attributes["aria-expanded"] = "false"
+                    unsafe { +"""<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>""" }
+                }
                 div("nav-links") {
-                    a("#architecture") { +"CDN" }
-                    a("#how") { +"How it works" }
+                    id = "nav-menu"
+                    a("#architecture") { +"Architecture" }
                     a("#features") { +"Features" }
                     a("#pricing") { +"Pricing" }
                     a("/transloom/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
@@ -653,113 +597,10 @@ private fun HTML.landingPage() {
         section("arch-section") {
             id = "architecture"
             div("section-inner") {
-                p("section-label fade-up") { +"CDN ARCHITECTURE" }
-                h2("fade-up d1") { +"From commit to global edge. In under a minute." }
-                p("arch-sub fade-up d2") { +"Every translation is compiled, validated, and pushed to Cloudflare's global network — so your app never waits for a translation server." }
+                p("section-label fade-up") { +"TRANSLOOM ARCHITECTURE" }
+                h2("fade-up d1") { +"How Transloom takes you from commit to global delivery." }
+                p("arch-sub fade-up d2") { +"Transloom listens to your GitHub pushes, runs AI-powered semantic detection, translates with Claude, validates every string, and publishes to Cloudflare's global KV — so your app serves any language in under 20ms." }
                 div("arch-diagram fade-up d3") { unsafe { +CDN_ARCH_SVG } }
-            }
-        }
-
-        section("cdn-demo-section") {
-            id = "cdn-demo"
-            div("section-inner") {
-                p("section-label fade-up") { +"LIVE DEMO" }
-                h2("fade-up d1") { +"Fetch a translation from the edge." }
-                p("arch-sub fade-up d2") { +"Pick a string key, language, and edge region. Hit fetch — watch the request travel from your SDK to the nearest Cloudflare PoP and back in milliseconds." }
-
-                div("cdn-demo-wrap fade-up d3") {
-                    // Left: Request configurator
-                    div("cdp-panel cdp-req-panel") {
-                        // Panel chrome
-                        div("cdp-chrome") {
-                            div("cdp-chrome-dots") {
-                                span("cdp-chrome-dot r") {}; span("cdp-chrome-dot y") {}; span("cdp-chrome-dot g") {}
-                            }
-                            span("cdp-chrome-title") { +"SDK Request" }
-                        }
-                        div("cdp-panel-body") {
-                            div("cdp-field") {
-                                label { +"String key" }
-                                unsafe { +"""<select id="cdn-key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 11px;color:var(--accent);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;width:100%;box-sizing:border-box">
-  <option value="onboarding_welcome_title">onboarding_welcome_title</option>
-  <option value="settings_save_button">settings_save_button</option>
-  <option value="error_network_unavailable">error_network_unavailable</option>
-  <option value="checkout_confirm_purchase">checkout_confirm_purchase</option>
-</select>""" }
-                            }
-                            div("cdp-field") {
-                                label { +"Target language" }
-                                unsafe { +"""<select id="cdn-lang" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 11px;color:var(--text);font-size:13px;width:100%;box-sizing:border-box">
-  <option value="es">🇪🇸  Spanish (es)</option>
-  <option value="fr">🇫🇷  French (fr)</option>
-  <option value="de">🇩🇪  German (de)</option>
-  <option value="ja">🇯🇵  Japanese (ja)</option>
-  <option value="ko">🇰🇷  Korean (ko)</option>
-  <option value="hi">🇮🇳  Hindi (hi)</option>
-  <option value="pt">🇧🇷  Portuguese (pt)</option>
-  <option value="zh">🇨🇳  Chinese (zh)</option>
-</select>""" }
-                            }
-                            div("cdp-field") {
-                                label { +"Edge region" }
-                                unsafe { +"""<select id="cdn-region" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 11px;color:var(--text);font-size:13px;width:100%;box-sizing:border-box">
-  <option value="Mumbai" data-lat="40" data-flag="🇮🇳">🇮🇳  Mumbai, IN — 40ms</option>
-  <option value="Singapore" data-lat="28" data-flag="🇸🇬">🇸🇬  Singapore, SG — 28ms</option>
-  <option value="Frankfurt" data-lat="35" data-flag="🇩🇪">🇩🇪  Frankfurt, DE — 35ms</option>
-  <option value="New York" data-lat="22" data-flag="🇺🇸">🇺🇸  New York, US — 22ms</option>
-  <option value="Tokyo" data-lat="31" data-flag="🇯🇵">🇯🇵  Tokyo, JP — 31ms</option>
-  <option value="São Paulo" data-lat="45" data-flag="🇧🇷">🇧🇷  São Paulo, BR — 45ms</option>
-</select>""" }
-                            }
-                            button {
-                                id = "cdn-fetch-btn"
-                                classes = setOf("btn", "btn-primary", "cdn-fetch-btn")
-                                unsafe { +"""<svg id="cdn-btn-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>""" }
-                                span { id = "cdn-btn-text"; +"Fetch from CDN" }
-                            }
-                        }
-                    }
-
-                    // Center: animated flight path
-                    div("cdp-flight") {
-                        div("cdp-flight-node") {
-                            unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""" }
-                            span { +"SDK" }
-                        }
-                        div("cdp-wire-wrap") {
-                            div("cdp-wire") { div("cdp-packet") { id = "pkt1" } }
-                            span("cdp-wire-label") { id = "cdp-req-label"; +"GET /v1/strings" }
-                        }
-                        div("cdp-flight-node cdp-node-edge-f") {
-                            unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""" }
-                            span { id = "cdn-edge-label2"; +"Edge PoP" }
-                        }
-                        div("cdp-wire-wrap") {
-                            div("cdp-wire cdp-wire-ret") { div("cdp-packet cdp-packet-back") { id = "pkt2" } }
-                            span("cdp-wire-label cdp-wire-label-ret") { id = "cdp-res-label"; +"200 OK · HIT" }
-                        }
-                        div("cdp-flight-node cdp-node-cf-f") {
-                            unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""" }
-                            span { +"CF KV" }
-                        }
-                    }
-
-                    // Right: response panel
-                    div("cdp-panel cdp-res-panel") {
-                        div("cdp-chrome") {
-                            div("cdp-status-row") {
-                                div("cdp-dot cdp-dot-dim") { id = "cdn-status-dot" }
-                                span("cdp-chrome-title") { id = "cdn-status-label"; +"Waiting for request…" }
-                            }
-                            span("cdp-latency-badge") { id = "cdn-latency-badge" }
-                        }
-                        div("cdp-panel-body") {
-                            div("cdp-response-body") { id = "cdn-response"; +"" }
-                            div("cdp-metrics") { id = "cdn-metrics" }
-                            div("cdp-sdk-snippet") { id = "cdn-sdk-snippet" }
-                        }
-                    }
-                }
             }
         }
 
@@ -978,20 +819,24 @@ Text(Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>))<
 
 private const val LANDING_CSS = """
 @keyframes heroDrift{0%,100%{transform:translate(-50%,0) scale(1)}50%{transform:translate(-50%,30px) scale(1.08)}}
-@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
-.nav-inner{max-width:1100px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+/* ─── Nav ─── */
+nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1140px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .nav-links{display:flex;align-items:center;gap:24px}
 .nav-links a:not(.btn){color:var(--text-muted);font-size:14px;transition:color .2s ease}
 .nav-links a:not(.btn):hover{color:var(--text)}
 .nav-cta{padding:8px 16px!important;font-size:13px!important}
+.nav-hamburger{display:none;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:36px;height:36px;padding:0;flex-shrink:0;transition:border-color .2s,color .2s;cursor:pointer}
+.nav-hamburger:hover{border-color:var(--accent);color:var(--accent)}
+/* ─── Hero ─── */
 .hero{position:relative;overflow:hidden;padding:96px 24px 72px;text-align:center}
 .hero-glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:680px;height:680px;background:radial-gradient(circle,rgba(0,229,160,.14) 0%,transparent 70%);pointer-events:none;animation:heroDrift 12s ease-in-out infinite}
 .hero-glow2{position:absolute;top:100px;right:-200px;width:500px;height:500px;background:radial-gradient(circle,rgba(0,229,160,.06) 0%,transparent 70%);pointer-events:none}
 .hero-inner{max-width:780px;margin:0 auto;position:relative}
-.hero-title{font-size:clamp(36px,6vw,62px);font-weight:800;line-height:1.1;letter-spacing:-1.5px;margin:20px 0}
+.hero-title{font-size:clamp(34px,6vw,62px);font-weight:800;line-height:1.1;letter-spacing:-1.5px;margin:20px 0}
 .accent{color:var(--accent)}
-.hero-sub{color:var(--text-muted);font-size:17px;line-height:1.7;margin-bottom:36px}
+.hero-sub{color:var(--text-muted);font-size:clamp(15px,2vw,17px);line-height:1.7;margin-bottom:36px}
 .hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:40px}
 .hero-btn{padding:13px 24px;font-size:15px}
 .hero-stats{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:40px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 24px;max-width:640px;margin-left:auto;margin-right:auto}
@@ -1002,74 +847,16 @@ nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.78);backdrop-filter
 .hero-lang-strip{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 .lang-chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:13px;color:var(--text-dim);transition:border-color .2s ease,color .2s ease,transform .2s ease}
 .lang-chip:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+/* ─── Sections ─── */
 section{padding:80px 24px}
-.section-inner{max-width:1100px;margin:0 auto}
+.section-inner{max-width:1140px;margin:0 auto}
 .section-label{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px}
-h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bottom:48px}
+h2{font-size:clamp(24px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bottom:48px}
 /* ─── Architecture section ─── */
 .arch-section{padding:80px 24px;background:var(--bg);border-top:1px solid var(--border)}
-.arch-diagram{max-width:800px;margin:0 auto;overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 24px}
-.arch-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:48px;max-width:600px;line-height:1.6}
-/* ─── CDN Demo section ─── */
-.cdn-demo-section{padding:80px 24px;background:var(--surface2);border-top:1px solid var(--border)}
-.cdn-demo-wrap{display:grid;grid-template-columns:280px 1fr 320px;gap:16px;align-items:start;max-width:1060px;margin:0 auto}
-.cdp-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.cdp-chrome{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)}
-.cdp-chrome-dots{display:flex;gap:5px;flex-shrink:0}
-.cdp-chrome-dot{width:10px;height:10px;border-radius:50%}
-.cdp-chrome-dot.r{background:#ff5f56}.cdp-chrome-dot.y{background:#ffbd2e}.cdp-chrome-dot.g{background:#27c93f}
-.cdp-chrome-title{font-size:11px;font-weight:600;letter-spacing:.8px;color:var(--text-muted);text-transform:uppercase}
-.cdp-status-row{display:flex;align-items:center;gap:8px}
-.cdp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .3s,box-shadow .3s}
-.cdp-dot-dim{background:var(--text-muted)}
-.cdp-latency-badge{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(0,229,160,.25);border-radius:20px;padding:2px 8px;min-width:40px;text-align:center}
-.cdp-panel-body{padding:16px;display:flex;flex-direction:column;gap:12px}
-.cdp-field{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text-muted)}
-.cdn-fetch-btn{width:100%;padding:11px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
-.cdn-fetch-btn:disabled{opacity:.6;cursor:not-allowed;transform:none!important}
-/* Flight visualization (center column) */
-.cdp-flight{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;min-height:240px;justify-content:center}
-.cdp-flight-node{display:flex;flex-direction:column;align-items:center;gap:5px}
-.cdp-flight-node svg{padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--accent);width:36px;height:36px}
-.cdp-flight-node span{font-size:10px;font-weight:600;color:var(--text-muted);letter-spacing:.5px}
-.cdp-node-edge-f svg{border-color:rgba(0,229,160,.4);background:rgba(0,229,160,.08)}
-.cdp-node-cf-f svg{border-color:rgba(0,229,160,.25)}
-.cdp-wire-wrap{width:100%;display:flex;flex-direction:column;align-items:stretch;gap:3px}
-.cdp-wire{height:2px;background:linear-gradient(90deg,rgba(0,229,160,.3),rgba(0,229,160,.08));position:relative;overflow:hidden}
-.cdp-wire-ret{background:linear-gradient(270deg,rgba(0,229,160,.3),rgba(0,229,160,.08))}
-.cdp-wire-label{font-size:9.5px;color:var(--text-muted);font-family:ui-monospace,'SF Mono',Menlo,monospace;text-align:center;opacity:.7}
-.cdp-wire-label-ret{color:rgba(0,229,160,.7)}
-.cdp-packet{position:absolute;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);opacity:0}
-.cdp-packet.pkt-moving{animation:cdpPktFwd .55s ease-in-out forwards}
-.cdp-packet-back.pkt-moving-back{animation:cdpPktBack .55s ease-in-out forwards}
-@keyframes cdpPktFwd{0%{left:-8px;opacity:0}25%{opacity:1}75%{opacity:1}100%{left:calc(100% + 8px);opacity:0}}
-@keyframes cdpPktBack{0%{right:-8px;opacity:0}25%{opacity:1}75%{opacity:1}100%{right:calc(100% + 8px);opacity:0}}
-/* Response panel */
-.cdp-loading{color:var(--accent);font-size:16px;letter-spacing:4px;animation:cdpDotPulse 1s ease-in-out infinite}
-@keyframes cdpDotPulse{0%,100%{opacity:.3}50%{opacity:1}}
-.cdp-response-body{min-height:110px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;line-height:1.75;color:var(--text-dim);overflow:auto}
-.cdp-json{margin:0;white-space:pre}
-.cj-k{color:#7ec8e3}.cj-s{color:#a8d8a8}.cj-n{color:#f0a878}.cj-b{color:#888}.cj-p{color:#666}.cj-em{color:var(--accent)}
-/* Metrics */
-.cdp-metrics{display:flex;flex-direction:column;gap:7px;font-size:12px}
-.cdm-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.cdm-k{color:var(--text-muted);flex-shrink:0;width:72px}
-.cdm-v{color:var(--text);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px}
-.cdm-v.hit{color:var(--accent);font-weight:700}
-.cdm-lat-row{align-items:flex-start}
-.cdm-lat-bars{display:flex;flex-direction:column;gap:4px;flex:1}
-.cdm-bar-wrap{display:flex;align-items:center;gap:6px}
-.cdm-bar-lbl{font-size:9.5px;color:#555;width:46px;text-align:right;flex-shrink:0}
-.cdm-bar-track{flex:1;height:4px;background:#1a1a1a;border-radius:2px;overflow:hidden}
-.cdm-bar{height:100%;background:var(--accent);border-radius:2px;transition:width .5s ease}
-.cdm-bar-dim{background:rgba(0,229,160,.4)}
-.cdm-bar-val{font-size:10px;color:var(--text-dim);width:30px;text-align:right;flex-shrink:0;font-family:ui-monospace,'SF Mono',Menlo,monospace}
-.cdm-bar-val-accent{color:var(--accent);font-weight:700}
-/* SDK snippet */
-.cdp-sdk-snippet{margin-top:2px}
-.cdp-snip-label{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
-.cdp-snip-code{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.65;color:var(--text-dim);white-space:pre;overflow-x:auto;margin:0}
-/* ─── How it works — numbered step cards ─── */
+.arch-diagram{max-width:1060px;margin:0 auto;overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 24px}
+.arch-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:48px;max-width:640px;line-height:1.6}
+/* ─── How it works ─── */
 .how-section{padding:88px 24px 100px}
 .how-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:48px;max-width:580px;line-height:1.6}
 .how-steps{display:flex;flex-direction:column;gap:0;max-width:760px;margin:0 auto 64px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface)}
@@ -1091,7 +878,6 @@ h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bo
 .time-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:livePulse 1.4s ease-in-out infinite}
 .time-pill strong{color:var(--accent);font-weight:700;margin:0 2px}
 .time-sep{color:var(--text-muted);margin:0 4px}
-@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
 /* ─── SDK section ─── */
 .sdk-section{padding:88px 24px;background:var(--bg);border-top:1px solid var(--border)}
 .sdk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px;margin-top:48px}
@@ -1114,7 +900,7 @@ h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bo
 .sdk-bottom{margin-top:32px;display:flex;justify-content:center}
 .sdk-compat{display:inline-flex;align-items:center;gap:10px;font-size:14px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 20px}
 .sdk-compat svg{color:var(--accent);flex-shrink:0}
-/* ─── features ─── */
+/* ─── Features ─── */
 .features-section{background:var(--surface2);border-top:1px solid var(--border)}
 .features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
 .feature-card{padding:24px}
@@ -1122,7 +908,7 @@ h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bo
 .feature-icon{font-size:28px;margin-bottom:12px;color:var(--accent);line-height:0}
 .feature-card h3{font-size:15px;font-weight:600;margin-bottom:8px}
 .feature-card p{font-size:13px;color:var(--text-muted);line-height:1.6}
-/* ─── pricing ─── */
+/* ─── Pricing ─── */
 .pricing-section{background:var(--bg);border-top:1px solid var(--border)}
 .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:20px;padding-top:4px}
 .pricing-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;display:flex;flex-direction:column;position:relative;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}
@@ -1151,23 +937,63 @@ h2{font-size:clamp(26px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bo
 .cta-section p{color:var(--text-muted);margin-bottom:32px}
 .cta-btn{padding:14px 28px;font-size:16px}
 footer{padding:28px 24px;border-top:1px solid var(--border)}
-.footer-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
+.footer-inner{max-width:1140px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
 .text-muted{color:var(--text-muted)}
-/* ─── Responsive ─── */
-@media(max-width:900px){
-  .cdn-demo-wrap{grid-template-columns:1fr 1fr}
-  .cdp-res-panel{grid-column:1 / -1}
-  .cdp-flight{flex-direction:row;min-height:auto;padding:16px;justify-content:space-around;flex-wrap:wrap;gap:6px}
-  .cdp-wire-wrap{width:60px}
+/* ─── Responsive: tablet (≤1024px) ─── */
+@media(max-width:1024px){
+  .sdk-grid{grid-template-columns:repeat(2,1fr)}
+  .features-grid{grid-template-columns:repeat(2,1fr)}
+  .arch-diagram svg{min-width:760px}
 }
+/* ─── Responsive: hamburger nav (≤768px) ─── */
+@media(max-width:768px){
+  .nav-hamburger{display:flex}
+  .nav-links{position:absolute;top:calc(100% + 1px);left:0;right:0;flex-direction:column;align-items:stretch;background:rgba(8,8,8,.97);border-bottom:1px solid var(--border);padding:8px 0 16px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);display:none;gap:0;z-index:200}
+  .nav-links.open{display:flex}
+  .nav-links a:not(.btn){padding:13px 24px;font-size:15px;width:100%;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,.04)}
+  .nav-links .nav-cta{margin:8px 16px 0;width:calc(100% - 32px)!important;text-align:center;display:block;padding:12px 16px!important;font-size:14px!important;box-sizing:border-box}
+  .nav-inner{position:relative;flex-wrap:nowrap}
+  .hero{padding:80px 20px 56px}
+  section{padding:64px 20px}
+  h2{margin-bottom:32px}
+  .arch-sub{font-size:15px}
+  .how-section{padding:64px 20px 80px}
+  .sdk-section{padding:64px 20px}
+}
+/* ─── Responsive: mobile (≤640px) ─── */
 @media(max-width:640px){
-  .cdn-demo-wrap{grid-template-columns:1fr}
-  .cdp-flight{display:none}
-  .sdk-grid{grid-template-columns:1fr}
+  .hero{padding:72px 16px 48px}
+  .hero-inner{padding:0}
+  .hero-stats{flex-wrap:wrap;padding:12px 12px;gap:2px}
+  .hero-stat{padding:6px 12px;min-width:calc(50% - 24px)}
+  .hero-stat-div{display:none}
+  .hero-stat-val{font-size:20px}
+  .hero-actions{flex-direction:column;align-items:stretch;padding:0 8px}
+  .hero-actions .btn{text-align:center;width:100%}
+  .hero-lang-strip{gap:6px}
+  .lang-chip{font-size:12px;padding:4px 10px}
+  .arch-diagram{padding:16px 12px;border-radius:10px}
+  .how-steps{margin-left:0;margin-right:0;border-radius:10px}
   .hsc-tag{display:none}
-  .hero-stats{gap:8px;padding:12px 16px}
-  .hero-stat{padding:0 10px}
-  .arch-diagram{padding:16px 12px}
+  .hsc-body{padding:14px 16px}
+  .hsc-left{min-width:52px;padding:18px 14px}
+  .sdk-grid{grid-template-columns:1fr}
+  .features-grid{grid-template-columns:1fr}
+  .pricing-grid{grid-template-columns:1fr}
+  .sdk-code{font-size:11px}
+  section{padding:52px 16px}
+  .sdk-section,.how-section{padding:52px 16px 64px}
+}
+/* ─── Responsive: small mobile (≤400px) ─── */
+@media(max-width:400px){
+  .hero-title{font-size:28px;letter-spacing:-1px}
+  .hero-sub{font-size:14px}
+  .hero-btn{font-size:14px;padding:12px 20px}
+  .hsc-head{flex-direction:column;align-items:flex-start;gap:6px}
+  .hsc-title{font-size:14px}
+  .pricing-price{font-size:36px}
+  .time-pill{font-size:12px;padding:8px 16px;gap:8px}
+  .nav-inner{padding:12px 16px}
 }
 """
 
@@ -2792,17 +2618,32 @@ private const val BILLING_CSS = """
 .billing-page-header p{font-size:13px;color:var(--text-muted)}
 .billing-section{margin-bottom:32px}
 .billing-section-title{font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:12px}
+/* ── State banners ── */
+.sub-state-banner{display:none;align-items:flex-start;gap:14px;padding:16px 18px;border-radius:var(--radius);margin-bottom:24px;font-size:13px;line-height:1.55}
+.sub-state-banner.visible{display:flex}
+.sub-state-banner-icon{flex-shrink:0;margin-top:1px}
+.sub-state-banner-body{flex:1}
+.sub-state-banner-title{font-size:14px;font-weight:700;margin-bottom:3px}
+.sub-state-banner-sub{color:inherit;opacity:.8}
+.sub-state-banner-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.sub-state-banner.trial{background:rgba(250,173,20,.08);border:1px solid rgba(250,173,20,.28);color:var(--yellow)}
+.sub-state-banner.cancelling{background:rgba(255,77,79,.07);border:1px solid rgba(255,77,79,.22);color:var(--red)}
+.sub-state-banner.limit-hit{background:rgba(255,77,79,.07);border:1px solid rgba(255,77,79,.22);color:var(--red)}
+.days-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,.15);margin-left:6px;vertical-align:middle}
+/* ── Subscription summary grid ── */
 .sub-summary{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
 .sub-detail-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .25s}
 .sub-detail-label{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
 .sub-detail-value{font-size:17px;font-weight:600;color:var(--text)}
 .sub-detail-value.accent{color:var(--accent)}
+.sub-detail-sub{font-size:11px;color:var(--text-muted);margin-top:4px}
 .plan-status-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
 .status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px}
 .status-active{background:rgba(0,229,160,.12);color:var(--accent);border:1px solid rgba(0,229,160,.25)}
 .status-trial{background:rgba(250,173,20,.1);color:var(--yellow);border:1px solid rgba(250,173,20,.25)}
 .status-cancelling{background:rgba(255,77,79,.1);color:var(--red);border:1px solid rgba(255,77,79,.2)}
 .status-free{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)}
+.status-expired{background:rgba(255,77,79,.08);color:var(--red);border:1px solid rgba(255,77,79,.18)}
 .plan-actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center}
 .plan-upgrade-group{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-top:16px}
 .plan-upgrade-group-title{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:10px}
@@ -2895,36 +2736,68 @@ async function loadBillingPage(){
   // Plan name
   document.getElementById('plan-name').textContent=sub.displayName||sub.plan;
 
-  // Status badge
+  // Status badge — covers all states including trial
   const statusEl=document.getElementById('plan-status');
   if(sub.cancelAtPeriodEnd){
     statusEl.className='status-badge status-cancelling';statusEl.textContent='Cancelling';
   } else if(sub.plan==='FREE'){
     statusEl.className='status-badge status-free';statusEl.textContent='Free';
-  } else if(sub.trialLimitHit){
+  } else if(sub.inTrial&&sub.trialLimitHit){
     statusEl.className='status-badge status-trial';statusEl.textContent='Trial limit hit';
+  } else if(sub.inTrial){
+    statusEl.className='status-badge status-trial';statusEl.textContent='Trial';
   } else {
     statusEl.className='status-badge status-active';statusEl.textContent='Active';
   }
 
-  // Renewal / period
+  // Renewal / period — proper display for all states
   const expiryLabel=document.getElementById('plan-expiry-label');
-  if(sub.currentPeriodEnd){
-    document.getElementById('renewal-date').textContent=sub.currentPeriodEnd;
-    document.getElementById('billing-period').textContent='Until '+sub.currentPeriodEnd;
-    if(expiryLabel)expiryLabel.textContent=sub.cancelAtPeriodEnd?'CANCELS ON':'RENEWAL DATE';
+  const renewalDateEl=document.getElementById('renewal-date');
+  const billingPeriodEl=document.getElementById('billing-period');
+  const dateSubEl=document.getElementById('billing-date-sub');
+
+  if(sub.inTrial&&sub.trialEndsOn){
+    // Trial: show trial end date prominently
+    if(expiryLabel)expiryLabel.textContent='TRIAL ENDS';
+    renewalDateEl.textContent=sub.trialEndsOn;
+    billingPeriodEl.textContent='Free until '+sub.trialEndsOn;
+    if(dateSubEl){
+      const days=sub.daysUntilRenewal!=null?sub.daysUntilRenewal:0;
+      dateSubEl.textContent=days===0?'Charges tomorrow':days+' day'+(days!==1?'s':'')+' remaining';
+    }
+  } else if(sub.currentPeriodEnd){
+    if(expiryLabel)expiryLabel.textContent=sub.cancelAtPeriodEnd?'ACCESS ENDS ON':'NEXT BILLING';
+    renewalDateEl.textContent=sub.currentPeriodEnd;
+    billingPeriodEl.textContent=(sub.cancelAtPeriodEnd?'Cancels on ':'Renews on ')+sub.currentPeriodEnd;
+    if(dateSubEl&&sub.daysUntilRenewal!=null){
+      const days=sub.daysUntilRenewal;
+      if(sub.cancelAtPeriodEnd){
+        dateSubEl.textContent=days===0?'Access ends today':days+' day'+(days!==1?'s':'')+' of access remaining';
+      } else {
+        dateSubEl.textContent=days===0?'Renews today':days+' day'+(days!==1?'s':'')+' until renewal';
+      }
+    }
   } else {
-    document.getElementById('renewal-date').textContent='—';
-    document.getElementById('billing-period').textContent='No active billing period';
     if(expiryLabel)expiryLabel.textContent='RENEWAL DATE';
+    renewalDateEl.textContent='—';
+    billingPeriodEl.textContent=sub.plan==='FREE'?'No active billing':'—';
+    if(dateSubEl)dateSubEl.textContent='';
   }
 
-  // Price
+  // Price — add trial context
   if(sub.monthlyPricePaise){
-    document.getElementById('plan-price').textContent='₹'+(sub.monthlyPricePaise/100)+'/mo';
+    const priceEl=document.getElementById('plan-price');
+    priceEl.textContent='₹'+(sub.monthlyPricePaise/100)+'/mo';
+    const priceSub=document.getElementById('plan-price-sub');
+    if(priceSub)priceSub.textContent=sub.inTrial?'Free during trial · billed after':'Billed monthly';
   } else {
     document.getElementById('plan-price').textContent=sub.plan==='FREE'?'Free':'—';
+    const priceSub=document.getElementById('plan-price-sub');
+    if(priceSub)priceSub.textContent='';
   }
+
+  // State banner — prominent contextual banner above the subscription section
+  renderStateBanner(sub);
 
   // Usage bars
   const barEl=document.getElementById('usage-bar-billing');
@@ -2940,9 +2813,7 @@ async function loadBillingPage(){
     usage.projectLimit?usage.projectsUsed+' / '+usage.projectLimit:usage.projectsUsed+' (unlimited)';
 
   // Plan actions — only rendered when no payment is in progress
-  if(!paymentPending){
-    renderPlanActions(sub);
-  }
+  if(!paymentPending) renderPlanActions(sub);
 
   // User chip
   const chip=document.getElementById('user-chip');
@@ -2952,15 +2823,19 @@ async function loadBillingPage(){
   if(invRes){
     const invData=await invRes.json();
     const list=document.getElementById('invoice-list-billing');
-    if(!invData.invoices||invData.invoices.length===0){
-      list.innerHTML='<div class="empty-invoices">No invoices yet. Your first invoice will appear here after your trial ends.</div>';
+    const isEmpty=!invData.invoices||invData.invoices.length===0;
+    if(isEmpty){
+      const msg=sub.inTrial
+        ?'No invoices yet — your first charge will appear here when your trial ends on '+(sub.trialEndsOn||'the trial end date')+'.'
+        :'No invoices yet. Your first invoice will appear here after your first charge.';
+      list.innerHTML='<div class="empty-invoices">'+esc(msg)+'</div>';
     } else {
       list.innerHTML=invData.invoices.map(inv=>`
         <div class="invoice-row-full">
           <span>${'$'}{esc(inv.date)}</span>
           <span class="invoice-id">${'$'}{esc(inv.id)}</span>
           <span class="invoice-amount">${'$'}{esc(inv.amount)}</span>
-          <span class="invoice-status-${'$'}{esc(inv.status.toLowerCase())}">${'$'}{esc(inv.status)}</span>
+          <span>${'$'}{esc(inv.status)}</span>
           <a class="invoice-download" href="/transloom/api/billing/invoices/${'$'}{encodeURIComponent(inv.id)}/receipt" target="_blank">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download
@@ -2970,18 +2845,79 @@ async function loadBillingPage(){
   }
 }
 
+// ── State banner — contextual banner based on subscription state ───────────────
+function renderStateBanner(sub){
+  const el=document.getElementById('sub-state-banner');
+  if(!el){return;}
+  el.className='sub-state-banner';
+  el.innerHTML='';
+
+  const clockSvg='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  const warnSvg='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+  if(sub.inTrial&&!sub.cancelAtPeriodEnd){
+    const days=sub.daysUntilRenewal!=null?sub.daysUntilRenewal:7;
+    const dayLabel=days===0?'today':days===1?'tomorrow':'in '+days+' days';
+    el.className='sub-state-banner trial visible';
+    el.innerHTML='<div class="sub-state-banner-icon">'+clockSvg+'</div>'
+      +'<div class="sub-state-banner-body">'
+      +'<div class="sub-state-banner-title">You\'re on a free trial<span class="days-pill">'+days+' day'+(days!==1?'s':'')+' left</span></div>'
+      +'<div class="sub-state-banner-sub">Your card won\'t be charged until '+esc(sub.trialEndsOn||dayLabel)+'. '
+      +'Full '+esc(sub.displayName)+' access is active — all features are unlocked.</div>'
+      +'<div class="sub-state-banner-actions">'
+      +'<button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="activateNow()">Start billing now</button>'
+      +'<a href="#" style="font-size:12px;color:inherit;opacity:.8;align-self:center" onclick="cancelSubscription();return false">Cancel trial →</a>'
+      +'</div></div>';
+    return;
+  }
+
+  if(sub.inTrial&&sub.cancelAtPeriodEnd){
+    const date=sub.trialEndsOn||'the end of your trial';
+    el.className='sub-state-banner cancelling visible';
+    el.innerHTML='<div class="sub-state-banner-icon">'+warnSvg+'</div>'
+      +'<div class="sub-state-banner-body">'
+      +'<div class="sub-state-banner-title">Trial cancellation scheduled</div>'
+      +'<div class="sub-state-banner-sub">Your trial will end on '+esc(date)+' and won\'t renew. '
+      +'You\'ll keep full '+esc(sub.displayName)+' access until then.</div>'
+      +'</div>';
+    return;
+  }
+
+  if(sub.cancelAtPeriodEnd&&sub.currentPeriodEnd){
+    const days=sub.daysUntilRenewal!=null?sub.daysUntilRenewal:0;
+    const urgency=days<=3?'urgent':'';
+    el.className='sub-state-banner cancelling visible '+urgency;
+    el.innerHTML='<div class="sub-state-banner-icon">'+warnSvg+'</div>'
+      +'<div class="sub-state-banner-body">'
+      +'<div class="sub-state-banner-title">Subscription cancelling'
+      +(days<=7?'<span class="days-pill">'+days+' day'+(days!==1?'s':'')+' left</span>':'')+'</div>'
+      +'<div class="sub-state-banner-sub">Your '+esc(sub.displayName)+' plan ends on <strong>'+esc(sub.currentPeriodEnd)+'</strong>. '
+      +'All features remain active until then. After that your account reverts to the Free plan.</div>'
+      +'<div class="sub-state-banner-actions">'
+      +'<a href="/transloom#pricing" class="btn btn-primary" style="font-size:12px;padding:6px 14px">Resubscribe →</a>'
+      +'</div></div>';
+    return;
+  }
+
+  if(sub.trialLimitHit){
+    el.className='sub-state-banner limit-hit visible';
+    el.innerHTML='<div class="sub-state-banner-icon">'+warnSvg+'</div>'
+      +'<div class="sub-state-banner-body">'
+      +'<div class="sub-state-banner-title">Trial string limit reached</div>'
+      +'<div class="sub-state-banner-sub">You\'ve hit the trial limit. Activate your paid plan to unlock the full quota immediately.</div>'
+      +'<div class="sub-state-banner-actions">'
+      +'<button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="activateNow()">Activate paid plan now</button>'
+      +'</div></div>';
+  }
+}
+
 // ── Render plan action buttons based on current plan ──────────────────────────
 function renderPlanActions(sub){
   const el=document.getElementById('plan-actions-billing');
   if(!el)return;
   let html='';
 
-  if(sub.trialLimitHit){
-    html+='<button class="btn btn-primary" onclick="activateNow()">Activate paid plan now</button>';
-  }
-
   if(sub.plan==='FREE'){
-    // Show both upgrade options explicitly so users know what they're buying
     html+=`
       <div class="plan-upgrade-group">
         <div class="plan-upgrade-group-title">Available plans</div>
@@ -2992,7 +2928,7 @@ function renderPlanActions(sub){
           </div>
           <div style="display:flex;align-items:center">
             <span class="upgrade-option-price">₹499/mo</span>
-            <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="startUpgrade('SOLO')">Select</button>
+            <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="startUpgrade('SOLO')">Start trial</button>
           </div>
         </div>
         <div class="upgrade-option">
@@ -3002,19 +2938,22 @@ function renderPlanActions(sub){
           </div>
           <div style="display:flex;align-items:center">
             <span class="upgrade-option-price">₹1,999/mo</span>
-            <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border)" onclick="startUpgrade('TEAM')">Select</button>
+            <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border)" onclick="startUpgrade('TEAM')">Start trial</button>
           </div>
         </div>
       </div>`;
-  } else if(sub.plan==='SOLO'){
-    html+='<button class="btn btn-primary" style="font-size:13px" onclick="startUpgrade(\'TEAM\')">Upgrade to Team</button>';
-  }
-
-  if((sub.plan==='SOLO'||sub.plan==='TEAM')&&!sub.cancelAtPeriodEnd){
-    html+='<a href="#" style="font-size:13px;color:var(--text-muted);align-self:center" onclick="cancelSubscription();return false">Cancel subscription →</a>';
-  }
-  if(sub.cancelAtPeriodEnd&&(sub.plan==='SOLO'||sub.plan==='TEAM')){
-    html+='<span style="font-size:12px;color:var(--yellow)">Access continues until '+esc(sub.currentPeriodEnd||'end of period')+'</span>';
+  } else if(sub.inTrial&&!sub.cancelAtPeriodEnd){
+    // Trial active — upgrade and cancel handled by the banner; just show upgrade-to-team if on solo
+    if(sub.plan==='SOLO'){
+      html+='<button class="btn btn-primary" style="font-size:13px" onclick="startUpgrade(\'TEAM\')">Upgrade to Team</button>';
+    }
+  } else if(!sub.cancelAtPeriodEnd){
+    if(sub.plan==='SOLO'){
+      html+='<button class="btn btn-primary" style="font-size:13px" onclick="startUpgrade(\'TEAM\')">Upgrade to Team</button>';
+    }
+    if(sub.plan==='SOLO'||sub.plan==='TEAM'){
+      html+='<a href="#" style="font-size:13px;color:var(--text-muted);align-self:center" onclick="cancelSubscription();return false">Cancel subscription →</a>';
+    }
   }
 
   el.innerHTML=html;
@@ -3115,11 +3054,27 @@ async function activateNow(){
 }
 
 async function cancelSubscription(){
-  if(!confirm('Cancel subscription? You will keep access until the end of the billing period.'))return;
+  // Fetch latest sub to show the actual date in the confirm dialog
+  const subRes=await api('/billing/subscription');
+  const sub=subRes&&subRes.ok?await subRes.json():null;
+  const dateStr=sub?.inTrial&&sub?.trialEndsOn
+    ?sub.trialEndsOn
+    :(sub?.currentPeriodEnd||'the end of your billing period');
+  const planLabel=sub?.displayName||'your plan';
+  const isTrial=sub&&sub.inTrial;
+  const msg=isTrial
+    ?('Cancel trial?\n\nYou\'ll keep '+planLabel+' access until '+dateStr+', then your account returns to the Free plan. No charge will be made.')
+    :('Cancel subscription?\n\nYou\'ll keep '+planLabel+' access until '+dateStr+', then your account reverts to the Free plan.');
+  if(!confirm(msg))return;
   const res=await api('/billing/cancel',{method:'POST'});
   if(!res)return;
-  if(res.ok){toast('Subscription will cancel at end of period');loadBillingPage();}
-  else{const err=await res.json();toast(err.error||'Cancel failed','error');}
+  if(res.ok){
+    toast(isTrial?'Trial cancelled — no charge will be made.':'Subscription will cancel at end of period.');
+    loadBillingPage();
+  } else {
+    const err=await res.json();
+    toast(err.error||'Cancel failed','error');
+  }
 }
 
 loadBillingPage();
@@ -3148,6 +3103,12 @@ private fun HTML.billingApp() {
                     classes = setOf("inline-banner")
                 }
 
+                // ── Subscription state banner (trial / cancelling / limit-hit) ─
+                div {
+                    id = "sub-state-banner"
+                    classes = setOf("sub-state-banner")
+                }
+
                 // ── Subscription summary ──────────────────────────────────────
                 div("billing-section") {
                     div("billing-section-title") { +"Subscription" }
@@ -3163,6 +3124,7 @@ private fun HTML.billingApp() {
                             div {
                                 div("sub-detail-label") { +"Monthly price" }
                                 div("sub-detail-value") { id = "plan-price"; +"—" }
+                                div("sub-detail-sub") { id = "plan-price-sub" }
                             }
                             // Sync state — visible during post-payment reconciliation
                             div {
@@ -3180,10 +3142,11 @@ private fun HTML.billingApp() {
                             div {
                                 div("sub-detail-label") { id = "plan-expiry-label"; +"Renewal Date" }
                                 div("sub-detail-value") { id = "renewal-date"; +"—" }
+                                div("sub-detail-sub") { id = "billing-date-sub" }
                             }
                             div {
                                 style = "margin-top:16px"
-                                div("sub-detail-label") { +"Billing Period" }
+                                div("sub-detail-label") { +"Billing Status" }
                                 div("sub-detail-value") { id = "billing-period"; style = "font-size:14px"; +"—" }
                             }
                         }
@@ -3305,6 +3268,7 @@ private fun HTML.reviewPortal() {
                         }
                     }
                 }
+                div { id = "rv-batch-bar" }
                 div("rv-list") { id = "review-list" }
             }
         }
@@ -3376,6 +3340,20 @@ private const val REVIEW_CSS = """
 .rv-btn-cancel{background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;transition:all .15s}
 .rv-btn-cancel:hover{color:var(--text);border-color:var(--text-muted)}
 @media(max-width:700px){.rv-body{grid-template-columns:1fr}.rv-source{border-right:none;border-bottom:1px solid var(--border)}.rv-toolbar{flex-direction:column;align-items:stretch}.rv-search-wrap{max-width:100%}}
+.rv-group{margin-bottom:24px}
+.rv-group-header{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius) var(--radius) 0 0;border-bottom:none}
+.rv-group-header+.rv-card{border-radius:0}
+.rv-group-header+.rv-card+.rv-card{border-radius:0}
+.rv-group .rv-card:last-child{border-radius:0 0 var(--radius) var(--radius)}
+.rv-group .rv-card{border-radius:0;border-top:none}
+.rv-commit-badge{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--accent);background:var(--accent-dim2);border:1px solid rgba(0,229,160,.2);padding:3px 9px;border-radius:6px}
+.rv-group-meta{font-size:12px;color:var(--text-muted);flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+.rv-group-project{font-weight:600;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv-group-count{color:var(--text-muted);white-space:nowrap}
+.rv-group-approve-all{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;background:transparent;border:1px solid rgba(0,229,160,.4);color:var(--accent);cursor:pointer;transition:all .12s;font-family:inherit}
+.rv-group-approve-all:hover:not(:disabled){background:var(--accent-dim);border-color:var(--accent)}
+.rv-group-approve-all:disabled{opacity:.4;cursor:not-allowed}
+.rv-group-approve-all .rv-gaa-count{background:rgba(0,229,160,.15);padding:1px 6px;border-radius:10px;font-size:10px}
 """
 
 private val REVIEW_JS = """
@@ -3451,81 +3429,109 @@ function getVisible(){
   return items;
 }
 
+const warnSvg='<svg width=”13” height=”13” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”1.9” stroke-linecap=”round” stroke-linejoin=”round” style=”flex-shrink:0;margin-top:1px”><path d=”M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z”/><line x1=”12” y1=”9” x2=”12” y2=”13”/><line x1=”12” y1=”17” x2=”12.01” y2=”17”/></svg>';
+const globeSvg='<svg width=”11” height=”11” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><circle cx=”12” cy=”12” r=”10”/><line x1=”2” y1=”12” x2=”22” y2=”12”/><path d=”M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z”/></svg>';
+const xSvg='<svg width=”13” height=”13” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><circle cx=”12” cy=”12” r=”10”/><line x1=”15” y1=”9” x2=”9” y2=”15”/><line x1=”9” y1=”9” x2=”15” y2=”15”/></svg>';
+const checkSvg='<svg width=”13” height=”13” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2.2” stroke-linecap=”round” stroke-linejoin=”round”><polyline points=”20 6 9 17 4 12”/></svg>';
+const arrowSvg='<svg width=”11” height=”11” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><polyline points=”17 1 21 5 17 9”/><path d=”M3 11V9a4 4 0 0 1 4-4h14”/><polyline points=”7 23 3 19 7 15”/><path d=”M21 13v2a4 4 0 0 1-4 4H3”/></svg>';
+
+function renderCard(item){
+  var id=esc(item.id);
+  var isBlocked=item.status==='blocked';
+  var lang=(item.targetLanguage||'')+(item.targetRegion?'-'+item.targetRegion:'');
+  var lname=langName(item.targetLanguage)+(item.targetRegion?' ('+esc(item.targetRegion)+')':'');
+  var charCount=item.translatedText?item.translatedText.length:0;
+  var srcLen=item.sourceText?item.sourceText.length:0;
+  var pillCls=isBlocked?'rv-pill-blocked':(isCulturalItem(item)?'rv-pill-cultural':'rv-pill-review');
+  var pillTxt=isBlocked?'Blocked':(isCulturalItem(item)?'Cultural':'Pending');
+  var blockBanner=isBlocked&&item.blockReason?'<div class=”rv-block-banner”>'+warnSvg+'<span><strong>Rejection reason:</strong> '+esc(item.blockReason)+'</span></div>':'';
+  var isCultural=isCulturalItem(item);
+  var culturalBanner='';
+  if(isCultural){
+    var cIssues=parseCulturalIssues(item.blockReason||'');
+    var issueHtml=cIssues.map(function(s){return '<li>'+esc(s)+'</li>';}).join('');
+    culturalBanner='<div class=”rv-cultural-banner”><div class=”rv-cultural-banner-title”><svg width=”13” height=”13” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><path d=”M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z”/><path d=”M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z”/></svg><strong>Cultural sensitivity flag</strong></div>'+(issueHtml?'<ul class=”rv-cultural-issues”>'+issueHtml+'</ul>':'')+'</div>';
+  }
+  var approveBtnLabel=isBlocked?checkSvg+' Approve &amp; re-merge':checkSvg+' Approve &amp; merge';
+  return '<div class=”rv-card status-'+esc(item.status)+'” id=”card-'+id+'”>'+
+    '<div class=”rv-card-header”>'+
+      '<div class=”rv-card-header-left”>'+
+        '<code class=”rv-key” title=”'+esc(item.stringKey)+'”>'+esc(item.stringKey)+'</code>'+
+        '<div class=”rv-badges”>'+
+          '<span class=”rv-badge rv-badge-project”>'+esc(item.projectName)+'</span>'+
+          '<span class=”rv-badge rv-badge-lang” title=”'+esc(lname)+'”>'+esc(lang.toUpperCase())+'</span>'+
+        '</div>'+
+      '</div>'+
+      '<span class=”rv-status-pill '+pillCls+'”>'+pillTxt+'</span>'+
+    '</div>'+
+    blockBanner+culturalBanner+
+    '<div class=”rv-body”>'+
+      '<div class=”rv-source”>'+
+        '<div class=”rv-pane-label”>'+globeSvg+' Source &middot; English</div>'+
+        '<div class=”rv-source-text”>'+esc(item.sourceText)+'</div>'+
+      '</div>'+
+      '<div class=”rv-target”>'+
+        '<div class=”rv-pane-label”>'+arrowSvg+' Translation &middot; '+esc(lname)+'<span class=”rv-editable-hint”>&ensp;editable</span></div>'+
+        '<textarea class=”rv-textarea” id=”trans-'+id+'” oninput=”updateCharCount(\''+id+'\',this.value,'+srcLen+')”>'+esc(item.translatedText)+'</textarea>'+
+      '</div>'+
+    '</div>'+
+    '<div class=”rv-actions”>'+
+      '<span class=”rv-char-hint” id=”chars-'+id+'”>'+charCount+' chars</span>'+
+      '<div class=”rv-action-btns”>'+
+        '<button class=”rv-btn-reject” id=”btn-reject-'+id+'” onclick=”showRejectPanel(\''+id+'\')”>'+xSvg+' Reject</button>'+
+        '<button class=”rv-btn-approve” id=”btn-approve-'+id+'” onclick=”approve(\''+id+'\')”>'+approveBtnLabel+'</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class=”rv-reject-panel” id=”reject-panel-'+id+'”>'+
+      '<div class=”rv-pane-label” style=”margin-bottom:6px”>'+warnSvg+' Rejection Reason</div>'+
+      '<textarea id=”reject-reason-'+id+'” class=”rv-reject-textarea” placeholder=”Describe why this translation needs to be redone…”></textarea>'+
+      '<div class=”rv-reject-footer”>'+
+        '<button class=”rv-btn-cancel” onclick=”hideRejectPanel(\''+id+'\')”>Cancel</button>'+
+        '<button class=”rv-btn-confirm-reject” onclick=”confirmReject(\''+id+'\')”>Confirm Rejection</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
 function render(){
   updateCounts();
   const items=getVisible();
   const list=document.getElementById('review-list');
   if(items.length===0){
-    const okSvg='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-4px;margin-right:8px;color:var(--accent)"><polyline points="20 6 9 17 4 12"/></svg>';
+    const okSvg='<svg width=”20” height=”20” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”1.8” stroke-linecap=”round” stroke-linejoin=”round” style=”display:inline;vertical-align:-4px;margin-right:8px;color:var(--accent)”><polyline points=”20 6 9 17 4 12”/></svg>';
     const msg=searchQuery?'No results for “'+esc(searchQuery)+'”.'
       :currentFilter==='blocked'?'No blocked translations.'
       :currentFilter==='review'?okSvg+'All pending translations reviewed!'
       :okSvg+'All caught up — no translations to review.';
-    list.innerHTML='<div class="empty-state">'+msg+'</div>';return;
+    list.innerHTML='<div class=”empty-state”>'+msg+'</div>';return;
   }
 
-  const warnSvg='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-  const globeSvg='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
-  const xSvg='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-  const checkSvg='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-  const arrowSvg='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+  // Group by pipelineRunId (items with no pipelineRunId go in their own '__ungrouped__' group)
+  const groups=new Map();
+  items.forEach(function(item){
+    var key=item.pipelineRunId||'__ungrouped__';
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(item);
+  });
 
-  list.innerHTML=items.map(function(item){
-    var id=esc(item.id);
-    var isBlocked=item.status==='blocked';
-    var lang=(item.targetLanguage||'')+(item.targetRegion?'-'+item.targetRegion:'');
-    var lname=langName(item.targetLanguage)+(item.targetRegion?' ('+esc(item.targetRegion)+')':'');
-    var charCount=item.translatedText?item.translatedText.length:0;
-    var srcLen=item.sourceText?item.sourceText.length:0;
-    var pillCls=isBlocked?'rv-pill-blocked':(isCulturalItem(item)?'rv-pill-cultural':'rv-pill-review');
-    var pillTxt=isBlocked?'Blocked':(isCulturalItem(item)?'Cultural':'Pending');
-    var blockBanner=isBlocked&&item.blockReason?'<div class="rv-block-banner">'+warnSvg+'<span><strong>Rejection reason:</strong> '+esc(item.blockReason)+'</span></div>':'';
-    var isCultural=isCulturalItem(item);
-    var culturalBanner='';
-    if(isCultural){
-      var cIssues=parseCulturalIssues(item.blockReason||'');
-      var issueHtml=cIssues.map(function(s){return '<li>'+esc(s)+'</li>';}).join('');
-      culturalBanner='<div class="rv-cultural-banner"><div class="rv-cultural-banner-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg><strong>Cultural sensitivity flag</strong></div>'+(issueHtml?'<ul class="rv-cultural-issues">'+issueHtml+'</ul>':'')+'</div>';
+  var html='';
+  groups.forEach(function(groupItems,runId){
+    var pendingInGroup=groupItems.filter(function(i){return i.status==='review';});
+    var commitShort=groupItems[0].commitShort;
+    var projectName=groupItems[0].projectName;
+    var showHeader=(commitShort!=null||groups.size>1);
+    if(showHeader){
+      var approveAllBtn='';
+      if(pendingInGroup.length>0){
+        approveAllBtn='<button class=”rv-group-approve-all” id=”gaa-'+esc(runId)+'” onclick=”approveGroup(\''+esc(runId)+'\')”><svg width=”11” height=”11” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2.5” stroke-linecap=”round” stroke-linejoin=”round”><polyline points=”20 6 9 17 4 12”/></svg> Approve all <span class=”rv-gaa-count”>'+pendingInGroup.length+'</span></button>';
+      }
+      html+='<div class=”rv-group-header”>'+(commitShort?'<span class=”rv-commit-badge”>'+esc(commitShort)+'</span>':'')+
+        '<div class=”rv-group-meta”><span class=”rv-group-project”>'+esc(projectName)+'</span><span class=”rv-group-count”>&middot;&nbsp;'+groupItems.length+' item'+(groupItems.length!==1?'s':'')+'</span></div>'+
+        approveAllBtn+'</div>';
     }
-    return '<div class="rv-card status-'+esc(item.status)+'" id="card-'+id+'">'+
-      '<div class="rv-card-header">'+
-        '<div class="rv-card-header-left">'+
-          '<code class="rv-key" title="'+esc(item.stringKey)+'">'+esc(item.stringKey)+'</code>'+
-          '<div class="rv-badges">'+
-            '<span class="rv-badge rv-badge-project">'+esc(item.projectName)+'</span>'+
-            '<span class="rv-badge rv-badge-lang" title="'+esc(lname)+'">'+esc(lang.toUpperCase())+'</span>'+
-          '</div>'+
-        '</div>'+
-        '<span class="rv-status-pill '+pillCls+'">'+pillTxt+'</span>'+
-      '</div>'+
-      blockBanner+culturalBanner+
-      '<div class="rv-body">'+
-        '<div class="rv-source">'+
-          '<div class="rv-pane-label">'+globeSvg+' Source &middot; English</div>'+
-          '<div class="rv-source-text">'+esc(item.sourceText)+'</div>'+
-        '</div>'+
-        '<div class="rv-target">'+
-          '<div class="rv-pane-label">'+arrowSvg+' Translation &middot; '+esc(lname)+'<span class="rv-editable-hint">&ensp;editable</span></div>'+
-          '<textarea class="rv-textarea" id="trans-'+id+'" oninput="updateCharCount(\''+id+'\',this.value,'+srcLen+')">'+esc(item.translatedText)+'</textarea>'+
-        '</div>'+
-      '</div>'+
-      '<div class="rv-actions">'+
-        '<span class="rv-char-hint" id="chars-'+id+'">'+charCount+' chars</span>'+
-        '<div class="rv-action-btns">'+
-          '<button class="rv-btn-reject" id="btn-reject-'+id+'" onclick="showRejectPanel(\''+id+'\')">'+xSvg+' Reject</button>'+
-          '<button class="rv-btn-approve" id="btn-approve-'+id+'" onclick="approve(\''+id+'\')">'+checkSvg+' Approve &amp; merge</button>'+
-        '</div>'+
-      '</div>'+
-      '<div class="rv-reject-panel" id="reject-panel-'+id+'">'+
-        '<div class="rv-pane-label" style="margin-bottom:6px">'+warnSvg+' Rejection Reason</div>'+
-        '<textarea id="reject-reason-'+id+'" class="rv-reject-textarea" placeholder="Describe why this translation needs to be redone…"></textarea>'+
-        '<div class="rv-reject-footer">'+
-          '<button class="rv-btn-cancel" onclick="hideRejectPanel(\''+id+'\')">Cancel</button>'+
-          '<button class="rv-btn-confirm-reject" onclick="confirmReject(\''+id+'\')">Confirm Rejection</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
-  }).join('');
+    html+='<div class=”rv-group”>'+groupItems.map(function(item){return renderCard(item);}).join('')+'</div>';
+  });
+  list.innerHTML=html;
 }
 
 function updateCharCount(id,val,srcLen){
@@ -3545,7 +3551,7 @@ async function approve(id){
     allItems=allItems.filter(i=>i.id!==id);
     document.getElementById('card-'+id)?.remove();
     updateStatChips();updateCounts();
-    toast('Approved — PR will be updated shortly.');
+    toast('Approved — will be added to the existing PR shortly.');
     if(getVisible().length===0)render();
   }else{
     if(ab)ab.disabled=false;if(rb)rb.disabled=false;
@@ -3582,6 +3588,31 @@ async function confirmReject(id){
     const err=await res.json().catch(()=>({}));
     toast(err.error||'Rejection failed — please try again.','error');
   }
+}
+async function approveGroup(runId){
+  const btn=document.getElementById('gaa-'+runId);
+  if(btn)btn.disabled=true;
+  const targets=allItems.filter(function(i){return (i.pipelineRunId||'__ungrouped__')===runId&&i.status==='review';});
+  if(targets.length===0){if(btn)btn.disabled=false;return;}
+  let succeeded=0;
+  for(var i=0;i<targets.length;i++){
+    var item=targets[i];
+    var ab=document.getElementById('btn-approve-'+item.id);
+    var rb=document.getElementById('btn-reject-'+item.id);
+    if(ab)ab.disabled=true;if(rb)rb.disabled=true;
+    var editedText=(document.getElementById('trans-'+item.id)?.value||'').trim();
+    var res=await fetch(BASE+'/review/'+item.id+'/approve',{method:'POST',headers:authHeaders(),body:JSON.stringify({editedText:editedText||null})});
+    if(res.ok){
+      allItems=allItems.filter(function(x){return x.id!==item.id;});
+      document.getElementById('card-'+item.id)?.remove();
+      succeeded++;
+    }else{
+      if(ab)ab.disabled=false;if(rb)rb.disabled=false;
+    }
+  }
+  updateStatChips();updateCounts();
+  if(succeeded>0)toast(succeeded+' translation'+(succeeded!==1?'s':'')+' approved — PR will be updated shortly.');
+  render();
 }
 loadReviews();
 """.trimIndent()

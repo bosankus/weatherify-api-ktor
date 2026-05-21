@@ -31,7 +31,9 @@ data class Subscription(
     val currentPeriodEnd: Instant?,
     val limitHitAt: Instant? = null,
     /** Plan the user is moving to; set on subscription creation, cleared on payment confirmation. */
-    val pendingPlan: BillingPlan? = null
+    val pendingPlan: BillingPlan? = null,
+    /** When the subscription document was first created (i.e. when the user subscribed). */
+    val startedAt: Instant? = null
 ) {
     val inTrial: Boolean get() =
         plan != BillingPlan.FREE && plan != BillingPlan.ENTERPRISE &&

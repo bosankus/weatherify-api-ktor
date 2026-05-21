@@ -238,6 +238,8 @@ class MongoBillingRepository(
         val limitHitAt = (get("limitHitAt") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
         val pendingPlan = runCatching { BillingPlan.valueOf(getString("pendingPlan") ?: "") }.getOrNull()
+        val startedAt = (get("startedAt") as? Number)?.toLong()
+            ?.let { Instant.fromEpochMilliseconds(it) }
         return Subscription(
             userId = getString("userId"),
             plan = plan,
@@ -246,7 +248,8 @@ class MongoBillingRepository(
             cancelAtPeriodEnd = getBoolean("cancelAtPeriodEnd", false),
             currentPeriodEnd = periodEnd,
             limitHitAt = limitHitAt,
-            pendingPlan = pendingPlan
+            pendingPlan = pendingPlan,
+            startedAt = startedAt
         )
     }
 }

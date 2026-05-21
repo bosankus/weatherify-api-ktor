@@ -200,7 +200,7 @@ class TranslationPipeline(
         coroutineScope {
             config.targets.map { target ->
                 async {
-                    val (approved, count) = processTarget(payload, project, config, target, addedStrings)
+                    val (approved, count) = processTarget(payload, project, config, target, addedStrings, runId = runId, commitShort = payload.commitHash.take(7))
                     translatedCounts[target.code] = count
                     val done = completedLangs.incrementAndGet()
                     eventBus.stepRunning(userId, runId, "TRANSLATING", "$done / $totalLangs languages")
@@ -244,7 +244,7 @@ class TranslationPipeline(
                 return
             }
             eventBus.stepDone(userId, runId, "CREATING_PR", pr.prUrl)
-            eventBus.finishRun(userId, runId, prUrl = pr.prUrl, surfaceSkipped = surfaceKeys.size)
+            eventBus.finishRun(userId, runId, prUrl = pr.prUrl, prBranch = pr.branchName, surfaceSkipped = surfaceKeys.size)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             log.info("Translation PR created: {}", pr.prUrl)
             runCatching { runCdnPublish(userId, runId, project.id) }
@@ -290,7 +290,9 @@ class TranslationPipeline(
         project: Project,
         config: TransloomConfig,
         target: TargetConfig,
-        addedStrings: Map<String, String>
+        addedStrings: Map<String, String>,
+        runId: String,
+        commitShort: String
     ): Pair<Map<String, String>, Int> {
         data class StringResult(val key: String, val text: String, val status: String)
 
@@ -320,14 +322,14 @@ class TranslationPipeline(
                                 outcome == null -> {
                                     log.warn("Missing batch result for key='{}' lang={}", key, target.code)
                                     val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, target.code, target.region, "", "blocked", "Missing from batch")
+                                    translationRepository.upsertTranslation(stringId, target.code, target.region, "", "blocked", "Missing from batch", pipelineRunId = runId, commitShort = commitShort)
                                     null
                                 }
                                 outcome.isSuccess -> {
                                     val r = outcome.getOrThrow()
                                     val status = if (r.flags.isNotEmpty()) "review" else "auto"
                                     val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, status)
+                                    translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, status, pipelineRunId = runId, commitShort = commitShort)
                                     if (status != "auto") log.info("'{}' → {} flagged: {}", key, target.code, r.flags)
                                     StringResult(key, r.text, status)
                                 }
@@ -335,7 +337,7 @@ class TranslationPipeline(
                                     val error = outcome.exceptionOrNull()?.message
                                     log.warn("Failed key='{}' lang={}: {}", key, target.code, error)
                                     val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, target.code, target.region, "", "blocked", error)
+                                    translationRepository.upsertTranslation(stringId, target.code, target.region, "", "blocked", error, pipelineRunId = runId, commitShort = commitShort)
                                     null
                                 }
                             }
@@ -368,7 +370,7 @@ class TranslationPipeline(
                 val srcText = addedStrings[r.key] ?: return@map r
                 val notes = "Cultural: ${analysis.issues.joinToString("; ")}"
                 val stringId = translationRepository.upsertString(project.id, r.key, srcText)
-                translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, "review", notes)
+                translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, "review", notes, pipelineRunId = runId, commitShort = commitShort)
                 log.info("Cultural flag key='{}' lang={}: {}", r.key, target.code, analysis.issues)
                 StringResult(r.key, r.text, "review")
             }

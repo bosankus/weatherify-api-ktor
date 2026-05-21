@@ -9,6 +9,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -51,6 +52,14 @@ class UserLifecycleMonitor(
             stuck.forEach { (user, reason) ->
                 log.warn("  · userId={} login={} email={} reason=\"{}\"",
                     user.id, user.githubUsername, user.email ?: "—", reason)
+                runCatching {
+                    if (userActivityService.shouldNotify(user.id, setOf(UserEvent.ONBOARDING_STUCK), withinHours = 24)) {
+                        userActivityService.record(
+                            user.id, UserEvent.ONBOARDING_STUCK,
+                            mapOf("reason" to reason, "step" to user.onboardingStep.name)
+                        )
+                    }
+                }.onFailure { log.warn("ONBOARDING_STUCK record failed userId={}: {}", user.id, it.message) }
             }
         }
 
@@ -60,13 +69,14 @@ class UserLifecycleMonitor(
             expiring.forEach { (user, daysLeft, plan) ->
                 log.warn("  · userId={} login={} plan={} daysLeft={}",
                     user.id, user.githubUsername, plan.name, daysLeft)
-                // Record so the user's dashboard insights can pick it up next request.
                 runCatching {
-                    userActivityService.record(
-                        user.id, UserEvent.PLAN_EXPIRY_NOTIFIED,
-                        mapOf("plan" to plan.name, "daysLeft" to daysLeft.toString())
-                    )
-                }
+                    if (userActivityService.shouldNotify(user.id, setOf(UserEvent.PLAN_EXPIRY_NOTIFIED), withinHours = 24)) {
+                        userActivityService.record(
+                            user.id, UserEvent.PLAN_EXPIRY_NOTIFIED,
+                            mapOf("plan" to plan.name, "daysLeft" to daysLeft.toString())
+                        )
+                    }
+                }.onFailure { log.warn("PLAN_EXPIRY_NOTIFIED record failed userId={}: {}", user.id, it.message) }
             }
         }
 
@@ -76,6 +86,14 @@ class UserLifecycleMonitor(
             abandoned.forEach { user ->
                 log.warn("  · userId={} login={} email={}",
                     user.id, user.githubUsername, user.email ?: "—")
+                runCatching {
+                    if (userActivityService.shouldNotify(user.id, setOf(UserEvent.CHECKOUT_ABANDONED), withinHours = 24)) {
+                        userActivityService.record(
+                            user.id, UserEvent.CHECKOUT_ABANDONED,
+                            mapOf("detectedAt" to Clock.System.now().toString())
+                        )
+                    }
+                }.onFailure { log.warn("CHECKOUT_ABANDONED record failed userId={}: {}", user.id, it.message) }
             }
         }
 

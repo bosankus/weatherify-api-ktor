@@ -208,12 +208,13 @@ class PipelineEventBus(private val redisUrl: String? = null) {
         userId: String,
         runId: String,
         prUrl: String? = null,
+        prBranch: String? = null,
         error: String? = null,
         surfaceSkipped: Int = 0
     ) {
         val finishedAt = System.currentTimeMillis()
         mutateRun(userId, runId) {
-            it.copy(finishedAt = finishedAt, prUrl = prUrl, error = error, surfaceSkipped = surfaceSkipped)
+            it.copy(finishedAt = finishedAt, prUrl = prUrl, prBranch = prBranch, error = error, surfaceSkipped = surfaceSkipped)
         }
         activeSteps.remove(runId)
         emit(userId, PipelineEvent(

@@ -21,7 +21,9 @@ data class Translation(
     val status: String,
     val blockReason: String?,
     val projectId: String,
-    val projectName: String
+    val projectName: String,
+    val pipelineRunId: String? = null,
+    val commitShort: String? = null
 )
 
 @Serializable

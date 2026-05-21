@@ -121,6 +121,17 @@ fun Route.configureApiRoutes(
                     currentPlanDisplay = plan.displayName
                 )
 
+                val now = kotlinx.datetime.Clock.System.now()
+                val sevenDays = kotlin.time.Duration.parse("7d")
+                val trialEndsOn = if (sub.inTrial && sub.startedAt != null)
+                    (sub.startedAt + sevenDays).toLocalDateTime(TimeZone.UTC).date.toString()
+                else null
+                val daysUntilRenewal = when {
+                    sub.inTrial && sub.startedAt != null ->
+                        ((sub.startedAt + sevenDays) - now).inWholeDays.toInt().coerceAtLeast(0)
+                    sub.currentPeriodEnd != null -> (sub.currentPeriodEnd - now).inWholeDays.toInt().coerceAtLeast(0)
+                    else -> null
+                }
                 val subscription = SubscriptionResponse(
                     plan = plan.name,
                     displayName = plan.displayName,
@@ -129,7 +140,10 @@ fun Route.configureApiRoutes(
                     maxProjects = if (plan.maxProjects == Int.MAX_VALUE) -1 else plan.maxProjects,
                     cancelAtPeriodEnd = sub.cancelAtPeriodEnd,
                     currentPeriodEnd = sub.currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString(),
-                    trialLimitHit = sub.inTrial && sub.limitHitAt != null
+                    trialLimitHit = sub.inTrial && sub.limitHitAt != null,
+                    inTrial = sub.inTrial,
+                    trialEndsOn = trialEndsOn,
+                    daysUntilRenewal = daysUntilRenewal
                 )
 
                 val usageResp = UsageResponse(
@@ -242,20 +256,18 @@ fun Route.configureApiRoutes(
                     )
                 }
 
-                val userToken = preflightUser?.githubToken
-                if (userToken != null) {
-                    runCatching { githubService.createWebhook(project.githubRepo, userToken) }
-                        .onSuccess {
-                            runCatching { projectRepository.markWebhookVerified(project.id) }
-                            call.application.launch {
-                                userActivityService.record(
-                                    userId, UserEvent.WEBHOOK_INSTALLED,
-                                    mapOf("projectId" to project.id, "repo" to project.githubRepo)
-                                )
-                            }
+                val userToken = preflightUser!!.githubToken!!
+                runCatching { githubService.createWebhook(project.githubRepo, userToken) }
+                    .onSuccess {
+                        runCatching { projectRepository.markWebhookVerified(project.id) }
+                        call.application.launch {
+                            userActivityService.record(
+                                userId, UserEvent.WEBHOOK_INSTALLED,
+                                mapOf("projectId" to project.id, "repo" to project.githubRepo)
+                            )
                         }
-                        .onFailure { apiLog.warn("Webhook auto-install failed for {}: {}", project.githubRepo, it.message) }
-                }
+                    }
+                    .onFailure { apiLog.warn("Webhook auto-install failed for {}: {}", project.githubRepo, it.message) }
 
                 call.respond(
                     HttpStatusCode.Created,
@@ -418,7 +430,9 @@ fun Route.configureApiRoutes(
                         status = t.status,
                         blockReason = t.blockReason,
                         projectId = t.projectId,
-                        projectName = t.projectName
+                        projectName = t.projectName,
+                        pipelineRunId = t.pipelineRunId,
+                        commitShort = t.commitShort
                     )
                 }
                 call.respond(HttpStatusCode.OK, ReviewListResponse(response, total))
@@ -442,7 +456,7 @@ fun Route.configureApiRoutes(
                 val editedText = body.editedText?.takeIf { it.isNotBlank() }
                 translationRepository.approve(translationId, editedText)
 
-                launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, translation.projectId, cdnPublishService)
+                launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, translation.projectId, cdnPublishService, eventBus = pipelineEventBus)
 
                 call.respond(HttpStatusCode.OK, mapOf("status" to "approved", "id" to translationId))
             }
@@ -479,7 +493,7 @@ fun Route.configureApiRoutes(
 
                 // Trigger a follow-up PR per affected project (existing claim+PR logic).
                 projectIds.forEach { projectId ->
-                    launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, projectId, cdnPublishService)
+                    launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, projectId, cdnPublishService, eventBus = pipelineEventBus)
                 }
 
                 apiLog.info("Batch approve: userId={} approved={} of {}", userId, approved, validIds.size)
@@ -711,17 +725,15 @@ private fun launchFollowUpPr(
     userRepository: UserRepository,
     translationRepository: TranslationRepository,
     projectId: String,
-    cdnPublishService: CdnPublishService? = null
+    cdnPublishService: CdnPublishService? = null,
+    eventBus: PipelineEventBus? = null
 ) {
     application.launch {
-        // Brief window: collect any simultaneous approvals so they land in one PR.
         delay(2_000L)
 
         val pending = translationRepository.getApprovedForProject(projectId)
         if (pending.isEmpty()) return@launch
 
-        // Atomic claim: first coroutine to run sets status "approved" → "auto".
-        // Any concurrent duplicate coroutine will find 0 modified documents and bail.
         val claimed = translationRepository.claimApproved(pending.map { it.id })
         if (claimed == 0) {
             apiLog.debug("Follow-up PR: lost claim race for project={}, bailing", projectId)
@@ -740,7 +752,6 @@ private fun launchFollowUpPr(
             return@launch
         }
 
-        // Group translations by their target file path (one file per language).
         val fileTranslations = mutableMapOf<String, MutableMap<String, String>>()
         for (t in pending) {
             val target = project.targets.firstOrNull { it.code == t.targetLanguage } ?: continue
@@ -751,11 +762,76 @@ private fun launchFollowUpPr(
         val stringCount = pending.map { it.stringKey }.distinct().size
         val langCount   = pending.map { it.targetLanguage }.distinct().size
 
+        // ── Try to add a commit to the most recent open PR branch for this project ──
+        val recentRuns = if (eventBus != null) runCatching { eventBus.recentRuns(project.ownerId) }.getOrElse { emptyList() } else emptyList()
+        val latestPrBranch = recentRuns
+            .filter { it.projectId == projectId && it.prBranch != null }
+            .maxByOrNull { it.startedAt }
+            ?.prBranch
+
+        if (latestPrBranch != null) {
+            val maxRetries = 3
+            var lastError: Exception? = null
+            for (attempt in 1..maxRetries) {
+                try {
+                    val updatedFiles: Map<String, String> = coroutineScope {
+                        fileTranslations.entries.map { (filePath, translations) ->
+                            async {
+                                val existing = githubService.fetchFileContent(
+                                    repo = project.githubRepo, branch = project.watchBranch,
+                                    filePath = filePath, token = githubToken
+                                )
+                                val merged = when {
+                                    filePath.endsWith(".xml")     -> StringParserService.mergeAndroidXml(existing, translations)
+                                    filePath.endsWith(".strings") -> StringParserService.mergeIosStrings(existing, translations)
+                                    filePath.endsWith(".json") || filePath.endsWith(".arb") ->
+                                        StringParserService.mergeJsonStrings(existing, translations)
+                                    else -> return@async null
+                                }
+                                filePath to merged
+                            }
+                        }.awaitAll().filterNotNull().toMap()
+                    }
+
+                    val added = githubService.addCommitToBranch(
+                        repo          = project.githubRepo,
+                        branchName    = latestPrBranch,
+                        files         = updatedFiles,
+                        commitMessage = "chore(i18n): add $stringCount reviewed translation${if (stringCount != 1) "s" else ""} for $langCount language${if (langCount != 1) "s" else ""} (approved via Transloom portal)",
+                        token         = githubToken
+                    )
+
+                    if (added) {
+                        apiLog.info("Review commit pushed to existing PR branch={} ({} translations, {} languages)", latestPrBranch, pending.size, langCount)
+                        if (cdnPublishService != null) {
+                            runCatching { cdnPublishService.publish(projectId) }
+                                .onSuccess { receipt -> apiLog.info("CDN auto-publish after review commit: project={} locales={}", projectId, receipt.locales) }
+                                .onFailure { e -> apiLog.warn("CDN publish failed after review commit: project={}: {}", projectId, e.message) }
+                        }
+                        return@launch
+                    }
+                    // Branch no longer exists — fall through to create a new PR
+                    apiLog.info("PR branch {} not found — will create a new PR for project={}", latestPrBranch, projectId)
+                    break
+                } catch (e: Exception) {
+                    lastError = e
+                    if (attempt < maxRetries) {
+                        val delayMs = 1000L * (1L shl (attempt - 1))
+                        apiLog.warn("Review commit attempt {}/{} failed, retrying in {}ms: {}", attempt, maxRetries, delayMs, e.message)
+                        delay(delayMs)
+                    }
+                }
+            }
+            if (lastError != null) {
+                apiLog.warn("Review commit to existing branch failed after retries, falling back to new PR for project={}", projectId)
+            }
+        }
+
+        // ── Fall back: create a new PR ──────────────────────────────────────────
         val maxRetries = 3
         var lastError: Exception? = null
         for (attempt in 1..maxRetries) {
             try {
-                // Fetch every target file and merge in parallel — one network call per language.
                 val updatedFiles: Map<String, String> = coroutineScope {
                     fileTranslations.entries.map { (filePath, translations) ->
                         async {
@@ -779,16 +855,16 @@ private fun launchFollowUpPr(
                     repo          = project.githubRepo,
                     baseBranch    = project.watchBranch,
                     files         = updatedFiles,
-                    commitMessage = "chore(i18n): add $stringCount approved translation${if (stringCount != 1) "s" else ""} for $langCount language${if (langCount != 1) "s" else ""}",
-                    prTitle       = "Transloom: $stringCount approved translation${if (stringCount != 1) "s" else ""} · $langCount language${if (langCount != 1) "s" else ""}",
+                    commitMessage = "chore(i18n): add $stringCount reviewed translation${if (stringCount != 1) "s" else ""} for $langCount language${if (langCount != 1) "s" else ""}",
+                    prTitle       = "Transloom: $stringCount reviewed translation${if (stringCount != 1) "s" else ""} · $langCount language${if (langCount != 1) "s" else ""}",
                     prBody        = buildApprovalPrBody(pending),
                     token         = githubToken
                 )
-                apiLog.info("Batch follow-up PR created: {} ({} translations, {} languages)", pr.prUrl, pending.size, langCount)
+                apiLog.info("New follow-up PR created: {} ({} translations, {} languages)", pr.prUrl, pending.size, langCount)
                 if (cdnPublishService != null) {
                     runCatching { cdnPublishService.publish(projectId) }
-                        .onSuccess { receipt -> apiLog.info("CDN auto-publish after PR: project={} locales={} version={}", projectId, receipt.locales, receipt.bundleVersion) }
-                        .onFailure { e -> apiLog.warn("CDN auto-publish failed after PR for project={}: {}", projectId, e.message) }
+                        .onSuccess { receipt -> apiLog.info("CDN auto-publish after follow-up PR: project={} locales={}", projectId, receipt.locales) }
+                        .onFailure { e -> apiLog.warn("CDN publish failed after follow-up PR: project={}: {}", projectId, e.message) }
                 }
                 return@launch
             } catch (e: Exception) {

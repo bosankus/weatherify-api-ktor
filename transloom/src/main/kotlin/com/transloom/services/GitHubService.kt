@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 
-data class PrSummary(val status: String, val prUrl: String)
+data class PrSummary(val status: String, val prUrl: String, val branchName: String)
 
 @Serializable
 data class GitRefResponse(
@@ -202,7 +202,69 @@ class GitHubService {
             setBody(PullRequestPayload(title = prTitle, head = newBranchName, base = baseBranch, body = prBody))
         }.body()
 
-        return PrSummary("success", prResp.html_url)
+        return PrSummary("success", prResp.html_url, newBranchName)
+    }
+
+    /**
+     * Pushes a new commit to an existing branch. Returns false if the branch no longer exists
+     * (caller should fall back to creating a new PR). Throws on other GitHub API errors.
+     */
+    suspend fun addCommitToBranch(
+        repo: String,
+        branchName: String,
+        files: Map<String, String>,
+        commitMessage: String,
+        token: String
+    ): Boolean {
+        // 1. Get current tip of the branch
+        val refResponse = client.get("https://api.github.com/repos/$repo/git/ref/heads/$branchName") {
+            gitHubAuth(token)
+            header(HttpHeaders.Accept, "application/vnd.github+json")
+        }
+        if (refResponse.status == io.ktor.http.HttpStatusCode.NotFound) return false
+        if (!refResponse.status.isSuccess()) throw Exception("GitHub ref fetch failed: ${refResponse.status}")
+        val tipSha = refResponse.body<GitRefResponse>().gitObject.sha
+
+        // 2. Upload blobs in parallel
+        val treeItems = coroutineScope {
+            files.map { (path, content) ->
+                async {
+                    val blobResp: BlobResponse = client.post("https://api.github.com/repos/$repo/git/blobs") {
+                        gitHubAuth(token)
+                        header(HttpHeaders.Accept, "application/vnd.github+json")
+                        contentType(ContentType.Application.Json)
+                        setBody(BlobRequest(content = content))
+                    }.body()
+                    TreeItem(path = path, mode = "100644", type = "blob", sha = blobResp.sha)
+                }
+            }.awaitAll()
+        }
+
+        // 3. Create tree on top of current tip
+        val treeResp: TreeResponse = client.post("https://api.github.com/repos/$repo/git/trees") {
+            gitHubAuth(token)
+            header(HttpHeaders.Accept, "application/vnd.github+json")
+            contentType(ContentType.Application.Json)
+            setBody(TreeRequest(base_tree = tipSha, tree = treeItems))
+        }.body()
+
+        // 4. Create commit
+        val commitResp: CommitResponse = client.post("https://api.github.com/repos/$repo/git/commits") {
+            gitHubAuth(token)
+            header(HttpHeaders.Accept, "application/vnd.github+json")
+            contentType(ContentType.Application.Json)
+            setBody(CommitRequest(message = commitMessage, tree = treeResp.sha, parents = listOf(tipSha)))
+        }.body()
+
+        // 5. Advance the branch ref
+        val patchResponse = client.patch("https://api.github.com/repos/$repo/git/refs/heads/$branchName") {
+            gitHubAuth(token)
+            header(HttpHeaders.Accept, "application/vnd.github+json")
+            contentType(ContentType.Application.Json)
+            setBody(RefUpdateRequest(sha = commitResp.sha))
+        }
+        if (!patchResponse.status.isSuccess()) throw Exception("Failed to update branch ref: ${patchResponse.status}")
+        return true
     }
 
     suspend fun createWebhook(repo: String, token: String) {

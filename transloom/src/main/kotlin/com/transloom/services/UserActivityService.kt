@@ -2,6 +2,8 @@ package com.transloom.services
 
 import com.transloom.domain.BillingPlan
 import com.transloom.domain.OnboardingStep
+import com.transloom.domain.Subscription
+import com.transloom.domain.UsageStats
 import com.transloom.domain.User
 import com.transloom.domain.UserActivity
 import com.transloom.domain.UserEvent
@@ -27,6 +29,7 @@ class UserActivityService(
 
     private val STUCK_AFTER_SIGNUP_HOURS = 48
     private val STUCK_AFTER_PROJECT_HOURS = 72
+    private val STUCK_AFTER_WEBHOOK_HOURS = 24
     private val PLAN_EXPIRING_SOON_DAYS = 5L
     private val PAYMENT_ABANDONED_MINUTES = 60L
 
@@ -62,8 +65,9 @@ class UserActivityService(
             (it.toEpochMilliseconds() - now.toEpochMilliseconds()) / (1000 * 60 * 60 * 24)
         }
 
+        val usage = billingRepository.getUsage(userId)
         val (stuck, stuckReason) = evaluateStuck(user, recent, now)
-        val suggestions = buildSuggestions(user, subscription.plan, daysUntilExpiry, recent)
+        val suggestions = buildSuggestions(user, subscription, daysUntilExpiry, recent, usage)
 
         return UserInsights(
             userId = user.id,
@@ -120,6 +124,12 @@ class UserActivityService(
             .mapNotNull { userRepository.findById(it) }
     }
 
+    /** Returns true if no event in [events] has been recorded for [userId] within [withinHours] hours. Used by the lifecycle monitor for dedup. */
+    suspend fun shouldNotify(userId: String, events: Set<UserEvent>, withinHours: Long): Boolean {
+        val last = userActivityRepository.lastOccurrence(userId, events) ?: return true
+        return (Clock.System.now() - last.occurredAt).inWholeHours >= withinHours
+    }
+
     // ─── Private helpers ─────────────────────────────────────────────────────
 
     private fun onboardingStepFor(event: UserEvent): OnboardingStep? = when (event) {
@@ -143,30 +153,48 @@ class UserActivityService(
                 if (signedUpAgo > STUCK_AFTER_PROJECT_HOURS.hours)
                     true to "Project created but webhook not installed after ${signedUpAgo.inWholeHours}h"
                 else false to null
+            OnboardingStep.WEBHOOK_INSTALLED -> {
+                val elapsed = user.lastActiveAt?.let { now - it } ?: signedUpAgo
+                val hasTranslation = recent.any { it.event == UserEvent.TRANSLATION_RUN_STARTED }
+                if (!hasTranslation && elapsed > STUCK_AFTER_WEBHOOK_HOURS.hours)
+                    true to "Webhook installed but no translation run after ${elapsed.inWholeHours}h"
+                else false to null
+            }
             else -> false to null
         }
     }
 
     private fun buildSuggestions(
         user: User,
-        plan: BillingPlan,
+        subscription: Subscription,
         daysUntilExpiry: Long?,
-        recent: List<UserActivity>
+        recent: List<UserActivity>,
+        usage: UsageStats
     ): List<String> = buildList {
+        // Highest urgency: trial limit hit — surface as sole action to maximise upgrade conversion.
+        if (subscription.inTrial && subscription.limitHitAt != null) {
+            add("You've hit your ${subscription.plan.displayName} trial limit — upgrade now to resume translations instantly.")
+            return@buildList
+        }
+
         when (user.onboardingStep) {
             OnboardingStep.SIGNED_UP ->
                 add("Create your first project — point Transloom at a GitHub repo to start translating.")
             OnboardingStep.PROJECT_CREATED ->
                 add("Install the GitHub webhook so commits to your watch branch auto-trigger translations.")
             OnboardingStep.WEBHOOK_INSTALLED ->
-                add("Push a commit that changes a strings file to see the pipeline in action.")
+                add("Push a commit that changes a strings file — within seconds you'll see translated PRs appear in your dashboard.")
             OnboardingStep.FIRST_TRANSLATION ->
-                if (plan == BillingPlan.FREE)
-                    add("Upgrade to Solo to lift the 500-string monthly cap and unlock unlimited languages.")
+                if (subscription.plan == BillingPlan.FREE) {
+                    val limit = BillingPlan.FREE.stringLimit ?: 500
+                    val pct = if (limit > 0) (usage.stringsTranslated * 100) / limit else 0
+                    add("You've used ${usage.stringsTranslated} / $limit strings this month ($pct%). Upgrade to Solo (₹499/mo) for 10× more strings and unlimited languages.")
+                }
             else -> {}
         }
+
         if (daysUntilExpiry != null && daysUntilExpiry in 0..PLAN_EXPIRING_SOON_DAYS) {
-            add("Your ${plan.displayName} plan renews in $daysUntilExpiry day(s) — confirm your card is up to date.")
+            add("Your ${subscription.plan.displayName} plan renews in $daysUntilExpiry day(s) — confirm your card is up to date.")
         }
         val lastPaymentVerified = recent.firstOrNull { it.event == UserEvent.PAYMENT_VERIFIED }
         val lastInvoice = recent.firstOrNull { it.event == UserEvent.INVOICE_GENERATED }

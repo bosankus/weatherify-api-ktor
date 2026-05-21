@@ -12,6 +12,7 @@ data class PipelineRunState(
     val finishedAt: Long? = null,
     val steps: List<PipelineStepState>,
     val prUrl: String? = null,
+    val prBranch: String? = null,
     val error: String? = null,
     val projectId: String? = null,
     val retriedFromRunId: String? = null,
@@ -33,7 +34,8 @@ val STEP_LABELS = mapOf(
     "DETECTING_CHANGES" to "Scanning for changes",
     "BILLING_CHECK" to "Checking plan limits",
     "TRANSLATING" to "Translating strings",
-    "CREATING_PR" to "Opening pull request"
+    "CREATING_PR" to "Opening pull request",
+    "CDN_PUBLISH" to "Publishing to CDN"
 )
 
 fun initialSteps(): List<PipelineStepState> = STEP_LABELS.map { (id, label) ->

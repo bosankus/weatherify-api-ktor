@@ -2,11 +2,15 @@ package com.transloom.services
 
 import com.transloom.domain.BillingPlan
 import com.transloom.domain.UsageStats
+import com.transloom.domain.UserEvent
 import com.transloom.repository.BillingRepository
 import kotlinx.datetime.Clock
 import org.slf4j.LoggerFactory
 
-class BillingService(private val billingRepository: BillingRepository) {
+class BillingService(
+    private val billingRepository: BillingRepository,
+    private val userActivityService: UserActivityService? = null
+) {
     private val log = LoggerFactory.getLogger(BillingService::class.java)
 
     suspend fun getPlan(userId: String): BillingPlan = billingRepository.getSubscription(userId).plan
@@ -38,6 +42,10 @@ class BillingService(private val billingRepository: BillingRepository) {
     private suspend fun recordTrialLimitHit(subscription: com.transloom.domain.Subscription) {
         if (subscription.inTrial && subscription.limitHitAt == null) {
             billingRepository.setLimitHitAt(subscription.userId, Clock.System.now())
+            userActivityService?.record(
+                subscription.userId, UserEvent.TRIAL_LIMIT_HIT,
+                mapOf("plan" to subscription.plan.name)
+            )
         }
     }
 

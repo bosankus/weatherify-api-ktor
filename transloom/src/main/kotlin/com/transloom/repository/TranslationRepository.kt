@@ -12,7 +12,9 @@ interface TranslationRepository {
         targetRegion: String?,
         translatedText: String,
         status: String,
-        blockReason: String? = null
+        blockReason: String? = null,
+        pipelineRunId: String? = null,
+        commitShort: String? = null
     )
 
     suspend fun listStringsForProject(projectId: String, limit: Int = 100, offset: Int = 0): StringsPage

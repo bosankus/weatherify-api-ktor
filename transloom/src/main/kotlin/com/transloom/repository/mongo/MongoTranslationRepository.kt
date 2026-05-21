@@ -50,7 +50,9 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         targetRegion: String?,
         translatedText: String,
         status: String,
-        blockReason: String?
+        blockReason: String?,
+        pipelineRunId: String?,
+        commitShort: String?
     ) {
         val now = System.currentTimeMillis()
         val filter = and(eq("stringId", stringId), eq("targetLanguage", targetLanguage))
@@ -61,6 +63,8 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         )
         if (blockReason != null) setUpdates += Updates.set("blockReason", blockReason)
         else setUpdates += Updates.unset("blockReason")
+        if (pipelineRunId != null) setUpdates += Updates.set("pipelineRunId", pipelineRunId)
+        if (commitShort != null) setUpdates += Updates.set("commitShort", commitShort)
 
         val update = Updates.combine(
             Updates.setOnInsert("_id", UUID.randomUUID().toString()),
@@ -285,7 +289,9 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             status = getString("status") ?: "auto",
             blockReason = getString("blockReason"),
             projectId = strDoc?.getString("projectId") ?: "",
-            projectName = projDoc?.getString("name") ?: ""
+            projectName = projDoc?.getString("name") ?: "",
+            pipelineRunId = getString("pipelineRunId"),
+            commitShort = getString("commitShort")
         )
     }
 }

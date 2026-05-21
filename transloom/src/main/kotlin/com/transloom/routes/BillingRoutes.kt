@@ -51,7 +51,13 @@ data class SubscriptionResponse(
     val maxProjects: Int,
     val cancelAtPeriodEnd: Boolean,
     val currentPeriodEnd: String?,
-    val trialLimitHit: Boolean
+    val trialLimitHit: Boolean,
+    /** True when the user is in the 7-day free trial (paid plan, no first charge yet). */
+    val inTrial: Boolean,
+    /** Approximate date the trial ends (startedAt + 7 days), or null if not in trial. */
+    val trialEndsOn: String?,
+    /** Whole days until renewal or cancellation date; null when no active period. */
+    val daysUntilRenewal: Int?
 )
 
 @Serializable
@@ -90,6 +96,21 @@ fun Route.configureBillingRoutes(
             val userId = call.userId() ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
             val sub = billingRepository.getSubscription(userId)
             val plan = sub.plan
+            val now = Clock.System.now()
+
+            val trialEndsOn = if (sub.inTrial && sub.startedAt != null)
+                (sub.startedAt + 7.days).toLocalDateTime(TimeZone.UTC).date.toString()
+            else null
+
+            val daysUntilRenewal = when {
+                sub.inTrial && sub.startedAt != null -> {
+                    val trialEnd = sub.startedAt + 7.days
+                    (trialEnd - now).inWholeDays.toInt().coerceAtLeast(0)
+                }
+                sub.currentPeriodEnd != null -> (sub.currentPeriodEnd - now).inWholeDays.toInt().coerceAtLeast(0)
+                else -> null
+            }
+
             call.respond(
                 SubscriptionResponse(
                     plan = plan.name,
@@ -99,7 +120,10 @@ fun Route.configureBillingRoutes(
                     maxProjects = if (plan.maxProjects == Int.MAX_VALUE) -1 else plan.maxProjects,
                     cancelAtPeriodEnd = sub.cancelAtPeriodEnd,
                     currentPeriodEnd = sub.currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString(),
-                    trialLimitHit = sub.inTrial && sub.limitHitAt != null
+                    trialLimitHit = sub.inTrial && sub.limitHitAt != null,
+                    inTrial = sub.inTrial,
+                    trialEndsOn = trialEndsOn,
+                    daysUntilRenewal = daysUntilRenewal
                 )
             )
         }

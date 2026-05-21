@@ -159,7 +159,6 @@ fun Application.module() {
     val cdnPublishService = CdnPublishService(translationRepository, cfKvService, cdnPublishRepository)
 
     val jobQueue = TranslationJobQueue(jobQueueRepository)
-    val billingService = BillingService(billingRepository)
     // PipelineEventBus created first so it can be injected into UserActivityService
     // for SSE-driven onboarding step advancement.
     val pipelineEventBus = com.transloom.services.PipelineEventBus(redisUrl)
@@ -170,6 +169,7 @@ fun Application.module() {
         projectRepository = projectRepository,
         eventBus = pipelineEventBus
     )
+    val billingService = BillingService(billingRepository, userActivityService)
     val razorpayService = RazorpayBillingService(billingRepository, userActivityService)
     val lifecycleMonitor = UserLifecycleMonitor(userActivityService)
     lifecycleMonitor.start()
@@ -237,7 +237,7 @@ fun Application.module() {
             staleProjects.size, staleProjects.size, healed)
     }
 
-    environment.monitor.subscribe(ApplicationStopped) {
+    monitor.subscribe(ApplicationStopped) {
         jobQueue.close()
         pipelineEventBus.close()
         cacheRepository.close()
