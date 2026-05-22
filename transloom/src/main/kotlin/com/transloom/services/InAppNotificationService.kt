@@ -79,6 +79,28 @@ class InAppNotificationService(
         dedupMs = DEDUP_6H
     )
 
+    suspend fun notifyGitHubTokenInvalid(userId: String, repo: String) = notify(
+        userId = userId,
+        type = NotificationType.GITHUB_TOKEN_INVALID,
+        title = "GitHub access lost — re-authenticate",
+        message = "Transloom can no longer access $repo. Re-connect GitHub to resume automatic translations.",
+        level = "error",
+        actionUrl = "/transloom/auth/github",
+        actionLabel = "Re-connect GitHub",
+        dedupMs = DEDUP_6H
+    )
+
+    suspend fun notifyPipelineFailed(userId: String, repo: String, reason: String) = notify(
+        userId = userId,
+        type = NotificationType.PIPELINE_FAILED,
+        title = "Pipeline failed — $repo",
+        message = reason,
+        level = "error",
+        actionUrl = "/transloom/app#activity",
+        actionLabel = "View details",
+        dedupMs = DEDUP_1H
+    )
+
     suspend fun notifyOnboarding(userId: String, stuckReason: String) = notify(
         userId = userId,
         type = NotificationType.ONBOARDING,

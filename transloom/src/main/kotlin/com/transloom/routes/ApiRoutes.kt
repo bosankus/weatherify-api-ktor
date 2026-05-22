@@ -27,6 +27,7 @@ import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
+import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.CancellationException
@@ -42,9 +43,17 @@ import java.util.UUID
 
 private val apiLog = LoggerFactory.getLogger("ApiRoutes")
 
-// Tracks how many times each runId has been retried. In-memory, single-instance.
-private val retryAttempts = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
 private const val MAX_RETRIES = 3
+// TTL-bounded retry tracking — entries older than 30 min are evicted on each access
+// so the map never grows unbounded across thousands of pipeline runs.
+private const val RETRY_TTL_MS = 1_800_000L
+private data class RetryRecord(val count: java.util.concurrent.atomic.AtomicInteger, val createdAt: Long = System.currentTimeMillis())
+private val retryAttempts = java.util.concurrent.ConcurrentHashMap<String, RetryRecord>()
+private fun retryCount(runId: String): java.util.concurrent.atomic.AtomicInteger {
+    val cutoff = System.currentTimeMillis() - RETRY_TTL_MS
+    retryAttempts.entries.removeIf { it.value.createdAt < cutoff }
+    return retryAttempts.getOrPut(runId) { RetryRecord(java.util.concurrent.atomic.AtomicInteger(0)) }.count
+}
 
 @Serializable
 data class BootstrapResponse(
@@ -191,8 +200,17 @@ fun Route.configureApiRoutes(
                 if (body.name.isBlank() || body.githubRepo.isBlank()) {
                     return@post call.respond(HttpStatusCode.BadRequest, ApiError("name and githubRepo are required"))
                 }
+                if (body.name.length > 100) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("Project name must be 100 characters or less"))
+                }
+                if (body.githubRepo.length > 200 || !body.githubRepo.contains("/")) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("githubRepo must be in owner/repo format"))
+                }
                 if (body.targets.isEmpty()) {
                     return@post call.respond(HttpStatusCode.BadRequest, ApiError("At least one target language is required"))
+                }
+                if (body.targets.size > 25) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("Maximum 25 target languages per project"))
                 }
 
                 // Fetch count, plan, and user token in parallel — all are independent reads.
@@ -508,10 +526,12 @@ fun Route.configureApiRoutes(
                     return@post call.respond(HttpStatusCode.BadRequest, ApiError("One or more invalid translation ids"))
                 }
 
-                // Fetch translations to group by project and verify ownership.
-                val translations = validIds.mapNotNull { translationRepository.getTranslation(it) }
+                // Single aggregation pass instead of N individual getTranslation() calls.
+                val translations = translationRepository.listByIds(validIds)
                 val projectIds = translations.map { it.projectId }.distinct()
-                val projects = projectIds.mapNotNull { projectRepository.findById(it) }
+                val projects = coroutineScope {
+                    projectIds.map { id -> async { projectRepository.findById(id) } }.awaitAll().filterNotNull()
+                }
                 if (projects.any { it.ownerId != userId }) {
                     return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied to one or more translations"))
                 }
@@ -707,8 +727,7 @@ fun Route.configureApiRoutes(
             val runId = call.parameters["runId"]
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Missing runId"))
 
-            // Rate-limit: max 3 retries per original run to prevent runaway retry loops.
-            val count = retryAttempts.getOrPut(runId) { java.util.concurrent.atomic.AtomicInteger(0) }
+            val count = retryCount(runId)
             if (count.get() >= MAX_RETRIES) {
                 return@post call.respond(
                     HttpStatusCode.TooManyRequests,
@@ -747,10 +766,8 @@ fun Route.configureApiRoutes(
             call.respond(mapOf("queued" to true, "originalRunId" to runId, "attempt" to attempt, "maxRetries" to MAX_RETRIES))
         }
 
-        // --- Manual Sync ---
-        // Fetches the current HEAD of watchBranch and enqueues it through the normal pipeline,
-        // bypassing the need for a git push. Useful for initial project setup or re-syncing after
-        // config changes. Respects the same dedup, billing, and rate-limit guards as the webhook path.
+        // --- Manual Sync (rate-limited: 5/min per IP) ---
+        rateLimit(RateLimitName("manual_sync")) {
         post("/projects/{id}/sync") {
             val userId = call.userId()
                 ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
@@ -786,7 +803,7 @@ fun Route.configureApiRoutes(
                 "branch" to project.watchBranch,
                 "commitShort" to commitHash.take(7)
             ))
-        }
+        }} // end rateLimit + post
 
         // --- Webhook Install ---
         post("/projects/{id}/install-webhook") {

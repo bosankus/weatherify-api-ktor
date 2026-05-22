@@ -101,7 +101,12 @@ fun Route.configureWebhookRoutes(
                 return@post
             }
 
-            if (lastPushPerRepo.size > 1000) lastPushPerRepo.clear()
+            // Age-based eviction: remove entries older than 5 minutes rather than a full clear,
+            // which would race with concurrent reads and lose rate-limit state for active repos.
+            if (lastPushPerRepo.size > 2000) {
+                val cutoff = now - 300_000L
+                lastPushPerRepo.entries.removeIf { it.value < cutoff }
+            }
 
             val project = projectRepository.findByGithubRepo(repo)
             if (project == null) {

@@ -65,6 +65,12 @@ interface TranslationRepository {
      */
     suspend fun getPublishableTranslations(projectId: String): List<Translation>
 
+    /**
+     * Fetches multiple translations in a single aggregation pass — use instead of
+     * repeated getTranslation() calls to avoid N+1 database round-trips.
+     */
+    suspend fun listByIds(ids: List<String>): List<Translation>
+
     /** Locks a translation so the pipeline will never overwrite it. Returns false if not found. */
     suspend fun lock(translationId: String, lockedBy: String): Boolean
 

@@ -58,7 +58,9 @@ class TranslationPipeline(
     private val semanticChangeAnalyzer: SemanticChangeAnalyzer,
     private val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer,
     private val cdnPublishService: com.transloom.services.CdnPublishService,
-    private val sharedMemoryRepository: SharedTranslationMemoryRepository? = null
+    private val sharedMemoryRepository: SharedTranslationMemoryRepository? = null,
+    /** Max concurrent Gemini batch calls per translation run. Default 4 matches Gemini Flash burst limits. */
+    private val translationConcurrency: Int = 4
 ) {
     private val log = LoggerFactory.getLogger(TranslationPipeline::class.java)
 
@@ -74,6 +76,20 @@ class TranslationPipeline(
             projectId = project.id, retriedFromRunId = payload.retriedFromRunId
         )
         log.info("Pipeline: repo={} branch={} commit={}", payload.repositoryFullName, payload.branchName, payload.commitHash.take(7))
+
+        // ── Pre-flight billing check ───────────────────────────────────────────
+        // Fail fast before any GitHub API calls or MongoDB reads if the user has
+        // already hit their plan limit — avoids wasting quota on a doomed run.
+        if (billingService.isLimitAlreadyExceeded(userId)) {
+            val friendlyMsg = "Monthly string quota reached — upgrade your plan to resume translations."
+            eventBus.stepSkipped(userId, runId, "FETCHING_STRINGS")
+            eventBus.stepSkipped(userId, runId, "DETECTING_CHANGES")
+            eventBus.stepError(userId, runId, "BILLING_CHECK", friendlyMsg)
+            listOf("TRANSLATING", "CREATING_PR", "CDN_PUBLISH").forEach { eventBus.stepSkipped(userId, runId, it) }
+            eventBus.finishRun(userId, runId, error = friendlyMsg)
+            log.info("Pipeline skipped — userId={} has exceeded plan limit", userId)
+            return
+        }
 
         // ── Step: Fetch source files ───────────────────────────────────────────
         val sourceFilePaths = config.source.files.values.toList()
@@ -372,7 +388,7 @@ class TranslationPipeline(
         }
 
         // ── Phase 1c: Translate simple strings ────────────────────────────────
-        val semaphore = Semaphore(4)
+        val semaphore = Semaphore(translationConcurrency)
         val batches = simpleStrings.entries.chunked(BATCH_SIZE).map { chunk -> chunk.associate { it.key to it.value } }
 
         val simpleResults: List<StringResult?> = coroutineScope {

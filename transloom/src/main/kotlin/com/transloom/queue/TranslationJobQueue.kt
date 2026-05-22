@@ -20,20 +20,30 @@ data class WebhookPayload(
 )
 
 private const val QUEUE_KEY = "transloom:jobs"
+// Hard cap on the in-memory fallback queue. When Redis is unavailable and this fills,
+// new webhooks are rejected rather than crashing the JVM with an OOM.
+private const val FALLBACK_CAPACITY = 512
+// If a job is in-flight for longer than this without completing, the lock is stale and
+// cleared automatically so future webhooks for that project are not silently dropped.
+private const val IN_FLIGHT_TIMEOUT_MS = 5 * 60_000L   // 5 minutes
 
 class TranslationJobQueue(private val jobQueue: JobQueueRepository) {
     private val log = LoggerFactory.getLogger(TranslationJobQueue::class.java)
 
-    private val fallbackChannel = Channel<WebhookPayload>(Channel.UNLIMITED)
+    private val fallbackChannel = Channel<WebhookPayload>(FALLBACK_CAPACITY)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // Tracks project IDs currently enqueued or being processed. Prevents back-to-back
-    // webhooks (e.g. force-push, rapid commits) from stacking redundant jobs for the
-    // same project — the second webhook is dropped until the first job finishes.
-    private val inFlightProjects = ConcurrentHashMap.newKeySet<String>()
+    // Maps projectId → enqueue timestamp. Prevents back-to-back webhooks from stacking
+    // redundant jobs. Entries older than IN_FLIGHT_TIMEOUT_MS are evicted on every enqueue
+    // so a crashed processor can never permanently block a project.
+    private val inFlightProjects = ConcurrentHashMap<String, Long>()
 
     suspend fun enqueueJob(payload: WebhookPayload) {
-        if (!inFlightProjects.add(payload.projectId)) {
+        val now = System.currentTimeMillis()
+        // Evict stale in-flight entries before checking — prevents permanent lock on crash
+        inFlightProjects.entries.removeIf { now - it.value > IN_FLIGHT_TIMEOUT_MS }
+
+        if (inFlightProjects.putIfAbsent(payload.projectId, now) != null) {
             log.info("Dedup: project {} already in-flight, skipping commit={}", payload.projectId, payload.commitHash.take(7))
             return
         }
@@ -48,12 +58,17 @@ class TranslationJobQueue(private val jobQueue: JobQueueRepository) {
                 log.error("Failed to enqueue to Redis, falling back to memory: {}", e.message)
             }
         }
-        fallbackChannel.send(payload)
-        log.info("Enqueued to memory: repo={} commit={}", payload.repositoryFullName, payload.commitHash.take(7))
+        val queued = fallbackChannel.trySend(payload).isSuccess
+        if (queued) {
+            log.info("Enqueued to memory: repo={} commit={}", payload.repositoryFullName, payload.commitHash.take(7))
+        } else {
+            inFlightProjects.remove(payload.projectId)
+            log.error("In-memory fallback queue full ({}) — dropped webhook for repo={} commit={}",
+                FALLBACK_CAPACITY, payload.repositoryFullName, payload.commitHash.take(7))
+        }
     }
 
     fun startWorker(processor: suspend (WebhookPayload) -> Unit) {
-        // Wrap the processor so the in-flight lock is always released, even on failure.
         val tracked: suspend (WebhookPayload) -> Unit = { payload ->
             try { processor(payload) } finally { inFlightProjects.remove(payload.projectId) }
         }

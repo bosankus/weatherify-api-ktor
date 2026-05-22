@@ -20,7 +20,7 @@ class UserLifecycleMonitor(
     private val userActivityService: UserActivityService,
     private val notificationService: NotificationService? = null,
     private val inAppNotificationService: InAppNotificationService? = null,
-    private val interval: Duration = 6.hours,
+    private val interval: Duration = 1.hours,     // was 6h — users stuck > 1h are now caught faster
     private val initialDelay: Duration = 1.minutes
 ) {
     private val log = LoggerFactory.getLogger(UserLifecycleMonitor::class.java)

@@ -4,11 +4,14 @@ import com.transloom.domain.OnboardingStep
 import com.transloom.model.ApiError
 import com.transloom.repository.BillingRepository
 import com.transloom.repository.ProjectRepository
+import com.transloom.repository.TranslationRepository
 import com.transloom.repository.UserRepository
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 
@@ -33,7 +36,8 @@ data class OnboardingStateResponse(
 fun Route.configureOnboardingRoutes(
     userRepository: UserRepository,
     billingRepository: BillingRepository,
-    projectRepository: ProjectRepository
+    projectRepository: ProjectRepository,
+    translationRepository: TranslationRepository
 ) {
     route("/transloom/api/onboarding") {
 
@@ -43,24 +47,45 @@ fun Route.configureOnboardingRoutes(
             val user = userRepository.findById(userId)
                 ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("User not found"))
 
-            val subscription = billingRepository.getSubscription(userId)
-            val plan = subscription.plan.name
-            val inTrial = subscription.inTrial
-            val trialLimitHit = subscription.limitHitAt != null
-            val hasProject = projectRepository.countForUser(userId) > 0
-            val completed = user.onboardingStep == OnboardingStep.COMPLETED
+            // Read all needed data in parallel
+            val (subscription, projectCount, stringsTranslated) = coroutineScope {
+                val subD = async { billingRepository.getSubscription(userId) }
+                val projD = async { projectRepository.countForUser(userId) }
+                val strD  = async { translationRepository.totalStringsTranslated(userId) }
+                Triple(subD.await(), projD.await(), strD.await())
+            }
+
+            // Auto-advance onboarding based on actual observed state rather than requiring
+            // every code path to explicitly call userActivityService.record(). This means
+            // users who e.g. set up a project via API but missed the WEBHOOK_INSTALLED event
+            // still see the correct step on next dashboard load.
+            val webhookVerified = projectRepository.listForUser(userId).any { it.webhookVerifiedAt != null }
+            val autoStep = when {
+                user.onboardingStep.ordinal >= OnboardingStep.COMPLETED.ordinal     -> user.onboardingStep
+                subscription.plan.name != "FREE" || subscription.inTrial           -> OnboardingStep.PLAN_ACTIVATED.advance(user.onboardingStep).let { user.onboardingStep }
+                stringsTranslated > 0                                               -> user.onboardingStep.advance(OnboardingStep.FIRST_TRANSLATION)
+                webhookVerified                                                     -> user.onboardingStep.advance(OnboardingStep.WEBHOOK_INSTALLED)
+                projectCount > 0                                                    -> user.onboardingStep.advance(OnboardingStep.PROJECT_CREATED)
+                else                                                                -> user.onboardingStep
+            }
+            if (autoStep != user.onboardingStep) {
+                runCatching { userRepository.advanceOnboarding(userId, autoStep, Clock.System.now()) }
+            }
+            val effectiveStep = if (autoStep.ordinal > user.onboardingStep.ordinal) autoStep else user.onboardingStep
+
+            val completed = effectiveStep == OnboardingStep.COMPLETED
             val dismissed = user.onboardingDismissedAt != null
 
             call.respond(
                 HttpStatusCode.OK,
                 OnboardingStateResponse(
-                    step = user.onboardingStep.name,
+                    step = effectiveStep.name,
                     dismissed = dismissed,
                     completed = completed,
-                    plan = plan,
-                    inTrial = inTrial,
-                    trialLimitHit = trialLimitHit,
-                    hasProject = hasProject,
+                    plan = subscription.plan.name,
+                    inTrial = subscription.inTrial,
+                    trialLimitHit = subscription.limitHitAt != null,
+                    hasProject = projectCount > 0,
                     showTour = !completed && !dismissed
                 )
             )

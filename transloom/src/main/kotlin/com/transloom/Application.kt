@@ -123,6 +123,11 @@ fun Application.module() {
             rateLimiter(limit = 30, refillPeriod = 60.seconds)
             requestKey { clientIp(it) }
         }
+        // Manual sync triggers GitHub API calls — cap to 5 per minute per IP to prevent abuse
+        register(RateLimitName("manual_sync")) {
+            rateLimiter(limit = 5, refillPeriod = 60.seconds)
+            requestKey { clientIp(it) }
+        }
     }
 
     install(Authentication) {
@@ -220,7 +225,12 @@ fun Application.module() {
         val config = buildConfigWithGlossary(project, glossary)
         val owner = userRepository.findById(project.ownerId)
         val githubToken = owner?.githubToken ?: run {
-            log.warn("Project owner has no GitHub token linked — cannot process webhook")
+            log.warn("Project owner {} has no GitHub token — cannot process webhook for {}", project.ownerId, project.githubRepo)
+            launch {
+                runCatching {
+                    inAppNotificationService.notifyGitHubTokenInvalid(project.ownerId, project.githubRepo)
+                }
+            }
             return@startWorker
         }
         pipeline.processWebhookPayload(payload, project, config, githubToken)
@@ -288,16 +298,21 @@ fun Application.module() {
     }
 
     monitor.subscribe(ApplicationStopped) {
-        jobQueue.close()
-        pipelineEventBus.close()
-        cacheRepository.close()
-        githubService.close()
-        translationService.close()
-        semanticChangeAnalyzer.close()
-        culturalSensitivityAnalyzer.close()
-        razorpayService.close()
-        lifecycleMonitor.stop()
-        cfKvService.close()
+        // Close each resource independently — a failure in one must not prevent others from closing.
+        listOf<Pair<String, () -> Unit>>(
+            "job queue"              to { jobQueue.close() },
+            "pipeline event bus"     to { pipelineEventBus.close() },
+            "cache repository"       to { cacheRepository.close() },
+            "github service"         to { githubService.close() },
+            "translation service"    to { translationService.close() },
+            "semantic analyzer"      to { semanticChangeAnalyzer.close() },
+            "cultural analyzer"      to { culturalSensitivityAnalyzer.close() },
+            "razorpay service"       to { razorpayService.close() },
+            "lifecycle monitor"      to { lifecycleMonitor.stop() },
+            "cloudflare kv service"  to { cfKvService.close() }
+        ).forEach { (name, closer) ->
+            runCatching(closer).onFailure { log.error("Failed to close {}: {}", name, it.message) }
+        }
         log.info("All resources closed on application stop")
     }
 
@@ -319,7 +334,7 @@ fun Application.module() {
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository, cdnPublishRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
             configureInsightsRoutes(userActivityService)
-            configureOnboardingRoutes(userRepository, billingRepository, projectRepository)
+            configureOnboardingRoutes(userRepository, billingRepository, projectRepository, translationRepository)
             configureCdnPublishRoute(projectRepository, cdnPublishService)
             configureNotificationRoutes(notificationRepository)
         }

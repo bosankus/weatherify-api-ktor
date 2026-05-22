@@ -294,6 +294,18 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
     }
 
+    override suspend fun listByIds(ids: List<String>): List<Translation> {
+        if (ids.isEmpty()) return emptyList()
+        val pipeline = listOf(
+            Aggregates.match(`in`("_id", ids)),
+            Aggregates.lookup("strings", "stringId", "_id", "strDoc"),
+            Aggregates.unwind("\$strDoc"),
+            Aggregates.lookup("projects", "strDoc.projectId", "_id", "projDoc"),
+            Aggregates.unwind("\$projDoc")
+        )
+        return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
+    }
+
     override suspend fun lock(translationId: String, lockedBy: String): Boolean {
         val result = translationsCol.updateOne(
             and(eq("_id", translationId), eq("lockedAt", null)),

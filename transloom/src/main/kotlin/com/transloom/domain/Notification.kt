@@ -26,4 +26,6 @@ object NotificationType {
     const val CHECKOUT_ABANDONED  = "CHECKOUT_ABANDONED"
     const val PLAN_EXPIRY         = "PLAN_EXPIRY"
     const val ONBOARDING          = "ONBOARDING"
+    const val GITHUB_TOKEN_INVALID = "GITHUB_TOKEN_INVALID"
+    const val PIPELINE_FAILED     = "PIPELINE_FAILED"
 }

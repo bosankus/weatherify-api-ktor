@@ -43,6 +43,12 @@ fun transloomIndexes(): List<IndexSpec> {
         IndexSpec("translations", Document(mapOf("stringId" to 1, "targetLanguage" to 1)), unique),
         IndexSpec("translations", Document("stringId", 1)),
         IndexSpec("translations", Document("status", 1)),
+        // targetLanguage + status enables review portal language filters without a collection scan
+        IndexSpec("translations", Document(mapOf("targetLanguage" to 1, "status" to 1))),
+        // projectId on translations is resolved via strings join; this index speeds up CDN publish queries
+        IndexSpec("strings", Document(mapOf("projectId" to 1, "updatedAt" to -1))),
+        // Compound ownerId+createdAt for project listing (sorted by creation time)
+        IndexSpec("projects", Document(mapOf("ownerId" to 1, "createdAt" to -1))),
         IndexSpec("translation_memory", Document("hashKey", 1), unique),
         IndexSpec("subscriptions", Document("userId", 1), unique),
         IndexSpec("subscriptions", Document("razorpaySubscriptionId", 1)),
