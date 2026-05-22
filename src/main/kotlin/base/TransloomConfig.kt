@@ -9,9 +9,12 @@ import com.transloom.di.transloomIndexes
 import com.transloom.pipeline.TranslationPipeline
 import com.transloom.pipeline.buildConfigWithGlossary
 import com.transloom.queue.TranslationJobQueue
+import com.transloom.repository.CdnPublishRepository
 import com.transloom.repository.GlossaryRepository
 import com.transloom.repository.mongo.*
 import com.transloom.routes.*
+import com.transloom.services.CdnPublishService
+import com.transloom.services.CloudflareKvService
 import com.transloom.repository.mongo.MongoCulturalAnalysisCacheRepository
 import com.transloom.repository.mongo.MongoSemanticChangeCacheRepository
 import com.transloom.services.BillingService
@@ -67,9 +70,16 @@ fun Application.configureTransloom(refundService: RefundService) {
     val pipelineEventBus = PipelineEventBus()
     val semanticChangeAnalyzer = SemanticChangeAnalyzer(MongoSemanticChangeCacheRepository(db))
     val culturalSensitivityAnalyzer = CulturalSensitivityAnalyzer(MongoCulturalAnalysisCacheRepository(db))
+    val cdnPublishRepository: CdnPublishRepository = MongoCdnPublishRepository(db)
+    val cfKvService = CloudflareKvService(
+        accountId = getSecretValue("cloudflare-account-id"),
+        namespaceId = getSecretValue("cloudflare-kv-namespace-id"),
+        apiToken = getSecretValue("cloudflare-api-token")
+    )
+    val cdnPublishService = CdnPublishService(translationRepository, cfKvService, cdnPublishRepository)
     val pipeline = TranslationPipeline(
         githubService, translationService, billingService, projectRepository, translationRepository,
-        pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer
+        pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService
     )
 
     // Central webhook dispatcher — register all Razorpay event handlers here.
@@ -121,7 +131,7 @@ fun Application.configureTransloom(refundService: RefundService) {
         configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
         authenticate("auth-jwt") {
             configureApiRoutes(billingService, billingRepository, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService)
-            configureDashboardRoutes(projectRepository, translationRepository, billingRepository)
+            configureDashboardRoutes(projectRepository, translationRepository, billingRepository, cdnPublishRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
             configureInsightsRoutes(userActivityService)
             configureOnboardingRoutes(userRepository, billingRepository, projectRepository)
