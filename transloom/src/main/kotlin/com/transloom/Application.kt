@@ -44,7 +44,11 @@ import com.transloom.services.SemanticChangeAnalyzer
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import com.transloom.services.UserLifecycleMonitor
+import com.transloom.services.NotificationService
+import com.transloom.services.InAppNotificationService
 import com.transloom.services.CloudflareKvService
+import com.transloom.repository.NotificationRepository
+import com.transloom.repository.SharedTranslationMemoryRepository
 import com.transloom.services.CdnPublishService
 import com.transloom.repository.CdnPublishRepository
 import com.androidplay.core.secrets.getSecretValue
@@ -151,6 +155,8 @@ fun Application.module() {
     val jobQueueRepository: JobQueueRepository by inject()
     val cacheRepository: CacheRepository by inject()
     val cdnPublishRepository: CdnPublishRepository by inject()
+    val notificationRepository: NotificationRepository by inject()
+    val sharedMemoryRepository: SharedTranslationMemoryRepository by inject()
 
     val cfAccountId = getSecretValue("cloudflare-account-id")
     val cfNamespaceId = getSecretValue("cloudflare-kv-namespace-id")
@@ -162,26 +168,44 @@ fun Application.module() {
     // PipelineEventBus created first so it can be injected into UserActivityService
     // for SSE-driven onboarding step advancement.
     val pipelineEventBus = com.transloom.services.PipelineEventBus(redisUrl)
+
+    val notificationService = NotificationService.fromEnv(
+        host = getSecretValue("smtp-host").ifBlank { "smtp.gmail.com" },
+        port = getSecretValue("smtp-port").toIntOrNull() ?: 587,
+        user = getSecretValue("smtp-user"),
+        password = getSecretValue("smtp-password"),
+        fromName = "Transloom"
+    )
+    if (notificationService.isConfigured) {
+        log.info("Email notifications enabled via SMTP")
+    } else {
+        log.info("Email notifications disabled — set smtp-user + smtp-password secrets to enable")
+    }
+
+    val inAppNotificationService = InAppNotificationService(notificationRepository, pipelineEventBus)
+
     val userActivityService = UserActivityService(
         userRepository = userRepository,
         userActivityRepository = userActivityRepository,
         billingRepository = billingRepository,
         projectRepository = projectRepository,
-        eventBus = pipelineEventBus
+        eventBus = pipelineEventBus,
+        notificationService = notificationService,
+        inAppNotificationService = inAppNotificationService
     )
     val billingService = BillingService(billingRepository, userActivityService)
     val razorpayService = RazorpayBillingService(billingRepository, userActivityService)
-    val lifecycleMonitor = UserLifecycleMonitor(userActivityService)
+    val lifecycleMonitor = UserLifecycleMonitor(userActivityService, notificationService, inAppNotificationService)
     lifecycleMonitor.start()
     val webhookDispatcher = RazorpayWebhookDispatcher(
         webhookSecret = getSecretValue("razorpay-webhook-secret"),
         handlers = listOf(razorpayService)
     )
     val githubService = GitHubService()
-    val translationService = TranslationService(memoryRepository)
+    val translationService = TranslationService(memoryRepository, sharedMemoryRepository)
     val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
     val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
-    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService)
+    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService, sharedMemoryRepository)
 
     jobQueue.startWorker { payload ->
         val projectUuid = runCatching { java.util.UUID.fromString(payload.projectId) }.getOrElse {
@@ -200,6 +224,32 @@ fun Application.module() {
             return@startWorker
         }
         pipeline.processWebhookPayload(payload, project, config, githubToken)
+
+        // Create in-app notification + optional email when pipeline produces a PR.
+        val completedRun = runCatching { pipelineEventBus.recentRuns(project.ownerId) }
+            .getOrElse { emptyList() }
+            .firstOrNull { it.projectId == project.id && it.prUrl != null }
+        if (completedRun != null) {
+            val langDetail = completedRun.steps
+                .firstOrNull { it.id == "TRANSLATING" }?.detail ?: ""
+            launch {
+                runCatching {
+                    inAppNotificationService.notifyPipelineComplete(
+                        userId = project.ownerId,
+                        projectName = project.name,
+                        prUrl = completedRun.prUrl!!,
+                        langDetail = langDetail,
+                        commitShort = completedRun.commitShort
+                    )
+                }.onFailure { log.warn("Pipeline complete in-app notification failed project={}: {}", project.id, it.message) }
+            }
+            if (notificationService.isConfigured && owner.email != null) {
+                launch {
+                    runCatching { notificationService.sendPipelineComplete(owner, completedRun, project.name) }
+                        .onFailure { log.warn("Pipeline complete email failed project={}: {}", project.id, it.message) }
+                }
+            }
+        }
     }
 
     launch {
@@ -271,6 +321,7 @@ fun Application.module() {
             configureInsightsRoutes(userActivityService)
             configureOnboardingRoutes(userRepository, billingRepository, projectRepository)
             configureCdnPublishRoute(projectRepository, cdnPublishService)
+            configureNotificationRoutes(notificationRepository)
         }
     }
 }

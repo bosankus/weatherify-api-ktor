@@ -13,6 +13,7 @@ import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import com.transloom.domain.StringWithTranslations
 import com.transloom.domain.StringsPage
 import com.transloom.domain.Translation
+import com.transloom.domain.TranslationHistoryEntry
 import com.transloom.domain.TranslationSummary
 import com.transloom.repository.TranslationRepository
 import kotlinx.coroutines.flow.firstOrNull
@@ -24,6 +25,7 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
 
     private val stringsCol = db.getCollection<Document>("strings")
     private val translationsCol = db.getCollection<Document>("translations")
+    private val historyCol = db.getCollection<Document>("translation_history")
 
     override suspend fun upsertString(projectId: String, key: String, sourceText: String): String {
         val now = System.currentTimeMillis()
@@ -56,6 +58,11 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
     ) {
         val now = System.currentTimeMillis()
         val filter = and(eq("stringId", stringId), eq("targetLanguage", targetLanguage))
+
+        // Respect lock: if an existing translation is locked, the pipeline must not overwrite it.
+        val existingDoc = translationsCol.find(filter).firstOrNull()
+        if (existingDoc?.get("lockedAt") != null) return
+
         val setUpdates = mutableListOf(
             Updates.set("translatedText", translatedText),
             Updates.set("status", status),
@@ -74,7 +81,33 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             Updates.setOnInsert("createdAt", now),
             *setUpdates.toTypedArray()
         )
-        translationsCol.findOneAndUpdate(filter, update, FindOneAndUpdateOptions().upsert(true))
+        val before = translationsCol.findOneAndUpdate(
+            filter, update,
+            FindOneAndUpdateOptions().upsert(true).returnDocument(ReturnDocument.BEFORE)
+        )
+        val prevText = before?.getString("translatedText")?.takeIf { it.isNotBlank() && it != translatedText }
+        if (prevText != null) {
+            // Store diff for review portal side-by-side view
+            translationsCol.updateOne(filter, Updates.set("previousTranslatedText", prevText))
+
+            // Write to immutable history log — query: GET /projects/{id}/strings/{key}/history
+            val translationId = before.getString("_id") ?: return
+            val stringDoc = stringsCol.find(eq("_id", stringId)).firstOrNull()
+            if (stringDoc != null) {
+                historyCol.insertOne(Document().apply {
+                    put("_id", UUID.randomUUID().toString())
+                    put("translationId", translationId)
+                    put("stringKey", stringDoc.getString("stringKey") ?: "")
+                    put("projectId", stringDoc.getString("projectId") ?: "")
+                    put("targetLanguage", targetLanguage)
+                    put("previousText", prevText)
+                    put("newText", translatedText)
+                    put("changedAt", now)
+                    put("changedBy", if (pipelineRunId != null) "pipeline" else "manual")
+                    if (pipelineRunId != null) put("pipelineRunId", pipelineRunId)
+                })
+            }
+        }
     }
 
     override suspend fun listStringsForProject(projectId: String, limit: Int, offset: Int): StringsPage {
@@ -122,16 +155,28 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             .associate { it.getString("stringKey") to (it.getString("sourceText") ?: "") }
     }
 
-    override suspend fun listPendingReviews(ownerId: String, limit: Int, offset: Int): List<Translation> {
-        val pipeline = ownerPipeline(ownerId, extraMatch = `in`("status", listOf("review", "blocked"))) +
+    override suspend fun listPendingReviews(
+        ownerId: String,
+        limit: Int,
+        offset: Int,
+        language: String?,
+        statusFilter: String?
+    ): List<Translation> {
+        val pipeline = ownerPipeline(ownerId, extraMatch = reviewMatch(language, statusFilter)) +
             listOf(Aggregates.skip(offset), Aggregates.limit(limit))
         return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
     }
 
-    override suspend fun countPendingReviews(ownerId: String): Int {
-        val pipeline = ownerPipeline(ownerId, extraMatch = `in`("status", listOf("review", "blocked"))) +
+    override suspend fun countPendingReviews(ownerId: String, language: String?, statusFilter: String?): Int {
+        val pipeline = ownerPipeline(ownerId, extraMatch = reviewMatch(language, statusFilter)) +
             listOf(Aggregates.count("total"))
         return (translationsCol.aggregate<Document>(pipeline).firstOrNull()?.get("total") as? Number)?.toInt() ?: 0
+    }
+
+    private fun reviewMatch(language: String?, statusFilter: String?): org.bson.conversions.Bson {
+        val statusBson = if (statusFilter != null) eq("status", statusFilter)
+                         else `in`("status", listOf("review", "blocked"))
+        return if (language != null) and(statusBson, eq("targetLanguage", language)) else statusBson
     }
 
     override suspend fun approve(translationId: String, editedText: String?): Boolean {
@@ -249,6 +294,50 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
     }
 
+    override suspend fun lock(translationId: String, lockedBy: String): Boolean {
+        val result = translationsCol.updateOne(
+            and(eq("_id", translationId), eq("lockedAt", null)),
+            Updates.combine(
+                Updates.set("lockedAt", System.currentTimeMillis()),
+                Updates.set("lockedBy", lockedBy),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        )
+        return result.modifiedCount > 0
+    }
+
+    override suspend fun unlock(translationId: String): Boolean {
+        val result = translationsCol.updateOne(
+            eq("_id", translationId),
+            Updates.combine(
+                Updates.unset("lockedAt"),
+                Updates.unset("lockedBy"),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        )
+        return result.modifiedCount > 0
+    }
+
+    override suspend fun listHistory(projectId: String, stringKey: String, limit: Int): List<TranslationHistoryEntry> =
+        historyCol.find(and(eq("projectId", projectId), eq("stringKey", stringKey)))
+            .sort(Sorts.descending("changedAt"))
+            .limit(limit)
+            .toList()
+            .map { doc ->
+                TranslationHistoryEntry(
+                    id = doc.getString("_id"),
+                    translationId = doc.getString("translationId") ?: "",
+                    stringKey = doc.getString("stringKey") ?: "",
+                    projectId = doc.getString("projectId") ?: "",
+                    targetLanguage = doc.getString("targetLanguage") ?: "",
+                    previousText = doc.getString("previousText") ?: "",
+                    newText = doc.getString("newText") ?: "",
+                    changedAt = (doc["changedAt"] as? Number)?.toLong() ?: 0L,
+                    changedBy = doc.getString("changedBy") ?: "pipeline",
+                    pipelineRunId = doc.getString("pipelineRunId")
+                )
+            }
+
     override suspend fun revertToReview(translationId: String) {
         translationsCol.updateOne(
             eq("_id", translationId),
@@ -291,7 +380,10 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             projectId = strDoc?.getString("projectId") ?: "",
             projectName = projDoc?.getString("name") ?: "",
             pipelineRunId = getString("pipelineRunId"),
-            commitShort = getString("commitShort")
+            commitShort = getString("commitShort"),
+            previousTranslatedText = getString("previousTranslatedText"),
+            lockedAt = (get("lockedAt") as? Number)?.toLong(),
+            lockedBy = getString("lockedBy")
         )
     }
 }

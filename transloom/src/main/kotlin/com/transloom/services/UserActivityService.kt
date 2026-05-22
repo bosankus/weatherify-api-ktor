@@ -23,7 +23,9 @@ class UserActivityService(
     private val userActivityRepository: UserActivityRepository,
     private val billingRepository: BillingRepository,
     private val projectRepository: ProjectRepository,
-    private val eventBus: PipelineEventBus? = null
+    private val eventBus: PipelineEventBus? = null,
+    private val notificationService: NotificationService? = null,
+    private val inAppNotificationService: InAppNotificationService? = null
 ) {
     private val log = LoggerFactory.getLogger(UserActivityService::class.java)
 
@@ -47,9 +49,26 @@ class UserActivityService(
                 .onSuccess { eventBus?.emitOnboardingStep(userId, step.name) }
                 .onFailure { log.warn("advanceOnboarding failed for userId={}: {}", userId, it.message) }
         }
+        // Fire transactional emails for key lifecycle events.
+        if (notificationService != null) {
+            runCatching {
+                when (event) {
+                    UserEvent.TRIAL_LIMIT_HIT -> {
+                        val user = userRepository.findById(userId)
+                        if (user != null) notificationService?.sendTrialLimitHit(user)
+                        inAppNotificationService?.notifyTrialLimitHit(userId)
+                    }
+                    else -> { /* other events handled by UserLifecycleMonitor scans */ }
+                }
+            }.onFailure { log.warn("Notification side-effect failed userId={} event={}: {}", userId, event, it.message) }
+        }
         log.debug("Activity recorded: userId={} event={} meta={}", userId, event, metadata)
         return activity
     }
+
+    /** Returns the pending (not yet activated) billing plan for a user, or null. */
+    suspend fun getPendingPlan(userId: String): BillingPlan? =
+        billingRepository.getSubscription(userId).pendingPlan
 
     suspend fun insightsFor(userId: String): UserInsights? {
         val user = userRepository.findById(userId) ?: return null

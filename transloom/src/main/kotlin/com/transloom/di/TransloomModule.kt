@@ -4,6 +4,8 @@ import com.androidplay.core.mongo.IndexSpec
 import com.transloom.repository.*
 import com.transloom.repository.mongo.*
 import com.transloom.repository.mongo.MongoCdnPublishRepository
+import com.transloom.repository.mongo.MongoNotificationRepository
+import com.transloom.repository.mongo.MongoSharedTranslationMemoryRepository
 import com.transloom.services.CulturalSensitivityAnalyzer
 import com.transloom.services.SemanticChangeAnalyzer
 import org.bson.Document
@@ -24,6 +26,8 @@ fun transloomModule(encryptionKey: String) = module {
     single<CulturalAnalysisCacheRepository> { MongoCulturalAnalysisCacheRepository(get()) }
     single { CulturalSensitivityAnalyzer(get()) }
     single<CdnPublishRepository> { MongoCdnPublishRepository(get()) }
+    single<NotificationRepository> { MongoNotificationRepository(get()) }
+    single<SharedTranslationMemoryRepository> { MongoSharedTranslationMemoryRepository(get()) }
 }
 
 fun transloomIndexes(): List<IndexSpec> {
@@ -59,5 +63,16 @@ fun transloomIndexes(): List<IndexSpec> {
         IndexSpec("cdn_publish_log", Document("projectId", 1)),
         IndexSpec("cdn_publish_log", Document(mapOf("projectId" to 1, "bundleVersion" to 1)), unique),
         IndexSpec("cdn_publish_log", Document("publishedAt", -1)),
+        // Notifications: userId+createdAt for list, userId+readAt for unread count
+        IndexSpec("notifications", Document(mapOf("userId" to 1, "createdAt" to -1))),
+        IndexSpec("notifications", Document(mapOf("userId" to 1, "readAt" to 1))),
+        IndexSpec("notifications", Document(mapOf("userId" to 1, "type" to 1, "createdAt" to -1))),
+        // TTL: auto-purge read notifications older than 30 days to keep the collection lean
+        IndexSpec("notifications", Document("createdAt", 1), IndexOptions().expireAfter(30, TimeUnit.DAYS)),
+        // Shared translation memory: hashKey is the primary lookup key
+        IndexSpec("shared_translation_memory", Document("hashKey", 1), IndexOptions().unique(true)),
+        // Translation history: query by project + stringKey, sorted by time
+        IndexSpec("translation_history", Document(mapOf("projectId" to 1, "stringKey" to 1, "changedAt" to -1))),
+        IndexSpec("translation_history", Document("translationId", 1)),
     )
 }

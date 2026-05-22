@@ -23,7 +23,13 @@ data class Translation(
     val projectId: String,
     val projectName: String,
     val pipelineRunId: String? = null,
-    val commitShort: String? = null
+    val commitShort: String? = null,
+    /** The previous value of translatedText before the most recent retranslation. Null for new strings. */
+    val previousTranslatedText: String? = null,
+    /** Epoch-millis when this translation was locked. Pipeline skips locked translations. */
+    val lockedAt: Long? = null,
+    /** userId who locked this translation. */
+    val lockedBy: String? = null
 )
 
 @Serializable

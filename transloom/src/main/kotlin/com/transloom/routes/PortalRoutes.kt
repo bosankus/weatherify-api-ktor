@@ -136,10 +136,25 @@ private fun appSidebar(active: String, reviewBadge: Boolean = false) = """
     </a>
   </nav>
   <div class="sidebar-footer">
+    <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()" aria-label="Notifications">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="notif-badge" id="notif-badge" style="display:none">0</span>
+    </button>
     <div class="user-chip" id="user-chip">Loading…</div>
     <button class="btn btn-ghost logout-btn" onclick="logout()">Sign out</button>
   </div>
 </aside>
+
+<div class="notif-overlay" id="notif-overlay" onclick="closeNotifPanel()"></div>
+<div class="notif-panel" id="notif-panel">
+  <div class="notif-panel-header">
+    <span class="notif-panel-title">Notifications</span>
+    <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+  </div>
+  <div class="notif-list" id="notif-list">
+    <div class="notif-empty">No notifications yet</div>
+  </div>
+</div>
 """
 
 private val APP_SIDEBAR_DASH     get() = appSidebar("dash",     reviewBadge = true)
@@ -185,6 +200,41 @@ label{display:block;font-size:13px;color:var(--text-dim);margin-bottom:5px}
 .toast.show{opacity:1;transform:translateY(0)}
 .toast.success{border-color:var(--accent);color:var(--accent)}
 .toast.error{border-color:var(--red);color:var(--red)}
+/* ── Notification bell ── */
+.notif-bell{position:relative;display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-muted);cursor:pointer;transition:border-color .2s,color .2s;flex-shrink:0}
+.notif-bell:hover{border-color:var(--accent);color:var(--accent)}
+.notif-bell.has-unread{color:var(--accent);border-color:rgba(0,229,160,.35)}
+@keyframes bellRing{0%,100%{transform:rotate(0)}15%{transform:rotate(12deg)}30%{transform:rotate(-10deg)}45%{transform:rotate(8deg)}60%{transform:rotate(-6deg)}75%{transform:rotate(4deg)}}
+.notif-bell.ringing svg{animation:bellRing .55s ease forwards}
+.notif-badge{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;background:var(--red);color:#fff;border-radius:8px;font-size:10px;font-weight:700;line-height:16px;text-align:center;padding:0 4px}
+/* ── Notification panel ── */
+.notif-overlay{position:fixed;inset:0;z-index:1000;display:none}
+.notif-overlay.open{display:block}
+.notif-panel{position:fixed;bottom:0;left:220px;width:340px;max-height:480px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius) var(--radius) 0 0;box-shadow:0 -4px 32px rgba(0,0,0,.5);z-index:1001;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+.notif-panel.open{transform:translateY(0)}
+.notif-panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.notif-panel-title{font-size:14px;font-weight:600;color:var(--text)}
+.notif-mark-all{background:transparent;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:4px;transition:color .15s}
+.notif-mark-all:hover{color:var(--accent)}
+.notif-list{overflow-y:auto;flex:1}
+.notif-empty{padding:32px 16px;text-align:center;color:var(--text-muted);font-size:13px}
+.notif-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;gap:10px;align-items:flex-start}
+.notif-item:last-child{border-bottom:none}
+.notif-item:hover{background:var(--surface2)}
+.notif-item.unread{background:var(--accent-dim2)}
+.notif-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.notif-dot.success{background:var(--accent)}
+.notif-dot.warning{background:var(--yellow)}
+.notif-dot.error{background:var(--red)}
+.notif-dot.info{background:#60a5fa}
+.notif-dot.read{background:transparent;border:1px solid var(--border)}
+.notif-body{flex:1;min-width:0}
+.notif-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:2px}
+.notif-msg{font-size:12px;color:var(--text-muted);line-height:1.4;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-meta{display:flex;align-items:center;gap:8px}
+.notif-time{font-size:11px;color:var(--text-muted)}
+.notif-action-link{font-size:11px;color:var(--accent);font-weight:600}
+@media(max-width:768px){.notif-panel{left:0;width:100%;border-radius:var(--radius) var(--radius) 0 0}}
 """
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1164,6 +1214,7 @@ private fun HTML.dashboardApp() {
         div("toast") { id = "toast" }
         div { id = "ob-host" }
         script { unsafe { +DASHBOARD_JS } }
+        script { unsafe { +NOTIFICATIONS_JS } }
         script { unsafe { +ONBOARDING_JS } }
         script { unsafe { +"Onboarding.boot('dashboard');" } }
     }
@@ -1446,6 +1497,128 @@ private const val DASHBOARD_CSS = """
 .status-free{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)}
 """
 
+// ── Notifications JS — included in every app page ─────────────────────────────
+private val NOTIFICATIONS_JS = """
+(function(){
+const NOTIF_BASE='/transloom/api/notifications';
+let notifState=[];
+let panelOpen=false;
+
+function notifApi(path,opts){
+  return fetch(NOTIF_BASE+path,{...opts,headers:{...authHeaders(),...(opts?.headers||{})}});
+}
+
+async function loadNotifications(){
+  try{
+    const res=await notifApi('');
+    if(!res.ok)return;
+    const d=await res.json();
+    notifState=d.notifications||[];
+    renderNotifBadge(d.unreadCount||0);
+    renderNotifList();
+  }catch{}
+}
+
+function renderNotifBadge(count){
+  const bell=document.getElementById('notif-bell');
+  const badge=document.getElementById('notif-badge');
+  if(!bell||!badge)return;
+  if(count>0){
+    badge.textContent=count>9?'9+':String(count);
+    badge.style.display='block';
+    bell.classList.add('has-unread');
+  }else{
+    badge.style.display='none';
+    bell.classList.remove('has-unread');
+  }
+}
+
+function renderNotifList(){
+  const list=document.getElementById('notif-list');
+  if(!list)return;
+  if(!notifState.length){list.innerHTML='<div class="notif-empty">No notifications yet</div>';return;}
+  list.innerHTML=notifState.map(n=>{
+    const isUnread=!n.readAt;
+    const dotClass=isUnread?n.level||'info':'read';
+    const timeAgo=formatTimeAgo(n.createdAt);
+    const action=n.actionUrl?`<a class="notif-action-link" href="${'$'}{esc(n.actionUrl)}" onclick="event.stopPropagation()">${'$'}{esc(n.actionLabel||'View')}</a>`:'';
+    return `<div class="notif-item${'$'}{isUnread?' unread':''}" onclick="onNotifClick('${'$'}{n.id}','${'$'}{esc(n.actionUrl||'')}')">
+      <div class="notif-dot ${'$'}{dotClass}"></div>
+      <div class="notif-body">
+        <div class="notif-title">${'$'}{esc(n.title)}</div>
+        <div class="notif-msg">${'$'}{esc(n.message)}</div>
+        <div class="notif-meta"><span class="notif-time">${'$'}{timeAgo}</span>${'$'}{action}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function formatTimeAgo(ms){
+  const diff=Date.now()-ms;
+  if(diff<60000)return'just now';
+  if(diff<3600000)return Math.floor(diff/60000)+'m ago';
+  if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
+  return Math.floor(diff/86400000)+'d ago';
+}
+
+async function onNotifClick(id,actionUrl){
+  // Mark as read locally first for instant feedback
+  const n=notifState.find(x=>x.id===id);
+  if(n&&!n.readAt){
+    n.readAt=Date.now();
+    const unread=notifState.filter(x=>!x.readAt).length;
+    renderNotifBadge(unread);
+    renderNotifList();
+    notifApi('/'+id+'/read',{method:'POST'}).catch(()=>{});
+  }
+  if(actionUrl){window.location.href=actionUrl;}
+}
+
+async function markAllNotifsRead(){
+  notifState.forEach(n=>{if(!n.readAt)n.readAt=Date.now();});
+  renderNotifBadge(0);
+  renderNotifList();
+  try{await notifApi('/read-all',{method:'POST'});}catch{}
+}
+
+function toggleNotifPanel(){
+  panelOpen?closeNotifPanel():openNotifPanel();
+}
+function openNotifPanel(){
+  panelOpen=true;
+  document.getElementById('notif-panel')?.classList.add('open');
+  document.getElementById('notif-overlay')?.classList.add('open');
+}
+function closeNotifPanel(){
+  panelOpen=false;
+  document.getElementById('notif-panel')?.classList.remove('open');
+  document.getElementById('notif-overlay')?.classList.remove('open');
+}
+
+// Called from SSE handler when type==="notification"
+window.pushInAppNotification=function(evt){
+  const existing=notifState.find(n=>n.id===evt.notificationId);
+  if(existing)return;
+  const n={id:evt.notificationId,title:evt.notificationTitle,message:evt.notificationMessage,
+    level:evt.notificationLevel||'info',actionUrl:evt.notificationActionUrl,
+    actionLabel:evt.notificationActionLabel,createdAt:Date.now(),readAt:null};
+  notifState.unshift(n);
+  const unread=notifState.filter(x=>!x.readAt).length;
+  renderNotifBadge(unread);
+  renderNotifList();
+  // Animate bell
+  const bell=document.getElementById('notif-bell');
+  if(bell){bell.classList.add('ringing');setTimeout(()=>bell.classList.remove('ringing'),600);}
+};
+
+window.toggleNotifPanel=toggleNotifPanel;
+window.closeNotifPanel=closeNotifPanel;
+window.markAllNotifsRead=markAllNotifsRead;
+
+loadNotifications();
+})();
+"""
+
 private val DASHBOARD_JS = """
 const BASE='/transloom/api';
 let token=localStorage.getItem('transloom_token');
@@ -1671,7 +1844,7 @@ async function createProject(){
   if(!name||!repo){toast('Name and repo are required','error');return;}
   if(selected.length===0){toast('Select at least one target language','error');return;}
   const targets=selected.map(code=>({code,name:langMap[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
-  const res=await api('/projects',{method:'POST',body:JSON.stringify({name,githubRepo:repo,watchBranch:branch,sourceFilePath:sourcePath,category,tone,targets})});
+  const res=await api('/projects',{method:'POST',body:JSON.stringify({name,githubRepo:repo,watchBranch:branch,sourceFilePaths:[sourcePath],category,tone,targets})});
   if(!res)return;
   if(res.ok){toast('Project created! Now push a new string to trigger your first translation.');closeModal();loadProjects();loadStats();window.Onboarding&&Onboarding.refresh();}
   else{
@@ -1967,6 +2140,8 @@ function handlePipelineEvent(evt){
       updateCdnWidget([{bundleVersion:d.cdnBundleVersion,locales:d.cdnLocales||[],publishedAt:Date.now(),status:'success'}]);
     }
     toast('Translations live on edge — SDK consumers will refresh on next launch');
+  }else if(d.type==='notification'){
+    if(typeof window.pushInAppNotification==='function')window.pushInAppNotification(d);
   }
 }
 
@@ -2238,7 +2413,7 @@ function renderProjects(){
 }
 
 function buildProjectCard(p){
-  const isIos=p.sourceFilePath&&p.sourceFilePath.includes('.strings');
+  const isIos=(p.sourceFilePaths||[]).some(f=>f.includes('.strings'));
   const platform=isIos?'iOS':'Android';
   return `<div class="pc-pro" id="pc-${'$'}{p.id}">
     <div class="pc-header">
@@ -2259,7 +2434,7 @@ function buildProjectCard(p){
       <span class="pc-tag">${'$'}{esc(p.tone)}</span>
       <span class="pc-tag langs">${'$'}{p.targetCount} language${'$'}{p.targetCount!==1?'s':''}</span>
     </div>
-    <div class="pc-source">${'$'}{esc(p.sourceFilePath)}</div>
+    <div class="pc-source">${'$'}{(p.sourceFilePaths||[]).map(f=>esc(f)).join(', ')}</div>
   </div>`;
 }
 
@@ -2295,7 +2470,7 @@ async function createProject(){
   if(!name||!repo){toast('Name and GitHub repo are required','error');return;}
   if(selected.length===0){toast('Select at least one target language','error');return;}
   const targets=selected.map(code=>({code,name:LANG_MAP[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
-  const res=await api('/projects',{method:'POST',body:JSON.stringify({name,githubRepo:repo,watchBranch:branch,sourceFilePath:sourcePath,category,tone,targets})});
+  const res=await api('/projects',{method:'POST',body:JSON.stringify({name,githubRepo:repo,watchBranch:branch,sourceFilePaths:[sourcePath],category,tone,targets})});
   if(!res)return;
   if(res.ok){toast('Project created! Webhook auto-installed.');closeNewModal();await init();window.Onboarding&&Onboarding.refresh();}
   else{
@@ -2317,12 +2492,12 @@ async function openEditModal(projectId){
   document.getElementById('edit-proj-id').value=p.id;
   document.getElementById('edit-proj-name').value=p.name;
   document.getElementById('edit-proj-branch').value=p.watchBranch;
-  document.getElementById('edit-proj-source').value=p.sourceFilePath;
+  document.getElementById('edit-proj-source').value=(p.sourceFilePaths||[])[0]||'values/strings.xml';
   document.getElementById('edit-proj-category').value=p.category;
   document.getElementById('edit-proj-tone').value=p.tone;
   document.getElementById('edit-modal-repo').textContent=p.githubRepo;
   document.getElementById('edit-cultural-enabled').checked=!!p.culturalSensitivityEnabled;
-  const isIos=p.sourceFilePath&&p.sourceFilePath.includes('.strings');
+  const isIos=(p.sourceFilePaths||[]).some(f=>f.includes('.strings'));
   const platRadio=document.getElementById(isIos?'edit-plat-ios':'edit-plat-android');
   if(platRadio)platRadio.checked=true;
   const selectedLangs=new Set((p.targets||[]).map(t=>t.code));
@@ -2353,7 +2528,7 @@ async function saveEdit(){
   if(!selected.length){toast('Select at least one language','error');return;}
   const targets=selected.map(code=>({code,name:LANG_MAP[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
   const culturalSensitivityEnabled=document.getElementById('edit-cultural-enabled')?.checked||false;
-  const res=await api('/projects/'+projectId,{method:'PUT',body:JSON.stringify({name,watchBranch,sourceFilePath,category,tone,targets,culturalSensitivityEnabled})});
+  const res=await api('/projects/'+projectId,{method:'PUT',body:JSON.stringify({name,watchBranch,sourceFilePaths:[sourceFilePath].filter(Boolean),category,tone,targets,culturalSensitivityEnabled})});
   if(!res)return;
   if(res.ok){toast('Project updated');closeEditModal();await init();}
   else{const err=await res.json();toast(err.error||'Update failed','error');}
@@ -2604,6 +2779,7 @@ private fun HTML.projectsApp() {
         div("toast") { id = "toast" }
         div { id = "ob-host" }
         script { unsafe { +PROJECTS_JS } }
+        script { unsafe { +NOTIFICATIONS_JS } }
         script { unsafe { +ONBOARDING_JS } }
         script { unsafe { +"Onboarding.boot('projects');" } }
     }
@@ -3211,6 +3387,7 @@ private fun HTML.billingApp() {
         div { id = "ob-host" }
 
         script { unsafe { raw(BILLING_JS) } }
+        script { unsafe { +NOTIFICATIONS_JS } }
         script { unsafe { +ONBOARDING_JS } }
         script { unsafe { +"Onboarding.boot('billing');" } }
     }
@@ -3274,6 +3451,7 @@ private fun HTML.reviewPortal() {
         }
         div("toast") { id = "toast" }
         script { unsafe { +REVIEW_JS } }
+        script { unsafe { +NOTIFICATIONS_JS } }
     }
 }
 

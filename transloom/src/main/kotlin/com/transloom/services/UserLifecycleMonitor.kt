@@ -15,9 +15,11 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
-/** Periodically scans for stuck onboarding, expiring plans, and abandoned payment sessions. Logs at WARN; plug in a notifier to [scan] when email/Slack is ready. */
+/** Periodically scans for stuck onboarding, expiring plans, and abandoned payment sessions. Logs at WARN and creates in-app notifications + optional transactional emails. */
 class UserLifecycleMonitor(
     private val userActivityService: UserActivityService,
+    private val notificationService: NotificationService? = null,
+    private val inAppNotificationService: InAppNotificationService? = null,
     private val interval: Duration = 6.hours,
     private val initialDelay: Duration = 1.minutes
 ) {
@@ -58,8 +60,10 @@ class UserLifecycleMonitor(
                             user.id, UserEvent.ONBOARDING_STUCK,
                             mapOf("reason" to reason, "step" to user.onboardingStep.name)
                         )
+                        inAppNotificationService?.notifyOnboarding(user.id, reason)
+                        notificationService?.sendOnboardingReminder(user, reason)
                     }
-                }.onFailure { log.warn("ONBOARDING_STUCK record failed userId={}: {}", user.id, it.message) }
+                }.onFailure { log.warn("ONBOARDING_STUCK notification failed userId={}: {}", user.id, it.message) }
             }
         }
 
@@ -75,8 +79,10 @@ class UserLifecycleMonitor(
                             user.id, UserEvent.PLAN_EXPIRY_NOTIFIED,
                             mapOf("plan" to plan.name, "daysLeft" to daysLeft.toString())
                         )
+                        inAppNotificationService?.notifyPlanExpiry(user.id, daysLeft, plan)
+                        notificationService?.sendPlanExpiryWarning(user, daysLeft, plan)
                     }
-                }.onFailure { log.warn("PLAN_EXPIRY_NOTIFIED record failed userId={}: {}", user.id, it.message) }
+                }.onFailure { log.warn("PLAN_EXPIRY_NOTIFIED notification failed userId={}: {}", user.id, it.message) }
             }
         }
 
@@ -92,8 +98,14 @@ class UserLifecycleMonitor(
                             user.id, UserEvent.CHECKOUT_ABANDONED,
                             mapOf("detectedAt" to Clock.System.now().toString())
                         )
+                        // Look up pending plan from billing repository via userActivityService
+                        val pendingPlan = userActivityService.getPendingPlan(user.id)
+                        if (pendingPlan != null) {
+                            inAppNotificationService?.notifyCheckoutAbandoned(user.id, pendingPlan)
+                            notificationService?.sendCheckoutAbandoned(user, pendingPlan)
+                        }
                     }
-                }.onFailure { log.warn("CHECKOUT_ABANDONED record failed userId={}: {}", user.id, it.message) }
+                }.onFailure { log.warn("CHECKOUT_ABANDONED notification failed userId={}: {}", user.id, it.message) }
             }
         }
 

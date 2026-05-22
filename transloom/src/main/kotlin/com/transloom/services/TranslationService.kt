@@ -2,6 +2,7 @@ package com.transloom.services
 
 import com.androidplay.core.secrets.getSecretValue
 import com.transloom.repository.TranslationMemoryRepository
+import com.transloom.repository.SharedTranslationMemoryRepository
 import com.transloom.pipeline.ExtractionResult
 import com.transloom.pipeline.PlaceholderGuard
 import com.transloom.pipeline.TokenExtractor
@@ -69,7 +70,40 @@ data class TranslationContext(
     val targetRegion: String? = null
 )
 
-class TranslationService(private val memoryStore: TranslationMemoryRepository) {
+// CLDR plural form requirements per language name. Languages not listed use the default two-form
+// system (one / other) that matches English.
+private val PLURAL_FORMS_BY_LANGUAGE: Map<String, List<String>> = mapOf(
+    "Russian"    to listOf("one", "few", "many", "other"),
+    "Ukrainian"  to listOf("one", "few", "many", "other"),
+    "Polish"     to listOf("one", "few", "many", "other"),
+    "Czech"      to listOf("one", "few", "many", "other"),
+    "Slovak"     to listOf("one", "few", "many", "other"),
+    "Serbian"    to listOf("one", "few", "other"),
+    "Croatian"   to listOf("one", "few", "other"),
+    "Slovenian"  to listOf("one", "two", "few", "other"),
+    "Lithuanian" to listOf("one", "few", "other"),
+    "Latvian"    to listOf("zero", "one", "other"),
+    "Romanian"   to listOf("one", "few", "other"),
+    "Arabic"     to listOf("zero", "one", "two", "few", "many", "other"),
+    // 1-form languages (everything is "other")
+    "Chinese"    to listOf("other"),
+    "Japanese"   to listOf("other"),
+    "Korean"     to listOf("other"),
+    "Vietnamese" to listOf("other"),
+    "Thai"       to listOf("other"),
+    "Indonesian" to listOf("other"),
+    "Malay"      to listOf("other")
+)
+
+fun requiredPluralForms(languageName: String): List<String> =
+    PLURAL_FORMS_BY_LANGUAGE[languageName] ?: listOf("one", "other")
+
+private val PLURAL_QUANTITIES = setOf("zero", "one", "two", "few", "many", "other")
+
+class TranslationService(
+    private val memoryStore: TranslationMemoryRepository,
+    private val sharedMemoryStore: SharedTranslationMemoryRepository? = null
+) {
     private val log = LoggerFactory.getLogger(TranslationService::class.java)
 
     private val geminiApiKey: String = getSecretValue("gemini-api-key")
@@ -117,6 +151,7 @@ class TranslationService(private val memoryStore: TranslationMemoryRepository) {
         for ((key, ctx) in keyedContexts) {
             val hashKey = cacheKey(ctx)
             val cached = memoryStore.getTranslation(hashKey)
+                ?: sharedMemoryStore?.get(ctx.sourceText, ctx.targetLanguage)
             if (cached != null) {
                 memoryStore.incrementUsage(hashKey)
                 results[key] = Result.success(TranslationResult(cached, emptyList()))
@@ -180,6 +215,74 @@ class TranslationService(private val memoryStore: TranslationMemoryRepository) {
             is PlaceholderGuard.GuardResult.Rejected ->
                 throw IllegalStateException("Validation rejected: ${guardResult.reason}")
         }
+    }
+
+    /**
+     * Translates grouped plural forms as a single structured Gemini call.
+     *
+     * Input:  Map<baseName, Map<quantity, sourceText>>
+     *   e.g.  { "item_count": {"one": "%d item", "other": "%d items"} }
+     *
+     * Output: Map<baseName, Map<quantity, translatedText>>
+     *   e.g.  { "item_count": {"one": "%d элемент", "few": "%d элемента", "many": "%d элементов", "other": "%d элемента"} }
+     *
+     * The system prompt instructs Gemini to generate ALL required CLDR quantities for the target
+     * language, even if the English source only has "one" and "other".
+     */
+    suspend fun translatePluralBatch(
+        pluralGroups: Map<String, Map<String, String>>,
+        context: TranslationContext
+    ): Map<String, Map<String, String>> {
+        if (pluralGroups.isEmpty()) return emptyMap()
+
+        val requiredForms = requiredPluralForms(context.targetLanguage)
+        val inputJson = json.encodeToString(
+            kotlinx.serialization.builtins.MapSerializer(
+                String.serializer(),
+                kotlinx.serialization.builtins.MapSerializer(String.serializer(), String.serializer())
+            ),
+            pluralGroups
+        )
+
+        val systemPrompt = buildPluralSystemPrompt(context, requiredForms)
+        val llmOutput = try {
+            callGeminiApiJson(systemPrompt, inputJson)
+        } catch (e: Exception) {
+            log.warn("Plural batch Gemini call failed: {}", e.message)
+            return emptyMap()
+        }
+
+        return try {
+            json.decodeFromString(
+                kotlinx.serialization.builtins.MapSerializer(
+                    String.serializer(),
+                    kotlinx.serialization.builtins.MapSerializer(String.serializer(), String.serializer())
+                ),
+                llmOutput.trim()
+            )
+        } catch (e: Exception) {
+            log.warn("Plural batch JSON parse failed: {}", e.message)
+            emptyMap()
+        }
+    }
+
+    private fun buildPluralSystemPrompt(ctx: TranslationContext, requiredForms: List<String>): String {
+        val glossaryLine = ctx.glossary?.entries?.joinToString(", ") { (k, v) -> "[$k -> $v]" }
+            ?.let { "Apply the following glossary exactly: $it" } ?: ""
+        return """
+            You are a professional mobile app translator for ${ctx.category} apps.
+            Translate Android plural strings from English to ${ctx.targetLanguage}${ctx.targetRegion?.let { " ($it)" } ?: ""}.
+            Tone: ${ctx.tone}.
+            Required CLDR plural categories for ${ctx.targetLanguage}: ${requiredForms.joinToString(", ")}.
+            Rules:
+            - Preserve ALL __PH_X__ and __ENT_X__ tokens exactly. Never translate tokens.
+            - For each string key, provide translations for ALL required categories listed above.
+            - If the source only has "one" and "other", generate the missing forms using correct grammar.
+            - Return valid JSON only. No explanations.
+            Input: JSON mapping string keys → { quantity: English source text }.
+            Output: JSON mapping the SAME keys → { quantity: translated text } with all required categories.
+            $glossaryLine
+        """.trimIndent()
     }
 
     private fun buildSystemPrompt(ctx: TranslationContext): String {

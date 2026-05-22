@@ -2,6 +2,7 @@ package com.transloom.repository
 
 import com.transloom.domain.StringsPage
 import com.transloom.domain.Translation
+import com.transloom.domain.TranslationHistoryEntry
 
 interface TranslationRepository {
     suspend fun upsertString(projectId: String, key: String, sourceText: String): String
@@ -21,10 +22,16 @@ interface TranslationRepository {
 
     suspend fun getStringKeysAndTexts(projectId: String): Map<String, String>
 
-    suspend fun listPendingReviews(ownerId: String, limit: Int = 50, offset: Int = 0): List<Translation>
+    suspend fun listPendingReviews(
+        ownerId: String,
+        limit: Int = 50,
+        offset: Int = 0,
+        language: String? = null,
+        statusFilter: String? = null
+    ): List<Translation>
 
-    /** Total count of pending reviews for the user — run in parallel with listPendingReviews for pagination. */
-    suspend fun countPendingReviews(ownerId: String): Int
+    /** Total count of pending reviews — run in parallel with listPendingReviews for pagination. */
+    suspend fun countPendingReviews(ownerId: String, language: String? = null, statusFilter: String? = null): Int
 
     suspend fun approve(translationId: String, editedText: String? = null): Boolean
 
@@ -57,4 +64,13 @@ interface TranslationRepository {
      * building a CDN locale bundle. Excludes "review" (unconfirmed) and "blocked" (rejected).
      */
     suspend fun getPublishableTranslations(projectId: String): List<Translation>
+
+    /** Locks a translation so the pipeline will never overwrite it. Returns false if not found. */
+    suspend fun lock(translationId: String, lockedBy: String): Boolean
+
+    /** Removes the lock from a translation, allowing future pipeline runs to update it. */
+    suspend fun unlock(translationId: String): Boolean
+
+    /** Returns the change history for a specific string key across all languages. */
+    suspend fun listHistory(projectId: String, stringKey: String, limit: Int = 30): List<TranslationHistoryEntry>
 }

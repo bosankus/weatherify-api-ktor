@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 @Serializable
 data class PipelineEvent(
-    val type: String,            // start | step | finish | onboarding
+    val type: String,            // start | step | finish | onboarding | cdn_ready | notification
     val runId: String = "",
     val stepId: String? = null,
     val status: String? = null,
@@ -38,9 +38,16 @@ data class PipelineEvent(
     val error: String? = null,
     val snapshot: PipelineRunState? = null,
     val surfaceSkipped: Int? = null,
-    val onboardingStep: String? = null,  // populated for type="onboarding"
+    val onboardingStep: String? = null,
     val cdnBundleVersion: String? = null,
-    val cdnLocales: List<String>? = null
+    val cdnLocales: List<String>? = null,
+    // Notification fields — populated when type = "notification"
+    val notificationId: String? = null,
+    val notificationTitle: String? = null,
+    val notificationMessage: String? = null,
+    val notificationLevel: String? = null,
+    val notificationActionUrl: String? = null,
+    val notificationActionLabel: String? = null
 )
 
 /**
@@ -181,6 +188,26 @@ class PipelineEventBus(private val redisUrl: String? = null) {
     /** Pushes an onboarding step change to any open dashboard SSE connection for this user. */
     fun emitOnboardingStep(userId: String, step: String) {
         emit(userId, PipelineEvent(type = "onboarding", onboardingStep = step))
+    }
+
+    fun emitNotification(
+        userId: String,
+        notificationId: String,
+        title: String,
+        message: String,
+        level: String,
+        actionUrl: String?,
+        actionLabel: String?
+    ) {
+        emit(userId, PipelineEvent(
+            type = "notification",
+            notificationId = notificationId,
+            notificationTitle = title,
+            notificationMessage = message,
+            notificationLevel = level,
+            notificationActionUrl = actionUrl,
+            notificationActionLabel = actionLabel
+        ))
     }
 
     fun emitCdnReady(userId: String, runId: String, bundleVersion: String, locales: List<String>) {

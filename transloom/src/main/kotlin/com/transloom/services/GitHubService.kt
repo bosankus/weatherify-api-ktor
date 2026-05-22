@@ -103,6 +103,18 @@ class GitHubService {
         }
     }
 
+    /** Returns the full commit SHA at the tip of [branch], or throws if the branch doesn't exist. */
+    suspend fun getLatestCommitHash(repo: String, branch: String, token: String): String {
+        val response = client.get("https://api.github.com/repos/$repo/git/ref/heads/$branch") {
+            gitHubAuth(token)
+            header(HttpHeaders.Accept, "application/vnd.github+json")
+        }
+        if (!response.status.isSuccess()) throw Exception(
+            "Could not resolve HEAD of '$branch' in $repo: HTTP ${response.status.value}"
+        )
+        return response.body<GitRefResponse>().gitObject.sha
+    }
+
     suspend fun fetchFileContent(repo: String, branch: String, filePath: String, token: String): String {
 
         val response = client.get("https://api.github.com/repos/$repo/contents/$filePath?ref=$branch") {

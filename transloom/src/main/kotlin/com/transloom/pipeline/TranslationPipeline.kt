@@ -10,6 +10,7 @@ import com.transloom.model.AppConfig
 import com.transloom.model.SourceConfig
 import com.transloom.model.TransloomConfig
 import com.transloom.queue.WebhookPayload
+import com.transloom.repository.SharedTranslationMemoryRepository
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
 import com.transloom.services.PipelineEventBus
@@ -18,6 +19,7 @@ import com.transloom.services.SemanticChangeAnalyzer
 import com.transloom.services.StringParserService
 import com.transloom.services.TranslationContext
 import com.transloom.services.TranslationService
+import com.transloom.services.requiredPluralForms
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -29,22 +31,22 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 fun buildConfigWithGlossary(project: Project, glossary: Map<String, Map<String, String>>): TransloomConfig {
-    val fileType = when {
-        project.sourceFilePath.endsWith(".strings") -> "ios"
-        project.sourceFilePath.endsWith(".json") || project.sourceFilePath.endsWith(".arb") -> "json"
-        else -> "android"
-    }
+    // Use the filename as the map key so multiple files of the same type can coexist.
+    val filesMap = project.sourceFilePaths.associateBy { it.substringAfterLast('/') }
     return TransloomConfig(
         app = AppConfig(name = project.name, category = project.category, tone = project.tone),
         source = SourceConfig(
             language = "en",
-            files = mapOf(fileType to project.sourceFilePath),
+            files = filesMap,
             watch_branch = project.watchBranch
         ),
         targets = project.targets,
         glossary = glossary.ifEmpty { null }
     )
 }
+
+// Plural form quantities recognised in Android string key names (e.g. "item_count.one")
+private val PLURAL_QUANTITIES = setOf("zero", "one", "two", "few", "many", "other")
 
 class TranslationPipeline(
     private val gitHubService: GitHubService,
@@ -55,7 +57,8 @@ class TranslationPipeline(
     private val eventBus: PipelineEventBus,
     private val semanticChangeAnalyzer: SemanticChangeAnalyzer,
     private val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer,
-    private val cdnPublishService: com.transloom.services.CdnPublishService
+    private val cdnPublishService: com.transloom.services.CdnPublishService,
+    private val sharedMemoryRepository: SharedTranslationMemoryRepository? = null
 ) {
     private val log = LoggerFactory.getLogger(TranslationPipeline::class.java)
 
@@ -72,20 +75,26 @@ class TranslationPipeline(
         )
         log.info("Pipeline: repo={} branch={} commit={}", payload.repositoryFullName, payload.branchName, payload.commitHash.take(7))
 
-        // ── Step: Fetch source file ────────────────────────────────────────────
-        val sourceFilePath = config.source.files.values.firstOrNull()
-        if (sourceFilePath == null) {
+        // ── Step: Fetch source files ───────────────────────────────────────────
+        val sourceFilePaths = config.source.files.values.toList()
+        if (sourceFilePaths.isEmpty()) {
             eventBus.stepError(userId, runId, "FETCHING_STRINGS", "No source file configured")
             eventBus.finishRun(userId, runId, error = "No source file configured for project ${project.id}")
             log.warn("No source file configured for project={} — skipping pipeline", project.id)
             return
         }
         eventBus.stepRunning(userId, runId, "FETCHING_STRINGS")
-        val sourceContent = try {
-            gitHubService.fetchFileContent(
-                repo = payload.repositoryFullName, branch = payload.commitHash,
-                filePath = sourceFilePath, token = githubToken
-            )
+        val sourceContentByPath: Map<String, String> = try {
+            coroutineScope {
+                sourceFilePaths.map { filePath ->
+                    async {
+                        filePath to gitHubService.fetchFileContent(
+                            repo = payload.repositoryFullName, branch = payload.commitHash,
+                            filePath = filePath, token = githubToken
+                        )
+                    }
+                }.awaitAll().toMap()
+            }
         } catch (e: Exception) {
             eventBus.stepError(userId, runId, "FETCHING_STRINGS", e.message)
             eventBus.finishRun(userId, runId, error = "Could not read source file: ${e.message}")
@@ -94,32 +103,38 @@ class TranslationPipeline(
         }
         eventBus.stepDone(userId, runId, "FETCHING_STRINGS")
 
-        // Hash-based fast skip: if the source file is byte-for-byte identical to the last
-        // successfully processed version, skip all DB reads and AI calls entirely.
-        val incomingHash = sha256(sourceContent)
+        // Hash-based fast skip: hash is computed over all source files combined (sorted by path for
+        // determinism). If byte-for-byte identical to the last successfully processed version, skip.
+        val incomingHash = sha256(sourceContentByPath.entries.sortedBy { it.key }.joinToString("\n") { it.value })
         if (incomingHash == project.lastSourceFileHash) {
             listOf("DETECTING_CHANGES", "BILLING_CHECK", "TRANSLATING", "CREATING_PR").forEach {
                 eventBus.stepSkipped(userId, runId, it)
             }
             eventBus.finishRun(userId, runId)
-            log.info("Source file unchanged (hash match) for repo={} commit={} — pipeline skipped",
+            log.info("Source files unchanged (hash match) for repo={} commit={} — pipeline skipped",
                 payload.repositoryFullName, payload.commitHash.take(7))
             return
         }
 
         // ── Step: Detect changes ───────────────────────────────────────────────
         eventBus.stepRunning(userId, runId, "DETECTING_CHANGES")
-        val allSourceStrings = when {
-            sourceFilePath.endsWith(".xml") -> StringParserService.parseAndroidXml(sourceContent)
-                .filterValues { !it.startsWith("@") }  // skip @string/ref, @drawable/ref etc.
-            sourceFilePath.endsWith(".strings") -> StringParserService.parseIosStrings(sourceContent)
-            sourceFilePath.endsWith(".json") || sourceFilePath.endsWith(".arb") ->
-                StringParserService.parseJsonStrings(sourceContent)
-            else -> {
-                log.warn("Unsupported source file format: {} — no strings extracted", sourceFilePath)
-                emptyMap()
+        // Merge strings from all source files; if keys collide across files the last file wins.
+        val allSourceStrings: Map<String, String> = sourceContentByPath.entries
+            .sortedBy { it.key }
+            .fold(mutableMapOf()) { acc, (filePath, content) ->
+                val parsed = when {
+                    filePath.endsWith(".xml") -> StringParserService.parseAndroidXml(content)
+                        .filterValues { !it.startsWith("@") }  // skip @string/ref, @drawable/ref etc.
+                    filePath.endsWith(".strings") -> StringParserService.parseIosStrings(content)
+                    filePath.endsWith(".json") || filePath.endsWith(".arb") ->
+                        StringParserService.parseJsonStrings(content)
+                    else -> {
+                        log.warn("Unsupported source file format: {} — no strings extracted", filePath)
+                        emptyMap()
+                    }
+                }
+                acc.apply { putAll(parsed) }
             }
-        }
         val existingDbStrings = translationRepository.getStringKeysAndTexts(project.id)
         val allChangedStrings = allSourceStrings.filter { (key, text) -> existingDbStrings[key] != text }
 
@@ -296,11 +311,71 @@ class TranslationPipeline(
     ): Pair<Map<String, String>, Int> {
         data class StringResult(val key: String, val text: String, val status: String)
 
-        // Group strings into batches; limit concurrent batch calls to avoid rate-limit bursts.
-        val semaphore = Semaphore(4)
-        val batches = addedStrings.entries.chunked(BATCH_SIZE).map { chunk -> chunk.associate { it.key to it.value } }
+        // ── Phase 1a: Separate plural forms from simple strings ────────────────
+        // Keys like "item_count.one" / "item_count.other" are plural variants.
+        // Group them so Gemini can translate all forms together and generate
+        // missing CLDR categories (e.g. Russian needs one/few/many/other).
+        val pluralGroups = mutableMapOf<String, MutableMap<String, String>>()
+        val simpleStrings = mutableMapOf<String, String>()
 
-        val results: List<StringResult?> = coroutineScope {
+        for ((key, text) in addedStrings) {
+            val lastSegment = key.substringAfterLast(".")
+            val baseName = key.substringBeforeLast(".")
+            if (lastSegment in PLURAL_QUANTITIES && baseName != key) {
+                pluralGroups.getOrPut(baseName) { mutableMapOf() }[lastSegment] = text
+            } else {
+                simpleStrings[key] = text
+            }
+        }
+
+        val allResults = mutableListOf<StringResult?>()
+
+        // ── Phase 1b: Translate plural groups ─────────────────────────────────
+        if (pluralGroups.isNotEmpty()) {
+            val sampleSource = addedStrings.values.firstOrNull() ?: ""
+            val pluralContext = TranslationContext(
+                appId = payload.repositoryFullName, appName = config.app.name,
+                category = config.app.category, tone = config.app.tone,
+                glossary = config.glossary?.get(target.code),
+                sourceText = sampleSource, targetLanguage = target.name, targetRegion = target.region
+            )
+            val pluralResults = runCatching {
+                translationService.translatePluralBatch(pluralGroups, pluralContext)
+            }.getOrElse { e ->
+                log.warn("Plural batch failed for lang={}: {}", target.code, e.message)
+                emptyMap()
+            }
+
+            for ((baseName, forms) in pluralGroups) {
+                val translatedForms = pluralResults[baseName]
+                if (translatedForms.isNullOrEmpty()) {
+                    // Fallback: store each form as blocked
+                    for ((quantity, sourceText) in forms) {
+                        val key = "$baseName.$quantity"
+                        val stringId = translationRepository.upsertString(project.id, key, sourceText)
+                        translationRepository.upsertTranslation(stringId, target.code, target.region, "", "blocked", "Plural translation failed", pipelineRunId = runId, commitShort = commitShort)
+                    }
+                } else {
+                    // Store all translated forms — including any new quantities Gemini generated
+                    for ((quantity, translatedText) in translatedForms) {
+                        val key = "$baseName.$quantity"
+                        val sourceText = forms[quantity] ?: forms["other"] ?: forms.values.firstOrNull() ?: ""
+                        val stringId = translationRepository.upsertString(project.id, key, sourceText)
+                        translationRepository.upsertTranslation(stringId, target.code, target.region, translatedText, "auto", pipelineRunId = runId, commitShort = commitShort)
+                        allResults += StringResult(key, translatedText, "auto")
+                        if (project.sharedMemoryOptIn) {
+                            runCatching { sharedMemoryRepository?.contribute(sourceText, target.name, translatedText) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Phase 1c: Translate simple strings ────────────────────────────────
+        val semaphore = Semaphore(4)
+        val batches = simpleStrings.entries.chunked(BATCH_SIZE).map { chunk -> chunk.associate { it.key to it.value } }
+
+        val simpleResults: List<StringResult?> = coroutineScope {
             batches.map { batch ->
                 async {
                     semaphore.withPermit {
@@ -312,9 +387,7 @@ class TranslationPipeline(
                                 sourceText = sourceText, targetLanguage = target.name, targetRegion = target.region
                             )
                         }
-
                         val batchResults = translationService.translateBatch(keyedContexts)
-
                         batch.keys.map { key ->
                             val sourceText = batch[key]!!
                             val outcome = batchResults[key]
@@ -331,6 +404,10 @@ class TranslationPipeline(
                                     val stringId = translationRepository.upsertString(project.id, key, sourceText)
                                     translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, status, pipelineRunId = runId, commitShort = commitShort)
                                     if (status != "auto") log.info("'{}' → {} flagged: {}", key, target.code, r.flags)
+                                    // Contribute auto-approved strings to shared pool if opted in
+                                    if (status == "auto" && project.sharedMemoryOptIn && sharedMemoryRepository != null) {
+                                        runCatching { sharedMemoryRepository.contribute(sourceText, target.name, r.text) }
+                                    }
                                     StringResult(key, r.text, status)
                                 }
                                 else -> {
@@ -347,13 +424,11 @@ class TranslationPipeline(
             }.awaitAll().flatten()
         }
 
-        // ── Phase 2: Cultural sensitivity check (only when opted in per-project) ──
-        // All auto-approved strings for this target are sent in one batched Gemini call.
-        // Any string that fails the cultural check is moved to "review" with a
-        // "Cultural: ..." blockReason visible in the review portal.
-        // Defaults to "no issues" on any error — never floods the review queue.
-        val finalResults: List<StringResult?> = if (!project.culturalSensitivityEnabled) results else {
-            val autoResults = results.filterNotNull().filter { it.status == "auto" }
+        allResults.addAll(simpleResults)
+
+        // ── Phase 2: Cultural sensitivity check ───────────────────────────────
+        val finalResults: List<StringResult?> = if (!project.culturalSensitivityEnabled) allResults else {
+            val autoResults = allResults.filterNotNull().filter { it.status == "auto" }
             val analysisInputs = autoResults.mapNotNull { r ->
                 val srcText = addedStrings[r.key] ?: return@mapNotNull null
                 r.key to (r.text to srcText)
@@ -363,7 +438,7 @@ class TranslationPipeline(
                 analysisInputs, target.name, target.region, config.app.category, config.app.tone
             )
 
-            results.map { r ->
+            allResults.map { r ->
                 if (r == null || r.status != "auto") return@map r
                 val analysis = analyses[r.key] ?: return@map r
                 if (!analysis.needsReview) return@map r

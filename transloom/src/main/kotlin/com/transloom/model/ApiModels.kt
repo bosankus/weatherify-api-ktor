@@ -8,10 +8,11 @@ data class CreateProjectBody(
     val name: String,
     val githubRepo: String,
     val watchBranch: String = "main",
-    val sourceFilePath: String = "values/strings.xml",
+    val sourceFilePaths: List<String> = listOf("values/strings.xml"),
     val category: String,
     val tone: String,
-    val targets: List<TargetConfig>
+    val targets: List<TargetConfig>,
+    val sharedMemoryOptIn: Boolean = false
 )
 
 @Serializable
@@ -20,7 +21,7 @@ data class ProjectResponse(
     val name: String,
     val githubRepo: String,
     val watchBranch: String,
-    val sourceFilePath: String,
+    val sourceFilePaths: List<String>,
     val category: String,
     val tone: String,
     val targetCount: Int
@@ -34,8 +35,12 @@ data class ReviewItemResponse(
     val targetLanguage: String,
     val targetRegion: String?,
     val translatedText: String,
+    /** Non-null when a string was retranslated — allows the reviewer to diff old vs new output. */
+    val previousTranslatedText: String? = null,
     val status: String,
     val blockReason: String?,
+    val lockedAt: Long? = null,
+    val lockedBy: String? = null,
     val projectId: String,
     val projectName: String,
     val pipelineRunId: String? = null,
@@ -72,7 +77,7 @@ data class UpdateProjectBody(
     val tone: String? = null,
     val category: String? = null,
     val watchBranch: String? = null,
-    val sourceFilePath: String? = null,
+    val sourceFilePaths: List<String>? = null,
     val targets: List<TargetConfig>? = null,
     val culturalSensitivityEnabled: Boolean? = null,
     val autoApproveEnabled: Boolean? = null
@@ -84,12 +89,13 @@ data class ProjectDetailResponse(
     val name: String,
     val githubRepo: String,
     val watchBranch: String,
-    val sourceFilePath: String,
+    val sourceFilePaths: List<String>,
     val category: String,
     val tone: String,
     val targets: List<TargetConfig>,
     val culturalSensitivityEnabled: Boolean = false,
     val autoApproveEnabled: Boolean = false,
+    val sharedMemoryOptIn: Boolean = false,
     /** ISO-8601 date-time of the last successful webhook verification, or null if never verified. */
     val webhookVerifiedAt: String? = null
 )

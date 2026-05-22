@@ -134,12 +134,15 @@ fun Route.configureWebhookRoutes(
                 commits.any { commit ->
                     val modified = commit.jsonObject["modified"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
                     val added = commit.jsonObject["added"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
-                    (modified + added).any { it == project.sourceFilePath || it.endsWith("/${project.sourceFilePath}") }
+                    val changedPaths = modified + added
+                    project.sourceFilePaths.any { sourcePath ->
+                        changedPaths.any { it == sourcePath || it.endsWith("/$sourcePath") }
+                    }
                 }
             } else true
 
             if (!sourceModified) {
-                log.info("Webhook ignored: '{}' not modified in push to {}", project.sourceFilePath, repo)
+                log.info("Webhook ignored: source files {} not modified in push to {}", project.sourceFilePaths, repo)
                 call.respond(HttpStatusCode.Accepted, "Ignored: source file not modified")
                 return@post
             }

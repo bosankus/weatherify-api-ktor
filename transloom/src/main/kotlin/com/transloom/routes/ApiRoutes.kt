@@ -171,7 +171,7 @@ fun Route.configureApiRoutes(
                         name = p.name,
                         githubRepo = p.githubRepo,
                         watchBranch = p.watchBranch,
-                        sourceFilePath = p.sourceFilePath,
+                        sourceFilePaths = p.sourceFilePaths,
                         category = p.category,
                         tone = p.tone,
                         targetCount = p.targets.size
@@ -235,11 +235,12 @@ fun Route.configureApiRoutes(
                     name = body.name,
                     githubRepo = body.githubRepo,
                     watchBranch = body.watchBranch,
-                    sourceFilePath = body.sourceFilePath,
+                    sourceFilePaths = body.sourceFilePaths.filter { it.isNotBlank() }.ifEmpty { listOf("values/strings.xml") },
                     category = body.category,
                     tone = body.tone,
                     targets = body.targets,
-                    culturalSensitivityEnabled = false
+                    culturalSensitivityEnabled = false,
+                    sharedMemoryOptIn = body.sharedMemoryOptIn
                 )
                 val project = runCatching { projectRepository.create(userId, input) }.getOrElse {
                     if (it.message?.contains("E11000") == true || it.message?.contains("duplicate") == true) {
@@ -276,7 +277,7 @@ fun Route.configureApiRoutes(
                         name = project.name,
                         githubRepo = project.githubRepo,
                         watchBranch = project.watchBranch,
-                        sourceFilePath = project.sourceFilePath,
+                        sourceFilePaths = project.sourceFilePaths,
                         category = project.category,
                         tone = project.tone,
                         targetCount = project.targets.size
@@ -305,7 +306,7 @@ fun Route.configureApiRoutes(
                     tone = body.tone,
                     category = body.category,
                     watchBranch = body.watchBranch,
-                    sourceFilePath = body.sourceFilePath,
+                    sourceFilePaths = body.sourceFilePaths?.filter { it.isNotBlank() }?.ifEmpty { null },
                     targets = body.targets,
                     culturalSensitivityEnabled = body.culturalSensitivityEnabled,
                     autoApproveEnabled = body.autoApproveEnabled
@@ -327,10 +328,11 @@ fun Route.configureApiRoutes(
                     ProjectDetailResponse(
                         id = updated.id, name = updated.name,
                         githubRepo = updated.githubRepo, watchBranch = updated.watchBranch,
-                        sourceFilePath = updated.sourceFilePath, category = updated.category,
+                        sourceFilePaths = updated.sourceFilePaths, category = updated.category,
                         tone = updated.tone, targets = updated.targets,
                         culturalSensitivityEnabled = updated.culturalSensitivityEnabled,
                         autoApproveEnabled = updated.autoApproveEnabled,
+                        sharedMemoryOptIn = updated.sharedMemoryOptIn,
                         webhookVerifiedAt = updated.webhookVerifiedAt?.toString()
                     )
                 )
@@ -354,12 +356,13 @@ fun Route.configureApiRoutes(
                         name = project.name,
                         githubRepo = project.githubRepo,
                         watchBranch = project.watchBranch,
-                        sourceFilePath = project.sourceFilePath,
+                        sourceFilePaths = project.sourceFilePaths,
                         category = project.category,
                         tone = project.tone,
                         targets = project.targets,
                         culturalSensitivityEnabled = project.culturalSensitivityEnabled,
                         autoApproveEnabled = project.autoApproveEnabled,
+                        sharedMemoryOptIn = project.sharedMemoryOptIn,
                         webhookVerifiedAt = project.webhookVerifiedAt?.toString()
                     )
                 )
@@ -403,6 +406,25 @@ fun Route.configureApiRoutes(
                 val page = translationRepository.listStringsForProject(projectId, limit, offset)
                 call.respond(HttpStatusCode.OK, page)
             }
+
+            get("/{id}/strings/{key}/history") {
+                val userId = call.userId()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+                val projectId = call.parameters["id"]
+                    ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+                val stringKey = call.parameters["key"]
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing string key"))
+
+                val project = projectRepository.findById(projectId)
+                if (project == null || project.ownerId != userId) {
+                    return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
+                }
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 30
+                val history = translationRepository.listHistory(projectId, stringKey, limit)
+                call.respond(HttpStatusCode.OK, mapOf("history" to history, "stringKey" to stringKey))
+            }
         }
 
         // --- Review Portal ---
@@ -413,10 +435,12 @@ fun Route.configureApiRoutes(
 
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 50
                 val offset = call.request.queryParameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                val language = call.request.queryParameters["language"]?.takeIf { it.isNotBlank() }
+                val statusFilter = call.request.queryParameters["status"]?.takeIf { it.isNotBlank() }
 
                 val (items, total) = coroutineScope {
-                    val itemsDeferred = async { translationRepository.listPendingReviews(userId, limit, offset) }
-                    val totalDeferred = async { translationRepository.countPendingReviews(userId) }
+                    val itemsDeferred = async { translationRepository.listPendingReviews(userId, limit, offset, language, statusFilter) }
+                    val totalDeferred = async { translationRepository.countPendingReviews(userId, language, statusFilter) }
                     itemsDeferred.await() to totalDeferred.await()
                 }
                 val response = items.map { t ->
@@ -427,8 +451,11 @@ fun Route.configureApiRoutes(
                         targetLanguage = t.targetLanguage,
                         targetRegion = t.targetRegion,
                         translatedText = t.translatedText,
+                        previousTranslatedText = t.previousTranslatedText,
                         status = t.status,
                         blockReason = t.blockReason,
+                        lockedAt = t.lockedAt,
+                        lockedBy = t.lockedBy,
                         projectId = t.projectId,
                         projectName = t.projectName,
                         pipelineRunId = t.pipelineRunId,
@@ -523,6 +550,41 @@ fun Route.configureApiRoutes(
 
                 translationRepository.reject(translationId, body.reason)
                 call.respond(HttpStatusCode.OK, mapOf("status" to "rejected", "id" to translationId))
+            }
+
+            post("/{id}/lock") {
+                val userId = call.userId()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+                val translationId = call.parameters["id"]
+                    ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid translation id"))
+
+                val translation = translationRepository.getTranslation(translationId)
+                    ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
+                val project = projectRepository.findById(translation.projectId)
+                if (project == null || project.ownerId != userId) {
+                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
+                }
+                val locked = translationRepository.lock(translationId, userId)
+                if (locked) call.respond(HttpStatusCode.OK, mapOf("status" to "locked", "id" to translationId))
+                else call.respond(HttpStatusCode.Conflict, ApiError("Translation is already locked"))
+            }
+
+            post("/{id}/unlock") {
+                val userId = call.userId()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+                val translationId = call.parameters["id"]
+                    ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid translation id"))
+
+                val translation = translationRepository.getTranslation(translationId)
+                    ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
+                val project = projectRepository.findById(translation.projectId)
+                if (project == null || project.ownerId != userId) {
+                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
+                }
+                translationRepository.unlock(translationId)
+                call.respond(HttpStatusCode.OK, mapOf("status" to "unlocked", "id" to translationId))
             }
         }
 
@@ -683,6 +745,47 @@ fun Route.configureApiRoutes(
             }
             apiLog.info("Retry enqueued: originalRunId={} attempt={}/{} project={} repo={}", runId, attempt, MAX_RETRIES, projectId, run.repo)
             call.respond(mapOf("queued" to true, "originalRunId" to runId, "attempt" to attempt, "maxRetries" to MAX_RETRIES))
+        }
+
+        // --- Manual Sync ---
+        // Fetches the current HEAD of watchBranch and enqueues it through the normal pipeline,
+        // bypassing the need for a git push. Useful for initial project setup or re-syncing after
+        // config changes. Respects the same dedup, billing, and rate-limit guards as the webhook path.
+        post("/projects/{id}/sync") {
+            val userId = call.userId()
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["id"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+
+            val project = projectRepository.findById(projectId)
+            if (project == null || project.ownerId != userId) {
+                return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
+            }
+            val owner = userRepository.findById(userId)
+            val token = owner?.githubToken
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("No GitHub token on file. Re-authenticate."))
+
+            val commitHash = runCatching {
+                githubService.getLatestCommitHash(project.githubRepo, project.watchBranch, token)
+            }.getOrElse {
+                return@post call.respond(HttpStatusCode.BadGateway, ApiError("Could not resolve HEAD of '${project.watchBranch}': ${it.message}"))
+            }
+
+            jobQueue.enqueueJob(WebhookPayload(
+                repositoryFullName = project.githubRepo,
+                commitHash = commitHash,
+                branchName = project.watchBranch,
+                projectId = projectId
+            ))
+            apiLog.info("Manual sync enqueued: project={} repo={} branch={} commit={}",
+                projectId, project.githubRepo, project.watchBranch, commitHash.take(7))
+            call.respond(HttpStatusCode.Accepted, mapOf(
+                "queued" to true,
+                "repo" to project.githubRepo,
+                "branch" to project.watchBranch,
+                "commitShort" to commitHash.take(7)
+            ))
         }
 
         // --- Webhook Install ---

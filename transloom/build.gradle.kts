@@ -56,4 +56,9 @@ dependencies {
     // we hand-draw the layout, so font-asian / forms / sign / svg aren't needed.
     implementation("com.itextpdf:kernel:8.0.4")
     implementation("com.itextpdf:layout:8.0.4")
+
+    // SMTP email delivery — Jakarta Mail 2.x implementation (Eclipse Angus).
+    // No third-party SaaS required; works with any SMTP relay (Google Workspace,
+    // self-hosted Postfix, AWS SES SMTP endpoint, etc.).
+    implementation("org.eclipse.angus:angus-mail:2.0.3")
 }

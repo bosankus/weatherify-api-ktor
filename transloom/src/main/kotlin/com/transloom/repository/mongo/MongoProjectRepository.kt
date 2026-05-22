@@ -39,12 +39,13 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             put("name", input.name)
             put("githubRepo", input.githubRepo)
             put("watchBranch", input.watchBranch)
-            put("sourceFilePath", input.sourceFilePath)
+            put("sourceFilePaths", input.sourceFilePaths)
             put("category", input.category)
             put("tone", input.tone)
             put("targets", targetsDocuments)
             put("culturalSensitivityEnabled", input.culturalSensitivityEnabled)
             put("autoApproveEnabled", input.autoApproveEnabled)
+            put("sharedMemoryOptIn", input.sharedMemoryOptIn)
             put("createdAt", now)
             put("updatedAt", now)
         }
@@ -57,11 +58,12 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             name = input.name,
             githubRepo = input.githubRepo,
             watchBranch = input.watchBranch,
-            sourceFilePath = input.sourceFilePath,
+            sourceFilePaths = input.sourceFilePaths,
             category = input.category,
             tone = input.tone,
             targets = input.targets,
-            culturalSensitivityEnabled = input.culturalSensitivityEnabled
+            culturalSensitivityEnabled = input.culturalSensitivityEnabled,
+            sharedMemoryOptIn = input.sharedMemoryOptIn
         )
     }
 
@@ -91,7 +93,7 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         tone: String?,
         category: String?,
         watchBranch: String?,
-        sourceFilePath: String?,
+        sourceFilePaths: List<String>?,
         targets: List<TargetConfig>?,
         culturalSensitivityEnabled: Boolean?,
         autoApproveEnabled: Boolean?
@@ -102,10 +104,11 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         tone?.let { updates.add(Updates.set("tone", it)) }
         category?.let { updates.add(Updates.set("category", it)) }
         watchBranch?.let { updates.add(Updates.set("watchBranch", it)) }
-        sourceFilePath?.let { updates.add(Updates.set("sourceFilePath", it)) }
+        sourceFilePaths?.let { updates.add(Updates.set("sourceFilePaths", it)) }
         targets?.let { updates.add(Updates.set("targets", it.map { t -> t.toDocument() })) }
         culturalSensitivityEnabled?.let { updates.add(Updates.set("culturalSensitivityEnabled", it)) }
         autoApproveEnabled?.let { updates.add(Updates.set("autoApproveEnabled", it)) }
+        // sharedMemoryOptIn is not exposed in the update API (only set at creation time)
 
         if (updates.isEmpty()) return false
 
@@ -208,18 +211,27 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         }
         val webhookVerifiedAt = (get("webhookVerifiedAt") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
+        // Backward compat: old documents store a single string in "sourceFilePath";
+        // new documents store a list in "sourceFilePaths".
+        val sourceFilePaths = (get("sourceFilePaths") as? List<*>)
+            ?.mapNotNull { it as? String }
+            ?.filter { it.isNotBlank() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: getString("sourceFilePath")?.let { listOf(it) }
+            ?: listOf("values/strings.xml")
         return Project(
             id = getString("_id"),
             ownerId = getString("ownerId") ?: "",
             name = getString("name") ?: "",
             githubRepo = getString("githubRepo") ?: "",
             watchBranch = getString("watchBranch") ?: "",
-            sourceFilePath = getString("sourceFilePath") ?: "",
+            sourceFilePaths = sourceFilePaths,
             category = getString("category") ?: "",
             tone = getString("tone") ?: "",
             targets = targets,
             culturalSensitivityEnabled = getBoolean("culturalSensitivityEnabled") ?: false,
             autoApproveEnabled = getBoolean("autoApproveEnabled") ?: false,
+            sharedMemoryOptIn = getBoolean("sharedMemoryOptIn") ?: false,
             webhookVerifiedAt = webhookVerifiedAt,
             lastSourceFileHash = getString("lastSourceFileHash")
         )

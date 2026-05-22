@@ -22,7 +22,7 @@ interface ProjectRepository {
         tone: String? = null,
         category: String? = null,
         watchBranch: String? = null,
-        sourceFilePath: String? = null,
+        sourceFilePaths: List<String>? = null,
         targets: List<TargetConfig>? = null,
         culturalSensitivityEnabled: Boolean? = null,
         autoApproveEnabled: Boolean? = null
