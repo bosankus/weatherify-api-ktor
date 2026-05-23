@@ -7,6 +7,16 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.html.*
 
+private fun ApplicationCall.issueBootstrapCookie() {
+    request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
+        response.cookies.append(Cookie(
+            name = "tl_token_bootstrap", value = tok,
+            path = "/transloom", maxAge = 15,
+            httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
+        ))
+    }
+}
+
 private const val FAVICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
@@ -39,46 +49,20 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
                 return@get
             }
 
-            // Set a short-lived JS-readable bootstrap cookie so the app can recover the JWT
-            // into localStorage without ever putting the token in the URL (avoids proxy log leaks).
-            call.request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
-                call.response.cookies.append(Cookie(
-                    name = "tl_token_bootstrap", value = tok,
-                    path = "/transloom", maxAge = 15,
-                    httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
-                ))
-            }
+            call.issueBootstrapCookie()
             call.respondHtml { dashboardApp() }
         }
         get("/welcome") { call.respondHtml { welcomePage() } }
         get("/billing") {
-            call.request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
-                call.response.cookies.append(Cookie(
-                    name = "tl_token_bootstrap", value = tok,
-                    path = "/transloom", maxAge = 15,
-                    httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
-                ))
-            }
+            call.issueBootstrapCookie()
             call.respondHtml { billingApp() }
         }
         get("/projects") {
-            call.request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
-                call.response.cookies.append(Cookie(
-                    name = "tl_token_bootstrap", value = tok,
-                    path = "/transloom", maxAge = 15,
-                    httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
-                ))
-            }
+            call.issueBootstrapCookie()
             call.respondHtml { projectsApp() }
         }
         get("/review-portal") {
-            call.request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
-                call.response.cookies.append(Cookie(
-                    name = "tl_token_bootstrap", value = tok,
-                    path = "/transloom", maxAge = 15,
-                    httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
-                ))
-            }
+            call.issueBootstrapCookie()
             call.respondHtml { reviewPortal() }
         }
         get("/favicon.svg") {
@@ -136,11 +120,13 @@ private fun appSidebar(active: String, reviewBadge: Boolean = false) = """
     </a>
   </nav>
   <div class="sidebar-footer">
-    <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()" aria-label="Notifications">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      <span class="notif-badge" id="notif-badge" style="display:none">0</span>
-    </button>
-    <div class="user-chip" id="user-chip">Loading…</div>
+    <div class="sidebar-footer-row">
+      <div class="user-chip" id="user-chip">Loading…</div>
+      <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()" aria-label="Notifications" title="Notifications">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-badge" id="notif-badge" style="display:none">0</span>
+      </button>
+    </div>
     <button class="btn btn-ghost logout-btn" onclick="logout()">Sign out</button>
   </div>
 </aside>
@@ -148,8 +134,16 @@ private fun appSidebar(active: String, reviewBadge: Boolean = false) = """
 <div class="notif-overlay" id="notif-overlay" onclick="closeNotifPanel()"></div>
 <div class="notif-panel" id="notif-panel">
   <div class="notif-panel-header">
-    <span class="notif-panel-title">Notifications</span>
-    <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+    <div class="notif-panel-header-left">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="notif-panel-title">Notifications</span>
+    </div>
+    <div class="notif-panel-header-right">
+      <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+      <button class="notif-close-btn" onclick="closeNotifPanel()" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
   </div>
   <div class="notif-list" id="notif-list">
     <div class="notif-empty">No notifications yet</div>
@@ -200,41 +194,48 @@ label{display:block;font-size:13px;color:var(--text-dim);margin-bottom:5px}
 .toast.show{opacity:1;transform:translateY(0)}
 .toast.success{border-color:var(--accent);color:var(--accent)}
 .toast.error{border-color:var(--red);color:var(--red)}
+/* ── Sidebar footer row ── */
+.sidebar-footer-row{display:flex;align-items:center;gap:8px}
+.sidebar-footer-row .user-chip{flex:1;min-width:0}
 /* ── Notification bell ── */
-.notif-bell{position:relative;display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-muted);cursor:pointer;transition:border-color .2s,color .2s;flex-shrink:0}
-.notif-bell:hover{border-color:var(--accent);color:var(--accent)}
-.notif-bell.has-unread{color:var(--accent);border-color:rgba(0,229,160,.35)}
-@keyframes bellRing{0%,100%{transform:rotate(0)}15%{transform:rotate(12deg)}30%{transform:rotate(-10deg)}45%{transform:rotate(8deg)}60%{transform:rotate(-6deg)}75%{transform:rotate(4deg)}}
-.notif-bell.ringing svg{animation:bellRing .55s ease forwards}
-.notif-badge{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;background:var(--red);color:#fff;border-radius:8px;font-size:10px;font-weight:700;line-height:16px;text-align:center;padding:0 4px}
-/* ── Notification panel ── */
-.notif-overlay{position:fixed;inset:0;z-index:1000;display:none}
-.notif-overlay.open{display:block}
-.notif-panel{position:fixed;bottom:0;left:220px;width:340px;max-height:480px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius) var(--radius) 0 0;box-shadow:0 -4px 32px rgba(0,0,0,.5);z-index:1001;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
-.notif-panel.open{transform:translateY(0)}
-.notif-panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
-.notif-panel-title{font-size:14px;font-weight:600;color:var(--text)}
+.notif-bell{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s}
+.notif-bell:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim2)}
+.notif-bell.has-unread{color:var(--accent);border-color:rgba(0,229,160,.4);background:var(--accent-dim2)}
+@keyframes bellRing{0%,100%{transform:rotate(0)}15%{transform:rotate(14deg)}30%{transform:rotate(-11deg)}45%{transform:rotate(8deg)}60%{transform:rotate(-5deg)}75%{transform:rotate(3deg)}}
+.notif-bell.ringing svg{animation:bellRing .6s ease forwards}
+.notif-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;background:var(--red);color:#fff;border-radius:9px;font-size:10px;font-weight:700;line-height:17px;text-align:center;padding:0 4px;border:2px solid var(--surface)}
+/* ── Notification panel (right-side drawer) ── */
+.notif-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);display:none;opacity:0;transition:opacity .25s}
+.notif-overlay.open{display:block;opacity:1}
+.notif-panel{position:fixed;top:0;right:0;width:360px;height:100vh;background:var(--surface);border-left:1px solid var(--border);box-shadow:-8px 0 48px rgba(0,0,0,.6);z-index:1001;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+.notif-panel.open{transform:translateX(0)}
+.notif-panel-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.notif-panel-header-left{display:flex;align-items:center;gap:8px}
+.notif-panel-header-right{display:flex;align-items:center;gap:4px}
+.notif-panel-title{font-size:14px;font-weight:700;color:var(--text)}
 .notif-mark-all{background:transparent;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:4px;transition:color .15s}
 .notif-mark-all:hover{color:var(--accent)}
+.notif-close-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:5px;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
+.notif-close-btn:hover{color:var(--text);background:var(--surface2)}
 .notif-list{overflow-y:auto;flex:1}
-.notif-empty{padding:32px 16px;text-align:center;color:var(--text-muted);font-size:13px}
-.notif-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;gap:10px;align-items:flex-start}
+.notif-empty{padding:48px 24px;text-align:center;color:var(--text-muted);font-size:13px;line-height:1.6}
+.notif-item{padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;gap:12px;align-items:flex-start}
 .notif-item:last-child{border-bottom:none}
 .notif-item:hover{background:var(--surface2)}
-.notif-item.unread{background:var(--accent-dim2)}
-.notif-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.notif-item.unread{background:rgba(0,229,160,.04)}
+.notif-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
 .notif-dot.success{background:var(--accent)}
 .notif-dot.warning{background:var(--yellow)}
 .notif-dot.error{background:var(--red)}
 .notif-dot.info{background:#60a5fa}
-.notif-dot.read{background:transparent;border:1px solid var(--border)}
+.notif-dot.read{background:transparent;border:1.5px solid #333}
 .notif-body{flex:1;min-width:0}
-.notif-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:2px}
-.notif-msg{font-size:12px;color:var(--text-muted);line-height:1.4;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:3px}
+.notif-msg{font-size:12px;color:var(--text-muted);line-height:1.45;margin-bottom:5px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .notif-meta{display:flex;align-items:center;gap:8px}
 .notif-time{font-size:11px;color:var(--text-muted)}
-.notif-action-link{font-size:11px;color:var(--accent);font-weight:600}
-@media(max-width:768px){.notif-panel{left:0;width:100%;border-radius:var(--radius) var(--radius) 0 0}}
+.notif-action-link{font-size:11px;color:var(--accent);font-weight:600;white-space:nowrap}
+@media(max-width:768px){.notif-panel{width:100%;border-left:none;border-top:1px solid var(--border)}}
 """
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -361,182 +362,266 @@ private const val WELCOME_CSS = """
 // ─── Landing Page ─────────────────────────────────────────────────────────────
 
 private const val CDN_ARCH_SVG = """
-<svg viewBox="0 0 1060 296" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1060px;display:block;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" aria-label="Transloom Pipeline Architecture">
+<svg viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:1200px;display:block;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" aria-label="Transloom System Architecture">
   <defs>
-    <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-      <path d="M0,1 L6,3.5 L0,6 Z" fill="rgba(0,229,160,.6)"/>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,1 L7,4 L0,7 Z" fill="rgba(0,229,160,.65)"/>
     </marker>
-    <marker id="arrBypass" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-      <path d="M0,1 L6,3.5 L0,6 Z" fill="rgba(0,229,160,.28)"/>
+    <marker id="arrBypass" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,1 L7,4 L0,7 Z" fill="rgba(0,229,160,.3)"/>
     </marker>
-    <marker id="arrFan" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-      <path d="M0,0.5 L5,3 L0,5.5 Z" fill="rgba(0,229,160,.4)"/>
+    <marker id="arrFan" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,1 L6,3.5 L0,6 Z" fill="rgba(0,229,160,.45)"/>
     </marker>
-    <filter id="brandGlow" x="-35%" y="-35%" width="170%" height="170%">
-      <feGaussianBlur stdDeviation="5" result="blur"/>
+    <marker id="arrEdge" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,1 L7,4 L0,7 Z" fill="rgba(110,130,255,.7)"/>
+    </marker>
+    <marker id="arrSvc" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,1 L5,3 L0,5 Z" fill="rgba(255,255,255,.2)"/>
+    </marker>
+    <filter id="brandGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <filter id="edgeGlow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+    <filter id="edgeGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <!-- ── Zone backgrounds ──────────────────────────── -->
-  <rect x="10" y="24" width="115" height="246" rx="10" fill="rgba(255,255,255,.015)" stroke="#1e1e1e" stroke-width="1"/>
-  <rect x="133" y="24" width="692" height="246" rx="10" fill="rgba(0,229,160,.012)" stroke="rgba(0,229,160,.18)" stroke-width="1"/>
-  <rect x="833" y="24" width="217" height="246" rx="10" fill="rgba(100,130,255,.015)" stroke="rgba(100,130,255,.2)" stroke-width="1"/>
+  <!-- ── Zone backgrounds ─────────────────────────────────────────── -->
+  <rect x="8" y="20" width="152" height="490" rx="12" fill="rgba(255,255,255,.013)" stroke="#1e1e1e" stroke-width="1"/>
+  <rect x="168" y="20" width="776" height="490" rx="12" fill="rgba(0,229,160,.01)" stroke="rgba(0,229,160,.16)" stroke-width="1"/>
+  <rect x="952" y="20" width="240" height="490" rx="12" fill="rgba(100,130,255,.013)" stroke="rgba(100,130,255,.2)" stroke-width="1"/>
 
-  <!-- ── Zone labels ────────────────────────────────── -->
-  <text x="67" y="16" text-anchor="middle" font-size="7.5" font-weight="700" letter-spacing="2" fill="rgba(255,255,255,.22)">YOUR CODE</text>
-  <text x="479" y="16" text-anchor="middle" font-size="7.5" font-weight="700" letter-spacing="2.5" fill="rgba(0,229,160,.5)">TRANSLOOM PIPELINE</text>
-  <text x="941" y="16" text-anchor="middle" font-size="7.5" font-weight="700" letter-spacing="2" fill="rgba(110,130,255,.5)">GLOBAL DELIVERY</text>
+  <!-- ── Zone labels ────────────────────────────────────────────────── -->
+  <text x="84" y="13" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="2" fill="rgba(255,255,255,.2)">YOUR CODE</text>
+  <text x="556" y="13" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="2.5" fill="rgba(0,229,160,.45)">TRANSLOOM PIPELINE</text>
+  <text x="1072" y="13" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="2" fill="rgba(110,130,255,.45)">GLOBAL DELIVERY</text>
 
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N1 — GitHub                                      -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="12" y="116" width="110" height="58" rx="8" fill="#111" stroke="#252525" stroke-width="1"/>
-  <circle cx="38" cy="145" r="12" fill="#1a1a1a" stroke="#333" stroke-width="1"/>
-  <text x="38" y="149.5" text-anchor="middle" font-size="11" fill="#666">&lt;/&gt;</text>
-  <text x="60" y="139" font-size="11" font-weight="600" fill="#ccc">GitHub</text>
-  <text x="60" y="155" font-size="9.5" fill="#555">commit push</text>
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- ROW 1 — Main pipeline nodes                                      -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
 
-  <!-- Arrow N1→N2 -->
-  <line x1="122" y1="145" x2="150" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite"/>
+  <!-- N1 — GitHub Push -->
+  <rect x="14" y="82" width="140" height="88" rx="10" fill="#111" stroke="#282828" stroke-width="1.2"/>
+  <circle cx="46" cy="126" r="16" fill="#181818" stroke="#2e2e2e" stroke-width="1.2"/>
+  <text x="46" y="131" text-anchor="middle" font-size="13" fill="#555">&lt;/&gt;</text>
+  <text x="72" y="117" font-size="13" font-weight="600" fill="#c8c8c8">GitHub</text>
+  <text x="72" y="133" font-size="11" fill="#454545">push · webhook</text>
+  <text x="72" y="150" font-size="10" fill="#333">git push origin main</text>
+
+  <!-- Arrow N1→N2 (crosses zone boundary) -->
+  <line x1="154" y1="126" x2="188" y2="126" stroke="rgba(0,229,160,.5)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.85s" repeatCount="indefinite"/>
   </line>
 
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N2 — Transloom Hub (brand node)                  -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="152" y="108" width="110" height="74" rx="9" fill="#061210" stroke="rgba(0,229,160,.7)" stroke-width="1.5" filter="url(#brandGlow)"/>
-  <rect x="148" y="104" width="118" height="82" rx="12" fill="none" stroke="rgba(0,229,160,.1)" stroke-width="2">
-    <animate attributeName="opacity" values="0.9;0.1;0.9" dur="3s" repeatCount="indefinite"/>
+  <!-- N2 — Transloom Hub (brand node) -->
+  <rect x="190" y="74" width="130" height="104" rx="11" fill="#061612" stroke="rgba(0,229,160,.75)" stroke-width="2" filter="url(#brandGlow)"/>
+  <rect x="185" y="69" width="140" height="114" rx="14" fill="none" stroke="rgba(0,229,160,.08)" stroke-width="2.5">
+    <animate attributeName="opacity" values="1;0.05;1" dur="3.2s" repeatCount="indefinite"/>
   </rect>
-  <circle cx="179" cy="145" r="14" fill="rgba(0,229,160,.12)" stroke="rgba(0,229,160,.55)" stroke-width="1.2"/>
-  <line x1="172" y1="138" x2="186" y2="138" stroke="rgba(0,229,160,.9)" stroke-width="2.2" stroke-linecap="round"/>
-  <line x1="179" y1="138" x2="179" y2="152" stroke="rgba(0,229,160,.9)" stroke-width="2.2" stroke-linecap="round"/>
-  <text x="202" y="136" font-size="12" font-weight="700" fill="#00E5A0">Transloom</text>
-  <text x="202" y="150" font-size="9.5" fill="rgba(0,229,160,.65)">Webhook trigger</text>
-  <text x="202" y="164" font-size="9" fill="rgba(0,229,160,.35)">pipeline queue</text>
+  <circle cx="222" cy="126" r="18" fill="rgba(0,229,160,.1)" stroke="rgba(0,229,160,.6)" stroke-width="1.5"/>
+  <line x1="214" y1="119" x2="230" y2="119" stroke="#00E5A0" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="222" y1="119" x2="222" y2="133" stroke="#00E5A0" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="249" y="114" font-size="14" font-weight="700" fill="#00E5A0">Transloom</text>
+  <text x="249" y="130" font-size="11" fill="rgba(0,229,160,.7)">Hub + Queue</text>
+  <text x="249" y="146" font-size="10" fill="rgba(0,229,160,.38)">Redis pub-sub</text>
+  <text x="249" y="161" font-size="10" fill="rgba(0,229,160,.25)">SSE live updates</text>
 
   <!-- Arrow N2→N3 -->
-  <line x1="262" y1="145" x2="280" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite" begin="0.2s"/>
+  <line x1="320" y1="126" x2="336" y2="126" stroke="rgba(0,229,160,.5)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.85s" repeatCount="indefinite" begin="0.2s"/>
   </line>
 
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N3 — Semantic AI                                 -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="282" y="116" width="110" height="58" rx="8" fill="#111" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
-  <circle cx="308" cy="145" r="12" fill="rgba(0,229,160,.08)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
-  <text x="308" y="149.5" text-anchor="middle" font-size="13" fill="rgba(0,229,160,.75)">✦</text>
-  <text x="330" y="138" font-size="10.5" font-weight="600" fill="#ccc">Semantic AI</text>
-  <text x="330" y="153" font-size="9" fill="#555">change detect</text>
+  <!-- N3 — Detect Changes -->
+  <rect x="338" y="82" width="118" height="88" rx="10" fill="#111" stroke="rgba(0,229,160,.28)" stroke-width="1.2"/>
+  <circle cx="368" cy="126" r="16" fill="rgba(0,229,160,.07)" stroke="rgba(0,229,160,.38)" stroke-width="1.2"/>
+  <text x="368" y="131" text-anchor="middle" font-size="15" fill="rgba(0,229,160,.8)">✦</text>
+  <text x="394" y="117" font-size="13" font-weight="600" fill="#c8c8c8">Detect Δ</text>
+  <text x="394" y="133" font-size="11" fill="#454545">semantic vs</text>
+  <text x="394" y="148" font-size="11" fill="#454545">surface change</text>
 
   <!-- Arrow N3→N4 -->
-  <line x1="392" y1="145" x2="410" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite" begin="0.4s"/>
+  <line x1="456" y1="126" x2="472" y2="126" stroke="rgba(0,229,160,.5)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.85s" repeatCount="indefinite" begin="0.4s"/>
   </line>
 
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N4 — AI Translate                                -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="412" y="116" width="110" height="58" rx="8" fill="#111" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
-  <circle cx="438" cy="145" r="12" fill="rgba(0,229,160,.08)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
-  <text x="438" y="149.5" text-anchor="middle" font-size="12" fill="rgba(0,229,160,.8)">◆</text>
-  <text x="460" y="138" font-size="10.5" font-weight="600" fill="#ccc">AI Translate</text>
-  <text x="460" y="153" font-size="9" fill="#555">Claude · 10+ langs</text>
+  <!-- N4 — Billing Check -->
+  <rect x="474" y="82" width="112" height="88" rx="10" fill="#111" stroke="rgba(0,229,160,.22)" stroke-width="1.2"/>
+  <circle cx="502" cy="126" r="16" fill="rgba(0,229,160,.06)" stroke="rgba(0,229,160,.32)" stroke-width="1.2"/>
+  <path d="M494 120 L510 120 L510 132 L494 132 Z M497 120 L497 117 M507 120 L507 117" fill="none" stroke="rgba(0,229,160,.65)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="528" y="117" font-size="13" font-weight="600" fill="#c8c8c8">Billing ✓</text>
+  <text x="528" y="133" font-size="11" fill="#454545">plan limits</text>
+  <text x="528" y="148" font-size="11" fill="#454545">quota check</text>
 
   <!-- Arrow N4→N5 -->
-  <line x1="522" y1="145" x2="540" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite" begin="0.6s"/>
+  <line x1="586" y1="126" x2="602" y2="126" stroke="rgba(0,229,160,.5)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.85s" repeatCount="indefinite" begin="0.6s"/>
   </line>
 
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N5 — Review Portal                               -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="542" y="116" width="110" height="58" rx="8" fill="#111" stroke="rgba(0,229,160,.3)" stroke-width="1"/>
-  <circle cx="568" cy="145" r="12" fill="rgba(0,229,160,.08)" stroke="rgba(0,229,160,.35)" stroke-width="1"/>
-  <text x="568" y="149.5" text-anchor="middle" font-size="12" fill="rgba(0,229,160,.8)">✓</text>
-  <text x="590" y="138" font-size="10.5" font-weight="600" fill="#ccc">Review Portal</text>
-  <text x="590" y="153" font-size="9" fill="#555">validate · approve</text>
+  <!-- N5 — AI Translate -->
+  <rect x="604" y="82" width="122" height="88" rx="10" fill="#111" stroke="rgba(0,229,160,.28)" stroke-width="1.2"/>
+  <circle cx="634" cy="126" r="16" fill="rgba(0,229,160,.07)" stroke="rgba(0,229,160,.38)" stroke-width="1.2"/>
+  <text x="634" y="131" text-anchor="middle" font-size="15" fill="rgba(0,229,160,.85)">◆</text>
+  <text x="660" y="117" font-size="13" font-weight="600" fill="#c8c8c8">AI Translate</text>
+  <text x="660" y="133" font-size="11" fill="#454545">Gemini Flash</text>
+  <text x="660" y="148" font-size="11" fill="#454545">batch · 20+ langs</text>
 
   <!-- Arrow N5→N6 -->
-  <line x1="652" y1="145" x2="670" y2="145" stroke="rgba(0,229,160,.45)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.8s" repeatCount="indefinite" begin="0.8s"/>
+  <line x1="726" y1="126" x2="742" y2="126" stroke="rgba(0,229,160,.5)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.85s" repeatCount="indefinite" begin="0.8s"/>
   </line>
 
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N6 — CDN Publish                                 -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="672" y="116" width="110" height="58" rx="8" fill="#111" stroke="rgba(0,229,160,.5)" stroke-width="1.5"/>
-  <circle cx="698" cy="145" r="12" fill="rgba(0,229,160,.12)" stroke="rgba(0,229,160,.55)" stroke-width="1"/>
-  <text x="698" y="150" text-anchor="middle" font-size="13" fill="rgba(0,229,160,.9)">↑</text>
-  <text x="720" y="138" font-size="10.5" font-weight="600" fill="#d0d0d0">CDN Publish</text>
-  <text x="720" y="153" font-size="9" fill="rgba(0,229,160,.5)">~45s total</text>
+  <!-- N6 — Review Portal -->
+  <rect x="744" y="82" width="112" height="88" rx="10" fill="#111" stroke="rgba(0,229,160,.28)" stroke-width="1.2"/>
+  <circle cx="773" cy="126" r="16" fill="rgba(0,229,160,.07)" stroke="rgba(0,229,160,.38)" stroke-width="1.2"/>
+  <path d="M764 126 Q773 118 782 126 Q773 134 764 126 Z M773 126 m-2.5,0 a2.5,2.5 0 1,1 5,0 a2.5,2.5 0 1,1 -5,0" fill="none" stroke="rgba(0,229,160,.75)" stroke-width="1.6"/>
+  <text x="799" y="117" font-size="13" font-weight="600" fill="#c8c8c8">Review</text>
+  <text x="799" y="133" font-size="11" fill="#454545">cultural check</text>
+  <text x="799" y="148" font-size="11" fill="#454545">approve · lock</text>
 
-  <!-- Arrow N6→N7 (zone boundary) -->
-  <line x1="782" y1="145" x2="841" y2="145" stroke="rgba(0,229,160,.65)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.7s" repeatCount="indefinite" begin="1s"/>
+  <!-- Arrow N6→N7 -->
+  <line x1="856" y1="126" x2="874" y2="126" stroke="rgba(0,229,160,.5)" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arr)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.85s" repeatCount="indefinite" begin="1s"/>
   </line>
 
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N7 — Cloudflare Global Edge KV                   -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="843" y="95" width="130" height="100" rx="10" fill="#0b0b18" stroke="rgba(110,130,255,.5)" stroke-width="1.5" filter="url(#edgeGlow)"/>
-  <rect x="838" y="90" width="140" height="110" rx="13" fill="none" stroke="rgba(110,130,255,.1)" stroke-width="2">
-    <animate attributeName="opacity" values="0.9;0.1;0.9" dur="2.8s" repeatCount="indefinite"/>
+  <!-- N7 — CDN Publish -->
+  <rect x="876" y="82" width="68" height="88" rx="10" fill="#0a1210" stroke="rgba(0,229,160,.55)" stroke-width="1.8"/>
+  <text x="910" y="114" text-anchor="middle" font-size="17" fill="rgba(0,229,160,.9)">↑</text>
+  <text x="910" y="134" text-anchor="middle" font-size="11" font-weight="700" fill="#c8c8c8">CDN</text>
+  <text x="910" y="149" text-anchor="middle" font-size="10" fill="rgba(0,229,160,.6)">Publish</text>
+  <text x="910" y="162" text-anchor="middle" font-size="9.5" fill="#333">~45s</text>
+
+  <!-- Arrow N7→Cloudflare (zone boundary) -->
+  <line x1="944" y1="126" x2="960" y2="126" stroke="rgba(0,229,160,.7)" stroke-width="2.2" stroke-dasharray="5 3" marker-end="url(#arrEdge)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="0.75s" repeatCount="indefinite" begin="1.15s"/>
+  </line>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- ROW 2 — Support / infrastructure nodes                          -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+
+  <!-- MongoDB -->
+  <rect x="192" y="278" width="120" height="72" rx="9" fill="#0e1008" stroke="rgba(87,180,90,.35)" stroke-width="1.2"/>
+  <circle cx="218" cy="314" r="13" fill="rgba(87,180,90,.08)" stroke="rgba(87,180,90,.4)" stroke-width="1.2"/>
+  <ellipse cx="218" cy="308" rx="8" ry="4" fill="none" stroke="rgba(87,180,90,.6)" stroke-width="1.2"/>
+  <rect x="210" y="308" width="16" height="8" fill="none" stroke="rgba(87,180,90,.4)" stroke-width="1"/>
+  <ellipse cx="218" cy="316" rx="8" ry="4" fill="none" stroke="rgba(87,180,90,.4)" stroke-width="1"/>
+  <text x="242" y="307" font-size="12" font-weight="600" fill="#aaa">MongoDB</text>
+  <text x="242" y="321" font-size="10.5" fill="#444">translations</text>
+  <text x="242" y="334" font-size="10.5" fill="#444">projects · users</text>
+
+  <!-- Redis -->
+  <rect x="330" y="278" width="112" height="72" rx="9" fill="#0e0a08" stroke="rgba(255,100,80,.3)" stroke-width="1.2"/>
+  <circle cx="356" cy="314" r="13" fill="rgba(255,80,60,.06)" stroke="rgba(255,80,60,.4)" stroke-width="1.2"/>
+  <path d="M350 318 L356 308 L362 318 Z M356 308 L356 320" fill="none" stroke="rgba(255,80,60,.7)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="380" y="307" font-size="12" font-weight="600" fill="#aaa">Redis</text>
+  <text x="380" y="321" font-size="10.5" fill="#444">job queue</text>
+  <text x="380" y="334" font-size="10.5" fill="#444">pub-sub SSE</text>
+
+  <!-- Gemini API -->
+  <rect x="604" y="278" width="122" height="72" rx="9" fill="#0a0c16" stroke="rgba(130,120,255,.32)" stroke-width="1.2"/>
+  <circle cx="632" cy="314" r="13" fill="rgba(120,110,255,.07)" stroke="rgba(130,120,255,.45)" stroke-width="1.2"/>
+  <text x="632" y="318" text-anchor="middle" font-size="14" fill="rgba(130,120,255,.85)">✦</text>
+  <text x="656" y="307" font-size="12" font-weight="600" fill="#aaa">Gemini API</text>
+  <text x="656" y="321" font-size="10.5" fill="#444">translation</text>
+  <text x="656" y="334" font-size="10.5" fill="#444">semantic detect</text>
+
+  <!-- GitHub API (PR creation) -->
+  <rect x="744" y="278" width="112" height="72" rx="9" fill="#0c0c0e" stroke="rgba(160,160,180,.22)" stroke-width="1.2"/>
+  <circle cx="770" cy="314" r="13" fill="rgba(160,160,180,.05)" stroke="rgba(160,160,180,.3)" stroke-width="1.2"/>
+  <text x="770" y="319" text-anchor="middle" font-size="11" fill="rgba(160,160,180,.65)">&lt;/&gt;</text>
+  <text x="794" y="307" font-size="12" font-weight="600" fill="#aaa">GitHub API</text>
+  <text x="794" y="321" font-size="10.5" fill="#444">create PR</text>
+  <text x="794" y="334" font-size="10.5" fill="#444">file commits</text>
+
+  <!-- ── Vertical connectors (pipeline → services) ─────── -->
+  <!-- Hub ↕ MongoDB (bidirectional) -->
+  <line x1="255" y1="178" x2="252" y2="278" stroke="rgba(87,180,90,.28)" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrSvc)"/>
+  <!-- Hub ↕ Redis -->
+  <line x1="290" y1="178" x2="380" y2="278" stroke="rgba(255,80,60,.22)" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrSvc)"/>
+  <!-- Translate → Gemini (strong, calls API) -->
+  <line x1="644" y1="170" x2="644" y2="278" stroke="rgba(130,120,255,.45)" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#arrSvc)"/>
+  <!-- Review ↕ GitHub API (PR creation) -->
+  <line x1="778" y1="170" x2="778" y2="278" stroke="rgba(160,160,180,.28)" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrSvc)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- DELIVERY ZONE — Cloudflare KV + SDKs                            -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+
+  <!-- Cloudflare KV -->
+  <rect x="960" y="70" width="216" height="116" rx="12" fill="#080818" stroke="rgba(110,130,255,.55)" stroke-width="2" filter="url(#edgeGlow)"/>
+  <rect x="955" y="65" width="226" height="126" rx="15" fill="none" stroke="rgba(110,130,255,.07)" stroke-width="2.5">
+    <animate attributeName="opacity" values="1;0.05;1" dur="3s" repeatCount="indefinite"/>
   </rect>
-  <circle cx="869" cy="145" r="16" fill="none" stroke="rgba(110,130,255,.5)" stroke-width="1.2"/>
-  <ellipse cx="869" cy="145" rx="7" ry="16" fill="none" stroke="rgba(110,130,255,.3)" stroke-width="1"/>
-  <line x1="853" y1="145" x2="885" y2="145" stroke="rgba(110,130,255,.3)" stroke-width="1"/>
-  <line x1="854" y1="136" x2="884" y2="136" stroke="rgba(110,130,255,.2)" stroke-width="0.8"/>
-  <line x1="854" y1="154" x2="884" y2="154" stroke="rgba(110,130,255,.2)" stroke-width="0.8"/>
-  <text x="894" y="134" font-size="11" font-weight="700" fill="#8898e8">Cloudflare</text>
-  <text x="894" y="148" font-size="11" font-weight="700" fill="#8898e8">Global KV</text>
-  <text x="894" y="162" font-size="9" fill="rgba(110,130,255,.55)">250+ PoPs</text>
-  <text x="894" y="175" font-size="8.5" fill="rgba(110,130,255,.35)">worldwide</text>
+  <circle cx="994" cy="128" r="20" fill="none" stroke="rgba(110,130,255,.55)" stroke-width="1.5"/>
+  <ellipse cx="994" cy="128" rx="9" ry="20" fill="none" stroke="rgba(110,130,255,.3)" stroke-width="1.2"/>
+  <line x1="974" y1="128" x2="1014" y2="128" stroke="rgba(110,130,255,.35)" stroke-width="1.2"/>
+  <line x1="975" y1="116" x2="1013" y2="116" stroke="rgba(110,130,255,.2)" stroke-width="1"/>
+  <line x1="975" y1="140" x2="1013" y2="140" stroke="rgba(110,130,255,.2)" stroke-width="1"/>
+  <text x="1025" y="112" font-size="14" font-weight="700" fill="#9aa8f0">Cloudflare</text>
+  <text x="1025" y="130" font-size="14" font-weight="700" fill="#9aa8f0">Global KV</text>
+  <text x="1025" y="147" font-size="11" fill="rgba(110,130,255,.6)">250+ edge PoPs</text>
+  <text x="1025" y="162" font-size="11" fill="rgba(110,130,255,.38)">worldwide &lt;20ms</text>
 
   <!-- Fan arrows CF → SDKs -->
-  <path d="M 879,195 L 879,213" fill="none" stroke="rgba(0,229,160,.4)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+  <path d="M 1000,186 L 1000,210" fill="none" stroke="rgba(0,229,160,.45)" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#arrFan)">
     <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.9s" repeatCount="indefinite"/>
   </path>
-  <path d="M 971,195 L 971,213" fill="none" stroke="rgba(0,229,160,.4)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+  <path d="M 1120,186 L 1120,210" fill="none" stroke="rgba(0,229,160,.45)" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#arrFan)">
     <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="0.9s" repeatCount="indefinite" begin="0.3s"/>
   </path>
-
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N8 — Android SDK output                          -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="840" y="213" width="78" height="36" rx="7" fill="#0f110f" stroke="rgba(61,220,132,.3)" stroke-width="1"/>
-  <text x="879" y="229" text-anchor="middle" font-size="9.5" font-weight="600" fill="#3DDC84">Android SDK</text>
-  <text x="879" y="243" text-anchor="middle" font-size="8.5" fill="rgba(0,229,160,.55)">&lt;20ms</text>
-
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- N9 — iOS SDK output                              -->
-  <!-- ════════════════════════════════════════════════ -->
-  <rect x="932" y="213" width="78" height="36" rx="7" fill="#0e0e14" stroke="rgba(140,140,200,.3)" stroke-width="1"/>
-  <text x="971" y="229" text-anchor="middle" font-size="9.5" font-weight="600" fill="#a0a0c8">iOS SDK</text>
-  <text x="971" y="243" text-anchor="middle" font-size="8.5" fill="rgba(110,130,255,.55)">&lt;20ms</text>
-
-  <!-- ════════════════════════════════════════════════ -->
-  <!-- BYPASS — no semantic change skip path            -->
-  <!-- ════════════════════════════════════════════════ -->
-  <path d="M 337,174 L 337,213 L 727,213 L 727,174" fill="none" stroke="rgba(0,229,160,.18)" stroke-width="1.2" stroke-dasharray="6 4" marker-end="url(#arrBypass)">
-    <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="2.2s" repeatCount="indefinite"/>
+  <!-- Web arrow -->
+  <path d="M 1062,186 L 1062,350" fill="none" stroke="rgba(0,229,160,.3)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arrFan)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.1s" repeatCount="indefinite" begin="0.15s"/>
   </path>
-  <rect x="448" y="206" width="118" height="14" rx="3" fill="#090909" stroke="rgba(0,229,160,.08)" stroke-width="0.5"/>
-  <text x="507" y="217" text-anchor="middle" font-size="8.5" fill="rgba(0,229,160,.32)">no semantic change → skip</text>
 
-  <!-- ── Bottom step labels ──────────────────────── -->
-  <text x="67"  y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">INGEST</text>
-  <text x="207" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="rgba(0,229,160,.3)">PROCESS</text>
-  <text x="337" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">DETECT</text>
-  <text x="467" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">TRANSLATE</text>
-  <text x="597" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">REVIEW</text>
-  <text x="727" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="#333">PUBLISH</text>
-  <text x="908" y="288" text-anchor="middle" font-size="7.5" font-weight="600" letter-spacing="0.5" fill="rgba(110,130,255,.3)">DELIVER</text>
+  <!-- Android SDK -->
+  <rect x="960" y="210" width="108" height="64" rx="9" fill="#091209" stroke="rgba(61,220,132,.35)" stroke-width="1.5"/>
+  <circle cx="984" cy="242" r="14" fill="rgba(61,220,132,.07)" stroke="rgba(61,220,132,.4)" stroke-width="1.2"/>
+  <path d="M979 238 L979 247 M989 238 L989 247 M976 238 Q984 230 992 238" fill="none" stroke="rgba(61,220,132,.75)" stroke-width="1.6" stroke-linecap="round"/>
+  <text x="1009" y="236" font-size="12" font-weight="700" fill="#3DDC84">Android</text>
+  <text x="1009" y="251" font-size="10.5" fill="rgba(61,220,132,.6)">SDK · KMP</text>
+  <text x="1009" y="265" font-size="10" fill="#333">&lt;20 ms</text>
+
+  <!-- iOS SDK -->
+  <rect x="1082" y="210" width="104" height="64" rx="9" fill="#0b0b18" stroke="rgba(160,160,220,.3)" stroke-width="1.5"/>
+  <circle cx="1104" cy="242" r="14" fill="rgba(160,160,220,.06)" stroke="rgba(160,160,220,.38)" stroke-width="1.2"/>
+  <path d="M1098 245 Q1100 235 1108 236 Q1113 241 1109 248 L1098 245 Z M1104 234 Q1105 230 1109 231" fill="none" stroke="rgba(160,160,220,.7)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1128" y="236" font-size="12" font-weight="700" fill="#a8b0e0">iOS</text>
+  <text x="1128" y="251" font-size="10.5" fill="rgba(160,160,220,.55)">Swift SDK</text>
+  <text x="1128" y="265" font-size="10" fill="#333">&lt;20 ms</text>
+
+  <!-- Web/JS -->
+  <rect x="1016" y="350" width="100" height="56" rx="9" fill="#0c0c0c" stroke="rgba(255,200,80,.28)" stroke-width="1.3"/>
+  <circle cx="1038" cy="378" r="12" fill="rgba(255,200,80,.06)" stroke="rgba(255,200,80,.38)" stroke-width="1.2"/>
+  <text x="1038" y="383" text-anchor="middle" font-size="12" fill="rgba(255,200,80,.75)">JS</text>
+  <text x="1060" y="371" font-size="12" font-weight="700" fill="#c8c072">Web/JS</text>
+  <text x="1060" y="385" font-size="10.5" fill="rgba(255,200,80,.5)">REST fetch</text>
+  <text x="1060" y="398" font-size="10" fill="#333">&lt;20 ms</text>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- BYPASS — surface change skip path                               -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <path d="M 397,170 L 397,246 L 900,246 L 900,170" fill="none" stroke="rgba(0,229,160,.2)" stroke-width="1.4" stroke-dasharray="7 5" marker-end="url(#arrBypass)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="2.4s" repeatCount="indefinite"/>
+  </path>
+  <rect x="550" y="237" width="194" height="18" rx="4" fill="#090909" stroke="rgba(0,229,160,.1)" stroke-width="0.8"/>
+  <text x="647" y="250" text-anchor="middle" font-size="10.5" fill="rgba(0,229,160,.35)">surface change only → skip translation</text>
+
+  <!-- GitHub PR arrow back from Review to GitHub (PR creation) -->
+  <path d="M 800,170 Q 820,220 800,278" fill="none" stroke="rgba(160,160,180,.2)" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrSvc)"/>
+
+  <!-- ── Step labels ───────────────────────────────────────────────── -->
+  <text x="84"  y="506" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1" fill="#2e2e2e">INGEST</text>
+  <text x="256" y="506" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1" fill="rgba(0,229,160,.35)">PROCESS</text>
+  <text x="398" y="506" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1" fill="#2e2e2e">DETECT</text>
+  <text x="530" y="506" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1" fill="#2e2e2e">BILLING</text>
+  <text x="666" y="506" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1" fill="#2e2e2e">TRANSLATE</text>
+  <text x="800" y="506" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1" fill="#2e2e2e">REVIEW</text>
+  <text x="910" y="506" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1" fill="#2e2e2e">PUBLISH</text>
+  <text x="1072" y="506" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1" fill="rgba(110,130,255,.38)">DELIVER</text>
 </svg>
 """
 
@@ -904,7 +989,7 @@ section{padding:80px 24px}
 h2{font-size:clamp(24px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bottom:48px}
 /* ─── Architecture section ─── */
 .arch-section{padding:80px 24px;background:var(--bg);border-top:1px solid var(--border)}
-.arch-diagram{max-width:1060px;margin:0 auto;overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 24px}
+.arch-diagram{max-width:1200px;margin:0 auto;overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:36px 28px}
 .arch-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:48px;max-width:640px;line-height:1.6}
 /* ─── How it works ─── */
 .how-section{padding:88px 24px 100px}
@@ -2788,76 +2873,91 @@ private fun HTML.projectsApp() {
 // ─── Billing Page ─────────────────────────────────────────────────────────────
 
 private const val BILLING_CSS = """
-.billing-page{padding:28px 32px;flex:1;overflow-y:auto}
-.billing-page-header{margin-bottom:28px}
-.billing-page-header h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.billing-page{padding:32px 36px;flex:1;overflow-y:auto;max-width:900px}
+.billing-page-header{margin-bottom:32px}
+.billing-page-header h1{font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:4px}
 .billing-page-header p{font-size:13px;color:var(--text-muted)}
-.billing-section{margin-bottom:32px}
-.billing-section-title{font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:12px}
+.billing-section{margin-bottom:36px}
+.billing-section-title{font-size:11px;font-weight:700;letter-spacing:1.2px;color:var(--text-muted);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.billing-section-title::after{content:'';flex:1;height:1px;background:var(--border)}
 /* ── State banners ── */
-.sub-state-banner{display:none;align-items:flex-start;gap:14px;padding:16px 18px;border-radius:var(--radius);margin-bottom:24px;font-size:13px;line-height:1.55}
+.sub-state-banner{display:none;align-items:flex-start;gap:14px;padding:18px 20px;border-radius:var(--radius);margin-bottom:28px;font-size:13px;line-height:1.6}
 .sub-state-banner.visible{display:flex}
 .sub-state-banner-icon{flex-shrink:0;margin-top:1px}
 .sub-state-banner-body{flex:1}
-.sub-state-banner-title{font-size:14px;font-weight:700;margin-bottom:3px}
-.sub-state-banner-sub{color:inherit;opacity:.8}
-.sub-state-banner-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-.sub-state-banner.trial{background:rgba(250,173,20,.08);border:1px solid rgba(250,173,20,.28);color:var(--yellow)}
-.sub-state-banner.cancelling{background:rgba(255,77,79,.07);border:1px solid rgba(255,77,79,.22);color:var(--red)}
-.sub-state-banner.limit-hit{background:rgba(255,77,79,.07);border:1px solid rgba(255,77,79,.22);color:var(--red)}
-.days-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,.15);margin-left:6px;vertical-align:middle}
-/* ── Subscription summary grid ── */
-.sub-summary{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-.sub-detail-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .25s}
-.sub-detail-label{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
-.sub-detail-value{font-size:17px;font-weight:600;color:var(--text)}
-.sub-detail-value.accent{color:var(--accent)}
-.sub-detail-sub{font-size:11px;color:var(--text-muted);margin-top:4px}
-.plan-status-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px}
+.sub-state-banner-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.sub-state-banner-sub{color:inherit;opacity:.8;line-height:1.55}
+.sub-state-banner-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.sub-state-banner.trial{background:rgba(250,173,20,.07);border:1px solid rgba(250,173,20,.25);color:var(--yellow)}
+.sub-state-banner.cancelling{background:rgba(255,77,79,.06);border:1px solid rgba(255,77,79,.2);color:var(--red)}
+.sub-state-banner.limit-hit{background:rgba(255,77,79,.06);border:1px solid rgba(255,77,79,.2);color:var(--red)}
+.days-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,.18);margin-left:8px;vertical-align:middle}
+/* ── Plan card ── */
+.plan-hero-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+.plan-hero-top{display:flex;align-items:flex-start;justify-content:space-between;padding:22px 24px 20px;gap:16px;border-bottom:1px solid var(--border)}
+.plan-hero-left{flex:1}
+.plan-hero-label{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
+.plan-hero-name{font-size:28px;font-weight:800;color:var(--accent);letter-spacing:-.5px;line-height:1}
+.plan-hero-price{font-size:14px;color:var(--text-muted);margin-top:6px;font-weight:500}
+.plan-hero-right{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.plan-hero-bottom{display:grid;grid-template-columns:1fr 1fr;padding:20px 24px;gap:16px}
+.plan-stat{display:flex;flex-direction:column;gap:3px}
+.plan-stat-label{font-size:11px;color:var(--text-muted);font-weight:600;letter-spacing:.3px;text-transform:uppercase}
+.plan-stat-value{font-size:15px;font-weight:600;color:var(--text)}
+.plan-stat-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.4px;flex-shrink:0}
 .status-active{background:rgba(0,229,160,.12);color:var(--accent);border:1px solid rgba(0,229,160,.25)}
 .status-trial{background:rgba(250,173,20,.1);color:var(--yellow);border:1px solid rgba(250,173,20,.25)}
 .status-cancelling{background:rgba(255,77,79,.1);color:var(--red);border:1px solid rgba(255,77,79,.2)}
 .status-free{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)}
-.status-expired{background:rgba(255,77,79,.08);color:var(--red);border:1px solid rgba(255,77,79,.18)}
-.plan-actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center}
-.plan-upgrade-group{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-top:16px}
-.plan-upgrade-group-title{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:10px}
-.upgrade-option{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);margin-bottom:8px;transition:border-color .15s}
-.upgrade-option:last-child{margin-bottom:0}
-.upgrade-option:hover{border-color:rgba(0,229,160,.3)}
-.upgrade-option-info strong{font-size:13px;font-weight:600}
-.upgrade-option-info span{font-size:12px;color:var(--text-muted)}
-.upgrade-option-price{font-size:13px;font-weight:700;color:var(--accent);margin-right:12px}
-.sync-state{display:none;align-items:center;gap:12px;padding:14px 16px;background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.2);border-radius:var(--radius);margin-top:16px}
+.plan-actions-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+/* ── Upgrade cards ── */
+.upgrade-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.upgrade-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .2s,transform .2s}
+.upgrade-card:hover{border-color:rgba(0,229,160,.35);transform:translateY(-2px)}
+.upgrade-card-header{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.upgrade-card-name{font-size:17px;font-weight:700;color:var(--text)}
+.upgrade-card-price{font-size:13px;font-weight:700;color:var(--accent)}
+.upgrade-card-desc{font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.5}
+.upgrade-card-features{list-style:none;display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.upgrade-card-features li{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted)}
+.upgrade-card-features li::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.upgrade-card-footer{display:flex;justify-content:flex-end}
+/* ── Usage ── */
+.usage-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px}
+.usage-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.usage-item-label{font-size:12px;color:var(--text-muted);margin-bottom:5px;font-weight:500}
+.usage-item-value{font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px}
+.usage-bar-track{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.usage-bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .5s;width:0%}
+/* ── Sync / inline banner ── */
+.sync-state{display:none;align-items:center;gap:12px;padding:14px 18px;background:rgba(0,229,160,.05);border:1px solid rgba(0,229,160,.18);border-radius:var(--radius);margin-top:16px}
 .sync-state.visible{display:flex}
-.sync-spinner{width:18px;height:18px;border:2px solid rgba(0,229,160,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+.sync-spinner{width:18px;height:18px;border:2px solid rgba(0,229,160,.25);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 .sync-text{font-size:13px;color:var(--accent);font-weight:500}
-.inline-banner{display:none;padding:14px 18px;border-radius:var(--radius);margin-top:0;margin-bottom:20px;font-size:13px;line-height:1.5}
+.inline-banner{display:none;padding:14px 20px;border-radius:var(--radius);margin-bottom:20px;font-size:13px;line-height:1.55}
 .inline-banner.visible{display:block}
-.inline-banner.success{background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.25);color:var(--accent)}
-.inline-banner.warning{background:rgba(250,173,20,.08);border:1px solid rgba(250,173,20,.25);color:var(--yellow)}
-.inline-banner.error{background:rgba(255,77,79,.07);border:1px solid rgba(255,77,79,.2);color:var(--red)}
-.inline-banner strong{display:block;font-size:14px;margin-bottom:3px}
-.payment-method-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;display:flex;align-items:center;gap:16px}
-.payment-method-icon{width:44px;height:44px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.inline-banner.success{background:rgba(0,229,160,.07);border:1px solid rgba(0,229,160,.22);color:var(--accent)}
+.inline-banner.warning{background:rgba(250,173,20,.07);border:1px solid rgba(250,173,20,.22);color:var(--yellow)}
+.inline-banner.error{background:rgba(255,77,79,.06);border:1px solid rgba(255,77,79,.18);color:var(--red)}
+.inline-banner strong{display:block;font-size:14px;margin-bottom:3px;font-weight:700}
+/* ── Payment method ── */
+.payment-method-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;align-items:center;gap:16px}
+.payment-method-icon{width:42px;height:42px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-muted)}
 .payment-method-info{flex:1}
-.payment-method-title{font-size:14px;font-weight:600;margin-bottom:2px}
-.payment-method-sub{font-size:12px;color:var(--text-muted)}
-.invoice-table-header{display:grid;grid-template-columns:110px 1fr 100px 90px 80px;gap:12px;padding:8px 16px;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--text-muted);text-transform:uppercase;border-bottom:1px solid var(--border)}
-.invoice-row-full{display:grid;grid-template-columns:110px 1fr 100px 90px 80px;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;font-size:13px;transition:border-color .15s}
-.invoice-row-full:hover{border-color:rgba(0,229,160,.2)}
+.payment-method-title{font-size:14px;font-weight:600;margin-bottom:3px}
+.payment-method-sub{font-size:12px;color:var(--text-muted);line-height:1.5}
+/* ── Invoice table ── */
+.invoice-table-header{display:grid;grid-template-columns:100px 1fr 90px 80px 80px;gap:12px;padding:8px 16px;font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--text-muted);text-transform:uppercase;border-bottom:1px solid var(--border)}
+.invoice-row-full{display:grid;grid-template-columns:100px 1fr 90px 80px 80px;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;font-size:13px;transition:border-color .15s,background .15s}
+.invoice-row-full:hover{border-color:rgba(0,229,160,.25);background:rgba(0,229,160,.02)}
 .invoice-id{font-family:monospace;font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.invoice-amount{font-weight:600}
-.invoice-download{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;transition:color .15s}
+.invoice-amount{font-weight:700;color:var(--text)}
+.invoice-download{font-size:12px;color:var(--text-muted);display:inline-flex;align-items:center;gap:5px;transition:color .15s;font-weight:500}
 .invoice-download:hover{color:var(--accent)}
-.empty-invoices{text-align:center;padding:40px 24px;color:var(--text-muted);font-size:14px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius)}
-.usage-overview{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
-.usage-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-.usage-item-label{font-size:12px;color:var(--text-muted);margin-bottom:6px}
-.usage-item-value{font-size:15px;font-weight:600;margin-bottom:8px}
-@media(max-width:768px){.sub-summary{grid-template-columns:1fr}.usage-grid{grid-template-columns:1fr}.invoice-table-header{display:none}.invoice-row-full{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}}
+.empty-invoices{text-align:center;padding:40px 24px;color:var(--text-muted);font-size:14px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);line-height:1.6}
+@media(max-width:768px){.plan-hero-bottom{grid-template-columns:1fr}.upgrade-cards{grid-template-columns:1fr}.usage-grid{grid-template-columns:1fr}.invoice-table-header{display:none}.invoice-row-full{grid-template-columns:1fr 1fr;gap:8px}}
 """
 
 private val BILLING_JS = """
@@ -3095,26 +3195,37 @@ function renderPlanActions(sub){
 
   if(sub.plan==='FREE'){
     html+=`
-      <div class="plan-upgrade-group">
-        <div class="plan-upgrade-group-title">Available plans</div>
-        <div class="upgrade-option">
-          <div class="upgrade-option-info">
-            <strong>Solo</strong>
-            <span> &mdash; 5,000 strings &middot; 3 projects &middot; All languages</span>
+      <div class="upgrade-cards">
+        <div class="upgrade-card">
+          <div class="upgrade-card-header">
+            <span class="upgrade-card-name">Solo</span>
+            <span class="upgrade-card-price">₹499/mo</span>
           </div>
-          <div style="display:flex;align-items:center">
-            <span class="upgrade-option-price">₹499/mo</span>
-            <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="startUpgrade('SOLO')">Start trial</button>
+          <div class="upgrade-card-desc">Perfect for solo developers shipping multilingual apps.</div>
+          <ul class="upgrade-card-features">
+            <li>5,000 strings / month</li>
+            <li>3 projects</li>
+            <li>Unlimited languages</li>
+            <li>7-day free trial</li>
+          </ul>
+          <div class="upgrade-card-footer">
+            <button class="btn btn-primary" style="font-size:12px;padding:7px 16px" onclick="startUpgrade('SOLO')">Start free trial →</button>
           </div>
         </div>
-        <div class="upgrade-option">
-          <div class="upgrade-option-info">
-            <strong>Team</strong>
-            <span> &mdash; Unlimited strings &middot; 10 projects &middot; All languages</span>
+        <div class="upgrade-card">
+          <div class="upgrade-card-header">
+            <span class="upgrade-card-name">Team</span>
+            <span class="upgrade-card-price">₹1,999/mo</span>
           </div>
-          <div style="display:flex;align-items:center">
-            <span class="upgrade-option-price">₹1,999/mo</span>
-            <button class="btn btn-primary" style="font-size:12px;padding:6px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--border)" onclick="startUpgrade('TEAM')">Start trial</button>
+          <div class="upgrade-card-desc">For teams shipping at scale with multiple repos.</div>
+          <ul class="upgrade-card-features">
+            <li>Unlimited strings</li>
+            <li>10 projects</li>
+            <li>Unlimited languages</li>
+            <li>7-day free trial</li>
+          </ul>
+          <div class="upgrade-card-footer">
+            <button class="btn btn-primary" style="font-size:12px;padding:7px 16px;background:var(--surface2);color:var(--text);border:1px solid var(--border)" onclick="startUpgrade('TEAM')">Start free trial →</button>
           </div>
         </div>
       </div>`;
@@ -3270,69 +3381,60 @@ private fun HTML.billingApp() {
             main("billing-page") {
                 div("billing-page-header") {
                     h1 { +"Billing" }
-                    p { +"Manage your plan, payment method, and download invoices." }
+                    p { +"Manage your subscription, track usage, and download invoices." }
                 }
 
-                // ── Inline payment status banner (hidden until needed) ─────────
-                div {
-                    id = "payment-banner"
-                    classes = setOf("inline-banner")
-                }
+                // ── Inline payment status banner ───────────────────────────────
+                div { id = "payment-banner"; classes = setOf("inline-banner") }
 
-                // ── Subscription state banner (trial / cancelling / limit-hit) ─
-                div {
-                    id = "sub-state-banner"
-                    classes = setOf("sub-state-banner")
-                }
+                // ── Contextual state banner (trial / cancelling / limit-hit) ──
+                div { id = "sub-state-banner"; classes = setOf("sub-state-banner") }
 
-                // ── Subscription summary ──────────────────────────────────────
+                // ── Current plan card ─────────────────────────────────────────
                 div("billing-section") {
-                    div("billing-section-title") { +"Subscription" }
-                    div("sub-summary") {
-                        div("sub-detail-card") {
-                            div("plan-status-row") {
-                                div {
-                                    div("sub-detail-label") { +"Current Plan" }
-                                    p("plan-name sub-detail-value accent") { id = "plan-name"; +"—" }
-                                }
-                                span { id = "plan-status"; classes = setOf("status-badge", "status-active"); +"Loading" }
-                            }
-                            div {
-                                div("sub-detail-label") { +"Monthly price" }
-                                div("sub-detail-value") { id = "plan-price"; +"—" }
+                    div("billing-section-title") { +"Current Plan" }
+                    div("plan-hero-card") {
+                        div("plan-hero-top") {
+                            div("plan-hero-left") {
+                                div("plan-hero-label") { +"Active subscription" }
+                                div("plan-hero-name") { id = "plan-name"; +"—" }
+                                div("plan-hero-price") { id = "plan-price"; +"—" }
                                 div("sub-detail-sub") { id = "plan-price-sub" }
                             }
-                            // Sync state — visible during post-payment reconciliation
-                            div {
-                                id = "sync-state"
-                                classes = setOf("sync-state")
-                                div { classes = setOf("sync-spinner") }
-                                span("sync-text") { +"Updating your plan…" }
-                            }
-                            div {
-                                id = "plan-actions-billing"
-                                classes = setOf("plan-actions-row")
+                            div("plan-hero-right") {
+                                span { id = "plan-status"; classes = setOf("status-badge", "status-active"); +"Loading" }
+                                div {
+                                    div {
+                                        style = "font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:3px"
+                                        id = "plan-expiry-label"
+                                        +"Renewal"
+                                    }
+                                    div { style = "font-size:15px;font-weight:600"; id = "renewal-date"; +"—" }
+                                    div { style = "font-size:11px;color:var(--text-muted);margin-top:2px"; id = "billing-date-sub" }
+                                }
                             }
                         }
-                        div("sub-detail-card") {
-                            div {
-                                div("sub-detail-label") { id = "plan-expiry-label"; +"Renewal Date" }
-                                div("sub-detail-value") { id = "renewal-date"; +"—" }
-                                div("sub-detail-sub") { id = "billing-date-sub" }
+                        div("plan-hero-bottom") {
+                            div("plan-stat") {
+                                div("plan-stat-label") { +"Billing status" }
+                                div("plan-stat-value") { id = "billing-period"; +"—" }
                             }
-                            div {
-                                style = "margin-top:16px"
-                                div("sub-detail-label") { +"Billing Status" }
-                                div("sub-detail-value") { id = "billing-period"; style = "font-size:14px"; +"—" }
+                            div("plan-stat") {
+                                div("plan-stat-label") { +"Actions" }
+                                div { id = "plan-actions-billing"; classes = setOf("plan-actions-row") }
                             }
                         }
                     }
+                    div { id = "sync-state"; classes = setOf("sync-state")
+                        div { classes = setOf("sync-spinner") }
+                        span("sync-text") { +"Updating your plan…" }
+                    }
                 }
 
-                // ── Usage overview ────────────────────────────────────────────
+                // ── Usage this period ─────────────────────────────────────────
                 div("billing-section") {
                     div("billing-section-title") { +"Usage This Period" }
-                    div("usage-overview") {
+                    div("usage-card") {
                         div("usage-grid") {
                             div {
                                 div("usage-item-label") { +"Strings translated" }
@@ -3352,11 +3454,11 @@ private fun HTML.billingApp() {
                     div("billing-section-title") { +"Payment Method" }
                     div("payment-method-card") {
                         div("payment-method-icon") {
-                            unsafe { +"<svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='1' y='4' width='22' height='16' rx='2' ry='2'/><line x1='1' y1='10' x2='23' y2='10'/></svg>" }
+                            unsafe { +"<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='1' y='4' width='22' height='16' rx='2' ry='2'/><line x1='1' y1='10' x2='23' y2='10'/></svg>" }
                         }
                         div("payment-method-info") {
                             div("payment-method-title") { +"Managed by Razorpay" }
-                            div("payment-method-sub") { +"Payment details are securely stored with Razorpay. To update your card or UPI, contact support." }
+                            div("payment-method-sub") { +"Your card and UPI details are securely stored with Razorpay. To update payment details, contact support@androidplay.in." }
                         }
                     }
                 }
@@ -3371,19 +3473,14 @@ private fun HTML.billingApp() {
                         span { +"Status" }
                         span { +"" }
                     }
-                    div {
-                        id = "invoice-list-billing"
-                        classes = setOf("invoice-list")
-                        div("empty-invoices") { +"Loading invoices..." }
+                    div { id = "invoice-list-billing"; classes = setOf("invoice-list")
+                        div("empty-invoices") { +"Loading invoices…" }
                     }
                 }
             }
         }
 
-        div {
-            id = "toast"
-            classes = setOf("toast")
-        }
+        div { id = "toast"; classes = setOf("toast") }
         div { id = "ob-host" }
 
         script { unsafe { raw(BILLING_JS) } }
@@ -3532,6 +3629,19 @@ private const val REVIEW_CSS = """
 .rv-group-approve-all:hover:not(:disabled){background:var(--accent-dim);border-color:var(--accent)}
 .rv-group-approve-all:disabled{opacity:.4;cursor:not-allowed}
 .rv-group-approve-all .rv-gaa-count{background:rgba(0,229,160,.15);padding:1px 6px;border-radius:10px;font-size:10px}
+/* ── Lock banner ── */
+.rv-lock-banner{display:flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(250,173,20,.05);border-bottom:1px solid rgba(250,173,20,.18);font-size:12px;color:var(--yellow);line-height:1.4}
+.rv-lock-banner span{flex:1}
+.rv-btn-lock{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-muted);cursor:pointer;transition:all .15s;flex-shrink:0}
+.rv-btn-lock:hover{border-color:var(--yellow);color:var(--yellow);background:rgba(250,173,20,.08)}
+.rv-btn-unlock{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:var(--radius-sm);background:transparent;border:1px solid rgba(250,173,20,.4);color:var(--yellow);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;margin-left:auto;font-family:inherit}
+.rv-btn-unlock:hover{background:rgba(250,173,20,.1)}
+.rv-badge-locked{background:rgba(250,173,20,.1);border-color:rgba(250,173,20,.25);color:var(--yellow);display:inline-flex;align-items:center;gap:4px}
+.rv-card.locked .rv-card-header{border-left:3px solid var(--yellow)!important}
+/* ── Diff banner ── */
+.rv-diff-banner{display:flex;align-items:flex-start;gap:8px;padding:9px 16px;background:rgba(0,229,160,.04);border-bottom:1px solid rgba(0,229,160,.12);font-size:12px;color:var(--text-muted);line-height:1.5}
+.rv-diff-label{color:var(--accent);font-weight:700;white-space:nowrap;flex-shrink:0}
+.rv-diff-prev{font-style:italic;text-decoration:line-through;text-decoration-color:rgba(255,255,255,.25)}
 """
 
 private val REVIEW_JS = """
@@ -3613,16 +3723,31 @@ const xSvg='<svg width=”13” height=”13” viewBox=”0 0 24 24” fill=”
 const checkSvg='<svg width=”13” height=”13” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2.2” stroke-linecap=”round” stroke-linejoin=”round”><polyline points=”20 6 9 17 4 12”/></svg>';
 const arrowSvg='<svg width=”11” height=”11” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><polyline points=”17 1 21 5 17 9”/><path d=”M3 11V9a4 4 0 0 1 4-4h14”/><polyline points=”7 23 3 19 7 15”/><path d=”M21 13v2a4 4 0 0 1-4 4H3”/></svg>';
 
+const lockSvg='<svg width=”12” height=”12” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><rect x=”3” y=”11” width=”18” height=”11” rx=”2” ry=”2”/><path d=”M7 11V7a5 5 0 0 1 10 0v4”/></svg>';
+const unlockSvg='<svg width=”12” height=”12” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><rect x=”3” y=”11” width=”18” height=”11” rx=”2” ry=”2”/><path d=”M7 11V7a5 5 0 0 1 9.9-1”/></svg>';
+const diffSvg='<svg width=”11” height=”11” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><line x1=”12” y1=”5” x2=”12” y2=”19”/><polyline points=”19 12 12 19 5 12”/></svg>';
+
 function renderCard(item){
   var id=esc(item.id);
   var isBlocked=item.status==='blocked';
+  var isLocked=!!item.lockedAt;
   var lang=(item.targetLanguage||'')+(item.targetRegion?'-'+item.targetRegion:'');
   var lname=langName(item.targetLanguage)+(item.targetRegion?' ('+esc(item.targetRegion)+')':'');
   var charCount=item.translatedText?item.translatedText.length:0;
   var srcLen=item.sourceText?item.sourceText.length:0;
   var pillCls=isBlocked?'rv-pill-blocked':(isCulturalItem(item)?'rv-pill-cultural':'rv-pill-review');
   var pillTxt=isBlocked?'Blocked':(isCulturalItem(item)?'Cultural':'Pending');
-  var blockBanner=isBlocked&&item.blockReason?'<div class=”rv-block-banner”>'+warnSvg+'<span><strong>Rejection reason:</strong> '+esc(item.blockReason)+'</span></div>':'';
+  var blockBanner=isBlocked&&item.blockReason&&!isCulturalItem(item)?'<div class=”rv-block-banner”>'+warnSvg+'<span><strong>Rejection reason:</strong> '+esc(item.blockReason)+'</span></div>':'';
+
+  // Lock banner
+  var lockBanner=isLocked?'<div class=”rv-lock-banner”>'+lockSvg+' <span><strong>Locked</strong> — pipeline cannot overwrite this translation.</span><button class=”rv-btn-unlock” onclick=”unlockTranslation(\''+id+'\')”>'+unlockSvg+' Unlock</button></div>':'';
+
+  // Diff banner — previous translation for comparison
+  var diffBanner='';
+  if(item.previousTranslatedText&&item.previousTranslatedText!==item.translatedText){
+    diffBanner='<div class=”rv-diff-banner”>'+diffSvg+' <span class=”rv-diff-label”>Previous:</span> <span class=”rv-diff-prev”>'+esc(item.previousTranslatedText)+'</span></div>';
+  }
+
   var isCultural=isCulturalItem(item);
   var culturalBanner='';
   if(isCultural){
@@ -3630,34 +3755,42 @@ function renderCard(item){
     var issueHtml=cIssues.map(function(s){return '<li>'+esc(s)+'</li>';}).join('');
     culturalBanner='<div class=”rv-cultural-banner”><div class=”rv-cultural-banner-title”><svg width=”13” height=”13” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><path d=”M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z”/><path d=”M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z”/></svg><strong>Cultural sensitivity flag</strong></div>'+(issueHtml?'<ul class=”rv-cultural-issues”>'+issueHtml+'</ul>':'')+'</div>';
   }
-  var approveBtnLabel=isBlocked?checkSvg+' Approve &amp; re-merge':checkSvg+' Approve &amp; merge';
-  return '<div class=”rv-card status-'+esc(item.status)+'” id=”card-'+id+'”>'+
+
+  // Lock button in header
+  var lockBtn=!isLocked?'<button class=”rv-btn-lock” onclick=”lockTranslation(\''+id+'\')” title=”Lock — prevent pipeline from overwriting”>'+lockSvg+'</button>':'';
+  var approveBtnLabel=isBlocked?checkSvg+' Approve &amp; re-merge':checkSvg+' Approve';
+
+  return '<div class=”rv-card status-'+esc(item.status)+(isLocked?' locked':'')+'” id=”card-'+id+'”>'+
     '<div class=”rv-card-header”>'+
       '<div class=”rv-card-header-left”>'+
         '<code class=”rv-key” title=”'+esc(item.stringKey)+'”>'+esc(item.stringKey)+'</code>'+
         '<div class=”rv-badges”>'+
           '<span class=”rv-badge rv-badge-project”>'+esc(item.projectName)+'</span>'+
           '<span class=”rv-badge rv-badge-lang” title=”'+esc(lname)+'”>'+esc(lang.toUpperCase())+'</span>'+
+          (isLocked?'<span class=”rv-badge rv-badge-locked”>'+lockSvg+' Locked</span>':'')+
         '</div>'+
       '</div>'+
-      '<span class=”rv-status-pill '+pillCls+'”>'+pillTxt+'</span>'+
+      '<div style=”display:flex;align-items:center;gap:6px”>'+
+        lockBtn+
+        '<span class=”rv-status-pill '+pillCls+'”>'+pillTxt+'</span>'+
+      '</div>'+
     '</div>'+
-    blockBanner+culturalBanner+
+    lockBanner+blockBanner+diffBanner+culturalBanner+
     '<div class=”rv-body”>'+
       '<div class=”rv-source”>'+
-        '<div class=”rv-pane-label”>'+globeSvg+' Source &middot; English</div>'+
+        '<div class=”rv-pane-label”>'+globeSvg+' English &middot; Source</div>'+
         '<div class=”rv-source-text”>'+esc(item.sourceText)+'</div>'+
       '</div>'+
       '<div class=”rv-target”>'+
-        '<div class=”rv-pane-label”>'+arrowSvg+' Translation &middot; '+esc(lname)+'<span class=”rv-editable-hint”>&ensp;editable</span></div>'+
-        '<textarea class=”rv-textarea” id=”trans-'+id+'” oninput=”updateCharCount(\''+id+'\',this.value,'+srcLen+')”>'+esc(item.translatedText)+'</textarea>'+
+        '<div class=”rv-pane-label”>'+arrowSvg+' '+esc(lname)+'<span class=”rv-editable-hint”>&ensp;click to edit</span></div>'+
+        '<textarea class=”rv-textarea” id=”trans-'+id+'” '+(isLocked?'readonly title=”Unlock to edit” style=”opacity:.55;cursor:not-allowed” ':'')+' oninput=”updateCharCount(\''+id+'\',this.value,'+srcLen+')”>'+esc(item.translatedText)+'</textarea>'+
       '</div>'+
     '</div>'+
     '<div class=”rv-actions”>'+
       '<span class=”rv-char-hint” id=”chars-'+id+'”>'+charCount+' chars</span>'+
       '<div class=”rv-action-btns”>'+
-        '<button class=”rv-btn-reject” id=”btn-reject-'+id+'” onclick=”showRejectPanel(\''+id+'\')”>'+xSvg+' Reject</button>'+
-        '<button class=”rv-btn-approve” id=”btn-approve-'+id+'” onclick=”approve(\''+id+'\')”>'+approveBtnLabel+'</button>'+
+        '<button class=”rv-btn-reject” id=”btn-reject-'+id+'” onclick=”showRejectPanel(\''+id+'\')” '+(isLocked?'disabled title=”Unlock to reject”':'')+'>'+xSvg+' Reject</button>'+
+        '<button class=”rv-btn-approve” id=”btn-approve-'+id+'” onclick=”approve(\''+id+'\')” '+(isLocked?'disabled title=”Unlock to approve”':'')+'>'+approveBtnLabel+'</button>'+
       '</div>'+
     '</div>'+
     '<div class=”rv-reject-panel” id=”reject-panel-'+id+'”>'+
@@ -3792,6 +3925,27 @@ async function approveGroup(runId){
   if(succeeded>0)toast(succeeded+' translation'+(succeeded!==1?'s':'')+' approved — PR will be updated shortly.');
   render();
 }
+async function lockTranslation(id){
+  const res=await fetch(BASE+'/review/'+id+'/lock',{method:'POST',headers:authHeaders()});
+  if(res&&res.ok){
+    const item=allItems.find(i=>i.id===id);
+    if(item){item.lockedAt=Date.now();item.lockedBy='me';}
+    const card=document.getElementById('card-'+id);
+    if(card)card.outerHTML=renderCard(allItems.find(i=>i.id===id)||{id});
+    toast('Translation locked — pipeline will not overwrite it.');
+  }else{toast('Failed to lock translation','error');}
+}
+
+async function unlockTranslation(id){
+  const res=await fetch(BASE+'/review/'+id+'/unlock',{method:'POST',headers:authHeaders()});
+  if(res&&res.ok){
+    const item=allItems.find(i=>i.id===id);
+    if(item){item.lockedAt=null;item.lockedBy=null;}
+    render();
+    toast('Translation unlocked.');
+  }else{toast('Failed to unlock translation','error');}
+}
+
 loadReviews();
 """.trimIndent()
 

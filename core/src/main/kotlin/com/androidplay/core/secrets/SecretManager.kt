@@ -117,7 +117,7 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "mongo-uri"                -> "mongodb://localhost:27017"
     "token-encryption-key"     -> "dev_token_encryption_key_32chars!"
     "allowed-origin"           -> "http://localhost:5173"
-    "frontend-url"             -> "http://localhost:5173/?token="
+    "frontend-url"             -> "http://localhost:5173/transloom/app"
     "github-webhook-secret"    -> ""
     "github-client-id"         -> "dummy_client_id"
     "github-client-secret"     -> "dummy_client_secret"

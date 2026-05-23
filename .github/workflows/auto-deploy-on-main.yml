@@ -41,18 +41,24 @@ jobs:
             --platform managed \
             --region asia-southeast1 \
             --allow-unauthenticated \
-            --update-env-vars="FRONTEND_URL=https://data.androidplay.in/transloom/app?token=,ALLOWED_ORIGIN=https://data.androidplay.in,APP_URL=https://data.androidplay.in" \
+            --update-env-vars="FRONTEND_URL=https://data.androidplay.in/transloom/app,ALLOWED_ORIGIN=https://data.androidplay.in,APP_URL=https://data.androidplay.in" \
             --update-secrets=DB_CONNECTION_STRING=db-connection-string:latest \
+            --update-secrets=MONGO_URI=mongo-uri:latest \
             --update-secrets=JWT_SECRET=jwt-secret:latest \
+            --update-secrets=TOKEN_ENCRYPTION_KEY=token-encryption-key:latest \
             --update-secrets=WEATHER_API_KEY=weather-data-secret:latest \
             --update-secrets=RAZORPAY_KEY_ID=razorpay-key-id:latest \
             --update-secrets=RAZORPAY_SECRET=razorpay-secret:latest \
             --update-secrets=RAZORPAY_WEBHOOK_SECRET=razorpay-webhook-secret:latest \
-            --update-secrets=RAZORPAY_PLAN_ID_SOLO=razorpay-plan-id-solo:latest \
-            --update-secrets=RAZORPAY_PLAN_ID_TEAM=razorpay-plan-id-team:latest \
+            --update-secrets=RAZORPAY_PLAN_SOLO=razorpay-plan-solo:latest \
+            --update-secrets=RAZORPAY_PLAN_TEAM=razorpay-plan-team:latest \
             --update-secrets=SENDGRID_API_KEY=sendgrid-api-key:latest \
             --update-secrets=REDIS_URL=redis-url:latest \
-            --update-secrets=TOKEN_ENCRYPTION_KEY=token-encryption-key:latest \
             --update-secrets=GITHUB_CLIENT_ID=github-client-id:latest \
             --update-secrets=GITHUB_CLIENT_SECRET=github-client-secret:latest \
-            --update-secrets=GITHUB_WEBHOOK_SECRET=github-webhook-secret:latest
+            --update-secrets=GITHUB_WEBHOOK_SECRET=github-webhook-secret:latest \
+            --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
+            --update-secrets=CLOUDFLARE_ACCOUNT_ID=cloudflare-account-id:latest \
+            --update-secrets=CLOUDFLARE_KV_NAMESPACE_ID=cloudflare-kv-namespace-id:latest \
+            --update-secrets=CLOUDFLARE_API_TOKEN=cloudflare-api-token:latest \
+            --update-secrets=FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest

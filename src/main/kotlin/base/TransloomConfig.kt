@@ -134,7 +134,7 @@ fun Application.configureTransloom(refundService: RefundService) {
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository, cdnPublishRepository)
             configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
             configureInsightsRoutes(userActivityService)
-            configureOnboardingRoutes(userRepository, billingRepository, projectRepository)
+            configureOnboardingRoutes(userRepository, billingRepository, projectRepository, translationRepository)
         }
     }
 }

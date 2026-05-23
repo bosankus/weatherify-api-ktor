@@ -62,7 +62,7 @@ fun Route.configureOnboardingRoutes(
             val webhookVerified = projectRepository.listForUser(userId).any { it.webhookVerifiedAt != null }
             val autoStep = when {
                 user.onboardingStep.ordinal >= OnboardingStep.COMPLETED.ordinal     -> user.onboardingStep
-                subscription.plan.name != "FREE" || subscription.inTrial           -> OnboardingStep.PLAN_ACTIVATED.advance(user.onboardingStep).let { user.onboardingStep }
+                subscription.plan.name != "FREE" || subscription.inTrial           -> user.onboardingStep.advance(OnboardingStep.PLAN_ACTIVATED)
                 stringsTranslated > 0                                               -> user.onboardingStep.advance(OnboardingStep.FIRST_TRANSLATION)
                 webhookVerified                                                     -> user.onboardingStep.advance(OnboardingStep.WEBHOOK_INSTALLED)
                 projectCount > 0                                                    -> user.onboardingStep.advance(OnboardingStep.PROJECT_CREATED)

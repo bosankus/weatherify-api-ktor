@@ -18,8 +18,6 @@ import com.transloom.queue.TranslationJobQueue
 import com.transloom.queue.WebhookPayload
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.StringParserService
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -130,30 +128,7 @@ fun Route.configureApiRoutes(
                     currentPlanDisplay = plan.displayName
                 )
 
-                val now = kotlinx.datetime.Clock.System.now()
-                val sevenDays = kotlin.time.Duration.parse("7d")
-                val trialEndsOn = if (sub.inTrial && sub.startedAt != null)
-                    (sub.startedAt + sevenDays).toLocalDateTime(TimeZone.UTC).date.toString()
-                else null
-                val daysUntilRenewal = when {
-                    sub.inTrial && sub.startedAt != null ->
-                        ((sub.startedAt + sevenDays) - now).inWholeDays.toInt().coerceAtLeast(0)
-                    sub.currentPeriodEnd != null -> (sub.currentPeriodEnd - now).inWholeDays.toInt().coerceAtLeast(0)
-                    else -> null
-                }
-                val subscription = SubscriptionResponse(
-                    plan = plan.name,
-                    displayName = plan.displayName,
-                    monthlyPricePaise = plan.monthlyPricePaise,
-                    stringLimit = plan.stringLimit,
-                    maxProjects = if (plan.maxProjects == Int.MAX_VALUE) -1 else plan.maxProjects,
-                    cancelAtPeriodEnd = sub.cancelAtPeriodEnd,
-                    currentPeriodEnd = sub.currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString(),
-                    trialLimitHit = sub.inTrial && sub.limitHitAt != null,
-                    inTrial = sub.inTrial,
-                    trialEndsOn = trialEndsOn,
-                    daysUntilRenewal = daysUntilRenewal
-                )
+                val subscription = sub.toResponse()
 
                 val usageResp = UsageResponse(
                     stringsTranslated = usage.stringsTranslated,

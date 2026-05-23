@@ -1,7 +1,5 @@
 package com.transloom.routes
 
-import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
 import com.transloom.domain.UserEvent
 import com.transloom.repository.UserRepository
 import com.transloom.services.UserActivityService
@@ -25,8 +23,6 @@ import org.slf4j.LoggerFactory
 import java.util.*
 
 private val log = LoggerFactory.getLogger("AuthRoutes")
-
-private const val JWT_TTL_MS = 7L * 24 * 60 * 60 * 1000
 
 @Serializable
 data class GitHubTokenRequest(
@@ -186,17 +182,19 @@ private suspend fun redirectAfterAuth(
     when {
         !pendingPlan.isNullOrBlank() -> call.respondRedirect("/transloom/billing/checkout?plan=${pendingPlan.uppercase()}")
         isNewUser -> call.respondRedirect("/transloom/welcome")
-        else -> call.respondRedirect(frontendRedirectUrl + jwtToken)
+        else -> {
+            // Session cookie (httpOnly) is already set. Use a short-lived JS-readable bootstrap
+            // cookie instead of putting the JWT in the URL — keeps the token out of proxy logs,
+            // browser history, and Referer headers.
+            call.response.cookies.append(Cookie(
+                name = "tl_token_bootstrap", value = jwtToken,
+                path = "/transloom", maxAge = 15,
+                httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
+            ))
+            call.respondRedirect(frontendRedirectUrl)
+        }
     }
 }
-
-private fun mintJwt(secret: String, userId: String, githubId: Long, username: String): String =
-    JWT.create()
-        .withAudience("transloom-app").withIssuer("transloom-backend")
-        .withClaim("userId", userId).withClaim("githubId", githubId)
-        .withClaim("username", username)
-        .withExpiresAt(Date(System.currentTimeMillis() + JWT_TTL_MS))
-        .sign(Algorithm.HMAC256(secret))
 
 private fun ApplicationCall.issueSessionCookie(token: String) {
     response.cookies.append(Cookie(

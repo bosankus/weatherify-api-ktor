@@ -6,6 +6,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.auth0.jwt.exceptions.JWTVerificationException
 import com.transloom.domain.BillingPlan
+import com.transloom.domain.Subscription
 import com.transloom.domain.UserEvent
 import com.transloom.repository.BillingRepository
 import com.transloom.repository.UserRepository
@@ -94,38 +95,7 @@ fun Route.configureBillingRoutes(
 
         get("/subscription") {
             val userId = call.userId() ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
-            val sub = billingRepository.getSubscription(userId)
-            val plan = sub.plan
-            val now = Clock.System.now()
-
-            val trialEndsOn = if (sub.inTrial && sub.startedAt != null)
-                (sub.startedAt + 7.days).toLocalDateTime(TimeZone.UTC).date.toString()
-            else null
-
-            val daysUntilRenewal = when {
-                sub.inTrial && sub.startedAt != null -> {
-                    val trialEnd = sub.startedAt + 7.days
-                    (trialEnd - now).inWholeDays.toInt().coerceAtLeast(0)
-                }
-                sub.currentPeriodEnd != null -> (sub.currentPeriodEnd - now).inWholeDays.toInt().coerceAtLeast(0)
-                else -> null
-            }
-
-            call.respond(
-                SubscriptionResponse(
-                    plan = plan.name,
-                    displayName = plan.displayName,
-                    monthlyPricePaise = plan.monthlyPricePaise,
-                    stringLimit = plan.stringLimit,
-                    maxProjects = if (plan.maxProjects == Int.MAX_VALUE) -1 else plan.maxProjects,
-                    cancelAtPeriodEnd = sub.cancelAtPeriodEnd,
-                    currentPeriodEnd = sub.currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString(),
-                    trialLimitHit = sub.inTrial && sub.limitHitAt != null,
-                    inTrial = sub.inTrial,
-                    trialEndsOn = trialEndsOn,
-                    daysUntilRenewal = daysUntilRenewal
-                )
-            )
+            call.respond(billingRepository.getSubscription(userId).toResponse())
         }
 
         post("/subscribe") {
@@ -614,6 +584,33 @@ private fun buildInvoiceReceipt(
 </html>
 """.trimIndent()
 
+// ─── Shared subscription response builder ─────────────────────────────────────
+
+internal fun Subscription.toResponse(): SubscriptionResponse {
+    val now = Clock.System.now()
+    val trialEndsOn = if (inTrial && startedAt != null)
+        (startedAt + 7.days).toLocalDateTime(TimeZone.UTC).date.toString()
+    else null
+    val daysUntilRenewal = when {
+        inTrial && startedAt != null -> ((startedAt + 7.days) - now).inWholeDays.toInt().coerceAtLeast(0)
+        currentPeriodEnd != null -> (currentPeriodEnd - now).inWholeDays.toInt().coerceAtLeast(0)
+        else -> null
+    }
+    return SubscriptionResponse(
+        plan = plan.name,
+        displayName = plan.displayName,
+        monthlyPricePaise = plan.monthlyPricePaise,
+        stringLimit = plan.stringLimit,
+        maxProjects = if (plan.maxProjects == Int.MAX_VALUE) -1 else plan.maxProjects,
+        cancelAtPeriodEnd = cancelAtPeriodEnd,
+        currentPeriodEnd = currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString(),
+        trialLimitHit = inTrial && limitHitAt != null,
+        inTrial = inTrial,
+        trialEndsOn = trialEndsOn,
+        daysUntilRenewal = daysUntilRenewal
+    )
+}
+
 // ─── Session cookie helpers ───────────────────────────────────────────────────
 
 internal fun ApplicationCall.sessionUserId(jwtSecret: String): String? {
@@ -640,12 +637,3 @@ internal fun ApplicationCall.clearSession() {
     ))
 }
 
-private fun mintJwt(jwtSecret: String, userId: String, githubId: Long, username: String): String {
-    val ttlMs = 7L * 24 * 60 * 60 * 1000
-    return JWT.create()
-        .withAudience("transloom-app").withIssuer("transloom-backend")
-        .withClaim("userId", userId).withClaim("githubId", githubId)
-        .withClaim("username", username)
-        .withExpiresAt(java.util.Date(System.currentTimeMillis() + ttlMs))
-        .sign(Algorithm.HMAC256(jwtSecret))
-}
