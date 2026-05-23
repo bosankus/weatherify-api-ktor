@@ -60,12 +60,11 @@ fun transloomIndexes(): List<IndexSpec> {
         // the abandoned-payment scan which filters by event then sorts by time.
         IndexSpec("user_events", Document(mapOf("userId" to 1, "occurredAt" to -1))),
         IndexSpec("user_events", Document(mapOf("event" to 1, "occurredAt" to -1))),
-        IndexSpec("semantic_change_cache", Document("hashKey", 1)),
         // TTL: purge semantic-change cache entries after 90 days — source text semantics are stable
-        IndexSpec("semantic_change_cache", Document("createdAt", 1), IndexOptions().expireAfter(90, TimeUnit.DAYS)),
-        IndexSpec("cultural_analysis_cache", Document("hashKey", 1)),
+        // Note: both caches key on _id (no separate hashKey field), so no hashKey index needed
+        IndexSpec("semantic_change_cache", Document("createdAt", 1), IndexOptions().expireAfter(90, TimeUnit.DAYS).name("ttl_semantic_90d")),
         // TTL: purge cultural-analysis cache entries after 30 days — cultural norms shift slowly
-        IndexSpec("cultural_analysis_cache", Document("createdAt", 1), IndexOptions().expireAfter(30, TimeUnit.DAYS)),
+        IndexSpec("cultural_analysis_cache", Document("createdAt", 1), IndexOptions().expireAfter(30, TimeUnit.DAYS).name("ttl_cultural_30d")),
         IndexSpec("cdn_publish_log", Document("projectId", 1)),
         IndexSpec("cdn_publish_log", Document(mapOf("projectId" to 1, "bundleVersion" to 1)), unique),
         IndexSpec("cdn_publish_log", Document("publishedAt", -1)),

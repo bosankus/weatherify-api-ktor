@@ -38,6 +38,13 @@ fun Application.configureHTTP() {
                     ?: call.request.local.remoteHost
             }
         }
+        register(RateLimitName("manual_sync")) {
+            rateLimiter(limit = 5, refillPeriod = 1.minutes)
+            requestKey { call ->
+                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+                    ?: call.request.local.remoteHost
+            }
+        }
     }
 
     install(Compression) {

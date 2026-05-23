@@ -28,7 +28,7 @@ class MongoSemanticChangeCacheRepository(db: MongoDatabase) : SemanticChangeCach
                 Updates.setOnInsert("_id", hashKey),
                 Updates.set("changeType", record.changeType.name),
                 Updates.set("reasoning", record.reasoning),
-                Updates.set("createdAt", System.currentTimeMillis())
+                Updates.set("createdAt", java.util.Date())
             ),
             FindOneAndUpdateOptions().upsert(true)
         )

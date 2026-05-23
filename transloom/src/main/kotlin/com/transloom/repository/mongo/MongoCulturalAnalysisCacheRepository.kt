@@ -28,7 +28,7 @@ class MongoCulturalAnalysisCacheRepository(db: MongoDatabase) : CulturalAnalysis
                 Updates.setOnInsert("_id", hashKey),
                 Updates.set("needsReview", analysis.needsReview),
                 Updates.set("issues", analysis.issues),
-                Updates.set("createdAt", System.currentTimeMillis())
+                Updates.set("createdAt", java.util.Date())
             ),
             FindOneAndUpdateOptions().upsert(true)
         )
