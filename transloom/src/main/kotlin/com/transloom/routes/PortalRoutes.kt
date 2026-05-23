@@ -3503,47 +3503,62 @@ private fun HTML.reviewPortal() {
         div("app-layout") {
             unsafe { +APP_SIDEBAR_REVIEW }
             main("rv-page") {
-                div("page-header") {
-                    div {
-                        div("page-title") { +"Translation Review" }
-                        div("page-sub") { +"Review flagged translations before they merge into your repos. Edit inline, then approve or reject." }
+                div("rv-inner") {
+                    // ── Hero header ────────────────────────────────────────────
+                    div("rv-hero") {
+                        div("rv-hero-top") {
+                            div {
+                                p("rv-eyebrow") { +"Translation Review" }
+                                h1("rv-page-title") { +"Review Portal" }
+                                p("rv-page-sub") { +"Inspect flagged translations before they merge. Edit inline, approve or reject with a single click." }
+                            }
+                            div("rv-hero-controls") {
+                                button(classes = "rv-btn-refresh") {
+                                    attributes["onclick"] = "loadReviews()"
+                                    attributes["title"] = "Refresh"
+                                    unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='23 4 23 10 17 10'/><polyline points='1 20 1 14 7 14'/><path d='M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15'/></svg>" }
+                                    +" Refresh"
+                                }
+                            }
+                        }
+                        div("rv-stat-row") { id = "rv-stat-chips" }
                     }
-                    div("rv-stat-chips") { id = "rv-stat-chips" }
+                    // ── Toolbar ────────────────────────────────────────────────
+                    div("rv-toolbar") {
+                        div("rv-filters") {
+                            button(classes = "rv-filter active") {
+                                attributes["onclick"] = "filterBy('all',this)"
+                                +"All "; span("rv-filter-count") { id = "cnt-all" }
+                            }
+                            button(classes = "rv-filter") {
+                                attributes["onclick"] = "filterBy('review',this)"
+                                +"Pending "; span("rv-filter-count") { id = "cnt-review" }
+                            }
+                            button(classes = "rv-filter") {
+                                id = "tab-cultural"
+                                attributes["onclick"] = "filterBy('cultural',this)"
+                                attributes["style"] = "display:none"
+                                +"Cultural "; span("rv-filter-count") { id = "cnt-cultural" }
+                            }
+                            button(classes = "rv-filter") {
+                                attributes["onclick"] = "filterBy('blocked',this)"
+                                +"Blocked "; span("rv-filter-count") { id = "cnt-blocked" }
+                            }
+                        }
+                        div("rv-search-wrap") {
+                            unsafe { +"<svg class='rv-search-icon' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>" }
+                            input {
+                                type = InputType.text
+                                classes = setOf("rv-search-input")
+                                id = "rv-search"
+                                placeholder = "Search by key, project, or text…"
+                                attributes["oninput"] = "applySearch(this.value)"
+                            }
+                        }
+                    }
+                    div { id = "rv-batch-bar" }
+                    div("rv-list") { id = "review-list" }
                 }
-                div("rv-toolbar") {
-                    div("rv-filters") {
-                        button(classes = "rv-filter active") {
-                            attributes["onclick"] = "filterBy('all',this)"
-                            +"All "; span("rv-filter-count") { id = "cnt-all" }
-                        }
-                        button(classes = "rv-filter") {
-                            attributes["onclick"] = "filterBy('review',this)"
-                            +"Pending "; span("rv-filter-count") { id = "cnt-review" }
-                        }
-                        button(classes = "rv-filter") {
-                            id = "tab-cultural"
-                            attributes["onclick"] = "filterBy('cultural',this)"
-                            attributes["style"] = "display:none"
-                            +"Cultural "; span("rv-filter-count") { id = "cnt-cultural" }
-                        }
-                        button(classes = "rv-filter") {
-                            attributes["onclick"] = "filterBy('blocked',this)"
-                            +"Blocked "; span("rv-filter-count") { id = "cnt-blocked" }
-                        }
-                    }
-                    div("rv-search-wrap") {
-                        unsafe { +"<svg class='rv-search-icon' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>" }
-                        input {
-                            type = InputType.text
-                            classes = setOf("rv-search-input")
-                            id = "rv-search"
-                            placeholder = "Search by key, project, or text…"
-                            attributes["oninput"] = "applySearch(this.value)"
-                        }
-                    }
-                }
-                div { id = "rv-batch-bar" }
-                div("rv-list") { id = "review-list" }
             }
         }
         div("toast") { id = "toast" }
@@ -3553,95 +3568,130 @@ private fun HTML.reviewPortal() {
 }
 
 private const val REVIEW_CSS = """
-.rv-page{flex:1;overflow-y:auto;padding:28px 32px}
-.rv-stat-chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.rv-stat-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid}
-.rv-chip-pending{background:rgba(250,173,20,.1);color:var(--yellow);border-color:rgba(250,173,20,.25)}
-.rv-chip-blocked{background:rgba(255,77,79,.1);color:var(--red);border-color:rgba(255,77,79,.25)}
-.rv-chip-projects{background:var(--accent-dim);color:var(--accent);border-color:rgba(0,229,160,.25)}
-.rv-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap}
-.rv-filters{display:flex;gap:4px}
-.rv-filter{padding:7px 14px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);font-size:13px;cursor:pointer;transition:all .12s;display:inline-flex;align-items:center;gap:6px}
-.rv-filter.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:500}
-.rv-filter-count{font-size:11px;font-weight:700;background:rgba(0,0,0,.15);border-radius:10px;padding:1px 6px;min-width:18px;text-align:center;line-height:1.6}
-.rv-filter.active .rv-filter-count{background:rgba(0,229,160,.18)}
+/* ── Page scaffold ── */
+.rv-page{flex:1;overflow-y:auto;background:var(--bg)}
+.rv-inner{max-width:1120px;margin:0 auto;padding:36px 40px}
+/* ── Hero header ── */
+.rv-hero{margin-bottom:28px}
+.rv-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}
+.rv-eyebrow{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);opacity:.75;margin-bottom:6px}
+.rv-page-title{font-size:26px;font-weight:700;letter-spacing:-.5px;color:var(--text);line-height:1.2}
+.rv-page-sub{font-size:13px;color:var(--text-muted);margin-top:6px;max-width:480px;line-height:1.6}
+.rv-hero-controls{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-top:4px}
+.rv-btn-refresh{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:var(--radius-sm);padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .15s}
+.rv-btn-refresh:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim2)}
+/* ── Stat chips row ── */
+.rv-stat-row{display:flex;gap:8px;flex-wrap:wrap}
+.rv-stat-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:24px;font-size:12px;font-weight:600;border:1px solid;transition:all .15s}
+.rv-chip-pending{background:rgba(250,173,20,.07);color:var(--yellow);border-color:rgba(250,173,20,.2)}
+.rv-chip-blocked{background:rgba(255,77,79,.07);color:var(--red);border-color:rgba(255,77,79,.2)}
+.rv-chip-projects{background:rgba(0,229,160,.06);color:var(--accent);border-color:rgba(0,229,160,.18)}
+.rv-chip-cultural{background:rgba(138,43,226,.07);color:#b57bee;border-color:rgba(138,43,226,.2)}
+/* ── Toolbar ── */
+.rv-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px}
+/* ── Segmented filter control ── */
+.rv-filters{display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px}
+.rv-filter{padding:5px 14px;border-radius:6px;background:transparent;border:1px solid transparent;color:var(--text-muted);font-size:13px;cursor:pointer;transition:all .12s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-family:inherit}
+.rv-filter.active{background:var(--surface);border-color:var(--border);color:var(--text);font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.rv-filter-count{font-size:11px;font-weight:700;background:rgba(255,255,255,.06);border-radius:8px;padding:0 5px;min-width:16px;text-align:center;line-height:1.7}
+.rv-filter.active .rv-filter-count{background:rgba(0,229,160,.12);color:var(--accent)}
+/* ── Search ── */
 .rv-search-wrap{position:relative;flex:1;max-width:300px}
-.rv-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}
-.rv-search-input{padding-left:32px!important}
-.rv-list{display:flex;flex-direction:column;gap:12px}
-.rv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:box-shadow .15s}
-.rv-card:hover{box-shadow:0 2px 16px rgba(0,0,0,.22)}
+.rv-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}
+.rv-search-input{padding-left:34px!important;height:36px;font-size:13px!important}
+/* ── List & groups ── */
+.rv-list{display:flex;flex-direction:column;gap:16px}
+.rv-group{border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+/* ── Group header ── */
+.rv-group-header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:linear-gradient(to right,var(--surface2),color-mix(in srgb,var(--surface2) 80%,var(--surface)));border-bottom:1px solid var(--border)}
+.rv-commit-badge{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--accent);background:var(--accent-dim2);border:1px solid rgba(0,229,160,.2);padding:3px 9px;border-radius:5px}
+.rv-group-meta{font-size:12px;color:var(--text-muted);flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+.rv-group-project{font-weight:600;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv-group-count{color:var(--text-muted);white-space:nowrap}
+.rv-group-approve-all{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;background:transparent;border:1px solid rgba(0,229,160,.3);color:var(--accent);cursor:pointer;transition:all .12s;font-family:inherit}
+.rv-group-approve-all:hover:not(:disabled){background:var(--accent-dim);border-color:var(--accent);transform:translateY(-1px)}
+.rv-group-approve-all:disabled{opacity:.4;cursor:not-allowed}
+.rv-group-approve-all .rv-gaa-count{background:rgba(0,229,160,.14);padding:1px 6px;border-radius:8px;font-size:10px}
+/* ── Card ── */
+.rv-card{background:var(--surface);overflow:hidden;transition:box-shadow .15s,border-color .15s;position:relative}
+.rv-group .rv-card+.rv-card{border-top:1px solid var(--border)}
+.rv-card:hover{box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
 .rv-card.status-review{border-left:3px solid var(--yellow)}
 .rv-card.status-blocked{border-left:3px solid var(--red)}
-.rv-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);gap:12px}
-.rv-card-header-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
-.rv-key{font-size:12px;font-family:'SFMono-Regular',Consolas,monospace;color:var(--accent);background:var(--accent-dim2);padding:3px 8px;border-radius:4px;border:1px solid rgba(0,229,160,.15);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;display:inline-block;vertical-align:middle}
-.rv-badges{display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap}
+/* ── Card header ── */
+.rv-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:var(--surface2);border-bottom:1px solid var(--border);gap:12px}
+.rv-card-header-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1;flex-wrap:wrap}
+.rv-card-header-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.rv-key{font-size:11.5px;font-family:'SFMono-Regular',Consolas,monospace;color:var(--accent);background:var(--accent-dim2);padding:3px 8px;border-radius:4px;border:1px solid rgba(0,229,160,.15);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;display:inline-block;vertical-align:middle}
+.rv-badges{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .rv-badge{font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid}
 .rv-badge-project{background:var(--surface);border-color:var(--border);color:var(--text-muted)}
-.rv-badge-lang{background:var(--accent-dim2);border-color:rgba(0,229,160,.2);color:var(--accent);font-family:monospace;font-size:10px;letter-spacing:.6px;font-weight:700}
+.rv-badge-lang{background:var(--accent-dim2);border-color:rgba(0,229,160,.2);color:var(--accent);font-family:monospace;font-size:10px;letter-spacing:.8px;font-weight:700}
+.rv-badge-locked{background:rgba(250,173,20,.08);border-color:rgba(250,173,20,.22);color:var(--yellow);display:inline-flex;align-items:center;gap:4px}
 .rv-status-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.2px;flex-shrink:0;border:1px solid}
 .rv-pill-review{background:rgba(250,173,20,.1);color:var(--yellow);border-color:rgba(250,173,20,.3)}
 .rv-pill-blocked{background:rgba(255,77,79,.1);color:var(--red);border-color:rgba(255,77,79,.3)}
 .rv-pill-cultural{background:rgba(138,43,226,.12);color:#b57bee;border-color:rgba(138,43,226,.3)}
-.rv-block-banner{display:flex;align-items:flex-start;gap:8px;padding:10px 16px;background:rgba(255,77,79,.05);border-bottom:1px solid rgba(255,77,79,.15);font-size:12px;color:var(--red);line-height:1.5}
-.rv-cultural-banner{padding:12px 16px;background:rgba(138,43,226,.06);border-bottom:1px solid rgba(138,43,226,.18);font-size:12px}
+/* ── Lock button ── */
+.rv-btn-lock{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-muted);cursor:pointer;transition:all .15s;flex-shrink:0}
+.rv-btn-lock:hover{border-color:var(--yellow);color:var(--yellow);background:rgba(250,173,20,.08)}
+/* ── Banners ── */
+.rv-block-banner{display:flex;align-items:flex-start;gap:8px;padding:10px 18px;background:rgba(255,77,79,.04);border-bottom:1px solid rgba(255,77,79,.12);font-size:12px;color:var(--red);line-height:1.5}
+.rv-lock-banner{display:flex;align-items:center;gap:8px;padding:9px 18px;background:rgba(250,173,20,.04);border-bottom:1px solid rgba(250,173,20,.14);font-size:12px;color:var(--yellow);line-height:1.4}
+.rv-lock-banner span{flex:1}
+.rv-btn-unlock{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:var(--radius-sm);background:transparent;border:1px solid rgba(250,173,20,.35);color:var(--yellow);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;margin-left:auto;font-family:inherit}
+.rv-btn-unlock:hover{background:rgba(250,173,20,.08)}
+.rv-diff-banner{display:flex;align-items:flex-start;gap:8px;padding:9px 18px;background:rgba(0,229,160,.03);border-bottom:1px solid rgba(0,229,160,.1);font-size:12px;color:var(--text-muted);line-height:1.5}
+.rv-diff-label{color:var(--accent);font-weight:700;white-space:nowrap;flex-shrink:0}
+.rv-diff-prev{font-style:italic;text-decoration:line-through;text-decoration-color:rgba(255,255,255,.2)}
+.rv-cultural-banner{padding:12px 18px;background:rgba(138,43,226,.04);border-bottom:1px solid rgba(138,43,226,.14);font-size:12px}
 .rv-cultural-banner-title{display:flex;align-items:center;gap:6px;color:#b57bee;font-weight:600;margin-bottom:6px}
 .rv-cultural-issues{margin:0;padding:0 0 0 18px;color:var(--text-muted);line-height:1.7}
-.rv-chip-cultural{background:rgba(138,43,226,.1);color:#b57bee;border-color:rgba(138,43,226,.25)}
+/* ── Card body ── */
 .rv-body{display:grid;grid-template-columns:1fr 1fr}
-.rv-source{padding:16px;border-right:1px solid var(--border)}
-.rv-target{padding:16px}
+.rv-source{padding:18px 20px;border-right:1px solid var(--border)}
+.rv-target{padding:18px 20px}
 .rv-pane-label{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:5px}
-.rv-editable-hint{font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;color:var(--text-muted);opacity:.65;margin-left:2px}
+.rv-editable-hint{font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;opacity:.6;margin-left:2px}
 .rv-source-text{font-size:14px;color:var(--text-dim);line-height:1.75}
-.rv-textarea{font-size:14px;line-height:1.75;resize:vertical;min-height:80px;background:var(--surface2)!important;border-color:var(--border)!important;transition:border-color .15s!important}
-.rv-textarea:focus{border-color:var(--accent)!important}
-.rv-actions{padding:10px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.rv-textarea{font-size:14px;line-height:1.75;resize:vertical;min-height:80px;background:var(--bg)!important;border-color:rgba(255,255,255,.06)!important;transition:border-color .15s,box-shadow .15s!important}
+.rv-textarea:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(0,229,160,.08)!important}
+/* ── Actions footer ── */
+.rv-actions{padding:11px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface2)}
 .rv-char-hint{font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .rv-action-btns{display:flex;gap:8px;flex-shrink:0}
-.rv-btn-reject{display:inline-flex;align-items:center;gap:5px;background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;font-family:inherit}
+.rv-btn-reject{display:inline-flex;align-items:center;gap:5px;background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;font-family:inherit;font-weight:500}
 .rv-btn-reject:hover:not(:disabled){border-color:var(--red);color:var(--red);background:rgba(255,77,79,.06)}
 .rv-btn-approve{display:inline-flex;align-items:center;gap:5px;background:var(--accent);color:#000;padding:6px 16px;font-size:13px;font-weight:600;border-radius:var(--radius-sm);border:none;cursor:pointer;transition:all .15s;font-family:inherit}
 .rv-btn-approve:hover:not(:disabled){background:#00c98d;transform:translateY(-1px);box-shadow:0 4px 14px -4px rgba(0,229,160,.4)}
 .rv-btn-approve:disabled,.rv-btn-reject:disabled{opacity:.38;cursor:not-allowed!important;transform:none!important;box-shadow:none!important}
-.rv-reject-panel{display:none;padding:14px 16px;border-top:1px solid rgba(255,77,79,.18);background:rgba(255,77,79,.03)}
+/* ── Reject panel ── */
+.rv-reject-panel{display:none;padding:16px 18px;border-top:1px solid rgba(255,77,79,.14);background:rgba(255,77,79,.025)}
 .rv-reject-panel.open{display:block}
-.rv-reject-textarea{min-height:60px;resize:vertical;font-size:13px;margin-top:8px;margin-bottom:10px;border-color:rgba(255,77,79,.35)!important}
+.rv-reject-textarea{min-height:64px;resize:vertical;font-size:13px;margin-top:8px;margin-bottom:10px;border-color:rgba(255,77,79,.3)!important}
 .rv-reject-footer{display:flex;gap:8px;justify-content:flex-end}
 .rv-btn-confirm-reject{background:var(--red);color:#fff;border:none;padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;transition:background .15s}
 .rv-btn-confirm-reject:hover:not(:disabled){background:#e03e40}
 .rv-btn-confirm-reject:disabled{opacity:.4;cursor:not-allowed}
 .rv-btn-cancel{background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 14px;font-size:13px;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;transition:all .15s}
 .rv-btn-cancel:hover{color:var(--text);border-color:var(--text-muted)}
-@media(max-width:700px){.rv-body{grid-template-columns:1fr}.rv-source{border-right:none;border-bottom:1px solid var(--border)}.rv-toolbar{flex-direction:column;align-items:stretch}.rv-search-wrap{max-width:100%}}
-.rv-group{margin-bottom:24px}
-.rv-group-header{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius) var(--radius) 0 0;border-bottom:none}
-.rv-group-header+.rv-card{border-radius:0}
-.rv-group-header+.rv-card+.rv-card{border-radius:0}
-.rv-group .rv-card:last-child{border-radius:0 0 var(--radius) var(--radius)}
-.rv-group .rv-card{border-radius:0;border-top:none}
-.rv-commit-badge{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--accent);background:var(--accent-dim2);border:1px solid rgba(0,229,160,.2);padding:3px 9px;border-radius:6px}
-.rv-group-meta{font-size:12px;color:var(--text-muted);flex:1;display:flex;align-items:center;gap:8px;min-width:0}
-.rv-group-project{font-weight:600;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rv-group-count{color:var(--text-muted);white-space:nowrap}
-.rv-group-approve-all{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;background:transparent;border:1px solid rgba(0,229,160,.4);color:var(--accent);cursor:pointer;transition:all .12s;font-family:inherit}
-.rv-group-approve-all:hover:not(:disabled){background:var(--accent-dim);border-color:var(--accent)}
-.rv-group-approve-all:disabled{opacity:.4;cursor:not-allowed}
-.rv-group-approve-all .rv-gaa-count{background:rgba(0,229,160,.15);padding:1px 6px;border-radius:10px;font-size:10px}
-/* ── Lock banner ── */
-.rv-lock-banner{display:flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(250,173,20,.05);border-bottom:1px solid rgba(250,173,20,.18);font-size:12px;color:var(--yellow);line-height:1.4}
-.rv-lock-banner span{flex:1}
-.rv-btn-lock{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-muted);cursor:pointer;transition:all .15s;flex-shrink:0}
-.rv-btn-lock:hover{border-color:var(--yellow);color:var(--yellow);background:rgba(250,173,20,.08)}
-.rv-btn-unlock{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:var(--radius-sm);background:transparent;border:1px solid rgba(250,173,20,.4);color:var(--yellow);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;margin-left:auto;font-family:inherit}
-.rv-btn-unlock:hover{background:rgba(250,173,20,.1)}
-.rv-badge-locked{background:rgba(250,173,20,.1);border-color:rgba(250,173,20,.25);color:var(--yellow);display:inline-flex;align-items:center;gap:4px}
-.rv-card.locked .rv-card-header{border-left:3px solid var(--yellow)!important}
-/* ── Diff banner ── */
-.rv-diff-banner{display:flex;align-items:flex-start;gap:8px;padding:9px 16px;background:rgba(0,229,160,.04);border-bottom:1px solid rgba(0,229,160,.12);font-size:12px;color:var(--text-muted);line-height:1.5}
-.rv-diff-label{color:var(--accent);font-weight:700;white-space:nowrap;flex-shrink:0}
-.rv-diff-prev{font-style:italic;text-decoration:line-through;text-decoration-color:rgba(255,255,255,.25)}
+/* ── Empty state ── */
+.rv-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:72px 24px;text-align:center;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius)}
+.rv-empty-icon{width:52px;height:52px;border-radius:50%;background:var(--accent-dim2);border:1px solid rgba(0,229,160,.14);display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--accent)}
+.rv-empty-icon.warn{background:rgba(255,77,79,.06);border-color:rgba(255,77,79,.14);color:var(--red)}
+.rv-empty-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
+.rv-empty-sub{font-size:13px;color:var(--text-muted);max-width:300px;line-height:1.55}
+/* ── Skeleton loader ── */
+.rv-skeleton{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.rv-skel-head{height:50px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.rv-skel-body{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.rv-skel-col{display:flex;flex-direction:column;gap:10px}
+.rv-skel-line{height:12px;background:var(--border);border-radius:4px;animation:rvSkelPulse 1.5s ease-in-out infinite}
+.rv-skel-line.w80{width:80%}.rv-skel-line.w60{width:60%}.rv-skel-line.w40{width:40%}
+.rv-skel-foot{height:46px;background:var(--surface2);border-top:1px solid var(--border)}
+@keyframes rvSkelPulse{0%{opacity:.35}50%{opacity:.75}100%{opacity:.35}}
+/* ── Responsive ── */
+@media(max-width:700px){.rv-body{grid-template-columns:1fr}.rv-source{border-right:none;border-bottom:1px solid var(--border)}.rv-toolbar{flex-direction:column;align-items:stretch}.rv-search-wrap{max-width:100%}.rv-filters{overflow-x:auto}.rv-inner{padding:20px 16px}.rv-page-title{font-size:20px}}
 """
 
 private val REVIEW_JS = """
@@ -3662,10 +3712,15 @@ function langName(code){return LANG_NAMES[code]||(code?code.toUpperCase():'?');}
 
 let allItems=[];let currentFilter='all';let searchQuery='';
 
+function skelCard(){return '<div class="rv-skeleton"><div class="rv-skel-head"></div><div class="rv-skel-body"><div class="rv-skel-col"><div class="rv-skel-line w80"></div><div class="rv-skel-line w60"></div><div class="rv-skel-line w40"></div></div><div class="rv-skel-col"><div class="rv-skel-line w60"></div><div class="rv-skel-line w80"></div><div class="rv-skel-line w50"></div></div></div><div class="rv-skel-foot"></div></div>';}
+
 async function loadReviews(){
-  document.getElementById('review-list').innerHTML='<div class="empty-state">Loading…</div>';
+  document.getElementById('review-list').innerHTML=skelCard()+skelCard()+skelCard();
   const res=await fetch(BASE+'/review',{headers:authHeaders()});
-  if(!res.ok){document.getElementById('review-list').innerHTML='<div class="empty-state">Failed to load reviews. Please try refreshing.</div>';return;}
+  if(!res.ok){
+    document.getElementById('review-list').innerHTML='<div class="rv-empty"><div class="rv-empty-icon warn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div class="rv-empty-title">Failed to load</div><p class="rv-empty-sub">Could not fetch reviews — please try refreshing.</p></div>';
+    return;
+  }
   const data=await res.json();
   allItems=data.pending_reviews||[];
   updateStatChips();
@@ -3770,7 +3825,7 @@ function renderCard(item){
           (isLocked?'<span class=”rv-badge rv-badge-locked”>'+lockSvg+' Locked</span>':'')+
         '</div>'+
       '</div>'+
-      '<div style=”display:flex;align-items:center;gap:6px”>'+
+      '<div class=”rv-card-header-right”>'+
         lockBtn+
         '<span class=”rv-status-pill '+pillCls+'”>'+pillTxt+'</span>'+
       '</div>'+
@@ -3778,12 +3833,12 @@ function renderCard(item){
     lockBanner+blockBanner+diffBanner+culturalBanner+
     '<div class=”rv-body”>'+
       '<div class=”rv-source”>'+
-        '<div class=”rv-pane-label”>'+globeSvg+' English &middot; Source</div>'+
+        '<div class=”rv-pane-label”>'+globeSvg+'&ensp;English &middot; Source</div>'+
         '<div class=”rv-source-text”>'+esc(item.sourceText)+'</div>'+
       '</div>'+
       '<div class=”rv-target”>'+
-        '<div class=”rv-pane-label”>'+arrowSvg+' '+esc(lname)+'<span class=”rv-editable-hint”>&ensp;click to edit</span></div>'+
-        '<textarea class=”rv-textarea” id=”trans-'+id+'” '+(isLocked?'readonly title=”Unlock to edit” style=”opacity:.55;cursor:not-allowed” ':'')+' oninput=”updateCharCount(\''+id+'\',this.value,'+srcLen+')”>'+esc(item.translatedText)+'</textarea>'+
+        '<div class=”rv-pane-label”>'+arrowSvg+'&ensp;'+esc(lname)+'<span class=”rv-editable-hint”>&ensp;&middot; click to edit</span></div>'+
+        '<textarea class=”rv-textarea” id=”trans-'+id+'” '+(isLocked?'readonly title=”Unlock to edit” style=”opacity:.5;cursor:not-allowed” ':'')+' oninput=”updateCharCount(\''+id+'\',this.value,'+srcLen+')”>'+esc(item.translatedText)+'</textarea>'+
       '</div>'+
     '</div>'+
     '<div class=”rv-actions”>'+
@@ -3794,7 +3849,7 @@ function renderCard(item){
       '</div>'+
     '</div>'+
     '<div class=”rv-reject-panel” id=”reject-panel-'+id+'”>'+
-      '<div class=”rv-pane-label” style=”margin-bottom:6px”>'+warnSvg+' Rejection Reason</div>'+
+      '<div class=”rv-pane-label” style=”margin-bottom:6px”>'+warnSvg+'&ensp;Rejection Reason</div>'+
       '<textarea id=”reject-reason-'+id+'” class=”rv-reject-textarea” placeholder=”Describe why this translation needs to be redone…”></textarea>'+
       '<div class=”rv-reject-footer”>'+
         '<button class=”rv-btn-cancel” onclick=”hideRejectPanel(\''+id+'\')”>Cancel</button>'+
@@ -3804,20 +3859,31 @@ function renderCard(item){
   '</div>';
 }
 
+function emptyHtml(iconSvg,title,sub,warn){
+  return '<div class=”rv-empty”><div class=”rv-empty-icon'+(warn?' warn':'')+'”>'+(iconSvg||'')+'</div><div class=”rv-empty-title”>'+title+'</div><p class=”rv-empty-sub”>'+sub+'</p></div>';
+}
+
 function render(){
   updateCounts();
   const items=getVisible();
   const list=document.getElementById('review-list');
   if(items.length===0){
-    const okSvg='<svg width=”20” height=”20” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”1.8” stroke-linecap=”round” stroke-linejoin=”round” style=”display:inline;vertical-align:-4px;margin-right:8px;color:var(--accent)”><polyline points=”20 6 9 17 4 12”/></svg>';
-    const msg=searchQuery?'No results for “'+esc(searchQuery)+'”.'
-      :currentFilter==='blocked'?'No blocked translations.'
-      :currentFilter==='review'?okSvg+'All pending translations reviewed!'
-      :okSvg+'All caught up — no translations to review.';
-    list.innerHTML='<div class=”empty-state”>'+msg+'</div>';return;
+    const okIcon='<svg width=”22” height=”22” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><polyline points=”20 6 9 17 4 12”/></svg>';
+    const searchIcon='<svg width=”20” height=”20” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” stroke-width=”1.8” stroke-linecap=”round” stroke-linejoin=”round”><circle cx=”11” cy=”11” r=”8”/><line x1=”21” y1=”21” x2=”16.65” y2=”16.65”/></svg>';
+    var icon=searchQuery?searchIcon:okIcon;
+    var title=searchQuery?'No results found'
+      :currentFilter==='blocked'?'No blocked translations'
+      :currentFilter==='review'?'All reviewed!'
+      :'All caught up';
+    var sub=searchQuery?'No items match &ldquo;'+esc(searchQuery)+'&rdquo; — try a different search.'
+      :currentFilter==='blocked'?'No translations are currently blocked.'
+      :currentFilter==='review'?'Every pending translation has been reviewed.'
+      :'No translations are waiting for review.';
+    list.innerHTML=emptyHtml(icon,title,sub,false);
+    return;
   }
 
-  // Group by pipelineRunId (items with no pipelineRunId go in their own '__ungrouped__' group)
+  // Group by pipelineRunId (items with no pipelineRunId go into '__ungrouped__')
   const groups=new Map();
   items.forEach(function(item){
     var key=item.pipelineRunId||'__ungrouped__';
@@ -3831,6 +3897,7 @@ function render(){
     var commitShort=groupItems[0].commitShort;
     var projectName=groupItems[0].projectName;
     var showHeader=(commitShort!=null||groups.size>1);
+    html+='<div class=”rv-group”>';
     if(showHeader){
       var approveAllBtn='';
       if(pendingInGroup.length>0){
@@ -3840,7 +3907,8 @@ function render(){
         '<div class=”rv-group-meta”><span class=”rv-group-project”>'+esc(projectName)+'</span><span class=”rv-group-count”>&middot;&nbsp;'+groupItems.length+' item'+(groupItems.length!==1?'s':'')+'</span></div>'+
         approveAllBtn+'</div>';
     }
-    html+='<div class=”rv-group”>'+groupItems.map(function(item){return renderCard(item);}).join('')+'</div>';
+    html+=groupItems.map(function(item){return renderCard(item);}).join('');
+    html+='</div>';
   });
   list.innerHTML=html;
 }
