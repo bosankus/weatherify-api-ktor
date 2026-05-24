@@ -865,6 +865,7 @@ Text(Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>))<
                 h2("fade-up d1") { +"Everything you need to ship globally." }
                 div("features-grid") {
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""","Global CDN delivery","Translations compiled and pushed to Cloudflare's global KV. Served from the nearest PoP to your user.","fade-up")
+                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><polyline points="21 3 21 8 16 8"/></svg>""","Instant OTA updates","Fix a typo in any language without a new app release. Every publish is versioned — promote or roll back in one click.","fade-up d1")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""","Android + iOS SDKs","Native SDKs in production. Drop-in init, edge delivery, offline cache — no networking code to write.","fade-up d1")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/><path d="M18.5 5c-.3 1-.7 1.3-1.5 1.5.8.2 1.2.5 1.5 1.5.3-1 .7-1.3 1.5-1.5-.8-.2-1.2-.5-1.5-1.5z"/></svg>""","Smart change detection","AI classifier skips retranslation for surface rewrites. Only semantic changes trigger the pipeline.","fade-up d2")
                     featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""","Placeholder guard","Automatic detection of %1\$s, %d, %@ — bad translations are blocked before they reach the CDN.","fade-up d3")
@@ -2383,6 +2384,13 @@ private const val PROJECTS_CSS = """
 .pc-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);font-size:12px;font-weight:500;padding:5px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s}
 .pc-btn:hover{border-color:var(--accent);color:var(--accent)}
 .pc-btn.del:hover{border-color:var(--red);color:var(--red);background:rgba(255,77,79,.07)}
+.pc-btn.ota{border-color:rgba(0,229,160,.35);color:var(--accent)}
+.pc-btn.ota:hover{background:rgba(0,229,160,.08)}
+.ota-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);margin-bottom:8px}
+.ota-version{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+.ota-version code{font-family:monospace;font-size:12px;color:var(--text-dim)}
+.ota-when{font-size:11px;color:var(--text-muted);margin-top:2px}
+.ota-badge.active{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(0,229,160,.15);color:var(--accent);letter-spacing:.5px;text-transform:uppercase}
 .pc-divider{height:1px;background:var(--border);margin:0 20px}
 .pc-meta{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 20px}
 .pc-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;letter-spacing:.3px;padding:3px 9px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted)}
@@ -2507,6 +2515,7 @@ function buildProjectCard(p){
         <div class="pc-repo">${'$'}{esc(p.githubRepo)}</div>
       </div>
       <div class="pc-actions">
+        ${'$'}{p.otaEnabled?`<button class="pc-btn ota" onclick="openOtaModal('${'$'}{p.id}','${'$'}{esc(p.name)}')">&#x21bb; OTA</button>`:''}
         <button class="pc-btn" onclick="openEditModal('${'$'}{p.id}')">&#9998; Edit</button>
         <button class="pc-btn del" onclick="confirmDeleteProject('${'$'}{p.id}','${'$'}{esc(p.name)}')">&#10005; Delete</button>
       </div>
@@ -2582,6 +2591,8 @@ async function openEditModal(projectId){
   document.getElementById('edit-proj-tone').value=p.tone;
   document.getElementById('edit-modal-repo').textContent=p.githubRepo;
   document.getElementById('edit-cultural-enabled').checked=!!p.culturalSensitivityEnabled;
+  document.getElementById('edit-ota-enabled').checked=!!p.otaEnabled;
+  document.getElementById('edit-ota-auto-promote').checked=p.autoPromote!==false;
   const isIos=(p.sourceFilePaths||[]).some(f=>f.includes('.strings'));
   const platRadio=document.getElementById(isIos?'edit-plat-ios':'edit-plat-android');
   if(platRadio)platRadio.checked=true;
@@ -2613,7 +2624,9 @@ async function saveEdit(){
   if(!selected.length){toast('Select at least one language','error');return;}
   const targets=selected.map(code=>({code,name:LANG_MAP[code],region:code.toUpperCase(),file:fileMap[code]+fileExt}));
   const culturalSensitivityEnabled=document.getElementById('edit-cultural-enabled')?.checked||false;
-  const res=await api('/projects/'+projectId,{method:'PUT',body:JSON.stringify({name,watchBranch,sourceFilePaths:[sourceFilePath].filter(Boolean),category,tone,targets,culturalSensitivityEnabled})});
+  const otaEnabled=document.getElementById('edit-ota-enabled')?.checked||false;
+  const autoPromote=document.getElementById('edit-ota-auto-promote')?.checked||false;
+  const res=await api('/projects/'+projectId,{method:'PUT',body:JSON.stringify({name,watchBranch,sourceFilePaths:[sourceFilePath].filter(Boolean),category,tone,targets,culturalSensitivityEnabled,otaEnabled,autoPromote})});
   if(!res)return;
   if(res.ok){toast('Project updated');closeEditModal();await init();}
   else{const err=await res.json();toast(err.error||'Update failed','error');}
@@ -2648,6 +2661,52 @@ async function executeDeleteProject(){
   if(!res)return;
   if(res.ok){toast('Project deleted');await init();}
   else{const err=await res.json();toast(err.error||'Delete failed','error');}
+}
+
+// ── OTA versions modal ────────────────────────────────────────────────────────
+let otaProjectId=null;
+async function openOtaModal(projectId,projectName){
+  otaProjectId=projectId;
+  document.getElementById('ota-modal-name').textContent=projectName||'';
+  document.getElementById('ota-modal').classList.add('open');
+  await loadOtaVersions();
+}
+function closeOtaModal(){document.getElementById('ota-modal').classList.remove('open');otaProjectId=null;}
+async function loadOtaVersions(){
+  const list=document.getElementById('ota-versions-list');
+  list.innerHTML='<div class="empty-state">Loading…</div>';
+  const res=await api('/projects/'+otaProjectId+'/versions');
+  if(!res||!res.ok){list.innerHTML='<div class="empty-state">Failed to load versions.</div>';return;}
+  const data=await res.json();
+  const versions=data.versions||[];
+  document.getElementById('ota-rollback-btn').disabled=versions.filter(v=>!v.active).length===0;
+  if(!versions.length){list.innerHTML='<div class="empty-state">No bundles published yet. Trigger a translation pipeline run to publish the first version.</div>';return;}
+  list.innerHTML=versions.map(v=>{
+    const when=new Date(v.publishedAt).toLocaleString();
+    const activeBadge=v.active?'<span class="ota-badge active">Active</span>':'';
+    const promoteBtn=v.active?'':`<button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="promoteOta('${'$'}{v.version}')">Promote</button>`;
+    return `<div class="ota-row">
+      <div>
+        <div class="ota-version"><code>${'$'}{esc(v.version)}</code> ${'$'}{activeBadge}</div>
+        <div class="ota-when">${'$'}{esc(when)} · ${'$'}{v.locales.length} locale${'$'}{v.locales.length!==1?'s':''}</div>
+      </div>
+      <div>${'$'}{promoteBtn}</div>
+    </div>`;
+  }).join('');
+}
+async function promoteOta(version){
+  if(!otaProjectId)return;
+  const res=await api('/projects/'+otaProjectId+'/versions/'+encodeURIComponent(version)+'/promote',{method:'POST'});
+  if(!res)return;
+  if(res.ok){toast('Promoted to v'+version.substring(0,8));await loadOtaVersions();}
+  else{const err=await res.json().catch(()=>({}));toast(err.error||'Promote failed','error');}
+}
+async function rollbackOta(){
+  if(!otaProjectId)return;
+  const res=await api('/projects/'+otaProjectId+'/rollback',{method:'POST'});
+  if(!res)return;
+  if(res.ok){const data=await res.json();toast('Rolled back to v'+(data.bundleVersion||'').substring(0,8));await loadOtaVersions();}
+  else{const err=await res.json().catch(()=>({}));toast(err.error||'Rollback failed','error');}
 }
 
 // ── Glossary ───────────────────────────────────────────────────────────────────
@@ -2845,6 +2904,30 @@ private fun HTML.projectsApp() {
                             }
                         }
                     }
+                    div("form-row feature-toggle-row") {
+                        div("feature-toggle-header") {
+                            label("feature-toggle-label") {
+                                input { type = InputType.checkBox; id = "edit-ota-enabled" }
+                                span("feature-toggle-track") {}
+                            }
+                            div {
+                                p("feature-toggle-name") { +"Instant OTA updates" }
+                                p("feature-toggle-hint") { +"Publish translation bundles to the CDN so apps can fetch fixes without a new release. Versioned with one-click rollback." }
+                            }
+                        }
+                    }
+                    div("form-row feature-toggle-row") {
+                        div("feature-toggle-header") {
+                            label("feature-toggle-label") {
+                                input { type = InputType.checkBox; id = "edit-ota-auto-promote" }
+                                span("feature-toggle-track") {}
+                            }
+                            div {
+                                p("feature-toggle-name") { +"Auto-promote new versions" }
+                                p("feature-toggle-hint") { +"When on, every successful publish goes live immediately. When off, new versions are staged for manual promotion. Requires OTA enabled." }
+                            }
+                        }
+                    }
                     div("form-row") {
                         label { +"Target languages" }
                         div("lang-picker") {
@@ -2857,6 +2940,27 @@ private fun HTML.projectsApp() {
                 div("modal-footer") {
                     button(classes = "btn btn-ghost") { attributes["onclick"] = "closeEditModal()"; +"Cancel" }
                     button(classes = "btn btn-primary") { attributes["onclick"] = "saveEdit()"; +"Save changes" }
+                }
+            }
+        }
+
+        div("modal-backdrop") {
+            id = "ota-modal"
+            div("modal card") {
+                style = "max-width:680px;width:100%"
+                div("modal-header") {
+                    div {
+                        p("edit-modal-title") { +"OTA Versions" }
+                        p("edit-modal-repo") { id = "ota-modal-name" }
+                    }
+                    button(classes = "modal-close") { attributes["onclick"] = "closeOtaModal()"; unsafe { +"&#10005;" } }
+                }
+                div("modal-body") {
+                    div { id = "ota-versions-list"; style = "max-height:420px;overflow-y:auto" }
+                }
+                div("modal-footer") {
+                    button(classes = "btn btn-ghost") { attributes["onclick"] = "closeOtaModal()"; +"Close" }
+                    button(classes = "btn btn-primary") { id = "ota-rollback-btn"; attributes["onclick"] = "rollbackOta()"; +"Roll back to previous" }
                 }
             }
         }

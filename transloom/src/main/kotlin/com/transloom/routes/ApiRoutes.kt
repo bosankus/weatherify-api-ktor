@@ -302,7 +302,9 @@ fun Route.configureApiRoutes(
                     sourceFilePaths = body.sourceFilePaths?.filter { it.isNotBlank() }?.ifEmpty { null },
                     targets = body.targets,
                     culturalSensitivityEnabled = body.culturalSensitivityEnabled,
-                    autoApproveEnabled = body.autoApproveEnabled
+                    autoApproveEnabled = body.autoApproveEnabled,
+                    otaEnabled = body.otaEnabled,
+                    autoPromote = body.autoPromote
                 )
 
                 val updated = projectRepository.findById(projectId)
@@ -326,6 +328,8 @@ fun Route.configureApiRoutes(
                         culturalSensitivityEnabled = updated.culturalSensitivityEnabled,
                         autoApproveEnabled = updated.autoApproveEnabled,
                         sharedMemoryOptIn = updated.sharedMemoryOptIn,
+                        otaEnabled = updated.otaEnabled,
+                        autoPromote = updated.autoPromote,
                         webhookVerifiedAt = updated.webhookVerifiedAt?.toString()
                     )
                 )
@@ -356,6 +360,8 @@ fun Route.configureApiRoutes(
                         culturalSensitivityEnabled = project.culturalSensitivityEnabled,
                         autoApproveEnabled = project.autoApproveEnabled,
                         sharedMemoryOptIn = project.sharedMemoryOptIn,
+                        otaEnabled = project.otaEnabled,
+                        autoPromote = project.autoPromote,
                         webhookVerifiedAt = project.webhookVerifiedAt?.toString()
                     )
                 )
@@ -545,6 +551,61 @@ fun Route.configureApiRoutes(
 
                 translationRepository.reject(translationId, body.reason)
                 call.respond(HttpStatusCode.OK, mapOf("status" to "rejected", "id" to translationId))
+            }
+
+            post("/{id}/hotfix") {
+                val userId = call.userId()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+                val translationId = call.parameters["id"]
+                    ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid translation id"))
+
+                val body = runCatching { call.receive<HotfixBody>() }.getOrElse {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("newText is required"))
+                }
+                if (body.newText.isBlank()) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("newText must not be empty"))
+                }
+
+                val translation = translationRepository.getTranslation(translationId)
+                    ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
+                val project = projectRepository.findById(translation.projectId)
+                if (project == null || project.ownerId != userId) {
+                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
+                }
+                if (!project.otaEnabled) {
+                    return@post call.respond(HttpStatusCode.Conflict, ApiError("Enable OTA for this project before hotfixing translations"))
+                }
+                val publishSvc = cdnPublishService
+                    ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiError("CDN publish service not available"))
+
+                val updated = translationRepository.hotfix(translationId, body.newText)
+                if (!updated) {
+                    return@post call.respond(HttpStatusCode.InternalServerError, ApiError("Hotfix update failed"))
+                }
+
+                val receipt = runCatching { publishSvc.publish(project.id, promote = project.autoPromote) }
+                    .getOrElse { e ->
+                        apiLog.error("Hotfix publish failed for project={}: {}", project.id, e.message)
+                        return@post call.respond(
+                            HttpStatusCode.OK,
+                            HotfixResponse(id = translationId, translatedText = body.newText, publish = null)
+                        )
+                    }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    HotfixResponse(
+                        id = translationId,
+                        translatedText = body.newText,
+                        publish = PublishReceiptInline(
+                            bundleVersion = receipt.bundleVersion,
+                            locales = receipt.locales,
+                            promoted = receipt.promoted,
+                            skipped = receipt.skipped
+                        )
+                    )
+                )
             }
 
             post("/{id}/lock") {

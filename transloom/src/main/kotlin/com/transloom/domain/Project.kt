@@ -21,7 +21,11 @@ data class Project(
     /** Timestamp of the last successful webhook verification. Null means never verified. */
     val webhookVerifiedAt: Instant? = null,
     /** SHA-256 of all source file contents combined after the last fully successful pipeline run. */
-    val lastSourceFileHash: String? = null
+    val lastSourceFileHash: String? = null,
+    /** When true, pipeline publishes translation bundles to the CDN (OTA) at the end of each run. */
+    val otaEnabled: Boolean = false,
+    /** When true, a successful publish is auto-promoted to the active version. When false, devs must promote manually. */
+    val autoPromote: Boolean = true
 )
 
 @Serializable
@@ -42,5 +46,7 @@ data class CreateProjectInput(
     val targets: List<TargetConfig>,
     val culturalSensitivityEnabled: Boolean = false,
     val autoApproveEnabled: Boolean = false,
-    val sharedMemoryOptIn: Boolean = false
+    val sharedMemoryOptIn: Boolean = false,
+    val otaEnabled: Boolean = false,
+    val autoPromote: Boolean = true
 )

@@ -191,6 +191,21 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         return result.modifiedCount > 0
     }
 
+    override suspend fun hotfix(translationId: String, newText: String): Boolean {
+        if (newText.isBlank()) return false
+        val now = System.currentTimeMillis()
+        val result = translationsCol.updateOne(
+            eq("_id", translationId),
+            Updates.combine(
+                Updates.set("translatedText", newText),
+                Updates.set("status", "auto"),
+                Updates.unset("blockReason"),
+                Updates.set("updatedAt", now)
+            )
+        )
+        return result.modifiedCount > 0
+    }
+
     override suspend fun approveMany(translationIds: List<String>): Int {
         if (translationIds.isEmpty()) return 0
         val now = System.currentTimeMillis()

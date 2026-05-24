@@ -25,7 +25,9 @@ interface ProjectRepository {
         sourceFilePaths: List<String>? = null,
         targets: List<TargetConfig>? = null,
         culturalSensitivityEnabled: Boolean? = null,
-        autoApproveEnabled: Boolean? = null
+        autoApproveEnabled: Boolean? = null,
+        otaEnabled: Boolean? = null,
+        autoPromote: Boolean? = null
     ): Boolean
 
     suspend fun delete(projectId: String)

@@ -38,6 +38,12 @@ interface TranslationRepository {
     /** Bulk-approve a list of review-status translations. Returns the number actually modified. */
     suspend fun approveMany(translationIds: List<String>): Int
 
+    /**
+     * Overwrites a translation's text and sets status to "auto" so it's immediately publishable
+     * to the CDN. Used by the OTA hotfix flow — bypasses the manual-review and follow-up-PR cycle.
+     */
+    suspend fun hotfix(translationId: String, newText: String): Boolean
+
     suspend fun reject(translationId: String, reason: String): Boolean
 
     suspend fun getTranslation(translationId: String): Translation?

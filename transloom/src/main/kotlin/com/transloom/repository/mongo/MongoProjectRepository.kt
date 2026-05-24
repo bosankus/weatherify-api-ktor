@@ -46,6 +46,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             put("culturalSensitivityEnabled", input.culturalSensitivityEnabled)
             put("autoApproveEnabled", input.autoApproveEnabled)
             put("sharedMemoryOptIn", input.sharedMemoryOptIn)
+            put("otaEnabled", input.otaEnabled)
+            put("autoPromote", input.autoPromote)
             put("createdAt", now)
             put("updatedAt", now)
         }
@@ -63,7 +65,10 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             tone = input.tone,
             targets = input.targets,
             culturalSensitivityEnabled = input.culturalSensitivityEnabled,
-            sharedMemoryOptIn = input.sharedMemoryOptIn
+            autoApproveEnabled = input.autoApproveEnabled,
+            sharedMemoryOptIn = input.sharedMemoryOptIn,
+            otaEnabled = input.otaEnabled,
+            autoPromote = input.autoPromote
         )
     }
 
@@ -96,7 +101,9 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         sourceFilePaths: List<String>?,
         targets: List<TargetConfig>?,
         culturalSensitivityEnabled: Boolean?,
-        autoApproveEnabled: Boolean?
+        autoApproveEnabled: Boolean?,
+        otaEnabled: Boolean?,
+        autoPromote: Boolean?
     ): Boolean {
         val updates = mutableListOf<org.bson.conversions.Bson>()
 
@@ -108,6 +115,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         targets?.let { updates.add(Updates.set("targets", it.map { t -> t.toDocument() })) }
         culturalSensitivityEnabled?.let { updates.add(Updates.set("culturalSensitivityEnabled", it)) }
         autoApproveEnabled?.let { updates.add(Updates.set("autoApproveEnabled", it)) }
+        otaEnabled?.let { updates.add(Updates.set("otaEnabled", it)) }
+        autoPromote?.let { updates.add(Updates.set("autoPromote", it)) }
         // sharedMemoryOptIn is not exposed in the update API (only set at creation time)
 
         if (updates.isEmpty()) return false
@@ -233,7 +242,9 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             autoApproveEnabled = getBoolean("autoApproveEnabled") ?: false,
             sharedMemoryOptIn = getBoolean("sharedMemoryOptIn") ?: false,
             webhookVerifiedAt = webhookVerifiedAt,
-            lastSourceFileHash = getString("lastSourceFileHash")
+            lastSourceFileHash = getString("lastSourceFileHash"),
+            otaEnabled = getBoolean("otaEnabled") ?: false,
+            autoPromote = getBoolean("autoPromote") ?: true
         )
     }
 }

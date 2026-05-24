@@ -20,17 +20,37 @@ class CloudflareKvService(
     private val http = HttpClient(CIO)
 
     /**
+     * Reads the value stored under [key] in the configured KV namespace.
+     * Returns null if the key does not exist (404). Throws [CdnPublishException] on other errors.
+     */
+    suspend fun get(key: String): String? {
+        val url = "$CF_API_BASE/accounts/$accountId/storage/kv/namespaces/$namespaceId/values/$key"
+        val response: HttpResponse = http.get(url) {
+            header(HttpHeaders.Authorization, "Bearer $apiToken")
+        }
+        if (response.status == HttpStatusCode.NotFound) return null
+        if (!response.status.isSuccess()) {
+            val body = runCatching { response.bodyAsText() }.getOrElse { "" }
+            log.error("Cloudflare KV GET failed: key={} status={} body={}", key, response.status, body)
+            throw CdnPublishException("Cloudflare KV GET returned ${response.status} for key '$key'")
+        }
+        return response.bodyAsText()
+    }
+
+    /**
      * Writes [value] under [key] in the configured KV namespace.
      * Returns true on success. Throws [CdnPublishException] if the payload exceeds KV limits
      * or the Cloudflare API returns a non-2xx status.
+     * Pass [expirationTtl] (seconds) to set a TTL on the KV entry.
      */
-    suspend fun put(key: String, value: String, metadataJson: String? = null): Boolean {
+    suspend fun put(key: String, value: String, metadataJson: String? = null, expirationTtl: Int? = null): Boolean {
         val valueBytes = value.toByteArray(Charsets.UTF_8)
         if (valueBytes.size > KV_MAX_VALUE_BYTES) {
             throw CdnPublishException("Bundle for key '$key' is ${valueBytes.size} bytes — exceeds KV 25 MB limit")
         }
 
-        val url = "$CF_API_BASE/accounts/$accountId/storage/kv/namespaces/$namespaceId/values/$key"
+        val ttlSuffix = if (expirationTtl != null) "?expiration_ttl=$expirationTtl" else ""
+        val url = "$CF_API_BASE/accounts/$accountId/storage/kv/namespaces/$namespaceId/values/$key$ttlSuffix"
 
         val response: HttpResponse = if (metadataJson != null) {
             http.put(url) {

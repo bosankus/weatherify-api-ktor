@@ -278,23 +278,30 @@ class TranslationPipeline(
             eventBus.finishRun(userId, runId, prUrl = pr.prUrl, prBranch = pr.branchName, surfaceSkipped = surfaceKeys.size)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             log.info("Translation PR created: {}", pr.prUrl)
-            runCatching { runCdnPublish(userId, runId, project.id) }
-                .onFailure { log.warn("CDN publish failed after PR for project={}: {}", project.id, it.message) }
+            maybePublishCdn(project, userId, runId)
         } else {
             eventBus.stepSkipped(userId, runId, "CREATING_PR", "No translatable strings approved")
             eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
-            runCatching { runCdnPublish(userId, runId, project.id) }
-                .onFailure { log.warn("CDN publish failed (no-PR path) for project={}: {}", project.id, it.message) }
+            maybePublishCdn(project, userId, runId)
         }
 
         val total = translatedCounts.values.sum()
         if (total > 0) billingService.recordUsage(project.ownerId, total)
     }
 
-    private suspend fun runCdnPublish(userId: String, runId: String, projectId: String) {
+    private suspend fun maybePublishCdn(project: Project, userId: String, runId: String) {
+        if (!project.otaEnabled) {
+            eventBus.stepSkipped(userId, runId, "CDN_PUBLISH", "OTA disabled for project")
+            return
+        }
+        runCatching { runCdnPublish(userId, runId, project.id, project.autoPromote) }
+            .onFailure { log.warn("CDN publish failed for project={}: {}", project.id, it.message) }
+    }
+
+    private suspend fun runCdnPublish(userId: String, runId: String, projectId: String, promote: Boolean) {
         eventBus.stepRunning(userId, runId, "CDN_PUBLISH", "Compiling bundles…")
-        val receipt = cdnPublishService.publish(projectId)
+        val receipt = cdnPublishService.publish(projectId, promote = promote)
         if (receipt.skipped) {
             val reason = when (receipt.skipReason) {
                 "bundle_unchanged" -> "Bundle unchanged — already live"
@@ -303,9 +310,10 @@ class TranslationPipeline(
             }
             eventBus.stepSkipped(userId, runId, "CDN_PUBLISH", reason)
         } else {
-            val detail = "${receipt.locales.size} locale${if (receipt.locales.size != 1) "s" else ""} live on edge"
+            val promotedNote = if (!promote) " (staged, not promoted)" else ""
+            val detail = "${receipt.locales.size} locale${if (receipt.locales.size != 1) "s" else ""} live on edge$promotedNote"
             eventBus.stepDone(userId, runId, "CDN_PUBLISH", detail)
-            eventBus.emitCdnReady(userId, runId, receipt.bundleVersion, receipt.locales)
+            if (promote) eventBus.emitCdnReady(userId, runId, receipt.bundleVersion, receipt.locales)
         }
         log.info("CDN publish done: project={} locales={} version={}", projectId, receipt.locales, receipt.bundleVersion)
     }

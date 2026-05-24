@@ -57,6 +57,24 @@ data class RejectBody(val reason: String)
 data class ApproveBody(val editedText: String? = null)
 
 @Serializable
+data class HotfixBody(val newText: String)
+
+@Serializable
+data class HotfixResponse(
+    val id: String,
+    val translatedText: String,
+    val publish: PublishReceiptInline?
+)
+
+@Serializable
+data class PublishReceiptInline(
+    val bundleVersion: String,
+    val locales: List<String>,
+    val promoted: Boolean,
+    val skipped: Boolean = false
+)
+
+@Serializable
 data class GlossaryEntryBody(
     val languageCode: String,
     val sourceTerm: String,
@@ -80,7 +98,9 @@ data class UpdateProjectBody(
     val sourceFilePaths: List<String>? = null,
     val targets: List<TargetConfig>? = null,
     val culturalSensitivityEnabled: Boolean? = null,
-    val autoApproveEnabled: Boolean? = null
+    val autoApproveEnabled: Boolean? = null,
+    val otaEnabled: Boolean? = null,
+    val autoPromote: Boolean? = null
 )
 
 @Serializable
@@ -96,6 +116,8 @@ data class ProjectDetailResponse(
     val culturalSensitivityEnabled: Boolean = false,
     val autoApproveEnabled: Boolean = false,
     val sharedMemoryOptIn: Boolean = false,
+    val otaEnabled: Boolean = false,
+    val autoPromote: Boolean = true,
     /** ISO-8601 date-time of the last successful webhook verification, or null if never verified. */
     val webhookVerifiedAt: String? = null
 )

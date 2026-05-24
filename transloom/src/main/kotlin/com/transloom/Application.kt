@@ -1,63 +1,45 @@
 package com.transloom
 
+import com.androidplay.core.cache.CacheRepository
+import com.androidplay.core.di.coreInfraModule
+import com.androidplay.core.mongo.MongoIndexer
+import com.androidplay.core.queue.JobQueueRepository
+import com.androidplay.core.razorpay.RazorpayWebhookDispatcher
+import com.androidplay.core.secrets.getSecretValue
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.mongodb.kotlin.client.coroutine.MongoDatabase
+import com.transloom.di.transloomIndexes
+import com.transloom.di.transloomModule
+import com.transloom.pipeline.TranslationPipeline
+import com.transloom.pipeline.buildConfigWithGlossary
+import com.transloom.queue.TranslationJobQueue
+import com.transloom.repository.*
+import com.transloom.routes.*
+import com.transloom.services.*
 import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
-import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.netty.*
+import io.ktor.server.plugins.*
 import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.plugins.cors.routing.CORS
+import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.netty.EngineMain
-import kotlin.time.Duration.Companion.seconds
-import com.androidplay.core.di.coreInfraModule
-import com.transloom.di.transloomModule
-import com.transloom.di.transloomIndexes
-import com.androidplay.core.mongo.MongoIndexer
-import com.mongodb.kotlin.client.coroutine.MongoDatabase
+import io.ktor.server.plugins.compression.Compression
+import io.ktor.server.plugins.compression.gzip
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import kotlin.time.Duration.Companion.days
-import com.transloom.repository.ProjectRepository
-import com.transloom.repository.UserRepository
-import com.transloom.repository.TranslationRepository
-import com.transloom.repository.BillingRepository
-import com.transloom.repository.TranslationMemoryRepository
-import com.transloom.repository.UserActivityRepository
-import com.transloom.pipeline.TranslationPipeline
-import com.transloom.pipeline.buildConfigWithGlossary
-import com.transloom.repository.GlossaryRepository
-import com.transloom.queue.TranslationJobQueue
-import com.androidplay.core.razorpay.RazorpayWebhookDispatcher
-import com.transloom.routes.*
-import com.transloom.services.BillingService
-import com.transloom.services.CulturalSensitivityAnalyzer
-import com.transloom.services.GitHubService
-import com.transloom.services.RazorpayBillingService
-import com.transloom.services.SemanticChangeAnalyzer
-import com.transloom.services.TranslationService
-import com.transloom.services.UserActivityService
-import com.transloom.services.UserLifecycleMonitor
-import com.transloom.services.NotificationService
-import com.transloom.services.InAppNotificationService
-import com.transloom.services.CloudflareKvService
-import com.transloom.repository.NotificationRepository
-import com.transloom.repository.SharedTranslationMemoryRepository
-import com.transloom.services.CdnPublishService
-import com.transloom.repository.CdnPublishRepository
-import com.androidplay.core.secrets.getSecretValue
-import com.androidplay.core.cache.CacheRepository
-import com.androidplay.core.queue.JobQueueRepository
-import io.ktor.server.plugins.origin
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.slf4j.LoggerFactory
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
 
 private val WEBHOOK_HEAL_STALENESS = 7.days
 
@@ -128,7 +110,13 @@ fun Application.module() {
             rateLimiter(limit = 5, refillPeriod = 60.seconds)
             requestKey { clientIp(it) }
         }
+        register(RateLimitName("bundle_fetch")) {
+            rateLimiter(limit = 60, refillPeriod = 60.seconds)
+            requestKey { clientIp(it) }
+        }
     }
+
+    install(Compression) { gzip() }
 
     install(Authentication) {
         jwt("auth-jwt") {
@@ -329,6 +317,9 @@ fun Application.module() {
         }
         configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
         configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
+        rateLimit(RateLimitName("bundle_fetch")) {
+            configureCdnBundleRoutes(projectRepository, cdnPublishRepository, cdnPublishService, cfKvService)
+        }
         authenticate("auth-jwt") {
             configureApiRoutes(billingService, billingRepository, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService, cdnPublishService)
             configureDashboardRoutes(projectRepository, translationRepository, billingRepository, cdnPublishRepository)
