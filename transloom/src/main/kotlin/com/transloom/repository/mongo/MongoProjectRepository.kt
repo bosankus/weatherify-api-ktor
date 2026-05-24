@@ -124,6 +124,11 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         updates.add(Updates.set("updatedAt", Clock.System.now().toEpochMilliseconds()))
 
         val result = projects.updateOne(eq("_id", projectId), Updates.combine(updates))
+
+        // Fan out project name change to denormalized translations docs
+        if (name != null) {
+            translations.updateMany(eq("projectId", projectId), Updates.set("projectName", name))
+        }
         return result.matchedCount > 0
     }
 

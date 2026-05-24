@@ -3,12 +3,16 @@ package com.transloom.repository.mongo
 import com.mongodb.client.model.Aggregates
 import com.mongodb.client.model.Filters.and
 import com.mongodb.client.model.Filters.eq
+import com.mongodb.client.model.Filters.exists
 import com.mongodb.client.model.Filters.`in`
 import com.mongodb.client.model.Filters.ne
+import com.mongodb.client.model.Filters.or
 import com.mongodb.client.model.FindOneAndUpdateOptions
 import com.mongodb.client.model.ReturnDocument
 import com.mongodb.client.model.Sorts
 import com.mongodb.client.model.Updates
+import com.mongodb.client.model.UpdateOneModel
+import com.mongodb.client.model.WriteModel
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import com.transloom.domain.StringWithTranslations
 import com.transloom.domain.StringsPage
@@ -19,18 +23,27 @@ import com.transloom.repository.TranslationRepository
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import org.bson.Document
+import org.slf4j.LoggerFactory
 import java.util.UUID
 
 class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
 
+    private val log = LoggerFactory.getLogger(MongoTranslationRepository::class.java)
+
     private val stringsCol = db.getCollection<Document>("strings")
     private val translationsCol = db.getCollection<Document>("translations")
     private val historyCol = db.getCollection<Document>("translation_history")
+    private val projectsCol = db.getCollection<Document>("projects")
 
     override suspend fun upsertString(projectId: String, key: String, sourceText: String): String {
         val now = System.currentTimeMillis()
         val newId = UUID.randomUUID().toString()
         val filter = and(eq("projectId", projectId), eq("stringKey", key))
+
+        // Detect sourceText change so we can fan out to denormalized translations
+        val existing = stringsCol.find(filter).firstOrNull()
+        val prevSourceText = existing?.getString("sourceText")
+
         val update = Updates.combine(
             Updates.setOnInsert("_id", newId),
             Updates.setOnInsert("projectId", projectId),
@@ -43,11 +56,21 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             filter, update,
             FindOneAndUpdateOptions().upsert(true).returnDocument(ReturnDocument.AFTER)
         ) ?: error("upsertString returned null for projectId=$projectId key=$key")
-        return doc.getString("_id")
+        val stringId = doc.getString("_id")
+
+        if (prevSourceText != null && prevSourceText != sourceText) {
+            translationsCol.updateMany(eq("stringId", stringId), Updates.set("sourceText", sourceText))
+        }
+        return stringId
     }
 
     override suspend fun upsertTranslation(
         stringId: String,
+        projectId: String,
+        ownerId: String,
+        stringKey: String,
+        sourceText: String,
+        projectName: String,
         targetLanguage: String,
         targetRegion: String?,
         translatedText: String,
@@ -66,7 +89,13 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         val setUpdates = mutableListOf(
             Updates.set("translatedText", translatedText),
             Updates.set("status", status),
-            Updates.set("updatedAt", now)
+            Updates.set("updatedAt", now),
+            // Denormalized fields — kept fresh on every write
+            Updates.set("projectId", projectId),
+            Updates.set("ownerId", ownerId),
+            Updates.set("stringKey", stringKey),
+            Updates.set("sourceText", sourceText),
+            Updates.set("projectName", projectName)
         )
         if (blockReason != null) setUpdates += Updates.set("blockReason", blockReason)
         else setUpdates += Updates.unset("blockReason")
@@ -92,21 +121,18 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
 
             // Write to immutable history log — query: GET /projects/{id}/strings/{key}/history
             val translationId = before.getString("_id") ?: return
-            val stringDoc = stringsCol.find(eq("_id", stringId)).firstOrNull()
-            if (stringDoc != null) {
-                historyCol.insertOne(Document().apply {
-                    put("_id", UUID.randomUUID().toString())
-                    put("translationId", translationId)
-                    put("stringKey", stringDoc.getString("stringKey") ?: "")
-                    put("projectId", stringDoc.getString("projectId") ?: "")
-                    put("targetLanguage", targetLanguage)
-                    put("previousText", prevText)
-                    put("newText", translatedText)
-                    put("changedAt", now)
-                    put("changedBy", if (pipelineRunId != null) "pipeline" else "manual")
-                    if (pipelineRunId != null) put("pipelineRunId", pipelineRunId)
-                })
-            }
+            historyCol.insertOne(Document().apply {
+                put("_id", UUID.randomUUID().toString())
+                put("translationId", translationId)
+                put("stringKey", stringKey)
+                put("projectId", projectId)
+                put("targetLanguage", targetLanguage)
+                put("previousText", prevText)
+                put("newText", translatedText)
+                put("changedAt", now)
+                put("changedBy", if (pipelineRunId != null) "pipeline" else "manual")
+                if (pipelineRunId != null) put("pipelineRunId", pipelineRunId)
+            })
         }
     }
 
@@ -162,15 +188,18 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         language: String?,
         statusFilter: String?
     ): List<Translation> {
-        val pipeline = ownerPipeline(ownerId, extraMatch = reviewMatch(language, statusFilter)) +
-            listOf(Aggregates.skip(offset), Aggregates.limit(limit))
-        return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
+        val filter = and(eq("ownerId", ownerId), reviewMatch(language, statusFilter))
+        return translationsCol.find(filter)
+            .sort(Sorts.descending("updatedAt"))
+            .skip(offset)
+            .limit(limit)
+            .toList()
+            .map { it.toTranslation() }
     }
 
     override suspend fun countPendingReviews(ownerId: String, language: String?, statusFilter: String?): Int {
-        val pipeline = ownerPipeline(ownerId, extraMatch = reviewMatch(language, statusFilter)) +
-            listOf(Aggregates.count("total"))
-        return (translationsCol.aggregate<Document>(pipeline).firstOrNull()?.get("total") as? Number)?.toInt() ?: 0
+        val filter = and(eq("ownerId", ownerId), reviewMatch(language, statusFilter))
+        return translationsCol.countDocuments(filter).toInt()
     }
 
     private fun reviewMatch(language: String?, statusFilter: String?): org.bson.conversions.Bson {
@@ -233,19 +262,13 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
     }
 
     override suspend fun getTranslation(translationId: String): Translation? {
-        val pipeline = listOf(
-            Aggregates.match(eq("_id", translationId)),
-            Aggregates.lookup("strings", "stringId", "_id", "strDoc"),
-            Aggregates.unwind("\$strDoc"),
-            Aggregates.lookup("projects", "strDoc.projectId", "_id", "projDoc"),
-            Aggregates.unwind("\$projDoc")
-        )
-        return translationsCol.aggregate<Document>(pipeline).firstOrNull()?.toTranslation()
+        return translationsCol.find(eq("_id", translationId)).firstOrNull()?.toTranslation()
     }
 
     override suspend fun countByStatus(ownerId: String): Map<String, Int> {
         val result = mutableMapOf("auto" to 0, "review" to 0, "blocked" to 0)
-        val pipeline = ownerPipeline(ownerId) + listOf(
+        val pipeline = listOf(
+            Aggregates.match(eq("ownerId", ownerId)),
             Aggregates.group("\$status", com.mongodb.client.model.Accumulators.sum("count", 1))
         )
         translationsCol.aggregate<Document>(pipeline).toList().forEach { doc ->
@@ -259,15 +282,9 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
     }
 
     override suspend fun getApprovedForProject(projectId: String): List<Translation> {
-        val pipeline = listOf(
-            Aggregates.match(eq("status", "approved")),
-            Aggregates.lookup("strings", "stringId", "_id", "strDoc"),
-            Aggregates.unwind("\$strDoc"),
-            Aggregates.match(eq("strDoc.projectId", projectId)),
-            Aggregates.lookup("projects", "strDoc.projectId", "_id", "projDoc"),
-            Aggregates.unwind("\$projDoc")
-        )
-        return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
+        return translationsCol.find(and(eq("projectId", projectId), eq("status", "approved")))
+            .toList()
+            .map { it.toTranslation() }
     }
 
     override suspend fun claimApproved(translationIds: List<String>): Int {
@@ -283,42 +300,26 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
     }
 
     override suspend fun totalStringsTranslated(ownerId: String): Int {
-        val pipeline = ownerPipeline(ownerId, extraMatch = ne("status", "blocked")) + listOf(
-            Aggregates.count("total")
-        )
-        val doc = translationsCol.aggregate<Document>(pipeline).firstOrNull()
-        return (doc?.get("total") as? Number)?.toInt() ?: 0
+        return translationsCol.countDocuments(and(eq("ownerId", ownerId), ne("status", "blocked"))).toInt()
     }
 
     override suspend fun activeLanguageCount(ownerId: String): Int {
-        val pipeline = ownerPipeline(ownerId) + listOf(
+        val pipeline = listOf(
+            Aggregates.match(eq("ownerId", ownerId)),
             Aggregates.group("\$targetLanguage")
         )
         return translationsCol.aggregate<Document>(pipeline).toList().size
     }
 
     override suspend fun getPublishableTranslations(projectId: String): List<Translation> {
-        val pipeline = listOf(
-            Aggregates.match(`in`("status", listOf("auto", "approved"))),
-            Aggregates.lookup("strings", "stringId", "_id", "strDoc"),
-            Aggregates.unwind("\$strDoc"),
-            Aggregates.match(eq("strDoc.projectId", projectId)),
-            Aggregates.lookup("projects", "strDoc.projectId", "_id", "projDoc"),
-            Aggregates.unwind("\$projDoc")
-        )
-        return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
+        return translationsCol.find(
+            and(eq("projectId", projectId), `in`("status", listOf("auto", "approved")))
+        ).toList().map { it.toTranslation() }
     }
 
     override suspend fun listByIds(ids: List<String>): List<Translation> {
         if (ids.isEmpty()) return emptyList()
-        val pipeline = listOf(
-            Aggregates.match(`in`("_id", ids)),
-            Aggregates.lookup("strings", "stringId", "_id", "strDoc"),
-            Aggregates.unwind("\$strDoc"),
-            Aggregates.lookup("projects", "strDoc.projectId", "_id", "projDoc"),
-            Aggregates.unwind("\$projDoc")
-        )
-        return translationsCol.aggregate<Document>(pipeline).toList().map { it.toTranslation() }
+        return translationsCol.find(`in`("_id", ids)).toList().map { it.toTranslation() }
     }
 
     override suspend fun lock(translationId: String, lockedBy: String): Boolean {
@@ -376,41 +377,64 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         )
     }
 
-    private fun ownerPipeline(
-        ownerId: String,
-        extraMatch: org.bson.conversions.Bson? = null
-    ): List<org.bson.conversions.Bson> {
-        val stages = mutableListOf<org.bson.conversions.Bson>()
-        if (extraMatch != null) stages += Aggregates.match(extraMatch)
-        stages += Aggregates.lookup("strings", "stringId", "_id", "strDoc")
-        stages += Aggregates.unwind("\$strDoc")
-        stages += Aggregates.lookup("projects", "strDoc.projectId", "_id", "projDoc")
-        stages += Aggregates.unwind("\$projDoc")
-        stages += Aggregates.match(eq("projDoc.ownerId", ownerId))
-        stages += Aggregates.sort(Sorts.descending("updatedAt"))
-        return stages
+    // ── Backfill ──────────────────────────────────────────────────────────────
+    // Populates denormalized fields on translations docs created before the
+    // denormalization landed. Idempotent: only touches docs missing `projectName`
+    // (the sentinel field, written on every fresh upsert).
+    override suspend fun backfillDenormalizedFields(): Int {
+        val missing = translationsCol.find(or(exists("projectName", false), eq("projectName", null)))
+            .toList()
+        if (missing.isEmpty()) return 0
+
+        // Build lookup tables in two batched queries — much cheaper than per-doc joins
+        val stringIds = missing.mapNotNull { it.getString("stringId") }.distinct()
+        if (stringIds.isEmpty()) return 0
+        val stringDocs = stringsCol.find(`in`("_id", stringIds)).toList()
+        val stringById = stringDocs.associateBy { it.getString("_id") }
+
+        val projectIds = stringDocs.mapNotNull { it.getString("projectId") }.distinct()
+        val projectDocs = if (projectIds.isEmpty()) emptyList()
+                          else projectsCol.find(`in`("_id", projectIds)).toList()
+        val projectById = projectDocs.associateBy { it.getString("_id") }
+
+        val ops: List<WriteModel<Document>> = missing.mapNotNull { tDoc ->
+            val sid = tDoc.getString("stringId") ?: return@mapNotNull null
+            val s = stringById[sid] ?: return@mapNotNull null
+            val pid = s.getString("projectId") ?: return@mapNotNull null
+            val p = projectById[pid]
+            UpdateOneModel<Document>(
+                eq("_id", tDoc.getString("_id")),
+                Updates.combine(
+                    Updates.set("projectId", pid),
+                    Updates.set("ownerId", p?.getString("ownerId") ?: ""),
+                    Updates.set("stringKey", s.getString("stringKey") ?: ""),
+                    Updates.set("sourceText", s.getString("sourceText") ?: ""),
+                    Updates.set("projectName", p?.getString("name") ?: "")
+                )
+            )
+        }
+        if (ops.isEmpty()) return 0
+        val result = translationsCol.bulkWrite(ops)
+        log.info("Backfilled denormalized fields on {} translations", result.modifiedCount)
+        return result.modifiedCount
     }
 
-    private fun Document.toTranslation(): Translation {
-        val strDoc = get("strDoc", Document::class.java)
-        val projDoc = get("projDoc", Document::class.java)
-        return Translation(
-            id = getString("_id"),
-            stringId = getString("stringId"),
-            stringKey = strDoc?.getString("stringKey") ?: "",
-            sourceText = strDoc?.getString("sourceText") ?: "",
-            targetLanguage = getString("targetLanguage"),
-            targetRegion = getString("targetRegion"),
-            translatedText = getString("translatedText") ?: "",
-            status = getString("status") ?: "auto",
-            blockReason = getString("blockReason"),
-            projectId = strDoc?.getString("projectId") ?: "",
-            projectName = projDoc?.getString("name") ?: "",
-            pipelineRunId = getString("pipelineRunId"),
-            commitShort = getString("commitShort"),
-            previousTranslatedText = getString("previousTranslatedText"),
-            lockedAt = (get("lockedAt") as? Number)?.toLong(),
-            lockedBy = getString("lockedBy")
-        )
-    }
+    private fun Document.toTranslation(): Translation = Translation(
+        id = getString("_id"),
+        stringId = getString("stringId"),
+        stringKey = getString("stringKey") ?: "",
+        sourceText = getString("sourceText") ?: "",
+        targetLanguage = getString("targetLanguage"),
+        targetRegion = getString("targetRegion"),
+        translatedText = getString("translatedText") ?: "",
+        status = getString("status") ?: "auto",
+        blockReason = getString("blockReason"),
+        projectId = getString("projectId") ?: "",
+        projectName = getString("projectName") ?: "",
+        pipelineRunId = getString("pipelineRunId"),
+        commitShort = getString("commitShort"),
+        previousTranslatedText = getString("previousTranslatedText"),
+        lockedAt = (get("lockedAt") as? Number)?.toLong(),
+        lockedBy = getString("lockedBy")
+    )
 }

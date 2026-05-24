@@ -45,6 +45,27 @@ fun Application.configureHTTP() {
                     ?: call.request.local.remoteHost
             }
         }
+        register(RateLimitName("github_webhook")) {
+            rateLimiter(limit = 10, refillPeriod = 1.minutes)
+            requestKey { call ->
+                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+                    ?: call.request.local.remoteHost
+            }
+        }
+        register(RateLimitName("razorpay_webhook")) {
+            rateLimiter(limit = 30, refillPeriod = 1.minutes)
+            requestKey { call ->
+                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+                    ?: call.request.local.remoteHost
+            }
+        }
+        register(RateLimitName("bundle_fetch")) {
+            rateLimiter(limit = 60, refillPeriod = 1.minutes)
+            requestKey { call ->
+                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+                    ?: call.request.local.remoteHost
+            }
+        }
     }
 
     install(Compression) {

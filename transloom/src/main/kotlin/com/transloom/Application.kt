@@ -15,7 +15,6 @@ import com.transloom.pipeline.TranslationPipeline
 import com.transloom.pipeline.buildConfigWithGlossary
 import com.transloom.queue.TranslationJobQueue
 import com.transloom.repository.*
-import com.transloom.routes.*
 import com.transloom.services.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -28,7 +27,6 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.response.*
-import io.ktor.server.routing.*
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.compression.gzip
 import kotlinx.coroutines.delay
@@ -142,6 +140,14 @@ fun Application.module() {
     val userRepository: UserRepository by inject()
     val glossaryRepository: GlossaryRepository by inject()
     val translationRepository: TranslationRepository by inject()
+    // One-time backfill of denormalized fields (projectId, ownerId, stringKey, sourceText, projectName)
+    // on legacy translations docs. Idempotent — only touches docs missing the sentinel projectName field.
+    // Runs in background so startup latency is unaffected; reads against legacy docs return empty
+    // strings for the denormalized fields until the backfill completes.
+    launch {
+        runCatching { translationRepository.backfillDenormalizedFields() }
+            .onFailure { log.warn("Translation denormalization backfill failed: {}", it.message) }
+    }
     val billingRepository: BillingRepository by inject()
     val memoryRepository: TranslationMemoryRepository by inject()
     val userActivityRepository: UserActivityRepository by inject()
@@ -304,30 +310,23 @@ fun Application.module() {
         log.info("All resources closed on application stop")
     }
 
-    routing {
-        configurePortalRoutes(jwtSecret)
-        rateLimit(RateLimitName("github_webhook")) {
-            configureWebhookRoutes(jobQueue, projectRepository, billingRepository)
-        }
-        rateLimit(RateLimitName("auth")) {
-            configureAuthRoutes(jwtSecret, userRepository, userActivityService)
-        }
-        rateLimit(RateLimitName("razorpay_webhook")) {
-            configureRazorpayWebhook(webhookDispatcher)
-        }
-        configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
-        configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
-        rateLimit(RateLimitName("bundle_fetch")) {
-            configureCdnBundleRoutes(projectRepository, cdnPublishRepository, cdnPublishService, cfKvService)
-        }
-        authenticate("auth-jwt") {
-            configureApiRoutes(billingService, billingRepository, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService, cdnPublishService)
-            configureDashboardRoutes(projectRepository, translationRepository, billingRepository, cdnPublishRepository)
-            configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
-            configureInsightsRoutes(userActivityService)
-            configureOnboardingRoutes(userRepository, billingRepository, projectRepository, translationRepository)
-            configureCdnPublishRoute(projectRepository, cdnPublishService)
-            configureNotificationRoutes(notificationRepository)
-        }
-    }
+    installTransloomRoutes(TransloomDeps(
+        jwtSecret = jwtSecret,
+        jobQueue = jobQueue,
+        webhookDispatcher = webhookDispatcher,
+        projectRepository = projectRepository,
+        userRepository = userRepository,
+        billingRepository = billingRepository,
+        translationRepository = translationRepository,
+        glossaryRepository = glossaryRepository,
+        notificationRepository = notificationRepository,
+        cdnPublishRepository = cdnPublishRepository,
+        billingService = billingService,
+        razorpayService = razorpayService,
+        githubService = githubService,
+        userActivityService = userActivityService,
+        pipelineEventBus = pipelineEventBus,
+        cdnPublishService = cdnPublishService,
+        cfKvService = cfKvService,
+    ))
 }

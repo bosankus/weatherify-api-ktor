@@ -9,6 +9,11 @@ interface TranslationRepository {
 
     suspend fun upsertTranslation(
         stringId: String,
+        projectId: String,
+        ownerId: String,
+        stringKey: String,
+        sourceText: String,
+        projectName: String,
         targetLanguage: String,
         targetRegion: String?,
         translatedText: String,
@@ -17,6 +22,9 @@ interface TranslationRepository {
         pipelineRunId: String? = null,
         commitShort: String? = null
     )
+
+    /** Backfills denormalized fields (stringKey, sourceText, projectId, ownerId, projectName) on translations docs that are missing them. Safe to run repeatedly. */
+    suspend fun backfillDenormalizedFields(): Int
 
     suspend fun listStringsForProject(projectId: String, limit: Int = 100, offset: Int = 0): StringsPage
 

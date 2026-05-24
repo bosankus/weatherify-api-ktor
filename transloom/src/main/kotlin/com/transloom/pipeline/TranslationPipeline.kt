@@ -59,8 +59,8 @@ class TranslationPipeline(
     private val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer,
     private val cdnPublishService: com.transloom.services.CdnPublishService,
     private val sharedMemoryRepository: SharedTranslationMemoryRepository? = null,
-    /** Max concurrent Gemini batch calls per translation run. Default 4 matches Gemini Flash burst limits. */
-    private val translationConcurrency: Int = 4
+    /** Max concurrent Gemini batch calls per translation run. */
+    private val translationConcurrency: Int = 8
 ) {
     private val log = LoggerFactory.getLogger(TranslationPipeline::class.java)
 
@@ -377,7 +377,7 @@ class TranslationPipeline(
                     for ((quantity, sourceText) in forms) {
                         val key = "$baseName.$quantity"
                         val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                        translationRepository.upsertTranslation(stringId, target.code, target.region, "", "blocked", "Plural translation failed", pipelineRunId = runId, commitShort = commitShort)
+                        translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, "", "blocked", "Plural translation failed", pipelineRunId = runId, commitShort = commitShort)
                     }
                 } else {
                     // Store all translated forms — including any new quantities Gemini generated
@@ -385,7 +385,7 @@ class TranslationPipeline(
                         val key = "$baseName.$quantity"
                         val sourceText = forms[quantity] ?: forms["other"] ?: forms.values.firstOrNull() ?: ""
                         val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                        translationRepository.upsertTranslation(stringId, target.code, target.region, translatedText, "auto", pipelineRunId = runId, commitShort = commitShort)
+                        translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, translatedText, "auto", pipelineRunId = runId, commitShort = commitShort)
                         allResults += StringResult(key, translatedText, "auto")
                         if (project.sharedMemoryOptIn) {
                             runCatching { sharedMemoryRepository?.contribute(sourceText, target.name, translatedText) }
@@ -419,14 +419,14 @@ class TranslationPipeline(
                                 outcome == null -> {
                                     log.warn("Missing batch result for key='{}' lang={}", key, target.code)
                                     val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, target.code, target.region, "", "blocked", "Missing from batch", pipelineRunId = runId, commitShort = commitShort)
+                                    translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, "", "blocked", "Missing from batch", pipelineRunId = runId, commitShort = commitShort)
                                     null
                                 }
                                 outcome.isSuccess -> {
                                     val r = outcome.getOrThrow()
                                     val status = if (r.flags.isNotEmpty()) "review" else "auto"
                                     val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, status, pipelineRunId = runId, commitShort = commitShort)
+                                    translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, r.text, status, pipelineRunId = runId, commitShort = commitShort)
                                     if (status != "auto") log.info("'{}' → {} flagged: {}", key, target.code, r.flags)
                                     // Contribute auto-approved strings to shared pool if opted in
                                     if (status == "auto" && project.sharedMemoryOptIn && sharedMemoryRepository != null) {
@@ -438,7 +438,7 @@ class TranslationPipeline(
                                     val error = outcome.exceptionOrNull()?.message
                                     log.warn("Failed key='{}' lang={}: {}", key, target.code, error)
                                     val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, target.code, target.region, "", "blocked", error, pipelineRunId = runId, commitShort = commitShort)
+                                    translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, "", "blocked", error, pipelineRunId = runId, commitShort = commitShort)
                                     null
                                 }
                             }
@@ -469,7 +469,7 @@ class TranslationPipeline(
                 val srcText = addedStrings[r.key] ?: return@map r
                 val notes = "Cultural: ${analysis.issues.joinToString("; ")}"
                 val stringId = translationRepository.upsertString(project.id, r.key, srcText)
-                translationRepository.upsertTranslation(stringId, target.code, target.region, r.text, "review", notes, pipelineRunId = runId, commitShort = commitShort)
+                translationRepository.upsertTranslation(stringId, project.id, project.ownerId, r.key, srcText, project.name, target.code, target.region, r.text, "review", notes, pipelineRunId = runId, commitShort = commitShort)
                 log.info("Cultural flag key='{}' lang={}: {}", r.key, target.code, analysis.issues)
                 StringResult(r.key, r.text, "review")
             }
@@ -497,7 +497,7 @@ class TranslationPipeline(
     }
 
     companion object {
-        private const val BATCH_SIZE = 10
+        private const val BATCH_SIZE = 25
 
         private fun sha256(content: String): String {
             val digest = MessageDigest.getInstance("SHA-256")

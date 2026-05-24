@@ -5,14 +5,15 @@ import com.androidplay.core.mongo.MongoIndexer
 import com.androidplay.core.queue.JobQueueRepository
 import com.androidplay.core.razorpay.RazorpayWebhookDispatcher
 import com.androidplay.core.secrets.getSecretValue
+import com.transloom.TransloomDeps
 import com.transloom.di.transloomIndexes
+import com.transloom.installTransloomRoutes
 import com.transloom.pipeline.TranslationPipeline
 import com.transloom.pipeline.buildConfigWithGlossary
 import com.transloom.queue.TranslationJobQueue
 import com.transloom.repository.CdnPublishRepository
 import com.transloom.repository.GlossaryRepository
 import com.transloom.repository.mongo.*
-import com.transloom.routes.*
 import com.transloom.services.CdnPublishService
 import com.transloom.services.CloudflareKvService
 import com.transloom.repository.mongo.MongoCulturalAnalysisCacheRepository
@@ -28,8 +29,6 @@ import com.transloom.services.UserActivityService
 import com.transloom.services.UserLifecycleMonitor
 import domain.service.RefundService
 import io.ktor.server.application.*
-import io.ktor.server.auth.*
-import io.ktor.server.routing.*
 import kotlinx.coroutines.runBlocking
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
@@ -71,6 +70,7 @@ fun Application.configureTransloom(refundService: RefundService) {
     val semanticChangeAnalyzer = SemanticChangeAnalyzer(MongoSemanticChangeCacheRepository(db))
     val culturalSensitivityAnalyzer = CulturalSensitivityAnalyzer(MongoCulturalAnalysisCacheRepository(db))
     val cdnPublishRepository: CdnPublishRepository = MongoCdnPublishRepository(db)
+    val notificationRepository = MongoNotificationRepository(db)
     val cfKvService = CloudflareKvService(
         accountId = getSecretValue("cloudflare-account-id"),
         namespaceId = getSecretValue("cloudflare-kv-namespace-id"),
@@ -122,19 +122,23 @@ fun Application.configureTransloom(refundService: RefundService) {
         log.info("Transloom resources closed")
     }
 
-    routing {
-        configurePortalRoutes(jwtSecret)
-        configureWebhookRoutes(jobQueue, projectRepository, billingRepository)
-        configureAuthRoutes(jwtSecret, userRepository, userActivityService)
-        configureRazorpayWebhook(webhookDispatcher)
-        configurePublicCheckoutRoute(razorpayService, userRepository, billingRepository, jwtSecret, userActivityService)
-        configureBillingReceiptRoute(jwtSecret, billingRepository, userRepository, userActivityService)
-        authenticate("auth-jwt") {
-            configureApiRoutes(billingService, billingRepository, githubService, projectRepository, userRepository, translationRepository, pipelineEventBus, jobQueue, glossaryRepository, userActivityService)
-            configureDashboardRoutes(projectRepository, translationRepository, billingRepository, cdnPublishRepository)
-            configureBillingRoutes(razorpayService, billingRepository, userRepository, jwtSecret, userActivityService)
-            configureInsightsRoutes(userActivityService)
-            configureOnboardingRoutes(userRepository, billingRepository, projectRepository, translationRepository)
-        }
-    }
+    installTransloomRoutes(TransloomDeps(
+        jwtSecret = jwtSecret,
+        jobQueue = jobQueue,
+        webhookDispatcher = webhookDispatcher,
+        projectRepository = projectRepository,
+        userRepository = userRepository,
+        billingRepository = billingRepository,
+        translationRepository = translationRepository,
+        glossaryRepository = glossaryRepository,
+        notificationRepository = notificationRepository,
+        cdnPublishRepository = cdnPublishRepository,
+        billingService = billingService,
+        razorpayService = razorpayService,
+        githubService = githubService,
+        userActivityService = userActivityService,
+        pipelineEventBus = pipelineEventBus,
+        cdnPublishService = cdnPublishService,
+        cfKvService = cfKvService,
+    ))
 }
