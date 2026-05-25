@@ -44,7 +44,9 @@ data class ReviewItemResponse(
     val projectId: String,
     val projectName: String,
     val pipelineRunId: String? = null,
-    val commitShort: String? = null
+    val commitShort: String? = null,
+    /** True when the owning project has OTA publish enabled — gates the Hotfix action in the review portal. */
+    val projectOtaEnabled: Boolean = false
 )
 
 @Serializable

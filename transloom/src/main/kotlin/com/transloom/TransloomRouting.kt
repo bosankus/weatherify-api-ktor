@@ -23,6 +23,7 @@ import com.transloom.routes.configurePortalRoutes
 import com.transloom.routes.configurePublicCheckoutRoute
 import com.transloom.routes.configureRazorpayWebhook
 import com.transloom.routes.configureWebhookRoutes
+import io.ktor.server.http.content.staticResources
 import com.transloom.services.BillingService
 import com.transloom.services.CdnPublishService
 import com.transloom.services.CloudflareKvService
@@ -64,6 +65,9 @@ class TransloomDeps(
  */
 fun Application.installTransloomRoutes(d: TransloomDeps) {
     routing {
+        // Serve portal CSS/JS bundles from src/main/resources/static at /transloom/static/*.
+        // Cached aggressively in prod via the etag plugin (default Ktor behavior).
+        staticResources("/transloom/static", "static")
         configurePortalRoutes(d.jwtSecret)
         rateLimit(RateLimitName("github_webhook")) {
             configureWebhookRoutes(d.jobQueue, d.projectRepository, d.billingRepository)

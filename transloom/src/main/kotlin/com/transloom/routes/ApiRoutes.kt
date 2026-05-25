@@ -437,11 +437,16 @@ fun Route.configureApiRoutes(
                 val language = call.request.queryParameters["language"]?.takeIf { it.isNotBlank() }
                 val statusFilter = call.request.queryParameters["status"]?.takeIf { it.isNotBlank() }
 
-                val (items, total) = coroutineScope {
+                // Fetch items, total, and the user's project list in parallel. The project
+                // list is needed for the OTA-enabled lookup on each review item; reading it
+                // once here avoids N+1 per-translation queries.
+                val (items, total, ownedProjects) = coroutineScope {
                     val itemsDeferred = async { translationRepository.listPendingReviews(userId, limit, offset, language, statusFilter) }
                     val totalDeferred = async { translationRepository.countPendingReviews(userId, language, statusFilter) }
-                    itemsDeferred.await() to totalDeferred.await()
+                    val projectsDeferred = async { projectRepository.listForUser(userId) }
+                    Triple(itemsDeferred.await(), totalDeferred.await(), projectsDeferred.await())
                 }
+                val otaByProject: Map<String, Boolean> = ownedProjects.associate { it.id to it.otaEnabled }
                 val response = items.map { t ->
                     ReviewItemResponse(
                         id = t.id,
@@ -458,7 +463,8 @@ fun Route.configureApiRoutes(
                         projectId = t.projectId,
                         projectName = t.projectName,
                         pipelineRunId = t.pipelineRunId,
-                        commitShort = t.commitShort
+                        commitShort = t.commitShort,
+                        projectOtaEnabled = otaByProject[t.projectId] ?: false
                     )
                 }
                 call.respond(HttpStatusCode.OK, ReviewListResponse(response, total))
