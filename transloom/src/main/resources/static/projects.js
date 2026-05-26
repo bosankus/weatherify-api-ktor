@@ -446,6 +446,10 @@
             <button type="button" class="bl-btn primary" data-drawer-act="export" style="margin-top:10px">Download bundle</button>
           </section>
 
+          <section class="pr-section pr-locked-section" id="pr-locked-features" style="display:none">
+            <h3 class="pr-section-title">Unlock more on Solo &amp; Team</h3>
+          </section>
+
           <section class="pr-section">
             <h3 class="pr-section-title">Wire into CI</h3>
             <p class="pr-toggle-hint" style="margin:0 0 8px">Trigger a translation run from any CI step. Drop your JWT in <code>$TL_TOKEN</code>:</p>
@@ -466,6 +470,7 @@
         body.querySelector('[data-drawer-act="reinstall-webhook"]')?.addEventListener('click', e => reinstallWebhook(p.id, e.currentTarget));
         body.querySelector('[data-drawer-act="export"]')?.addEventListener('click', e => exportBundle(p.id, e.currentTarget, body));
         body.querySelector('[data-drawer-act="copy-ci"]')?.addEventListener('click', e => copyCiSnippet(e.currentTarget, body));
+        renderLockedFeatures(body);
 
         const foot = mount.querySelector('.pr-drawer-foot');
         foot.innerHTML = `
@@ -475,6 +480,50 @@
           </div>`;
         foot.querySelector('[data-drawer-act="delete"]').addEventListener('click', e => deleteProject(p, e.currentTarget));
         foot.querySelector('[data-drawer-act="sync"]').addEventListener('click', e => syncNow(p.id, e.currentTarget));
+    }
+
+    // ── Locked Pro-feature previews (free users) ─────────────────────────────
+    // Renders disabled rows that show what Solo/Team unlocks. Each row sits
+    // next to the real settings so the gap between "have" and "could have"
+    // is visible at the moment of intent, not buried on a pricing page.
+    function renderLockedFeatures(body) {
+        if (!window.tlSubscription) return;
+        window.tlSubscription().then(sub => {
+            if (!sub || sub.plan !== 'FREE') return;
+            const host = body.querySelector('#pr-locked-features');
+            if (!host) return;
+            const rows = [
+                {
+                    plan: 'Solo',
+                    title: 'Parallel locale translation',
+                    hint: 'Translate every target language in parallel instead of sequentially. Typical Solo run is 3–5× faster.',
+                },
+                {
+                    plan: 'Solo',
+                    title: 'Semantic change detection',
+                    hint: 'AI skips re-translation when a source string is rewritten without changing meaning. Saves quota and review time.',
+                },
+                {
+                    plan: 'Team',
+                    title: 'Invite reviewers & translators',
+                    hint: 'Share this project with up to 15 teammates. Each member sees the review queue, can approve/edit translations, and gets notified on blocks.',
+                },
+                {
+                    plan: 'Solo',
+                    title: 'Unlimited projects & languages',
+                    hint: 'Free is capped at 1 project / 3 languages. Solo unlocks 3 projects and all locales.',
+                },
+            ];
+            host.insertAdjacentHTML('beforeend', rows.map(r => `
+                <div class="pr-locked-row" title="Unlocks on ${esc(r.plan)}">
+                  <div class="pr-locked-info">
+                    <div class="pr-locked-title">${esc(r.title)} <span class="pr-locked-badge">${esc(r.plan)}</span></div>
+                    <div class="pr-locked-hint">${esc(r.hint)}</div>
+                  </div>
+                  <a href="/transloom/billing" class="pr-locked-cta">Upgrade</a>
+                </div>`).join(''));
+            host.style.display = '';
+        }).catch(() => {});
     }
 
     function toggleRow(field, label, hint, value) {

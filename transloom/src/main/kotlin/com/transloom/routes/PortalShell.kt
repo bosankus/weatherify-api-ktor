@@ -37,7 +37,7 @@ internal fun HTML.portalShell(
         title { +"Transloom — $pageTitle" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
-        style { unsafe { +"$SHARED_CSS$SHELL_LAYOUT_CSS$ONBOARDING_CSS" } }
+        style { unsafe { +"$SHARED_CSS$SHELL_LAYOUT_CSS$SIDEBAR_QUOTA_CSS$CONVERSION_CSS$ONBOARDING_CSS" } }
         staticStylesheets.forEach { href ->
             link(rel = "stylesheet", href = href)
         }
@@ -61,6 +61,8 @@ internal fun HTML.portalShell(
         // Loaded synchronously before NOTIFICATIONS_JS / ONBOARDING_JS because both
         // reference window.authHeaders.
         script { unsafe { +SHELL_RUNTIME_JS } }
+        script { unsafe { +BILLING_CACHE_JS } }
+        script { unsafe { +SIDEBAR_QUOTA_JS } }
         script { unsafe { +NOTIFICATIONS_JS } }
         script { unsafe { +ONBOARDING_JS } }
 
@@ -190,4 +192,92 @@ private val SHELL_RUNTIME_JS = """
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',fillUserChip);
   else fillUserChip();
 })();
+"""
+
+/**
+ * Persistent quota meter that lives in the sidebar footer on every authenticated
+ * page. Visible only when the user is on the FREE plan — paid users see nothing
+ * (no upsell noise). Color shifts at 70% (yellow) / 90% (red) of the monthly
+ * string quota so the meter creates anticipation before the user hits the wall.
+ */
+internal const val SIDEBAR_QUOTA_CSS = """
+.sb-quota{padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;display:none}
+.sb-quota.visible{display:block}
+.sb-quota-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sb-quota-label{font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px}
+.sb-quota-val{font-size:11px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.sb-quota-track{height:4px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:8px}
+.sb-quota-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .4s ease,background .2s}
+.sb-quota.warn .sb-quota-fill{background:var(--yellow)}
+.sb-quota.crit .sb-quota-fill{background:var(--red)}
+.sb-quota.crit .sb-quota-val{color:var(--red)}
+.sb-quota-cta{display:block;text-align:center;font-size:11px;font-weight:600;color:var(--accent);padding:6px 8px;border:1px solid rgba(0,229,160,.3);border-radius:5px;transition:background .15s,border-color .15s}
+.sb-quota-cta:hover{background:var(--accent-dim);border-color:var(--accent)}
+.sb-quota.crit .sb-quota-cta{color:var(--red);border-color:rgba(255,77,79,.35)}
+.sb-quota.crit .sb-quota-cta:hover{background:rgba(255,77,79,.1)}
+"""
+
+/**
+ * Per-page-load promise cache around the two billing endpoints. Lives outside
+ * SHELL_RUNTIME_JS so the dashboard page (which has its own bootstrap) can pull
+ * it in independently. Idempotent — re-including is a no-op.
+ */
+internal const val BILLING_CACHE_JS = """
+(function(){
+  if(window.tlSubscription)return;
+  function H(){var t=localStorage.getItem('transloom_token');return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
+  var _s=null,_u=null;
+  window.tlSubscription=function(f){if(f||!_s){_s=fetch('/transloom/api/billing/subscription',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _s;};
+  window.tlUsage=function(f){if(f||!_u){_u=fetch('/transloom/api/billing/usage',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _u;};
+})();
+"""
+
+internal val SIDEBAR_QUOTA_JS = """
+(function(){
+  function render(host,sub,usage){
+    if(!sub||sub.plan!=='FREE'||!usage||!usage.stringLimit){host.classList.remove('visible');return;}
+    var used=usage.stringsTranslated||0,max=usage.stringLimit,pct=Math.min(100,Math.round(used/max*100));
+    var state=pct>=90?'crit':(pct>=70?'warn':'');
+    host.className='sb-quota visible'+(state?' '+state:'');
+    var rem=Math.max(0,max-used);
+    var ctaLabel=state==='crit'?(rem===0?'Quota hit — upgrade →':'Almost out — upgrade →'):'Upgrade for more →';
+    host.innerHTML=
+      '<div class="sb-quota-row"><span class="sb-quota-label">Strings this month</span>'
+      +'<span class="sb-quota-val">'+used+' / '+max+'</span></div>'
+      +'<div class="sb-quota-track"><div class="sb-quota-fill" style="width:'+pct+'%"></div></div>'
+      +'<a href="/transloom/billing" class="sb-quota-cta">'+ctaLabel+'</a>';
+  }
+  function boot(){
+    var host=document.getElementById('sb-quota');
+    if(!host||!window.tlSubscription||!window.tlUsage)return;
+    Promise.all([window.tlSubscription(),window.tlUsage()]).then(function(r){render(host,r[0],r[1]);});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);
+  else boot();
+})();
+"""
+
+/**
+ * Styling for the post-pipeline conversion banner (dashboard) and the locked
+ * Pro-feature rows in the projects drawer. Kept in the shell so both surfaces
+ * share the same look.
+ */
+internal const val CONVERSION_CSS = """
+.conv-toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,8px);background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 16px 12px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 12px 36px -8px rgba(0,229,160,.35),0 4px 16px rgba(0,0,0,.4);z-index:9500;opacity:0;transition:opacity .25s,transform .25s;max-width:560px;font-size:13px;color:var(--text)}
+.conv-toast.visible{opacity:1;transform:translate(-50%,0)}
+.conv-toast .conv-msg{flex:1;line-height:1.45}
+.conv-toast .conv-msg strong{color:var(--accent);font-weight:700}
+.conv-toast .conv-cta{font-size:12px;font-weight:700;color:#000;background:var(--accent);padding:7px 14px;border-radius:6px;white-space:nowrap;transition:filter .12s}
+.conv-toast .conv-cta:hover{filter:brightness(1.08)}
+.conv-toast .conv-close{background:transparent;border:none;color:var(--text-muted);font-size:18px;line-height:1;cursor:pointer;padding:2px 4px}
+.conv-toast .conv-close:hover{color:var(--text)}
+.pr-locked-section{margin-top:8px}
+.pr-locked-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px;background:var(--surface2);border:1px dashed var(--border);border-radius:var(--radius-sm);margin-bottom:8px;opacity:.85;transition:opacity .15s,border-color .15s}
+.pr-locked-row:hover{opacity:1;border-color:rgba(0,229,160,.3)}
+.pr-locked-info{flex:1;min-width:0}
+.pr-locked-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;display:flex;align-items:center;gap:6px}
+.pr-locked-badge{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(0,229,160,.3);border-radius:10px;padding:1px 7px}
+.pr-locked-hint{font-size:12px;color:var(--text-muted);line-height:1.45}
+.pr-locked-cta{font-size:11px;font-weight:600;color:var(--accent);white-space:nowrap;padding:6px 12px;border:1px solid rgba(0,229,160,.3);border-radius:5px;transition:background .15s}
+.pr-locked-cta:hover{background:var(--accent-dim)}
 """

@@ -134,6 +134,7 @@ internal fun appSidebar(active: String, reviewBadge: Boolean = false) = """
     </a>
   </nav>
   <div class="sidebar-footer">
+    <div id="sb-quota" class="sb-quota"></div>
     <div class="sidebar-footer-row">
       <div class="user-chip" id="user-chip">
         <div class="user-avatar" id="user-avatar">•</div>
@@ -1080,7 +1081,7 @@ private fun HTML.dashboardApp() {
         title { +"Transloom — Dashboard" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
-        style { unsafe { +"$SHARED_CSS$SHELL_LAYOUT_CSS$DASHBOARD_CSS$ONBOARDING_CSS" } }
+        style { unsafe { +"$SHARED_CSS$SHELL_LAYOUT_CSS$DASHBOARD_CSS$SIDEBAR_QUOTA_CSS$CONVERSION_CSS$ONBOARDING_CSS" } }
     }
     body {
         div("app-layout") {
@@ -1239,6 +1240,8 @@ private fun HTML.dashboardApp() {
         }
         div("toast") { id = "toast" }
         div { id = "ob-host" }
+        script { unsafe { +BILLING_CACHE_JS } }
+        script { unsafe { +SIDEBAR_QUOTA_JS } }
         script { unsafe { +DASHBOARD_JS } }
         script { unsafe { +NOTIFICATIONS_JS } }
         script { unsafe { +ONBOARDING_JS } }
@@ -1915,6 +1918,7 @@ function handlePipelineEvent(evt){
     if(d.surfaceSkipped)run.surfaceSkipped=d.surfaceSkipped;
     run.retryPending=false;
     scheduleRender(d.runId);scheduleWidgets();loadStats();
+    if(!run.error)maybeShowConversionToast(run);
   }else if(d.type==='cdn_ready'){
     const run=runState.get(d.runId);
     if(run){scheduleRender(d.runId);}
@@ -2142,6 +2146,39 @@ function updateCdnWidget(publishes){
     +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>'
     +' SDK consumers receive updated translations on next app launch or background refresh'
     +'</div>';
+}
+
+// ── Free-plan post-run conversion nudge ─────────────────────────────────────
+// Triggered once per session when a free user sees a successful run finish.
+// The point is timing: we surface "Solo is faster" at the moment the user has
+// just experienced value, not on page load. sessionStorage scopes the cap to
+// the current tab — a new session is a new opportunity.
+function maybeShowConversionToast(run){
+  try{
+    if(sessionStorage.getItem('tl_conv_toast_shown'))return;
+    if(!window.tlSubscription)return;
+    window.tlSubscription().then(function(sub){
+      if(!sub||sub.plan!=='FREE')return;
+      sessionStorage.setItem('tl_conv_toast_shown','1');
+      var durTxt='';
+      if(run.finishedAt&&run.startedAt){
+        var sec=Math.round((run.finishedAt-run.startedAt)/1000);
+        durTxt='This run took <strong>'+(sec<60?sec+'s':Math.floor(sec/60)+'m '+(sec%60)+'s')+'</strong> on Free. ';
+      }
+      showConvBanner(durTxt+'Solo translates every locale in parallel — typically <strong>3–5× faster</strong>.');
+    });
+  }catch(_){}
+}
+function showConvBanner(msgHtml){
+  var existing=document.querySelector('.conv-toast');if(existing)existing.remove();
+  var el=document.createElement('div');el.className='conv-toast';
+  el.innerHTML='<div class="conv-msg">'+msgHtml+'</div>'
+    +'<a href="/transloom/billing" class="conv-cta">Upgrade →</a>'
+    +'<button type="button" class="conv-close" aria-label="Dismiss">×</button>';
+  document.body.appendChild(el);
+  requestAnimationFrame(function(){el.classList.add('visible');});
+  el.querySelector('.conv-close').addEventListener('click',function(){el.classList.remove('visible');setTimeout(function(){el.remove();},250);});
+  setTimeout(function(){if(el.parentNode){el.classList.remove('visible');setTimeout(function(){el.remove();},250);}},14000);
 }
 
 loadStats();loadPlanWidget();loadPipelineRuns();loadCdnStatus();connectPipelineSSE();
