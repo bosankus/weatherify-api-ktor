@@ -1792,10 +1792,19 @@ async function retriggerRun(runId){
 }
 
 // ── SSE connection via fetch (Bearer auth — no token in URL) ──────────────────
+// Liveness contract:
+//   • Server sends ": ping\n\n" every 25s (see ApiRoutes.kt /pipeline/events).
+//   • Client watchdog reconnects if no bytes (data OR heartbeat) arrive for SSE_STALE_MS.
+//   • Backgrounded tabs (document.hidden) close the stream so a hidden dashboard
+//     costs nothing on Cloud Run; visibilitychange reopens it and refreshes the
+//     run list via REST so events emitted during the gap aren't missed.
 let sseBackoff=2000;
 let sseInstance=null;  // holds {abort: fn} to cancel the current stream
 let sseRetries=0;
+let sseLastFrameAt=0;
+let sseWatchdog=null;
 const SSE_MAX_RETRIES=5;
+const SSE_STALE_MS=45000;  // server pings every 25s; allow ~2x before giving up
 
 function setSseStatus(state,text){
   const el=document.getElementById('sse-status');
@@ -1805,8 +1814,26 @@ function setSseStatus(state,text){
   if(txt)txt.textContent=text;
 }
 
+function stopSseWatchdog(){
+  if(sseWatchdog){clearInterval(sseWatchdog);sseWatchdog=null;}
+}
+
+function startSseWatchdog(){
+  stopSseWatchdog();
+  sseLastFrameAt=Date.now();
+  sseWatchdog=setInterval(function(){
+    if(Date.now()-sseLastFrameAt>SSE_STALE_MS){
+      // No data or heartbeat for too long — assume the socket is half-open.
+      if(sseInstance){sseInstance.abort();sseInstance=null;}
+      stopSseWatchdog();
+      scheduleReconnect();
+    }
+  },5000);
+}
+
 function scheduleReconnect(){
   sseInstance=null;
+  stopSseWatchdog();
   sseRetries++;
   if(sseRetries>=SSE_MAX_RETRIES){setSseStatus('disconnected','Live updates unavailable');return;}
   setSseStatus('reconnecting','Reconnecting…');
@@ -1816,6 +1843,7 @@ function scheduleReconnect(){
 
 function connectPipelineSSE(){
   if(!token)return;
+  if(document.hidden)return;  // hidden tabs hold no stream — visibilitychange will reopen
   if(sseInstance){sseInstance.abort();sseInstance=null;}
   const controller=new AbortController();
   sseInstance={abort:function(){controller.abort();}};
@@ -1823,12 +1851,17 @@ function connectPipelineSSE(){
     .then(function(res){
       if(!res.ok){throw new Error('HTTP '+res.status);}
       sseBackoff=2000;sseRetries=0;setSseStatus('idle','');
+      startSseWatchdog();
+      // Refresh REST snapshot so any events emitted during the gap (backgrounded
+      // tab, dropped connection) are still reflected in the UI.
+      loadPipelineRuns();
       const reader=res.body.getReader();
       const dec=new TextDecoder();
       let buf='';
       function read(){
         reader.read().then(function(r){
           if(r.done){scheduleReconnect();return;}
+          sseLastFrameAt=Date.now();  // any bytes (data or heartbeat) prove the link is alive
           buf+=dec.decode(r.value,{stream:true});
           const lines=buf.split('\n');
           buf=lines.pop();
@@ -1845,6 +1878,17 @@ function connectPipelineSSE(){
     })
     .catch(function(e){if(e.name!=='AbortError')scheduleReconnect();});
 }
+
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){
+    if(sseInstance){sseInstance.abort();sseInstance=null;}
+    stopSseWatchdog();
+    setSseStatus('idle','');
+  }else{
+    sseRetries=0;sseBackoff=2000;
+    connectPipelineSSE();
+  }
+});
 
 async function loadPipelineRuns(){
   const res=await api('/pipeline/runs');if(!res||!res.ok)return;
