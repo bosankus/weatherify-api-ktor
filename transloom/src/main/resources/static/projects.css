@@ -1,17 +1,39 @@
 /* Projects page — scoped under .pr-page. */
 
+/* ── Shared button (mirrors billing.css .bl-btn so projects renders standalone) ── */
+.bl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    padding: 9px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.15s;
+}
+.bl-btn:hover { color: var(--text); border-color: var(--text-muted); transform: translateY(-1px); }
+.bl-btn.primary { background: var(--accent); color: #051a13; border-color: var(--accent); }
+.bl-btn.primary:hover { background: #00c98d; color: #051a13; border-color: #00c98d; }
+.bl-btn.danger:hover { color: var(--red); border-color: var(--red); }
+.bl-btn[disabled] { opacity: 0.55; cursor: not-allowed; transform: none; }
+.bl-btn .bl-spin {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    border-top-color: transparent;
+    animation: bl-spin 0.7s linear infinite;
+}
+@keyframes bl-spin { to { transform: rotate(360deg); } }
+
 .pr-page {
     flex: 1;
     overflow-y: auto;
     background: var(--bg);
-}
-
-.pr-page > * {
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: 40px;
-    padding-right: 40px;
+    padding: 28px 32px;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
@@ -20,8 +42,7 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: 24px;
-    padding-top: 32px;
-    padding-bottom: 24px;
+    margin-bottom: 24px;
 }
 
 .pr-header-text .page-title {
@@ -42,7 +63,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 16px;
-    padding-bottom: 40px;
 }
 
 .pr-card {
@@ -430,7 +450,7 @@
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-    .pr-page > * { padding-left: 20px; padding-right: 20px; }
+    .pr-page { padding-left: 20px; padding-right: 20px; }
     .pr-header { flex-direction: column; align-items: flex-start; gap: 12px; }
     .pr-form-grid-2 { grid-template-columns: 1fr; }
     .pr-drawer { width: 100vw; }

@@ -6,9 +6,7 @@
 }
 
 .rv-inner {
-    max-width: 1120px;
-    margin: 0 auto;
-    padding: 36px 40px;
+    padding: 28px 32px;
 }
 
 /* ── Hero header ── */
@@ -1001,7 +999,7 @@
     }
 
     .rv-inner {
-        padding: 20px 16px
+        padding: 20px 20px
     }
 
     .rv-page-title {

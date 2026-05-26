@@ -4,14 +4,7 @@
     flex: 1;
     overflow-y: auto;
     background: var(--bg);
-}
-
-.bl-page > * {
-    max-width: 1040px;
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: 40px;
-    padding-right: 40px;
+    padding: 28px 32px;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
@@ -20,8 +13,7 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: 24px;
-    padding-top: 32px;
-    padding-bottom: 20px;
+    margin-bottom: 20px;
 }
 
 .bl-header-text .page-title {
@@ -412,7 +404,7 @@
 }
 
 @media (max-width: 640px) {
-    .bl-page > * { padding-left: 20px; padding-right: 20px; }
+    .bl-page { padding-left: 20px; padding-right: 20px; }
     .bl-header { flex-direction: column; align-items: flex-start; gap: 12px; }
     .bl-plan-grid { grid-template-columns: 1fr; }
     .bl-modal-plans { grid-template-columns: 1fr; }

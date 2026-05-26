@@ -129,9 +129,10 @@
     // ── Create modal ─────────────────────────────────────────────────────────
     function openCreateModal() {
         const mount = $('pr-modal-mount');
-        if (!mount || mount.firstChild) return;
+        if (!mount || mount.firstElementChild) return;
         mount.innerHTML = renderCreateModalHtml();
-        const overlay = mount.firstChild;
+        // firstElementChild skips the leading whitespace text node from the template literal.
+        const overlay = mount.firstElementChild;
         requestAnimationFrame(() => overlay.classList.add('show'));
 
         const selectedLangs = []; // [{code, name, region, file}]

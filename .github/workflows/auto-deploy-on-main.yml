@@ -50,8 +50,8 @@ jobs:
             --update-secrets=RAZORPAY_KEY_ID=razorpay-key-id:latest \
             --update-secrets=RAZORPAY_SECRET=razorpay-secret:latest \
             --update-secrets=RAZORPAY_WEBHOOK_SECRET=razorpay-webhook-secret:latest \
-            --update-secrets=RAZORPAY_PLAN_SOLO=razorpay-plan-solo:latest \
-            --update-secrets=RAZORPAY_PLAN_TEAM=razorpay-plan-team:latest \
+            --update-secrets=RAZORPAY_PLAN_ID_SOLO=razorpay-plan-id-solo:latest \
+            --update-secrets=RAZORPAY_PLAN_ID_TEAM=razorpay-plan-id-team:latest \
             --update-secrets=SENDGRID_API_KEY=sendgrid-api-key:latest \
             --update-secrets=REDIS_URL=redis-url:latest \
             --update-secrets=GITHUB_CLIENT_ID=github-client-id:latest \

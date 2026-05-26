@@ -3,6 +3,7 @@ package com.transloom.routes
 import com.transloom.domain.CreateProjectInput
 import com.transloom.domain.PipelineRunState
 import com.transloom.domain.Translation
+import com.transloom.domain.TranslationHistoryEntry
 import com.transloom.repository.BillingRepository
 import com.transloom.repository.GlossaryRepository
 import com.transloom.repository.ProjectRepository
@@ -52,6 +53,28 @@ private fun retryCount(runId: String): java.util.concurrent.atomic.AtomicInteger
     retryAttempts.entries.removeIf { it.value.createdAt < cutoff }
     return retryAttempts.getOrPut(runId) { RetryRecord(java.util.concurrent.atomic.AtomicInteger(0)) }.count
 }
+
+@Serializable
+data class TranslationHistoryResponse(
+    val history: List<TranslationHistoryEntry>,
+    val stringKey: String
+)
+
+@Serializable
+data class RetryEnqueuedResponse(
+    val queued: Boolean,
+    val originalRunId: String,
+    val attempt: Int,
+    val maxRetries: Int
+)
+
+@Serializable
+data class ManualSyncResponse(
+    val queued: Boolean,
+    val repo: String,
+    val branch: String,
+    val commitShort: String
+)
 
 @Serializable
 data class BootstrapResponse(
@@ -422,7 +445,7 @@ fun Route.configureApiRoutes(
                 }
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 30
                 val history = translationRepository.listHistory(projectId, stringKey, limit)
-                call.respond(HttpStatusCode.OK, mapOf("history" to history, "stringKey" to stringKey))
+                call.respond(HttpStatusCode.OK, TranslationHistoryResponse(history = history, stringKey = stringKey))
             }
         }
 
@@ -729,6 +752,10 @@ fun Route.configureApiRoutes(
             call.response.header(HttpHeaders.Connection, "keep-alive")
             call.response.header("X-Accel-Buffering", "no")
             call.respondBytesWriter(contentType = ContentType.parse("text/event-stream; charset=utf-8")) {
+                // Flush an initial comment so Cloud Run / GFE see upstream bytes immediately.
+                // Without this, headers stay buffered until the first event/heartbeat and GFE 503s the connection.
+                writeStringUtf8(": connected\n\n")
+                flush()
                 coroutineScope {
                     val heartbeat = launch {
                         while (isActive) {
@@ -805,7 +832,7 @@ fun Route.configureApiRoutes(
                 )
             }
             apiLog.info("Retry enqueued: originalRunId={} attempt={}/{} project={} repo={}", runId, attempt, MAX_RETRIES, projectId, run.repo)
-            call.respond(mapOf("queued" to true, "originalRunId" to runId, "attempt" to attempt, "maxRetries" to MAX_RETRIES))
+            call.respond(RetryEnqueuedResponse(queued = true, originalRunId = runId, attempt = attempt, maxRetries = MAX_RETRIES))
         }
 
         // --- Manual Sync (rate-limited: 5/min per IP) ---
@@ -839,11 +866,11 @@ fun Route.configureApiRoutes(
             ))
             apiLog.info("Manual sync enqueued: project={} repo={} branch={} commit={}",
                 projectId, project.githubRepo, project.watchBranch, commitHash.take(7))
-            call.respond(HttpStatusCode.Accepted, mapOf(
-                "queued" to true,
-                "repo" to project.githubRepo,
-                "branch" to project.watchBranch,
-                "commitShort" to commitHash.take(7)
+            call.respond(HttpStatusCode.Accepted, ManualSyncResponse(
+                queued = true,
+                repo = project.githubRepo,
+                branch = project.watchBranch,
+                commitShort = commitHash.take(7)
             ))
         }} // end rateLimit + post
 
