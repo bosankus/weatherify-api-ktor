@@ -58,6 +58,9 @@ interface TranslationRepository {
 
     suspend fun countByStatus(ownerId: String): Map<String, Int>
 
+    /** Per-project status counts. Returns at minimum {auto, review, blocked} — missing keys are zero. */
+    suspend fun countByStatusForProject(projectId: String): Map<String, Int>
+
     suspend fun totalStringsTranslated(ownerId: String): Int
 
     suspend fun activeLanguageCount(ownerId: String): Int

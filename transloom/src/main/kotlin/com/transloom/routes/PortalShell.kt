@@ -195,26 +195,27 @@ private val SHELL_RUNTIME_JS = """
 """
 
 /**
- * Persistent quota meter that lives in the sidebar footer on every authenticated
- * page. Visible only when the user is on the FREE plan — paid users see nothing
- * (no upsell noise). Color shifts at 70% (yellow) / 90% (red) of the monthly
- * string quota so the meter creates anticipation before the user hits the wall.
+ * Cost-per-string widget that lives in the sidebar footer on every authenticated
+ * page. Visible to all paid plans plus FREE (with plan-appropriate framing).
+ * Hidden for ENTERPRISE (no plan price to divide by) and when the user has no
+ * strings translated and no history (the metric is meaningless).
+ *
+ * FREE shows anchored upsell math ("On Solo: ₹X / string at your pace").
+ * SOLO/TEAM show the real effective rate with month-over-month delta and an
+ * end-of-month projection.
  */
 internal const val SIDEBAR_QUOTA_CSS = """
 .sb-quota{padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;display:none}
 .sb-quota.visible{display:block}
-.sb-quota-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.sb-quota-label{font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px}
-.sb-quota-val{font-size:11px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
-.sb-quota-track{height:4px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:8px}
-.sb-quota-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .4s ease,background .2s}
-.sb-quota.warn .sb-quota-fill{background:var(--yellow)}
-.sb-quota.crit .sb-quota-fill{background:var(--red)}
-.sb-quota.crit .sb-quota-val{color:var(--red)}
+.sb-quota-eyebrow{font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.sb-quota-num{font-size:18px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:8px;margin-bottom:4px;line-height:1.1}
+.sb-quota-unit{font-size:11px;color:var(--text-muted);font-weight:500}
+.sb-quota-delta{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.sb-quota-delta.down{color:var(--accent)}
+.sb-quota-delta.up{color:var(--yellow)}
+.sb-quota-sub{font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.4}
 .sb-quota-cta{display:block;text-align:center;font-size:11px;font-weight:600;color:var(--accent);padding:6px 8px;border:1px solid rgba(0,229,160,.3);border-radius:5px;transition:background .15s,border-color .15s}
 .sb-quota-cta:hover{background:var(--accent-dim);border-color:var(--accent)}
-.sb-quota.crit .sb-quota-cta{color:var(--red);border-color:rgba(255,77,79,.35)}
-.sb-quota.crit .sb-quota-cta:hover{background:rgba(255,77,79,.1)}
 """
 
 /**
@@ -234,18 +235,70 @@ internal const val BILLING_CACHE_JS = """
 
 internal val SIDEBAR_QUOTA_JS = """
 (function(){
+  var PRICE={FREE:0,SOLO:499,TEAM:1999};
+  function fmt(n){return n>=10?n.toFixed(0):n.toFixed(2);}
+  function pad2(n){n=String(n);return n.length<2?'0'+n:n;}
+  function lastMonthKey(){
+    var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1);
+    return d.getFullYear()+'-'+pad2(d.getMonth()+1);
+  }
+  function daysInMonth(){
+    var d=new Date(); return new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  }
+  function findLast(history,key){
+    if(!history)return null;
+    for(var i=0;i<history.length;i++){
+      if(history[i].yearMonth===key && (history[i].stringsTranslated||0)>0)return history[i];
+    }
+    return null;
+  }
   function render(host,sub,usage){
-    if(!sub||sub.plan!=='FREE'||!usage||!usage.stringLimit){host.classList.remove('visible');return;}
-    var used=usage.stringsTranslated||0,max=usage.stringLimit,pct=Math.min(100,Math.round(used/max*100));
-    var state=pct>=90?'crit':(pct>=70?'warn':'');
-    host.className='sb-quota visible'+(state?' '+state:'');
-    var rem=Math.max(0,max-used);
-    var ctaLabel=state==='crit'?(rem===0?'Quota hit — upgrade →':'Almost out — upgrade →'):'Upgrade for more →';
-    host.innerHTML=
-      '<div class="sb-quota-row"><span class="sb-quota-label">Strings this month</span>'
-      +'<span class="sb-quota-val">'+used+' / '+max+'</span></div>'
-      +'<div class="sb-quota-track"><div class="sb-quota-fill" style="width:'+pct+'%"></div></div>'
-      +'<a href="/transloom/billing" class="sb-quota-cta">'+ctaLabel+'</a>';
+    if(!sub||!usage){host.classList.remove('visible');return;}
+    var plan=sub.plan;
+    if(plan==='ENTERPRISE'){host.classList.remove('visible');return;}
+    var strings=usage.stringsTranslated||0;
+    var history=usage.history||[];
+    if(strings===0 && history.length===0){host.classList.remove('visible');return;}
+    var price=PRICE[plan];
+    if(typeof price!=='number'){host.classList.remove('visible');return;}
+    var html='';
+    if(plan==='FREE'){
+      html+='<div class="sb-quota-eyebrow">Your effective rate</div>';
+      html+='<div class="sb-quota-num">₹0<span class="sb-quota-unit">/ string</span></div>';
+      if(strings>0){
+        var soloRate=PRICE.SOLO/Math.max(1,strings);
+        html+='<div class="sb-quota-sub">On Solo: ₹'+fmt(soloRate)+' / string at your pace</div>';
+      } else {
+        html+='<div class="sb-quota-sub">Translate something to see your rate</div>';
+      }
+      html+='<a href="/transloom/billing" class="sb-quota-cta">Compare plans →</a>';
+    } else {
+      var current=price/Math.max(1,strings);
+      var lm=findLast(history,lastMonthKey());
+      var deltaHtml='';
+      if(lm){
+        var lastRate=price/lm.stringsTranslated;
+        var delta=lastRate>0?((current-lastRate)/lastRate)*100:0;
+        var dir=delta<=0?'down':'up';
+        var arrow=delta<=0?'▼':'▲';
+        deltaHtml=' <span class="sb-quota-delta '+dir+'">'+arrow+' '+Math.abs(delta).toFixed(0)+'%</span>';
+      }
+      var d=new Date();
+      var day=d.getDate(), dim=daysInMonth();
+      var subHtml='';
+      if(day>5 && strings>0){
+        var projected=price/(strings*dim/day);
+        subHtml='<div class="sb-quota-sub">Projected: ₹'+fmt(projected)+' by month-end</div>';
+      } else if(!lm){
+        subHtml='<div class="sb-quota-sub">First month — projection available later</div>';
+      }
+      html+='<div class="sb-quota-eyebrow">Cost / string</div>';
+      html+='<div class="sb-quota-num">₹'+fmt(current)+deltaHtml+'</div>';
+      html+=subHtml;
+      html+='<a href="/transloom/billing/analytics" class="sb-quota-cta">See analytics →</a>';
+    }
+    host.className='sb-quota visible';
+    host.innerHTML=html;
   }
   function boot(){
     var host=document.getElementById('sb-quota');

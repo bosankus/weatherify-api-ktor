@@ -35,7 +35,12 @@ data class Subscription(
     /** Plan the user is moving to; set on subscription creation, cleared on payment confirmation. */
     val pendingPlan: BillingPlan? = null,
     /** When the subscription document was first created (i.e. when the user subscribed). */
-    val startedAt: Instant? = null
+    val startedAt: Instant? = null,
+    /**
+     * When this account first started a 7-day free trial. Set once and preserved across
+     * downgrades so a user can never claim a second trial after the first has been consumed.
+     */
+    val trialStartedAt: Instant? = null
 ) {
     val inTrial: Boolean get() =
         plan != BillingPlan.FREE && plan != BillingPlan.ENTERPRISE &&

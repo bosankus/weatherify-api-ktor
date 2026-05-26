@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory
 import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import kotlin.time.Duration.Companion.days
 
 private const val RAZORPAY_API = "https://api.razorpay.com/v1"
 private const val TRIAL_DAYS = 7L
@@ -97,7 +98,20 @@ class RazorpayBillingService(
         val planId = plan.razorpayPlanId()
             ?: throw IllegalArgumentException("No Razorpay plan ID configured for ${plan.name}")
 
-        val startAt = Clock.System.now().epochSeconds + (TRIAL_DAYS * 24 * 3600)
+        // Trial eligibility: only first-time subscribers within their first 7 days on FREE
+        // get the 7-day free trial. Anyone who has already consumed a trial, or has been on
+        // the free plan for more than 7 days, is billed immediately instead.
+        val now = Clock.System.now()
+        val signupAge = existing.startedAt?.let { now - it }
+        val trialEligible = existing.trialStartedAt == null &&
+            (signupAge == null || signupAge <= TRIAL_DAYS.days)
+        val startAt = if (trialEligible) {
+            now.epochSeconds + (TRIAL_DAYS * 24 * 3600)
+        } else {
+            now.epochSeconds
+        }
+        log.info("createSubscriptionForUser userId={} plan={} trialEligible={} (priorTrial={}, signupAgeDays={})",
+            userId, plan.name, trialEligible, existing.trialStartedAt != null, signupAge?.inWholeDays)
         val body = buildJsonObject {
             put("plan_id", planId)
             put("total_count", SUBSCRIPTION_CYCLES)
@@ -128,6 +142,7 @@ class RazorpayBillingService(
             razorpaySubscriptionId = subscriptionId,
             pendingPlan = plan
         )
+        if (trialEligible) billingRepository.markTrialStarted(userId, now)
         log.info("Created Razorpay subscription {} for userId={} plan={}", subscriptionId, userId, plan.name)
         return SubscriptionInit(subscriptionId, keyId, plan)
     }

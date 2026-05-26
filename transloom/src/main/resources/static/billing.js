@@ -266,22 +266,52 @@
 
     function renderSpark(history) {
         const host = $('bl-usage-spark');
+        const statsHost = $('bl-usage-spark-stats');
         if (!host) return;
-        if (!history.length) {
-            host.innerHTML = '<div class="bl-invoice-empty" style="padding:12px 0">No history yet</div>';
+        const currentYm = new Date().toISOString().slice(0, 7);
+
+        // Build a 6-slot window ending at current month so the axis is always 6 months wide.
+        const byMonth = new Map((history || []).map(h => [h.month, h.count || 0]));
+        const slots = [];
+        const now = new Date();
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            slots.push({ month: ym, count: byMonth.get(ym) || 0 });
+        }
+
+        const total = slots.reduce((s, h) => s + h.count, 0);
+        if (statsHost) {
+            if (total === 0) {
+                statsHost.innerHTML = '';
+            } else {
+                const peak = slots.reduce((a, b) => b.count > a.count ? b : a, slots[0]);
+                statsHost.innerHTML =
+                    `<span class="bl-spark-stat"><b>${fmtInt(total)}</b> total</span>` +
+                    `<span class="bl-spark-stat-sep">·</span>` +
+                    `<span class="bl-spark-stat">Peak <b>${fmtInt(peak.count)}</b> in ${esc(fmtMonth(peak.month))}</span>`;
+            }
+        }
+
+        if (total === 0) {
+            host.innerHTML = '<div class="bl-spark-empty">No translation activity in the last 6 months yet. Charts will populate as you translate strings.</div>';
             return;
         }
-        const last6 = history.slice(-6);
-        const max = Math.max(1, ...last6.map(h => h.count));
-        const currentYm = new Date().toISOString().slice(0, 7);
-        const bars = last6.map(h => {
-            const heightPct = Math.max(4, Math.round((h.count / max) * 100));
+
+        const max = Math.max(1, ...slots.map(h => h.count));
+        const cols = slots.map(h => {
+            const heightPct = h.count === 0 ? 0 : Math.max(6, Math.round((h.count / max) * 100));
             const isCur = h.month === currentYm ? 'true' : 'false';
-            return `<div class="bl-spark-bar" data-current="${isCur}" style="height:${heightPct}%">` +
-                   `<span class="bl-spark-bar-label">${fmtInt(h.count)} strings</span></div>`;
+            const isZero = h.count === 0 ? 'true' : 'false';
+            return `<div class="bl-spark-col" data-current="${isCur}">` +
+                   `<div class="bl-spark-col-value">${fmtInt(h.count)}</div>` +
+                   `<div class="bl-spark-col-track">` +
+                       `<div class="bl-spark-col-bar" data-current="${isCur}" data-zero="${isZero}" style="height:${heightPct}%"></div>` +
+                   `</div>` +
+                   `<div class="bl-spark-col-month">${esc(fmtMonth(h.month))}</div>` +
+                   `</div>`;
         }).join('');
-        const labels = last6.map(h => `<span>${esc(fmtMonth(h.month))}</span>`).join('');
-        host.innerHTML = `<div class="bl-spark-bars">${bars}</div><div class="bl-spark-foot">${labels}</div>`;
+        host.innerHTML = `<div class="bl-spark-grid">${cols}</div>`;
     }
 
     // ── Invoices loader ──────────────────────────────────────────────────────

@@ -30,6 +30,12 @@ interface BillingRepository {
 
     suspend fun setLimitHitAt(userId: String, at: Instant?)
 
+    /**
+     * Marks that the user has begun a 7-day free trial. Idempotent — only sets the
+     * timestamp on first call; preserved across downgrades so the trial cannot be reused.
+     */
+    suspend fun markTrialStarted(userId: String, at: Instant)
+
     suspend fun findByRazorpaySubscription(subscriptionId: String): String?
 
     suspend fun getUsage(userId: String): UsageStats

@@ -29,6 +29,20 @@ fun transloomModule(encryptionKey: String) = module {
     single<NotificationRepository> { MongoNotificationRepository(get()) }
     single<SharedTranslationMemoryRepository> { MongoSharedTranslationMemoryRepository(get()) }
     single<ProjectMembershipRepository> { MongoProjectMembershipRepository(get()) }
+    single<PipelineRunRepository> { MongoPipelineRunRepository(get()) }
+    single<MemberUsageRepository> { MongoMemberUsageRepository(get()) }
+    single { com.transloom.services.MemberUsageService(get()) }
+    single {
+        com.transloom.services.AnalyticsService(
+            pipelineRunRepository = get(),
+            memberUsageRepository = get(),
+            billingRepository = get(),
+            translationRepository = get(),
+            projectRepository = get(),
+            membershipRepository = get(),
+            userRepository = get()
+        )
+    }
 }
 
 fun transloomIndexes(): List<IndexSpec> {
@@ -97,5 +111,20 @@ fun transloomIndexes(): List<IndexSpec> {
         IndexSpec("project_members", Document("projectId", 1)),
         IndexSpec("project_members", Document("userId", 1)),
         IndexSpec("project_members", Document("inviteToken", 1)),
+        // Pipeline run history — analytics queries are owner-scoped, project-scoped, or
+        // member-scoped, each by descending startedAt. TTL keeps 365 days of history.
+        IndexSpec("pipeline_runs", Document(mapOf("ownerId" to 1, "startedAt" to -1))),
+        IndexSpec("pipeline_runs", Document(mapOf("projectId" to 1, "startedAt" to -1))),
+        IndexSpec("pipeline_runs", Document(mapOf("triggeredByUserId" to 1, "startedAt" to -1))),
+        IndexSpec("pipeline_runs", Document("startedAt", 1), IndexOptions().expireAfter(365, TimeUnit.DAYS).name("ttl_pipeline_runs_365d")),
+        // Member usage rollup — unique on the three-tuple to prevent duplicate rows;
+        // owner/project scoped reads for the analytics tab.
+        IndexSpec(
+            "member_usage_logs",
+            Document(mapOf("projectId" to 1, "memberUserId" to 1, "yearMonth" to 1)),
+            unique
+        ),
+        IndexSpec("member_usage_logs", Document(mapOf("ownerId" to 1, "yearMonth" to 1))),
+        IndexSpec("member_usage_logs", Document(mapOf("projectId" to 1, "yearMonth" to 1))),
     )
 }

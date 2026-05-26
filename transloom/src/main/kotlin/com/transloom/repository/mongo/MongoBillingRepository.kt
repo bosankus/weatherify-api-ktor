@@ -123,6 +123,19 @@ class MongoBillingRepository(
         subscriptions.updateOne(eq("userId", userId), update)
     }
 
+    override suspend fun markTrialStarted(userId: String, at: Instant) {
+        // setOnInsert wouldn't fire here (the subscription doc already exists), so use $setOnInsert-like
+        // semantics manually: only set the field if it isn't already present, to preserve the original
+        // trial start across downgrades and re-subscriptions.
+        subscriptions.updateOne(
+            and(eq("userId", userId), eq("trialStartedAt", null)),
+            Updates.combine(
+                Updates.set("trialStartedAt", at.toEpochMilliseconds()),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        )
+    }
+
     override suspend fun findByRazorpaySubscription(subscriptionId: String): String? =
         subscriptions.find(eq("razorpaySubscriptionId", subscriptionId)).firstOrNull()?.getString("userId")
 
@@ -240,6 +253,8 @@ class MongoBillingRepository(
         val pendingPlan = runCatching { BillingPlan.valueOf(getString("pendingPlan") ?: "") }.getOrNull()
         val startedAt = (get("startedAt") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
+        val trialStartedAt = (get("trialStartedAt") as? Number)?.toLong()
+            ?.let { Instant.fromEpochMilliseconds(it) }
         return Subscription(
             userId = getString("userId"),
             plan = plan,
@@ -249,7 +264,8 @@ class MongoBillingRepository(
             currentPeriodEnd = periodEnd,
             limitHitAt = limitHitAt,
             pendingPlan = pendingPlan,
-            startedAt = startedAt
+            startedAt = startedAt,
+            trialStartedAt = trialStartedAt
         )
     }
 }

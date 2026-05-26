@@ -161,8 +161,25 @@ fun Route.configureWebhookRoutes(
                 return@post
             }
 
-            jobQueue.enqueueJob(WebhookPayload(repo, commitHash, branchName, project.id))
-            log.info("Webhook queued: repo={} commit={} branch={}", repo, commitHash.take(7), branchName)
+            // Capture the head-commit author email for analytics attribution. The pipeline
+            // worker resolves this against project_members to credit a member, or falls back
+            // to the synthetic "external" actor in the analytics rollup.
+            val headCommit = json["head_commit"]?.jsonObject
+                ?: commits?.lastOrNull()?.jsonObject
+            val triggeredByEmail = headCommit?.get("author")?.jsonObject
+                ?.get("email")?.jsonPrimitive?.content
+                ?.trim()?.lowercase()
+                ?.takeIf { it.isNotEmpty() }
+
+            jobQueue.enqueueJob(WebhookPayload(
+                repositoryFullName = repo,
+                commitHash = commitHash,
+                branchName = branchName,
+                projectId = project.id,
+                triggeredByEmail = triggeredByEmail
+            ))
+            log.info("Webhook queued: repo={} commit={} branch={} authorEmail={}",
+                repo, commitHash.take(7), branchName, triggeredByEmail ?: "?")
             call.respond(HttpStatusCode.Accepted, "Webhook received and queued for processing")
         }
     }

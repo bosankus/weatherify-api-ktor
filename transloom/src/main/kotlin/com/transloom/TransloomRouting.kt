@@ -10,6 +10,7 @@ import com.transloom.repository.ProjectMembershipRepository
 import com.transloom.repository.ProjectRepository
 import com.transloom.repository.TranslationRepository
 import com.transloom.repository.UserRepository
+import com.transloom.routes.configureAnalyticsRoutes
 import com.transloom.routes.configureApiRoutes
 import com.transloom.routes.configureAuthRoutes
 import com.transloom.routes.configureBillingReceiptRoute
@@ -25,6 +26,7 @@ import com.transloom.routes.configurePublicCheckoutRoute
 import com.transloom.routes.configureRazorpayWebhook
 import com.transloom.routes.configureWebhookRoutes
 import io.ktor.server.http.content.staticResources
+import com.transloom.services.AnalyticsService
 import com.transloom.services.BillingService
 import com.transloom.services.CdnPublishService
 import com.transloom.services.CloudflareKvService
@@ -62,6 +64,7 @@ class TransloomDeps(
     val cdnPublishService: CdnPublishService,
     val cfKvService: CloudflareKvService,
     val translationService: TranslationService,
+    val analyticsService: AnalyticsService,
     val notificationService: NotificationService? = null,
     val inAppNotificationService: InAppNotificationService? = null,
 )
@@ -101,6 +104,7 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
             )
             configureDashboardRoutes(d.projectRepository, d.translationRepository, d.billingRepository, d.cdnPublishRepository)
             configureBillingRoutes(d.razorpayService, d.billingRepository, d.userRepository, d.jwtSecret, d.userActivityService)
+            configureAnalyticsRoutes(d.analyticsService, d.billingRepository)
             configureInsightsRoutes(d.userActivityService)
             configureOnboardingRoutes(d.userRepository, d.billingRepository, d.projectRepository, d.translationRepository)
             configureCdnPublishRoute(d.projectRepository, d.cdnPublishService)

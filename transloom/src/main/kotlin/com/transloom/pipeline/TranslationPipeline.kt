@@ -14,6 +14,7 @@ import com.transloom.queue.WebhookPayload
 import com.transloom.repository.SharedTranslationMemoryRepository
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
+import com.transloom.services.MemberUsageService
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.CulturalSensitivityAnalyzer
 import com.transloom.services.SemanticChangeAnalyzer
@@ -60,6 +61,8 @@ class TranslationPipeline(
     private val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer,
     private val cdnPublishService: com.transloom.services.CdnPublishService,
     private val sharedMemoryRepository: SharedTranslationMemoryRepository? = null,
+    /** Per-member analytics rollup. Optional so tests can omit it. */
+    private val memberUsageService: MemberUsageService? = null,
     /** Max concurrent Gemini batch calls per translation run. */
     private val translationConcurrency: Int = 8
 ) {
@@ -74,7 +77,8 @@ class TranslationPipeline(
         val userId = project.ownerId
         val runId = eventBus.startRun(
             userId, payload.repositoryFullName, payload.branchName, payload.commitHash.take(7),
-            projectId = project.id, retriedFromRunId = payload.retriedFromRunId
+            projectId = project.id, retriedFromRunId = payload.retriedFromRunId,
+            triggeredByUserId = payload.triggeredByUserId
         )
         log.info("Pipeline: repo={} branch={} commit={}", payload.repositoryFullName, payload.branchName, payload.commitHash.take(7))
 
@@ -270,6 +274,11 @@ class TranslationPipeline(
         eventBus.stepDone(userId, runId, "TRANSLATING",
             "$totalLangs language${if (totalLangs != 1) "s" else ""} done")
 
+        // Compute totals BEFORE finishRun so the persisted run summary and the
+        // member-usage rollup share the same numbers as billing.
+        val perLocaleCounts: Map<String, Int> = translatedCounts.toMap()
+        val total = perLocaleCounts.values.sum()
+
         // ── Step: Create PR ────────────────────────────────────────────────────
         if (updatedFiles.isNotEmpty()) {
             eventBus.stepRunning(userId, runId, "CREATING_PR")
@@ -285,24 +294,37 @@ class TranslationPipeline(
                 )
             } catch (e: Exception) {
                 eventBus.stepError(userId, runId, "CREATING_PR", e.message)
-                eventBus.finishRun(userId, runId, error = "PR creation failed: ${e.message}", surfaceSkipped = surfaceKeys.size)
+                eventBus.finishRun(userId, runId, error = "PR creation failed: ${e.message}", surfaceSkipped = surfaceKeys.size,
+                    stringsTranslated = total, stringsPerLocale = perLocaleCounts)
                 log.warn("PR creation failed for {}: {}", payload.repositoryFullName, e.message)
                 return
             }
             eventBus.stepDone(userId, runId, "CREATING_PR", pr.prUrl)
-            eventBus.finishRun(userId, runId, prUrl = pr.prUrl, prBranch = pr.branchName, surfaceSkipped = surfaceKeys.size)
+            eventBus.finishRun(userId, runId, prUrl = pr.prUrl, prBranch = pr.branchName, surfaceSkipped = surfaceKeys.size,
+                stringsTranslated = total, stringsPerLocale = perLocaleCounts)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             log.info("Translation PR created: {}", pr.prUrl)
             maybePublishCdn(project, userId, runId)
         } else {
             eventBus.stepSkipped(userId, runId, "CREATING_PR", "No translatable strings approved")
-            eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size)
+            eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size,
+                stringsTranslated = total, stringsPerLocale = perLocaleCounts)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             maybePublishCdn(project, userId, runId)
         }
 
-        val total = translatedCounts.values.sum()
-        if (total > 0) billingService.recordUsage(project.ownerId, total)
+        if (total > 0) {
+            billingService.recordUsage(project.ownerId, total)
+            // Per-member rollup writes after billing to mirror the same counts —
+            // analytics invariants depend on these staying in lockstep.
+            memberUsageService?.record(
+                projectId = project.id,
+                triggeredByUserId = payload.triggeredByUserId,
+                ownerId = project.ownerId,
+                stringsTranslated = total,
+                perLocale = perLocaleCounts
+            )
+        }
     }
 
     private suspend fun maybePublishCdn(project: Project, userId: String, runId: String) {

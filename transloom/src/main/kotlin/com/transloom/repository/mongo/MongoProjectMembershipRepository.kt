@@ -40,6 +40,18 @@ class MongoProjectMembershipRepository(
         collection.find(and(eq("projectId", projectId), eq("userId", userId)))
             .firstOrNull()?.toMembership()
 
+    override suspend fun findActiveByProjectAndEmail(projectId: String, email: String): ProjectMembership? {
+        val normalized = email.trim().lowercase()
+        if (normalized.isEmpty()) return null
+        return collection.find(
+            and(
+                eq("projectId", projectId),
+                eq("email", normalized),
+                eq("status", MembershipStatus.ACTIVE.name)
+            )
+        ).firstOrNull()?.toMembership()
+    }
+
     override suspend fun roleFor(projectId: String, userId: String): ProjectRole? {
         val doc = collection.find(
             and(

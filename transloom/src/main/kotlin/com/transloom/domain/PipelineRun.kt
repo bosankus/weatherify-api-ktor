@@ -15,6 +15,7 @@ data class PipelineRunState(
     val prBranch: String? = null,
     val error: String? = null,
     val projectId: String? = null,
+    val ownerId: String? = null,
     val retriedFromRunId: String? = null,
     val surfaceSkipped: Int = 0,
     val retryCount: Int = 0,
@@ -23,7 +24,13 @@ data class PipelineRunState(
     // a live ETA and per-language status without polling.
     val locales: List<LocaleProgressState> = emptyList(),
     val progressDone: Int = 0,
-    val progressTotal: Int = 0
+    val progressTotal: Int = 0,
+    // Who caused this run. For webhook pushes, populated by resolving the
+    // commit author's email against project_members; null means we couldn't
+    // match the email to an active member (= an "external" actor, attributed
+    // to the project owner for billing but distinguished in analytics).
+    val triggeredByUserId: String? = null,
+    val triggeredByLabel: String = "external"
 )
 
 @Serializable

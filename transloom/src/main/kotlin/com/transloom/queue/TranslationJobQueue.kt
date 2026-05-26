@@ -16,7 +16,13 @@ data class WebhookPayload(
     val commitHash: String,
     val branchName: String,
     val projectId: String,
-    val retriedFromRunId: String? = null
+    val retriedFromRunId: String? = null,
+    // Identity of the actor that caused the enqueue. For manual sync / retry the
+    // routes set [triggeredByUserId] to the JWT user. For GitHub webhooks only
+    // [triggeredByEmail] is known at receipt time; the worker resolves it to a
+    // userId against project_members before invoking the pipeline.
+    val triggeredByUserId: String? = null,
+    val triggeredByEmail: String? = null
 )
 
 private const val QUEUE_KEY = "transloom:jobs"

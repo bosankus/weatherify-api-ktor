@@ -13,6 +13,15 @@ interface ProjectMembershipRepository {
 
     suspend fun findByProjectAndUser(projectId: String, userId: String): ProjectMembership?
 
+    /**
+     * Looks up an ACTIVE membership for the given (projectId, lowercased email).
+     * Returns null if no ACTIVE row matches — used by the pipeline to attribute
+     * webhook-triggered runs to a known member when the GitHub commit author's
+     * email maps to one. Pending INVITED / REVOKED rows are deliberately ignored
+     * so a stale invite never grants attribution credit.
+     */
+    suspend fun findActiveByProjectAndEmail(projectId: String, email: String): ProjectMembership?
+
     /** Resolves to the user's effective role on a project, or null if not ACTIVE. */
     suspend fun roleFor(projectId: String, userId: String): ProjectRole?
 

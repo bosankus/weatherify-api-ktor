@@ -299,6 +299,21 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         return result
     }
 
+    override suspend fun countByStatusForProject(projectId: String): Map<String, Int> {
+        val result = mutableMapOf("auto" to 0, "review" to 0, "blocked" to 0)
+        val pipeline = listOf(
+            Aggregates.match(eq("projectId", projectId)),
+            Aggregates.group("\$status", com.mongodb.client.model.Accumulators.sum("count", 1))
+        )
+        translationsCol.aggregate<Document>(pipeline).toList().forEach { doc ->
+            val status = doc.getString("_id") ?: return@forEach
+            val count = (doc["count"] as? Number)?.toInt() ?: 0
+            val key = if (status == "approved") "auto" else status
+            result[key] = (result[key] ?: 0) + count
+        }
+        return result
+    }
+
     override suspend fun getApprovedForProject(projectId: String): List<Translation> {
         return translationsCol.find(and(eq("projectId", projectId), eq("status", "approved")))
             .toList()

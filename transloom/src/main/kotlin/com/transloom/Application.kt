@@ -157,6 +157,9 @@ fun Application.module() {
     val notificationRepository: NotificationRepository by inject()
     val sharedMemoryRepository: SharedTranslationMemoryRepository by inject()
     val membershipRepository: ProjectMembershipRepository by inject()
+    val pipelineRunRepository: PipelineRunRepository by inject()
+    val memberUsageService: MemberUsageService by inject()
+    val analyticsService: AnalyticsService by inject()
     // Materialize OWNER membership rows for legacy projects so the new permission
     // helper has a single code path. Idempotent — safe across restarts.
     launch {
@@ -173,7 +176,7 @@ fun Application.module() {
     val jobQueue = TranslationJobQueue(jobQueueRepository)
     // PipelineEventBus created first so it can be injected into UserActivityService
     // for SSE-driven onboarding step advancement.
-    val pipelineEventBus = com.transloom.services.PipelineEventBus(redisUrl)
+    val pipelineEventBus = com.transloom.services.PipelineEventBus(redisUrl, pipelineRunRepository)
 
     val notificationService = NotificationService.fromEnv(
         host = getSecretValue("smtp-host").ifBlank { "smtp.gmail.com" },
@@ -211,7 +214,7 @@ fun Application.module() {
     val translationService = TranslationService(memoryRepository, sharedMemoryRepository)
     val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
     val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
-    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService, sharedMemoryRepository)
+    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService, sharedMemoryRepository, memberUsageService)
 
     jobQueue.startWorker { payload ->
         val projectUuid = runCatching { java.util.UUID.fromString(payload.projectId) }.getOrElse {
@@ -234,7 +237,18 @@ fun Application.module() {
             }
             return@startWorker
         }
-        pipeline.processWebhookPayload(payload, project, config, githubToken)
+        // Resolve webhook commit-author email → active member userId so the run is
+        // attributed in analytics. If unmatched (or already set by a manual sync/retry
+        // route), leave triggeredByUserId as-is — null means "external" attribution.
+        val resolvedPayload = if (payload.triggeredByUserId != null || payload.triggeredByEmail == null) {
+            payload
+        } else {
+            val matched = runCatching {
+                membershipRepository.findActiveByProjectAndEmail(project.id, payload.triggeredByEmail)
+            }.getOrNull()
+            payload.copy(triggeredByUserId = matched?.userId)
+        }
+        pipeline.processWebhookPayload(resolvedPayload, project, config, githubToken)
 
         // Create in-app notification + optional email when pipeline produces a PR.
         val completedRun = runCatching { pipelineEventBus.recentRuns(project.ownerId) }
@@ -337,6 +351,7 @@ fun Application.module() {
         cdnPublishService = cdnPublishService,
         cfKvService = cfKvService,
         translationService = translationService,
+        analyticsService = analyticsService,
         notificationService = notificationService,
         inAppNotificationService = inAppNotificationService,
     ))

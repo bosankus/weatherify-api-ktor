@@ -2,8 +2,10 @@ package com.transloom.services
 
 import com.transloom.domain.LocaleProgressState
 import com.transloom.domain.PipelineRunState
+import com.transloom.domain.PipelineRunSummary
 import com.transloom.domain.PipelineStepState
 import com.transloom.domain.initialSteps
+import com.transloom.repository.PipelineRunRepository
 import io.lettuce.core.RedisClient
 import io.lettuce.core.pubsub.RedisPubSubAdapter
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection
@@ -66,7 +68,15 @@ data class PipelineEvent(
  *   tl:run:{runId}      — JSON of PipelineRunState (TTL 24 h)
  *   tl:runs:{userId}    — List of recent runIds, capped at 20 (TTL 24 h)
  */
-class PipelineEventBus(private val redisUrl: String? = null) {
+class PipelineEventBus(
+    private val redisUrl: String? = null,
+    /**
+     * Optional long-term run persistence. When supplied, every [finishRun] call also
+     * writes a [PipelineRunSummary] to Mongo for analytics queries that span beyond
+     * the 24h Redis TTL. Null in tests / no-Mongo envs.
+     */
+    private val runRepository: PipelineRunRepository? = null
+) {
 
     private val log = LoggerFactory.getLogger(PipelineEventBus::class.java)
     private val json = Json { encodeDefaults = false }
@@ -176,16 +186,25 @@ class PipelineEventBus(private val redisUrl: String? = null) {
         commitShort: String,
         projectId: String? = null,
         retriedFromRunId: String? = null,
-        retryCount: Int = 0
+        retryCount: Int = 0,
+        triggeredByUserId: String? = null
     ): String {
         val runId = UUID.randomUUID().toString()
         val steps = initialSteps().toMutableList()
         activeSteps[runId] = steps
+        // Owner == the userId passed in (the run's billing target). The label distinguishes
+        // owner-triggered, member-triggered, and external (webhook author not matched).
+        val label = when {
+            triggeredByUserId == null -> "external"
+            triggeredByUserId == userId -> "owner"
+            else -> "member"
+        }
         val snapshot = PipelineRunState(
             runId = runId, repo = repo, branch = branch,
             commitShort = commitShort, startedAt = System.currentTimeMillis(),
-            steps = steps.toList(), projectId = projectId, retriedFromRunId = retriedFromRunId,
-            retryCount = retryCount
+            steps = steps.toList(), projectId = projectId, ownerId = userId,
+            retriedFromRunId = retriedFromRunId, retryCount = retryCount,
+            triggeredByUserId = triggeredByUserId, triggeredByLabel = label
         )
         storeRun(userId, snapshot)
         emit(userId, PipelineEvent(type = "start", runId = runId, snapshot = snapshot))
@@ -271,7 +290,9 @@ class PipelineEventBus(private val redisUrl: String? = null) {
         prUrl: String? = null,
         prBranch: String? = null,
         error: String? = null,
-        surfaceSkipped: Int = 0
+        surfaceSkipped: Int = 0,
+        stringsTranslated: Int = 0,
+        stringsPerLocale: Map<String, Int> = emptyMap()
     ) {
         val finishedAt = System.currentTimeMillis()
         mutateRun(userId, runId) {
@@ -282,6 +303,58 @@ class PipelineEventBus(private val redisUrl: String? = null) {
             type = "finish", runId = runId, prUrl = prUrl, error = error,
             surfaceSkipped = surfaceSkipped.takeIf { it > 0 }
         ))
+        persistRunSummary(userId, runId, finishedAt, error, stringsTranslated, stringsPerLocale)
+    }
+
+    private fun persistRunSummary(
+        userId: String, runId: String, finishedAt: Long,
+        error: String?, stringsTranslated: Int, stringsPerLocale: Map<String, Int>
+    ) {
+        val repo = runRepository ?: return
+        // Read back the snapshot we just mutated so the summary includes the
+        // trigger metadata that startRun captured. Done off the request thread.
+        ioScope.launch {
+            runCatching {
+                val snap = loadRun(userId, runId) ?: return@launch
+                val status = when {
+                    error != null -> "failed"
+                    snap.steps.any { it.status == "error" } -> "failed"
+                    snap.steps.any { it.status == "skipped" } && stringsTranslated == 0 -> "succeeded"
+                    else -> "succeeded"
+                }
+                val summary = PipelineRunSummary(
+                    runId = runId,
+                    projectId = snap.projectId ?: "",
+                    ownerId = snap.ownerId ?: userId,
+                    triggeredByUserId = snap.triggeredByUserId,
+                    triggeredByLabel = snap.triggeredByLabel,
+                    repo = snap.repo,
+                    branch = snap.branch,
+                    commitShort = snap.commitShort,
+                    startedAt = snap.startedAt,
+                    finishedAt = finishedAt,
+                    durationMs = finishedAt - snap.startedAt,
+                    status = status,
+                    stringsTranslated = stringsTranslated,
+                    stringsPerLocale = stringsPerLocale,
+                    error = error
+                )
+                repo.persist(summary)
+            }.onFailure { log.warn("persistRunSummary failed runId={}: {}", runId, it.message) }
+        }
+    }
+
+    private suspend fun loadRun(userId: String, runId: String): PipelineRunState? {
+        if (inRedis) {
+            return runCatching {
+                pool!!.resource.use { jedis ->
+                    jedis.get(runStateKey(runId))
+                        ?.let { runCatching { json.decodeFromString<PipelineRunState>(it) }.getOrNull() }
+                }
+            }.getOrNull()
+        }
+        val deque = memRuns[userId] ?: return null
+        return synchronized(deque) { deque.firstOrNull { it.runId == runId } }
     }
 
     fun close() {

@@ -946,7 +946,8 @@ fun Route.configureApiRoutes(
                 commitHash = run.branch,
                 branchName = run.branch,
                 projectId = projectId,
-                retriedFromRunId = runId
+                retriedFromRunId = runId,
+                triggeredByUserId = userId
             )
             jobQueue.enqueueJob(payload)
             call.application.launch {
@@ -985,7 +986,8 @@ fun Route.configureApiRoutes(
                 repositoryFullName = project.githubRepo,
                 commitHash = commitHash,
                 branchName = project.watchBranch,
-                projectId = projectId
+                projectId = projectId,
+                triggeredByUserId = userId
             ))
             apiLog.info("Manual sync enqueued: project={} repo={} branch={} commit={}",
                 projectId, project.githubRepo, project.watchBranch, commitHash.take(7))

@@ -14,23 +14,10 @@ import com.transloom.queue.TranslationJobQueue
 import com.transloom.repository.CdnPublishRepository
 import com.transloom.repository.GlossaryRepository
 import com.transloom.repository.mongo.*
-import com.transloom.services.CdnPublishService
-import com.transloom.services.CloudflareKvService
-import com.transloom.repository.mongo.MongoCulturalAnalysisCacheRepository
-import com.transloom.repository.mongo.MongoSemanticChangeCacheRepository
-import com.transloom.services.BillingService
-import com.transloom.services.CulturalSensitivityAnalyzer
-import com.transloom.services.GitHubService
-import com.transloom.services.PipelineEventBus
-import com.transloom.services.RazorpayBillingService
-import com.transloom.services.SemanticChangeAnalyzer
-import com.transloom.services.TranslationService
-import com.transloom.services.UserActivityService
-import com.transloom.services.UserLifecycleMonitor
-import com.transloom.services.backfillProjectMemberships
-import kotlinx.coroutines.launch
+import com.transloom.services.*
 import domain.service.RefundService
 import io.ktor.server.application.*
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
@@ -68,12 +55,24 @@ fun Application.configureTransloom(refundService: RefundService) {
     val lifecycleMonitor = UserLifecycleMonitor(userActivityService).also { it.start() }
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository)
-    val pipelineEventBus = PipelineEventBus()
+    val pipelineRunRepository = MongoPipelineRunRepository(db)
+    val memberUsageRepository = MongoMemberUsageRepository(db)
+    val memberUsageService = MemberUsageService(memberUsageRepository)
+    val pipelineEventBus = PipelineEventBus(redisUrl = null, runRepository = pipelineRunRepository)
     val semanticChangeAnalyzer = SemanticChangeAnalyzer(MongoSemanticChangeCacheRepository(db))
     val culturalSensitivityAnalyzer = CulturalSensitivityAnalyzer(MongoCulturalAnalysisCacheRepository(db))
     val cdnPublishRepository: CdnPublishRepository = MongoCdnPublishRepository(db)
     val notificationRepository = MongoNotificationRepository(db)
     val membershipRepository = MongoProjectMembershipRepository(db)
+    val analyticsService = AnalyticsService(
+        pipelineRunRepository = pipelineRunRepository,
+        memberUsageRepository = memberUsageRepository,
+        billingRepository = billingRepository,
+        translationRepository = translationRepository,
+        projectRepository = projectRepository,
+        membershipRepository = membershipRepository,
+        userRepository = userRepository
+    )
     // Idempotent OWNER backfill for legacy projects — runs in background, doesn't gate startup.
     launch {
         runCatching { backfillProjectMemberships(projectRepository, userRepository, membershipRepository) }
@@ -87,7 +86,8 @@ fun Application.configureTransloom(refundService: RefundService) {
     val cdnPublishService = CdnPublishService(translationRepository, cfKvService, cdnPublishRepository)
     val pipeline = TranslationPipeline(
         githubService, translationService, billingService, projectRepository, translationRepository,
-        pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService
+        pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService,
+        sharedMemoryRepository = null, memberUsageService = memberUsageService
     )
 
     // Central webhook dispatcher — register all Razorpay event handlers here.
@@ -130,25 +130,28 @@ fun Application.configureTransloom(refundService: RefundService) {
         log.info("Transloom resources closed")
     }
 
-    installTransloomRoutes(TransloomDeps(
-        jwtSecret = jwtSecret,
-        jobQueue = jobQueue,
-        webhookDispatcher = webhookDispatcher,
-        projectRepository = projectRepository,
-        userRepository = userRepository,
-        billingRepository = billingRepository,
-        translationRepository = translationRepository,
-        glossaryRepository = glossaryRepository,
-        notificationRepository = notificationRepository,
-        membershipRepository = membershipRepository,
-        cdnPublishRepository = cdnPublishRepository,
-        billingService = billingService,
-        razorpayService = razorpayService,
-        githubService = githubService,
-        userActivityService = userActivityService,
-        pipelineEventBus = pipelineEventBus,
-        cdnPublishService = cdnPublishService,
-        cfKvService = cfKvService,
-        translationService = translationService,
-    ))
+    installTransloomRoutes(
+        TransloomDeps(
+            jwtSecret = jwtSecret,
+            jobQueue = jobQueue,
+            webhookDispatcher = webhookDispatcher,
+            projectRepository = projectRepository,
+            userRepository = userRepository,
+            billingRepository = billingRepository,
+            translationRepository = translationRepository,
+            glossaryRepository = glossaryRepository,
+            notificationRepository = notificationRepository,
+            membershipRepository = membershipRepository,
+            cdnPublishRepository = cdnPublishRepository,
+            billingService = billingService,
+            razorpayService = razorpayService,
+            githubService = githubService,
+            userActivityService = userActivityService,
+            pipelineEventBus = pipelineEventBus,
+            cdnPublishService = cdnPublishService,
+            cfKvService = cfKvService,
+            translationService = translationService,
+            analyticsService = analyticsService,
+        )
+    )
 }

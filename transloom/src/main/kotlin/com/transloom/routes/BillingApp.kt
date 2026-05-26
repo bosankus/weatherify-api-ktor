@@ -105,7 +105,13 @@ internal fun HTML.billingApp() {
             }
             // 6-month sparkline filled by JS.
             div("bl-spark") {
-                div("bl-eyebrow") { +"Last 6 months" }
+                div("bl-spark-head") {
+                    div {
+                        div("bl-eyebrow") { +"Strings translated · Last 6 months" }
+                        div("bl-spark-sub") { +"Monthly translation activity on your account" }
+                    }
+                    div("bl-spark-stats") { id = "bl-usage-spark-stats" }
+                }
                 div { id = "bl-usage-spark" }
             }
         }
