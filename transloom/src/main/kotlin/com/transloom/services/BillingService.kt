@@ -26,19 +26,11 @@ class BillingService(
     suspend fun isLimitAlreadyExceeded(userId: String): Boolean =
         billingRepository.getSubscription(userId).limitHitAt != null
 
-    suspend fun checkAndEnforceLimits(userId: String, stringsToTranslate: Int, currentProjects: Int): Boolean {
+    suspend fun checkAndEnforceLimits(userId: String, stringsToTranslate: Int): Boolean {
         val subscription = billingRepository.getSubscription(userId)
         val plan = subscription.plan
         val usage = billingRepository.getUsage(userId)
 
-        if (plan.maxProjects <= currentProjects) {
-            recordTrialLimitHit(subscription)
-            val msg = if (plan == BillingPlan.FREE)
-                "Free plan supports 1 project. Upgrade to Solo (3 projects) or Team (10 projects)."
-            else
-                "Project limit (${plan.maxProjects}) reached for the ${plan.displayName} plan."
-            throw IllegalStateException(msg)
-        }
         val stringLimit = plan.stringLimit
         if (stringLimit != null) {
             val projected = usage.stringsTranslated + stringsToTranslate

@@ -50,6 +50,8 @@ data class SubscriptionResponse(
     val monthlyPricePaise: Int?,
     val stringLimit: Int?,
     val maxProjects: Int,
+    /** Max invitable teammates per project (excluding OWNER); -1 means unlimited. */
+    val maxMembers: Int,
     val cancelAtPeriodEnd: Boolean,
     val currentPeriodEnd: String?,
     val trialLimitHit: Boolean,
@@ -602,6 +604,7 @@ internal fun Subscription.toResponse(): SubscriptionResponse {
         monthlyPricePaise = plan.monthlyPricePaise,
         stringLimit = plan.stringLimit,
         maxProjects = if (plan.maxProjects == Int.MAX_VALUE) -1 else plan.maxProjects,
+        maxMembers = if (plan.maxMembers == Int.MAX_VALUE) -1 else plan.maxMembers,
         cancelAtPeriodEnd = cancelAtPeriodEnd,
         currentPeriodEnd = currentPeriodEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString(),
         trialLimitHit = inTrial && limitHitAt != null,

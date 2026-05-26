@@ -18,6 +18,7 @@
     }
 
     const PROJECTS_API = '/transloom/api/projects';
+    const SUBSCRIPTION_API = '/transloom/api/billing/subscription';
     const ROLES = ['ADMIN', 'TRANSLATOR', 'VIEWER'];   // OWNER is implicit, set on create
     const ROLE_LABELS = { OWNER: 'Owner', ADMIN: 'Admin', TRANSLATOR: 'Translator', VIEWER: 'Viewer' };
 
@@ -40,14 +41,51 @@
     let currentProjectId = null;
     let members = [];
     let myRole = null;           // resolved from the list once it loads
+    let ownerPlan = null;        // project owner's plan, e.g. 'FREE' | 'SOLO' | 'TEAM'
+    let seatLimit = 0;           // -1 means unlimited
+    let seatsUsed = 0;
+    let myPlan = null;           // current user's own plan + maxMembers, from /billing/subscription
 
     // ── Boot ─────────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', init);
 
     async function init() {
         const initial = $('mb-bootstrap')?.dataset.projectId || '';
+        await loadMyPlan();
+        // Plan gate: members is a Team-plan feature. If the signed-in user isn't on a
+        // plan that includes teammates, skip the projects + members fetches entirely
+        // and render an upgrade-prompt empty state (mirrors the review-page pattern).
+        if (!planAllowsInvite()) {
+            $('mb-project-select').style.display = 'none';
+            $('mb-invite-btn').disabled = true;
+            $('mb-invite-btn').title = `Inviting teammates is a Team-plan feature. Current plan: ${esc(myPlan?.displayName || 'Free')}.`;
+            renderPlanGate();
+            return;
+        }
         await loadProjects(initial);
         wireHeader();
+    }
+
+    async function loadMyPlan() {
+        try {
+            const r = await tlFetch(SUBSCRIPTION_API);
+            if (!r.ok) throw new Error('status ' + r.status);
+            myPlan = await r.json();
+        } catch (err) {
+            console.warn('members: subscription load failed', err);
+            myPlan = null; // fail-open: treat as no plan info, gate will trigger
+        }
+    }
+
+    function renderPlanGate() {
+        const host = $('mb-list');
+        if (!host) return;
+        host.outerHTML = `
+            <div class="mb-empty" id="mb-list">
+                <h3>Inviting teammates is a Team-plan feature</h3>
+                <p>You're on the <b>${esc(myPlan?.displayName || 'Free')}</b> plan. Upgrade to the Team plan to invite up to 15 teammates per project.</p>
+                <a href="/transloom/billing" class="bl-btn primary">Upgrade plan</a>
+            </div>`;
     }
 
     async function loadProjects(preferredId) {
@@ -108,9 +146,12 @@
             if (!r.ok) throw new Error('status ' + r.status);
             const j = await r.json();
             members = j.members || [];
+            ownerPlan = j.ownerPlan || null;
+            seatLimit = typeof j.seatLimit === 'number' ? j.seatLimit : 0;
+            seatsUsed = typeof j.seatsUsed === 'number' ? j.seatsUsed : 0;
             myRole = (myUserId && (members.find(m => m.userId === myUserId)?.role)) || null;
             renderList();
-            $('mb-invite-btn').disabled = !canManage();
+            updateInviteButton();
         } catch (err) {
             console.warn('members: list load failed', err);
             renderError('Could not load members. Refresh to try again.');
@@ -119,6 +160,37 @@
 
     function canManage() {
         return myRole === 'OWNER' || myRole === 'ADMIN';
+    }
+
+    // Invites are a Team-plan feature. Before any project is loaded we gate on the
+    // signed-in user's own plan (myPlan.maxMembers). Once the members list arrives
+    // we additionally honour the project owner's seatLimit (the payer's plan wins).
+    // -1 means unlimited (ENTERPRISE); 0 means the plan doesn't include teammates.
+    function planAllowsInvite() {
+        if (myPlan && typeof myPlan.maxMembers === 'number') {
+            if (myPlan.maxMembers === 0) return false;
+        }
+        if (seatLimit === 0) return false;
+        return true;
+    }
+    function hasSeatsLeft() {
+        return seatLimit === -1 || seatsUsed < seatLimit;
+    }
+
+    function updateInviteButton() {
+        const btn = $('mb-invite-btn');
+        if (!btn) return;
+        const allowed = canManage() && planAllowsInvite() && hasSeatsLeft();
+        btn.disabled = !allowed;
+        if (!canManage()) {
+            btn.title = 'Only admins or the owner can invite teammates.';
+        } else if (!planAllowsInvite()) {
+            btn.title = `Inviting teammates is a Team-plan feature. Current plan: ${ownerPlan || 'Free'}.`;
+        } else if (!hasSeatsLeft()) {
+            btn.title = `Seat limit reached (${seatsUsed}/${seatLimit}) for the Team plan.`;
+        } else {
+            btn.removeAttribute('title');
+        }
     }
 
     function renderList() {

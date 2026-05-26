@@ -210,8 +210,7 @@ class TranslationPipeline(
         // ── Step: Billing check ────────────────────────────────────────────────
         eventBus.stepRunning(userId, runId, "BILLING_CHECK")
         try {
-            val projectCount = projectRepository.countForUser(project.ownerId)
-            billingService.checkAndEnforceLimits(project.ownerId, addedStrings.size * config.targets.size, projectCount)
+            billingService.checkAndEnforceLimits(project.ownerId, addedStrings.size * config.targets.size)
         } catch (e: Exception) {
             val friendlyMsg = e.message?.let { humanizeBillingError(it) } ?: "Plan limit reached"
             eventBus.stepError(userId, runId, "BILLING_CHECK", friendlyMsg)

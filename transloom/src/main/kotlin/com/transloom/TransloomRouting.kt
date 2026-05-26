@@ -107,7 +107,7 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
             configureNotificationRoutes(d.notificationRepository)
             configureMemberRoutes(
                 d.membershipRepository, d.projectRepository, d.userRepository,
-                d.notificationService, d.inAppNotificationService
+                d.billingService, d.notificationService, d.inAppNotificationService
             )
         }
     }

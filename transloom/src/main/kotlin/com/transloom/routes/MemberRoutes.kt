@@ -7,6 +7,7 @@ import com.transloom.model.ApiError
 import com.transloom.repository.ProjectMembershipRepository
 import com.transloom.repository.ProjectRepository
 import com.transloom.repository.UserRepository
+import com.transloom.services.BillingService
 import com.transloom.services.InAppNotificationService
 import com.transloom.services.NotificationService
 import com.transloom.services.requireProjectRole
@@ -38,7 +39,15 @@ data class MemberDto(
 )
 
 @Serializable
-data class MemberListResponse(val members: List<MemberDto>)
+data class MemberListResponse(
+    val members: List<MemberDto>,
+    /** Project owner's plan, e.g. "FREE", "SOLO", "TEAM". */
+    val ownerPlan: String,
+    /** Max invitable seats (excluding OWNER) under the owner's plan. -1 means unlimited. */
+    val seatLimit: Int,
+    /** Active + pending invited rows (excluding OWNER) counted against the seat limit. */
+    val seatsUsed: Int
+)
 
 @Serializable
 data class InviteBody(val email: String, val role: String)
@@ -63,6 +72,7 @@ fun Route.configureMemberRoutes(
     memberships: ProjectMembershipRepository,
     projects: ProjectRepository,
     users: UserRepository,
+    billing: BillingService,
     notifications: NotificationService?,
     inApp: InAppNotificationService?
 ) {
@@ -82,7 +92,17 @@ fun Route.configureMemberRoutes(
             // Fetch display names for bound users in one pass. Pending invites have no userId.
             val userIds = rows.mapNotNull { it.userId }.distinct()
             val nameById = userIds.associateWith { uid -> users.findById(uid)?.githubUsername }
-            call.respond(HttpStatusCode.OK, MemberListResponse(rows.map { it.toDto(nameById[it.userId]) }))
+            val ownerPlan = billing.getPlan(project!!.ownerId)
+            val seatsUsed = countSeats(rows)
+            call.respond(
+                HttpStatusCode.OK,
+                MemberListResponse(
+                    members = rows.map { it.toDto(nameById[it.userId]) },
+                    ownerPlan = ownerPlan.name,
+                    seatLimit = if (ownerPlan.maxMembers == Int.MAX_VALUE) -1 else ownerPlan.maxMembers,
+                    seatsUsed = seatsUsed
+                )
+            )
         }
 
         post {
@@ -107,6 +127,28 @@ fun Route.configureMemberRoutes(
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("role must be ADMIN, TRANSLATOR, or VIEWER"))
             if (role == ProjectRole.OWNER) {
                 return@post call.respond(HttpStatusCode.BadRequest, ApiError("Cannot invite as OWNER — use transfer-ownership instead"))
+            }
+
+            // Seat gate: enforce against the project OWNER's plan, since they pay.
+            // FREE/SOLO have maxMembers=0 (no teammates); TEAM = 15; ENTERPRISE = unlimited.
+            val ownerPlan = billing.getPlan(project!!.ownerId)
+            if (ownerPlan.maxMembers <= 0) {
+                return@post call.respond(
+                    HttpStatusCode.Forbidden,
+                    ApiError("Inviting teammates is a Team-plan feature. Ask the project owner to upgrade to invite members.")
+                )
+            }
+            val existing = memberships.list(projectId)
+            // Re-inviting an existing pending email doesn't consume a new seat — only block when net-new.
+            val emailAlreadySeated = existing.any {
+                it.email.equals(email, ignoreCase = true) &&
+                    (it.status == MembershipStatus.ACTIVE || it.status == MembershipStatus.INVITED)
+            }
+            if (!emailAlreadySeated && countSeats(existing) >= ownerPlan.maxMembers) {
+                return@post call.respond(
+                    HttpStatusCode.Forbidden,
+                    ApiError("Seat limit (${ownerPlan.maxMembers}) reached for the ${ownerPlan.displayName} plan.")
+                )
             }
 
             val token = newInviteToken()
@@ -271,6 +313,12 @@ private fun ProjectMembership.toDto(displayName: String?): MemberDto = MemberDto
     acceptedAt = acceptedAt?.toEpochMilliseconds(),
     displayName = displayName
 )
+
+// Seats counted = active members + pending invites, excluding the OWNER (who is implicit, not a seat).
+private fun countSeats(rows: List<ProjectMembership>): Int = rows.count {
+    it.role != ProjectRole.OWNER &&
+        (it.status == MembershipStatus.ACTIVE || it.status == MembershipStatus.INVITED)
+}
 
 private fun parseRole(raw: String): ProjectRole? =
     runCatching { ProjectRole.valueOf(raw.trim().uppercase()) }.getOrNull()
