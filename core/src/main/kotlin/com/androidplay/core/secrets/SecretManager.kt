@@ -122,8 +122,8 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "github-client-id"         -> "dummy_client_id"
     "github-client-secret"     -> "dummy_client_secret"
     "webhook-url"              -> "https://transloom.dev/transloom/webhook/github"
-    "razorpay-plan-solo"       -> ""
-    "razorpay-plan-team"       -> ""
+    "razorpay-plan-id-solo"       -> ""
+    "razorpay-plan-id-team"       -> ""
     "app-url"                  -> "http://localhost:8081"
     else                       -> ""
 }

@@ -129,11 +129,13 @@ internal const val SHELL_LAYOUT_CSS = """
 .nav-badge{font-size:11px;font-weight:700;border-radius:10px;padding:1px 7px;min-width:20px;text-align:center}
 .review-badge{background:var(--accent-dim);color:var(--accent);display:none}
 .sidebar-footer{padding:16px 16px 0;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
-.user-chip{font-size:12px;color:var(--text-muted);padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-chip{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);min-width:0}
+.user-avatar{width:26px;height:26px;border-radius:50%;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;text-transform:uppercase;letter-spacing:0}
+.user-name{font-size:12px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
 .logout-btn{width:100%;font-size:12px;padding:7px 12px}
 .main-content{flex:1;overflow-y:auto;padding:28px 32px}
 .page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:12px}
-.page-title{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:3px}
+.page-title{font-size:26px;font-weight:700;letter-spacing:-.5px;line-height:1.2;margin-bottom:3px}
 .page-sub{font-size:13px;color:var(--text-muted)}
 """
 
@@ -165,5 +167,16 @@ private val SHELL_RUNTIME_JS = """
     localStorage.removeItem('transloom_token');
     window.location.href='/transloom/auth/logout';
   };
+  function fillUserChip(){
+    if(!token)return;
+    var p={};try{p=JSON.parse(atob(token.split('.')[1]));}catch(_){}
+    var name=p.username?'@'+p.username:(p.email||'You');
+    var src=p.username||p.email||'?';
+    var initial=src.charAt(0).toUpperCase();
+    var n=document.getElementById('user-name');if(n)n.textContent=name;
+    var a=document.getElementById('user-avatar');if(a)a.textContent=initial;
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',fillUserChip);
+  else fillUserChip();
 })();
 """

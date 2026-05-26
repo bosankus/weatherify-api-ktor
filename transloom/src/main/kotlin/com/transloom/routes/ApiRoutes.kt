@@ -14,6 +14,8 @@ import com.transloom.domain.UserEvent
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
 import com.transloom.services.CdnPublishService
+import com.transloom.services.TranslationContext
+import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import com.transloom.queue.TranslationJobQueue
 import com.transloom.queue.WebhookPayload
@@ -96,7 +98,8 @@ fun Route.configureApiRoutes(
     jobQueue: TranslationJobQueue,
     glossaryRepository: GlossaryRepository,
     userActivityService: UserActivityService,
-    cdnPublishService: CdnPublishService? = null
+    cdnPublishService: CdnPublishService? = null,
+    translationService: TranslationService
 ) {
 
     route("/transloom/api") {
@@ -411,6 +414,64 @@ fun Route.configureApiRoutes(
                 call.respond(HttpStatusCode.OK, mapOf("status" to "Project deleted", "id" to projectId))
             }
 
+            // Round-trip export: rebuild the localized resource file for a target language
+            // in the project's source format (.xml / .strings / .json). Includes auto-approved
+            // and reviewer-approved strings; skips blocked/review rows so the artifact is shippable.
+            //
+            //   GET /transloom/api/projects/{id}/export?lang=fr&format=auto
+            //
+            // `format=auto` (default) picks based on the target's source file extension. Pass
+            // an explicit `xml | strings | json` to override (useful when devs want a quick
+            // peek in another format).
+            get("/{id}/export") {
+                val userId = call.userId()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+                val projectId = call.parameters["id"]
+                    ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+                val lang = call.request.queryParameters["lang"]?.takeIf { it.isNotBlank() }
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing lang query parameter"))
+
+                val project = projectRepository.findById(projectId)
+                if (project == null || project.ownerId != userId) {
+                    return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
+                }
+                val target = project.targets.firstOrNull { it.code == lang }
+                    ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("Language '$lang' not configured on this project"))
+
+                val rows = translationRepository.getPublishableTranslations(projectId)
+                    .filter { it.targetLanguage == lang }
+                if (rows.isEmpty()) {
+                    return@get call.respond(HttpStatusCode.NoContent, mapOf("message" to "Nothing to export for $lang yet"))
+                }
+                val entries = rows.associate { it.stringKey to it.translatedText }
+
+                val format = (call.request.queryParameters["format"] ?: "auto").lowercase()
+                val ext = when (format) {
+                    "xml" -> "xml"; "strings" -> "strings"; "json" -> "json"
+                    else -> target.file.substringAfterLast('.', "xml").lowercase()
+                }
+                val (body, contentType, filename) = when (ext) {
+                    "strings" -> Triple(
+                        StringParserService.mergeIosStrings("", entries),
+                        ContentType.parse("text/plain; charset=utf-8"),
+                        "Localizable.$lang.strings"
+                    )
+                    "json", "arb" -> Triple(
+                        StringParserService.mergeJsonStrings("", entries),
+                        ContentType.Application.Json,
+                        "strings.$lang.$ext"
+                    )
+                    else -> Triple(
+                        StringParserService.mergeAndroidXml("", entries),
+                        ContentType.parse("application/xml; charset=utf-8"),
+                        "strings.$lang.xml"
+                    )
+                }
+                call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$filename\"")
+                call.respondText(body, contentType)
+            }
+
             get("/{id}/strings") {
                 val userId = call.userId()
                     ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
@@ -670,6 +731,54 @@ fun Route.configureApiRoutes(
                 }
                 translationRepository.unlock(translationId)
                 call.respond(HttpStatusCode.OK, mapOf("status" to "unlocked", "id" to translationId))
+            }
+
+            // Soft-fail retry: re-translate a single blocked string without rerunning the
+            // whole pipeline. Useful when one row fails (Gemini transient, plural quirk) and
+            // the user wants to recover it from the review portal in one click.
+            post("/{id}/retry-translation") {
+                val userId = call.userId()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+                val translationId = call.parameters["id"]
+                    ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid translation id"))
+
+                val translation = translationRepository.getTranslation(translationId)
+                    ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
+                val project = projectRepository.findById(translation.projectId)
+                if (project == null || project.ownerId != userId) {
+                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
+                }
+
+                val target = project.targets.firstOrNull { it.code == translation.targetLanguage }
+                    ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError("Target language no longer configured on project"))
+
+                val ctx = TranslationContext(
+                    appId = project.githubRepo, appName = project.name,
+                    category = project.category, tone = project.tone,
+                    glossary = projectRepository.getGlossary(project.id)[target.code],
+                    sourceText = translation.sourceText,
+                    targetLanguage = target.name, targetRegion = target.region
+                )
+                val outcome = translationService.translateBatch(mapOf(translation.stringKey to ctx))[translation.stringKey]
+                if (outcome == null || outcome.isFailure) {
+                    val err = outcome?.exceptionOrNull()?.message ?: "Retry failed"
+                    return@post call.respond(HttpStatusCode.BadGateway, ApiError(err))
+                }
+                val result = outcome.getOrThrow()
+                val status = if (result.flags.isNotEmpty()) "review" else "auto"
+                translationRepository.upsertTranslation(
+                    stringId = translation.stringId, projectId = translation.projectId,
+                    ownerId = userId, stringKey = translation.stringKey, sourceText = translation.sourceText,
+                    projectName = translation.projectName, targetLanguage = translation.targetLanguage,
+                    targetRegion = translation.targetRegion, translatedText = result.text, status = status,
+                    pipelineRunId = translation.pipelineRunId, commitShort = translation.commitShort
+                )
+                call.respond(HttpStatusCode.OK, mapOf(
+                    "status" to status,
+                    "id" to translationId,
+                    "translatedText" to result.text
+                ))
             }
         }
 

@@ -116,7 +116,10 @@ internal fun appSidebar(active: String, reviewBadge: Boolean = false) = """
   </nav>
   <div class="sidebar-footer">
     <div class="sidebar-footer-row">
-      <div class="user-chip" id="user-chip">Loading…</div>
+      <div class="user-chip" id="user-chip">
+        <div class="user-avatar" id="user-avatar">•</div>
+        <div class="user-name" id="user-name">…</div>
+      </div>
       <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()" aria-label="Notifications" title="Notifications">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <span class="notif-badge" id="notif-badge" style="display:none">0</span>
@@ -1388,6 +1391,24 @@ private const val DASHBOARD_CSS = """
 .cdnw-sdk-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:var(--text-muted);line-height:1.55;padding-top:10px;border-top:1px solid var(--border)}
 .cdnw-sdk-note svg{flex-shrink:0;margin-top:1px;opacity:.6}
 .run-no-retranslation{font-size:12px;color:var(--accent);opacity:.8}
+/* ── Per-locale lanes + ETA ─────────────────────────────────────────────── */
+.run-locales{padding:6px 18px 14px;display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--border)}
+.run-locales-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;padding-bottom:2px}
+.run-locales-eta{color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:500;font-variant-numeric:tabular-nums}
+.lane-row{display:flex;align-items:center;gap:10px;font-size:12px}
+.lane-code{flex-shrink:0;min-width:54px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text-dim);font-size:11px}
+.lane-name{flex:1;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px}
+.lane-track{flex:1.4;height:4px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;overflow:hidden;min-width:60px}
+.lane-fill{height:100%;background:var(--text-muted);border-radius:3px;transition:width .4s ease,background .2s}
+.lane-row.translating .lane-fill{background:var(--accent);animation:pulse 1.6s infinite}
+.lane-row.done .lane-fill{background:var(--accent);opacity:.7}
+.lane-row.error .lane-fill{background:var(--red)}
+.lane-row.queued .lane-fill{background:var(--text-muted);opacity:.4}
+.lane-count{flex-shrink:0;color:var(--text-muted);font-variant-numeric:tabular-nums;font-size:11px;min-width:46px;text-align:right}
+/* ── Resume-on-reconnect pill ───────────────────────────────────────────── */
+.sse-resume-pill{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-12px);z-index:2200;display:none;align-items:center;gap:8px;padding:8px 14px;background:var(--surface);border:1px solid var(--accent);border-radius:20px;font-size:12px;font-weight:600;color:var(--text);box-shadow:0 8px 24px -8px rgba(0,0,0,.5);opacity:0;transition:opacity .2s,transform .2s}
+.sse-resume-pill.visible{display:inline-flex;opacity:1;transform:translateX(-50%) translateY(0)}
+.sse-resume-pill .sse-resume-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(0,229,160,.15)}
 .run-footer{padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pr-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);font-weight:500}
 .pr-link:hover{text-decoration:underline}
@@ -1469,7 +1490,6 @@ async function api(path,opts={}){
 }
 function logout(){localStorage.removeItem('transloom_token');window.location.href='/transloom/auth/logout';}
 function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
-function jwtPayload(t){try{return JSON.parse(atob(t.split('.')[1]));}catch{return{};}}
 function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
 
 async function loadStats(){
@@ -1549,20 +1569,24 @@ async function loadPlanWidget(){
 }
 
 function updateRunSummaryWidget(){
-  const runs=Object.values(runState);
-  const active=runs.filter(r=>!r.finishedAt).length;
-  const failed=runs.filter(r=>r.finishedAt&&r.error).length;
-  const done=runs.filter(r=>r.finishedAt&&!r.error&&r.prUrl).length;
+  // Single pass: tally active/failed and collect rows for the top-5 sort.
+  let active=0,failed=0;
+  const all=[];
+  runState.forEach(function(r){
+    if(!r.finishedAt)active++;
+    else if(r.error)failed++;
+    all.push(r);
+  });
   const badge=document.getElementById('w-run-badge');
   if(badge){
-    if(active>0){badge.textContent=active+' running';badge.style.display='inline';}
+    if(active>0){badge.textContent=active+' running';badge.style.background='';badge.style.color='';badge.style.display='inline';}
     else if(failed>0){badge.textContent=failed+' failed';badge.style.background='rgba(255,77,79,.12)';badge.style.color='var(--red)';badge.style.display='inline';}
     else{badge.style.display='none';}
   }
   const list=document.getElementById('w-run-summary');if(!list)return;
-  if(!runs.length){list.innerHTML='<div class="w-empty">No runs yet</div>';return;}
-  const recent=runs.sort((a,b)=>(b.startedAt||0)-(a.startedAt||0)).slice(0,5);
-  list.innerHTML=recent.map(r=>{
+  if(!all.length){list.innerHTML='<div class="w-empty">No runs yet</div>';return;}
+  all.sort(function(a,b){return(b.startedAt||0)-(a.startedAt||0);});
+  list.innerHTML=all.slice(0,5).map(function(r){
     const st=!r.finishedAt?'running':(r.error?'error':'done');
     return '<div class="w-run-row"><span class="mini-dot '+st+'"></span>'
       +'<span class="w-run-repo">'+esc(r.repo)+'</span>'
@@ -1570,8 +1594,6 @@ function updateRunSummaryWidget(){
   }).join('');
 }
 
-const payload=jwtPayload(token);
-const userEl=document.getElementById('user-chip');if(userEl)userEl.textContent=payload.username?'@'+payload.username:(payload.email||'You');
 
 // ─── Pipeline Activity ─────────────────────────────────────────────────────
 
@@ -1586,7 +1608,36 @@ const STEP_ICONS={
 
 // runId -> { repo, branch, commitShort, startedAt, finishedAt, steps:{id->{status,detail}},
 //            stepLabels, prUrl, error, projectId, retriedFromRunId, retryPending }
-const runState={};
+// Map (not plain object) so we can evict the oldest entry when capacity is
+// exceeded over a long-lived dashboard session.
+const runState=new Map();
+const RUN_CAP=20; // matches PipelineEventBus.MAX_RUNS on the server
+
+// ── Render scheduler ────────────────────────────────────────────────────────
+// SSE bursts (a run emits webhook+fetch+detect+billing+translate+pr+cdn within
+// seconds) used to trigger one full-card outerHTML rewrite per event. Coalesce
+// every render into a single requestAnimationFrame so multiple events landing
+// in the same tick produce exactly one DOM write per touched run.
+const _dirtyRuns=new Set();
+let _widgetDirty=false;
+let _rafScheduled=false;
+function _scheduleFlush(){if(!_rafScheduled){_rafScheduled=true;requestAnimationFrame(_flushRenders);}}
+function scheduleRender(runId){_dirtyRuns.add(runId);_scheduleFlush();}
+function scheduleWidgets(){_widgetDirty=true;_scheduleFlush();}
+function _flushRenders(){
+  _rafScheduled=false;
+  if(_dirtyRuns.size){
+    const list=document.getElementById('run-list');
+    _dirtyRuns.forEach(function(runId){
+      const html=buildRunHtml(runId);if(!html)return;
+      const existing=document.getElementById('rc-'+runId);
+      if(existing){existing.outerHTML=html;}
+      else if(list){document.getElementById('activity-empty')?.remove();list.insertAdjacentHTML('afterbegin',html);}
+    });
+    _dirtyRuns.clear();
+  }
+  if(_widgetDirty){_widgetDirty=false;updateRunSummaryWidget();}
+}
 
 // ── Timestamps ────────────────────────────────────────────────────────────────
 function timeAgo(ms){
@@ -1599,12 +1650,21 @@ function timeAgo(ms){
 }
 function runDuration(s,e){const sec=Math.round((e-s)/1e3);if(sec<60)return sec+'s';return Math.floor(sec/60)+'m '+sec%60+'s';}
 
-// Tick timestamps in all visible run cards every 20s without a full re-render
-setInterval(function(){
-  document.querySelectorAll('[data-started]').forEach(function(el){
-    el.textContent=timeAgo(parseInt(el.dataset.started,10));
-  });
-},20000);
+// Tick visible-card timestamps every 20s. Paused when the tab is hidden so
+// backgrounded dashboards don't burn CPU on querySelectorAll loops.
+let _tickTimer=null;
+function startTimestampTicker(){
+  if(_tickTimer)return;
+  _tickTimer=setInterval(function(){
+    document.querySelectorAll('[data-started]').forEach(function(el){
+      el.textContent=timeAgo(parseInt(el.dataset.started,10));
+    });
+    // Re-render any active run so the ETA decreases between SSE bursts.
+    runState.forEach(function(r,id){if(!r.finishedAt&&(r.localeOrder||[]).length)scheduleRender(id);});
+  },20000);
+}
+function stopTimestampTicker(){if(_tickTimer){clearInterval(_tickTimer);_tickTimer=null;}}
+startTimestampTicker();
 
 // ── Card builders ─────────────────────────────────────────────────────────────
 function buildStepHtml(id,st,label){
@@ -1615,12 +1675,49 @@ function buildStepHtml(id,st,label){
     +'<div class="step-body"><span class="step-label '+esc(s.status)+'">'+esc(label)+'</span>'+detail+'</div></div>';
 }
 
+function buildLaneHtml(L){
+  const pct=L.total>0?Math.min(100,Math.round((L.done/L.total)*100)):0;
+  const status=esc(L.status||'queued');
+  return '<div class="lane-row '+status+'">'
+    +'<span class="lane-code">'+esc(L.code)+'</span>'
+    +'<span class="lane-name">'+esc(L.name||'')+'</span>'
+    +'<div class="lane-track"><div class="lane-fill" style="width:'+pct+'%"></div></div>'
+    +'<span class="lane-count">'+(L.done||0)+' / '+(L.total||0)+'</span>'
+    +'</div>';
+}
+
+function buildEta(run){
+  const done=run.progressDone||0,total=run.progressTotal||0;
+  if(!total||done>=total||run.finishedAt)return '';
+  const elapsed=(Date.now()-(run.startedAt||Date.now()))/1000;
+  if(elapsed<3||done===0)return '';
+  const rate=done/elapsed;
+  const remaining=Math.round((total-done)/rate);
+  if(!isFinite(remaining)||remaining<=0)return '';
+  const label=remaining<60?(remaining+'s'):(Math.floor(remaining/60)+'m '+(remaining%60)+'s');
+  return done+' / '+total+' strings · ~'+label+' left';
+}
+
 function buildRunHtml(runId){
-  const run=runState[runId];if(!run)return '';
+  const run=runState.get(runId);if(!run)return '';
   const isActive=!run.finishedAt;
   const hasError=!!run.error;
   const isRetrying=!!run.retryPending;
   const steps=STEP_ORDER.map(id=>buildStepHtml(id,run.steps[id],run.stepLabels[id]||id)).join('');
+
+  // Per-locale lanes (Point 1) — visible while the run is active or for the
+  // brief window where finished runs still have lane data in memory. Skipped
+  // entirely when no lanes have been emitted yet (e.g. early steps).
+  let lanesHtml='';
+  const order=run.localeOrder||[];
+  if(order.length){
+    const lanes=order.map(function(c){return buildLaneHtml(run.locales[c]);}).join('');
+    const eta=isActive?buildEta(run):'';
+    lanesHtml='<div class="run-locales">'
+      +'<div class="run-locales-head"><span>Languages</span>'
+      +(eta?'<span class="run-locales-eta">'+esc(eta)+'</span>':'')
+      +'</div>'+lanes+'</div>';
+  }
 
   // Savings chip — shown whenever the semantic analyzer skipped retranslation
   const skipped=run.surfaceSkipped||0;
@@ -1681,41 +1778,52 @@ function buildRunHtml(runId){
     +'<div class="run-status-dot '+dot+'"></div>'
     +'</div></div>'
     +'<div class="run-steps">'+steps+'</div>'
+    +lanesHtml
     +footHtml+'</div>';
 }
 
-function renderRunCard(runId){
-  const html=buildRunHtml(runId);if(!html)return;
-  const existing=document.getElementById('rc-'+runId);
-  if(existing){existing.outerHTML=html;}
-  else{
-    document.getElementById('activity-empty')?.remove();
-    document.getElementById('run-list').insertAdjacentHTML('afterbegin',html);
-  }
-}
-
 function applySnapshot(snapshot){
-  const run=runState[snapshot.runId]||{steps:{},stepLabels:{}};
-  Object.assign(run,{
-    repo:snapshot.repo,branch:snapshot.branch,commitShort:snapshot.commitShort,
-    startedAt:snapshot.startedAt,finishedAt:snapshot.finishedAt||null,
-    prUrl:snapshot.prUrl||null,error:snapshot.error||null,
-    projectId:snapshot.projectId||null,retriedFromRunId:snapshot.retriedFromRunId||null,
-    surfaceSkipped:snapshot.surfaceSkipped||0
-  });
-  if(!run.steps)run.steps={};
-  if(!run.stepLabels)run.stepLabels={};
+  const existing=runState.get(snapshot.runId);
+  const run=existing||{steps:{},stepLabels:{},locales:{},localeOrder:[]};
+  run.repo=snapshot.repo;run.branch=snapshot.branch;run.commitShort=snapshot.commitShort;
+  run.startedAt=snapshot.startedAt;run.finishedAt=snapshot.finishedAt||null;
+  run.prUrl=snapshot.prUrl||null;run.error=snapshot.error||null;
+  run.projectId=snapshot.projectId||null;run.retriedFromRunId=snapshot.retriedFromRunId||null;
+  run.surfaceSkipped=snapshot.surfaceSkipped||0;
   (snapshot.steps||[]).forEach(function(s){
     run.steps[s.id]={status:s.status,detail:s.detail||null};
     run.stepLabels[s.id]=s.label;
   });
-  runState[snapshot.runId]=run;
+  // Per-locale lanes (Point 1) — server replays the full set on REST snapshot,
+  // and dribbles individual updates over SSE via "locale" events.
+  if(Array.isArray(snapshot.locales)&&snapshot.locales.length){
+    if(!run.locales)run.locales={};
+    if(!run.localeOrder)run.localeOrder=[];
+    snapshot.locales.forEach(function(l){
+      if(!run.locales[l.code])run.localeOrder.push(l.code);
+      run.locales[l.code]=l;
+    });
+  }
+  run.progressDone=snapshot.progressDone||run.progressDone||0;
+  run.progressTotal=snapshot.progressTotal||run.progressTotal||0;
+  runState.set(snapshot.runId,run);
+  if(runState.size>RUN_CAP)_evictOldestRun();
 }
 
-function updateActivityBadge(){
-  const active=Object.values(runState).filter(function(r){return !r.finishedAt;}).length;
-  const badge=document.getElementById('activity-badge');
-  if(badge){if(active>0){badge.textContent=active;badge.style.display='inline';}else{badge.style.display='none';}}
+function _evictOldestRun(){
+  // Prefer evicting the oldest *finished* run so an unbounded burst of new
+  // starts never bumps a live run out from under the user.
+  let oldestKey=null,oldestTs=Infinity;
+  let oldestFinishedKey=null,oldestFinishedTs=Infinity;
+  runState.forEach(function(r,k){
+    const t=r.startedAt||0;
+    if(t<oldestTs){oldestTs=t;oldestKey=k;}
+    if(r.finishedAt&&t<oldestFinishedTs){oldestFinishedTs=t;oldestFinishedKey=k;}
+  });
+  const evict=oldestFinishedKey||oldestKey;
+  if(!evict)return;
+  runState.delete(evict);
+  document.getElementById('rc-'+evict)?.remove();
 }
 
 // ── Smart scroll: only auto-scroll when user hasn't scrolled past first card ──
@@ -1743,27 +1851,54 @@ function handlePipelineEvent(evt){
 
   if(d.type==='start'&&d.snapshot){
     applySnapshot(d.snapshot);
-    // If this is a retry run, mark the parent as retried (clear retryPending)
+    // For a retry run, replace the parent's slot in-place so the activity feed
+    // shows one card whose state advances, not two stacked entries. Re-key the
+    // existing DOM node to the new runId; the upcoming scheduleRender will then
+    // outerHTML-replace it in place rather than prepending at top.
     if(d.snapshot.retriedFromRunId){
-      const parent=runState[d.snapshot.retriedFromRunId];
-      if(parent){parent.retryPending=false;renderRunCard(d.snapshot.retriedFromRunId);}
+      const parentId=d.snapshot.retriedFromRunId;
+      const parentEl=document.getElementById('rc-'+parentId);
+      if(parentEl) parentEl.id='rc-'+d.runId;
+      runState.delete(parentId);
+      _dirtyRuns.delete(parentId);
     }
-    renderRunCard(d.runId);updateActivityBadge();updateRunSummaryWidget();maybeScrollToActivity();
+    scheduleRender(d.runId);scheduleWidgets();maybeScrollToActivity();
+  }else if(d.type==='locale'&&d.locale){
+    const run=runState.get(d.runId);if(!run)return;
+    if(!run.locales)run.locales={};
+    if(!run.localeOrder)run.localeOrder=[];
+    if(!run.locales[d.locale.code])run.localeOrder.push(d.locale.code);
+    run.locales[d.locale.code]=d.locale;
+    // Refresh aggregate counters so ETA stays accurate as batches stream in.
+    let done=0,total=0;
+    run.localeOrder.forEach(function(c){const L=run.locales[c];done+=L.done||0;total+=L.total||0;});
+    run.progressDone=done;run.progressTotal=total;
+    scheduleRender(d.runId);
+  }else if(d.type==='locales'&&Array.isArray(d.locales)){
+    const run=runState.get(d.runId);if(!run)return;
+    if(!run.locales)run.locales={};
+    if(!run.localeOrder)run.localeOrder=[];
+    d.locales.forEach(function(l){
+      if(!run.locales[l.code])run.localeOrder.push(l.code);
+      run.locales[l.code]=l;
+    });
+    run.progressDone=d.progressDone||0;run.progressTotal=d.progressTotal||0;
+    scheduleRender(d.runId);
   }else if(d.type==='step'){
-    const run=runState[d.runId];if(!run)return;
+    const run=runState.get(d.runId);if(!run)return;
     if(!run.steps)run.steps={};
     run.steps[d.stepId]={status:d.status,detail:d.detail||null};
-    renderRunCard(d.runId);updateActivityBadge();updateRunSummaryWidget();
+    scheduleRender(d.runId);scheduleWidgets();
   }else if(d.type==='finish'){
-    const run=runState[d.runId];if(!run)return;
+    const run=runState.get(d.runId);if(!run)return;
     run.finishedAt=d.finishedAt||Date.now();
     if(d.prUrl)run.prUrl=d.prUrl;if(d.error)run.error=d.error;
     if(d.surfaceSkipped)run.surfaceSkipped=d.surfaceSkipped;
     run.retryPending=false;
-    renderRunCard(d.runId);updateActivityBadge();updateRunSummaryWidget();loadStats();
+    scheduleRender(d.runId);scheduleWidgets();loadStats();
   }else if(d.type==='cdn_ready'){
-    const run=runState[d.runId];
-    if(run){renderRunCard(d.runId);}
+    const run=runState.get(d.runId);
+    if(run){scheduleRender(d.runId);}
     if(d.cdnBundleVersion){
       updateCdnWidget([{bundleVersion:d.cdnBundleVersion,locales:d.cdnLocales||[],publishedAt:Date.now(),status:'success'}]);
     }
@@ -1775,15 +1910,15 @@ function handlePipelineEvent(evt){
 
 // ── Retrigger a failed run ────────────────────────────────────────────────────
 async function retriggerRun(runId){
-  const run=runState[runId];
+  const run=runState.get(runId);
   if(!run||run.retryPending)return;
   run.retryPending=true;
-  renderRunCard(runId); // show "Retrying…" button state immediately
+  scheduleRender(runId); // show "Retrying…" button state immediately
 
   const res=await api('/pipeline/runs/'+encodeURIComponent(runId)+'/retry',{method:'POST'});
   if(!res||!res.ok){
     run.retryPending=false;
-    renderRunCard(runId);
+    scheduleRender(runId);
     toast('Failed to queue retry — please try again','error');
     return;
   }
@@ -1803,6 +1938,22 @@ let sseInstance=null;  // holds {abort: fn} to cancel the current stream
 let sseRetries=0;
 let sseLastFrameAt=0;
 let sseWatchdog=null;
+let _sseHadGap=false;  // set true when an active SSE drops; consumed by loadPipelineRuns()
+
+function showResumePill(n){
+  let el=document.getElementById('sse-resume-pill');
+  if(!el){
+    el=document.createElement('div');
+    el.id='sse-resume-pill';el.className='sse-resume-pill';
+    el.innerHTML='<span class="sse-resume-dot"></span><span id="sse-resume-text"></span>';
+    document.body.appendChild(el);
+  }
+  const txt=document.getElementById('sse-resume-text');
+  if(txt)txt.textContent='Resumed — caught up on '+n+' update'+(n===1?'':'s');
+  requestAnimationFrame(function(){el.classList.add('visible');});
+  clearTimeout(el._t);
+  el._t=setTimeout(function(){el.classList.remove('visible');},3500);
+}
 const SSE_MAX_RETRIES=5;
 const SSE_STALE_MS=45000;  // server pings every 25s; allow ~2x before giving up
 
@@ -1834,6 +1985,7 @@ function startSseWatchdog(){
 function scheduleReconnect(){
   sseInstance=null;
   stopSseWatchdog();
+  _sseHadGap=true;
   sseRetries++;
   if(sseRetries>=SSE_MAX_RETRIES){setSseStatus('disconnected','Live updates unavailable');return;}
   setSseStatus('reconnecting','Reconnecting…');
@@ -1883,9 +2035,12 @@ document.addEventListener('visibilitychange',function(){
   if(document.hidden){
     if(sseInstance){sseInstance.abort();sseInstance=null;}
     stopSseWatchdog();
+    stopTimestampTicker();
     setSseStatus('idle','');
+    _sseHadGap=true;
   }else{
     sseRetries=0;sseBackoff=2000;
+    startTimestampTicker();
     connectPipelineSSE();
   }
 });
@@ -1893,10 +2048,39 @@ document.addEventListener('visibilitychange',function(){
 async function loadPipelineRuns(){
   const res=await api('/pipeline/runs');if(!res||!res.ok)return;
   const data=await res.json();
-  const runs=(data.runs||[]).slice(0,10);if(!runs.length)return;
-  document.getElementById('activity-empty')?.remove();
-  runs.forEach(function(s){applySnapshot(s);renderRunCard(s.runId);});
-  updateActivityBadge();updateRunSummaryWidget();
+  // Server returns newest-first (capped at MAX_RUNS server-side).
+  const runs=(data.runs||[]).slice(0,RUN_CAP);if(!runs.length)return;
+  // Resume-aware diff: count snapshot changes vs current in-memory state so we
+  // can show the user a visible "caught up" signal after an SSE gap. Captures
+  // brand-new runs and progress that advanced while disconnected.
+  let caughtUp=0;
+  runs.forEach(function(s){
+    const prev=runState.get(s.runId);
+    if(!prev){caughtUp++;return;}
+    if((s.progressDone||0)>(prev.progressDone||0))caughtUp++;
+    else if(s.finishedAt&&!prev.finishedAt)caughtUp++;
+  });
+  if(_sseHadGap&&caughtUp>0){
+    showResumePill(caughtUp);
+  }
+  _sseHadGap=false;
+  runs.forEach(applySnapshot);
+  // Collapse retry chains: a retry run supersedes its parent in the feed, so
+  // drop parents that have a retry present. Matches the live SSE behavior in
+  // handlePipelineEvent where a 'start' with retriedFromRunId re-keys the
+  // parent's card to the new runId.
+  const retriedParents=new Set();
+  runs.forEach(function(s){if(s.retriedFromRunId)retriedParents.add(s.retriedFromRunId);});
+  retriedParents.forEach(function(id){runState.delete(id);});
+  const visibleRuns=runs.filter(function(s){return !retriedParents.has(s.runId);});
+  const list=document.getElementById('run-list');
+  if(list){
+    document.getElementById('activity-empty')?.remove();
+    // Build the full list in newest-first order in one DOM write — the prior
+    // per-card insertAdjacentHTML('afterbegin') loop reversed the order.
+    list.innerHTML=visibleRuns.map(function(s){return buildRunHtml(s.runId);}).join('');
+  }
+  updateRunSummaryWidget();
 }
 
 async function loadCdnStatus(){

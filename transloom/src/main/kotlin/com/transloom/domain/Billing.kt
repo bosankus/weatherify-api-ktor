@@ -17,8 +17,8 @@ enum class BillingPlan(
 
     fun razorpayPlanId(): String? = when (this) {
         FREE, ENTERPRISE -> null
-        SOLO -> getSecretValue("razorpay-plan-solo").takeIf { it.isNotBlank() }
-        TEAM -> getSecretValue("razorpay-plan-team").takeIf { it.isNotBlank() }
+        SOLO -> getSecretValue("razorpay-plan-id-solo").takeIf { it.isNotBlank() }
+        TEAM -> getSecretValue("razorpay-plan-id-team").takeIf { it.isNotBlank() }
     }
 }
 

@@ -297,6 +297,12 @@
                 <div class="rv-actions">
                     <span class="rv-char-hint" data-charhint="${esc(it.id)}">${edited.length} char${edited.length === 1 ? '' : 's'}</span>
                     <div class="rv-action-btns">
+                        ${(it.status || '').toUpperCase().includes('BLOCK')
+                            ? `<button type="button" class="rv-btn-reject" data-retry-translation="${esc(it.id)}" title="Ask Gemini to translate this string again">
+                                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+                                   Retry translation
+                               </button>`
+                            : ''}
                         <button type="button" class="rv-btn-reject" data-reject="${esc(it.id)}">Reject</button>
                         ${hotfixAllowed
                             ? `<button type="button" class="rv-btn-hotfix" data-hotfix="${esc(it.id)}" title="Publish this translation to the CDN immediately">
@@ -374,7 +380,31 @@
         if (hotfixCancelBtn) return cancelHotfix(hotfixCancelBtn.dataset.hotfixCancel);
         const hotfixConfirmBtn = t.closest('[data-hotfix-confirm]');
         if (hotfixConfirmBtn) return confirmHotfix(hotfixConfirmBtn.dataset.hotfixConfirm, hotfixConfirmBtn);
+        const retryBtn = t.closest('[data-retry-translation]');
+        if (retryBtn) return retryTranslation(retryBtn.dataset.retryTranslation, retryBtn);
     });
+
+    async function retryTranslation(id, btn) {
+        setBusy(btn, true);
+        try {
+            const r = await tlFetch(`${API}/${encodeURIComponent(id)}/retry-translation`, { method: 'POST' });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                throw new Error(err.error || 'retry failed');
+            }
+            const { status } = await r.json();
+            if (status === 'auto') {
+                removeItem(id);
+                toast('Translation recovered — approved automatically', 'success');
+            } else {
+                toast('Retry succeeded — moved to review', 'success');
+                await load(true);
+            }
+        } catch (e) {
+            toast(e.message || 'Retry failed', 'error');
+            setBusy(btn, false);
+        }
+    }
 
     function cssEsc(s) {
         // Selectors built from IDs must escape special characters; data attribute

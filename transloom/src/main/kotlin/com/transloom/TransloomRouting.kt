@@ -30,6 +30,7 @@ import com.transloom.services.CloudflareKvService
 import com.transloom.services.GitHubService
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.RazorpayBillingService
+import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
@@ -55,6 +56,7 @@ class TransloomDeps(
     val pipelineEventBus: PipelineEventBus,
     val cdnPublishService: CdnPublishService,
     val cfKvService: CloudflareKvService,
+    val translationService: TranslationService,
 )
 
 /**
@@ -87,7 +89,7 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
             configureApiRoutes(
                 d.billingService, d.billingRepository, d.githubService, d.projectRepository,
                 d.userRepository, d.translationRepository, d.pipelineEventBus, d.jobQueue,
-                d.glossaryRepository, d.userActivityService, d.cdnPublishService
+                d.glossaryRepository, d.userActivityService, d.cdnPublishService, d.translationService
             )
             configureDashboardRoutes(d.projectRepository, d.translationRepository, d.billingRepository, d.cdnPublishRepository)
             configureBillingRoutes(d.razorpayService, d.billingRepository, d.userRepository, d.jwtSecret, d.userActivityService)

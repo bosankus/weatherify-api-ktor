@@ -188,7 +188,9 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         language: String?,
         statusFilter: String?
     ): List<Translation> {
-        val filter = and(eq("ownerId", ownerId), reviewMatch(language, statusFilter))
+        val projectIds = projectIdsForOwner(ownerId)
+        if (projectIds.isEmpty()) return emptyList()
+        val filter = and(`in`("projectId", projectIds), reviewMatch(language, statusFilter))
         return translationsCol.find(filter)
             .sort(Sorts.descending("updatedAt"))
             .skip(offset)
@@ -198,8 +200,22 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
     }
 
     override suspend fun countPendingReviews(ownerId: String, language: String?, statusFilter: String?): Int {
-        val filter = and(eq("ownerId", ownerId), reviewMatch(language, statusFilter))
+        val projectIds = projectIdsForOwner(ownerId)
+        if (projectIds.isEmpty()) return 0
+        val filter = and(`in`("projectId", projectIds), reviewMatch(language, statusFilter))
         return translationsCol.countDocuments(filter).toInt()
+    }
+
+    /**
+     * Returns project IDs owned by the given user. Used as the join key for dashboard/review
+     * queries instead of the denormalized `ownerId` field on translations, which is unreliable
+     * for legacy docs (missing) and for docs the backfill couldn't resolve a project for.
+     */
+    private suspend fun projectIdsForOwner(ownerId: String): List<String> {
+        return projectsCol.find(eq("ownerId", ownerId))
+            .projection(Document("_id", 1))
+            .toList()
+            .mapNotNull { it.getString("_id") }
     }
 
     private fun reviewMatch(language: String?, statusFilter: String?): org.bson.conversions.Bson {
@@ -267,8 +283,10 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
 
     override suspend fun countByStatus(ownerId: String): Map<String, Int> {
         val result = mutableMapOf("auto" to 0, "review" to 0, "blocked" to 0)
+        val projectIds = projectIdsForOwner(ownerId)
+        if (projectIds.isEmpty()) return result
         val pipeline = listOf(
-            Aggregates.match(eq("ownerId", ownerId)),
+            Aggregates.match(`in`("projectId", projectIds)),
             Aggregates.group("\$status", com.mongodb.client.model.Accumulators.sum("count", 1))
         )
         translationsCol.aggregate<Document>(pipeline).toList().forEach { doc ->
@@ -300,12 +318,16 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
     }
 
     override suspend fun totalStringsTranslated(ownerId: String): Int {
-        return translationsCol.countDocuments(and(eq("ownerId", ownerId), ne("status", "blocked"))).toInt()
+        val projectIds = projectIdsForOwner(ownerId)
+        if (projectIds.isEmpty()) return 0
+        return translationsCol.countDocuments(and(`in`("projectId", projectIds), ne("status", "blocked"))).toInt()
     }
 
     override suspend fun activeLanguageCount(ownerId: String): Int {
+        val projectIds = projectIdsForOwner(ownerId)
+        if (projectIds.isEmpty()) return 0
         val pipeline = listOf(
-            Aggregates.match(eq("ownerId", ownerId)),
+            Aggregates.match(and(`in`("projectId", projectIds), `in`("status", listOf("auto", "approved")))),
             Aggregates.group("\$targetLanguage")
         )
         return translationsCol.aggregate<Document>(pipeline).toList().size
@@ -402,15 +424,20 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             val s = stringById[sid] ?: return@mapNotNull null
             val pid = s.getString("projectId") ?: return@mapNotNull null
             val p = projectById[pid]
+            val setUpdates = mutableListOf(
+                Updates.set("projectId", pid),
+                Updates.set("stringKey", s.getString("stringKey") ?: ""),
+                Updates.set("sourceText", s.getString("sourceText") ?: ""),
+                Updates.set("projectName", p?.getString("name") ?: "")
+            )
+            // Only set ownerId when we actually resolved one — never overwrite with "".
+            // A blank ownerId would break dashboard queries that join on the field.
+            p?.getString("ownerId")?.takeIf { it.isNotBlank() }?.let {
+                setUpdates += Updates.set("ownerId", it)
+            }
             UpdateOneModel<Document>(
                 eq("_id", tDoc.getString("_id")),
-                Updates.combine(
-                    Updates.set("projectId", pid),
-                    Updates.set("ownerId", p?.getString("ownerId") ?: ""),
-                    Updates.set("stringKey", s.getString("stringKey") ?: ""),
-                    Updates.set("sourceText", s.getString("sourceText") ?: ""),
-                    Updates.set("projectName", p?.getString("name") ?: "")
-                )
+                Updates.combine(setUpdates)
             )
         }
         if (ops.isEmpty()) return 0

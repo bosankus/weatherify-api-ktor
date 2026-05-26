@@ -2,6 +2,7 @@ package com.transloom.pipeline
 
 import com.transloom.domain.ChangeType
 import com.transloom.domain.CulturalAnalysis
+import com.transloom.domain.LocaleProgressState
 import com.transloom.domain.Project
 import com.transloom.domain.TargetConfig
 import com.transloom.repository.ProjectRepository
@@ -225,16 +226,31 @@ class TranslationPipeline(
         val completedLangs = AtomicInteger(0)
         eventBus.stepRunning(userId, runId, "TRANSLATING", "0 / $totalLangs languages")
 
+        // Seed per-locale lanes so the dashboard can draw one row per target right away.
+        // Total = strings × 1 per locale; updates flow back as batches complete.
+        val perLocaleTotal = addedStrings.size
+        eventBus.seedLocales(userId, runId, config.targets.map { t ->
+            LocaleProgressState(code = t.code, name = t.name, status = "queued", done = 0, total = perLocaleTotal)
+        })
+
         val updatedFiles = ConcurrentHashMap<String, String>()
         val translatedCounts = ConcurrentHashMap<String, Int>()
 
         coroutineScope {
             config.targets.map { target ->
                 async {
-                    val (approved, count) = processTarget(payload, project, config, target, addedStrings, runId = runId, commitShort = payload.commitHash.take(7))
+                    eventBus.emitLocaleProgress(userId, runId, LocaleProgressState(
+                        code = target.code, name = target.name, status = "translating",
+                        done = 0, total = perLocaleTotal
+                    ))
+                    val (approved, count) = processTarget(payload, project, config, target, addedStrings, runId = runId, commitShort = payload.commitHash.take(7), userId = userId)
                     translatedCounts[target.code] = count
                     val done = completedLangs.incrementAndGet()
                     eventBus.stepRunning(userId, runId, "TRANSLATING", "$done / $totalLangs languages")
+                    eventBus.emitLocaleProgress(userId, runId, LocaleProgressState(
+                        code = target.code, name = target.name, status = "done",
+                        done = perLocaleTotal, total = perLocaleTotal
+                    ))
                     if (approved.isNotEmpty()) {
                         val existing = gitHubService.fetchFileContent(
                             repo = payload.repositoryFullName, branch = payload.branchName,
@@ -331,8 +347,19 @@ class TranslationPipeline(
         target: TargetConfig,
         addedStrings: Map<String, String>,
         runId: String,
-        commitShort: String
+        commitShort: String,
+        userId: String
     ): Pair<Map<String, String>, Int> {
+        val laneTotal = addedStrings.size
+        val laneDone = AtomicInteger(0)
+        fun bumpLane(delta: Int) {
+            if (delta <= 0) return
+            val d = laneDone.addAndGet(delta).coerceAtMost(laneTotal)
+            eventBus.emitLocaleProgress(userId, runId, LocaleProgressState(
+                code = target.code, name = target.name, status = "translating",
+                done = d, total = laneTotal
+            ))
+        }
         data class StringResult(val key: String, val text: String, val status: String)
 
         // ── Phase 1a: Separate plural forms from simple strings ────────────────
@@ -379,7 +406,9 @@ class TranslationPipeline(
                         val stringId = translationRepository.upsertString(project.id, key, sourceText)
                         translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, "", "blocked", "Plural translation failed", pipelineRunId = runId, commitShort = commitShort)
                     }
+                    bumpLane(forms.size)
                 } else {
+                    bumpLane(forms.size)
                     // Store all translated forms — including any new quantities Gemini generated
                     for ((quantity, translatedText) in translatedForms) {
                         val key = "$baseName.$quantity"
@@ -412,6 +441,7 @@ class TranslationPipeline(
                             )
                         }
                         val batchResults = translationService.translateBatch(keyedContexts)
+                        bumpLane(batch.size)
                         batch.keys.map { key ->
                             val sourceText = batch[key]!!
                             val outcome = batchResults[key]

@@ -328,5 +328,6 @@ fun Application.module() {
         pipelineEventBus = pipelineEventBus,
         cdnPublishService = cdnPublishService,
         cfKvService = cfKvService,
+        translationService = translationService,
     ))
 }

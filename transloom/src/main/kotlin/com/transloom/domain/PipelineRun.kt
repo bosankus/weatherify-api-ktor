@@ -17,7 +17,13 @@ data class PipelineRunState(
     val projectId: String? = null,
     val retriedFromRunId: String? = null,
     val surfaceSkipped: Int = 0,
-    val retryCount: Int = 0
+    val retryCount: Int = 0,
+    // Per-locale lanes and aggregate progress for the TRANSLATING phase.
+    // Populated incrementally as batches complete so the dashboard can show
+    // a live ETA and per-language status without polling.
+    val locales: List<LocaleProgressState> = emptyList(),
+    val progressDone: Int = 0,
+    val progressTotal: Int = 0
 )
 
 @Serializable
@@ -26,6 +32,15 @@ data class PipelineStepState(
     val label: String,
     val status: String, // pending | running | done | error | skipped
     val detail: String? = null
+)
+
+@Serializable
+data class LocaleProgressState(
+    val code: String,
+    val name: String,
+    val status: String, // queued | translating | done | error
+    val done: Int = 0,
+    val total: Int = 0
 )
 
 val STEP_LABELS = mapOf(

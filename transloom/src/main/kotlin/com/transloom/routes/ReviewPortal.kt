@@ -35,7 +35,6 @@ internal fun HTML.reviewPortal() {
             header("rv-hero") {
                 div("rv-hero-top") {
                     div {
-                        div("rv-eyebrow") { +"Review portal" }
                         h1("rv-page-title") { +"Pending translations" }
                         p("rv-page-sub") {
                             +"Approve, edit, or reject AI translations before they ship. "

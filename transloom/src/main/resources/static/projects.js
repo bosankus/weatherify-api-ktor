@@ -422,6 +422,38 @@
             ${toggleRow('sharedMemoryOptIn', 'Contribute to shared memory',
                 'Approved translations help other Transloom projects with similar phrases.', p.sharedMemoryOptIn)}
           </section>
+
+          <section class="pr-section">
+            <h3 class="pr-section-title">Export</h3>
+            <p class="pr-toggle-hint" style="margin:0 0 10px">Download approved translations in your source format. Skips blocked or pending-review rows.</p>
+            <div class="pr-form-grid-2">
+              <div class="pr-form-row" style="margin:0">
+                <label for="pr-export-lang">Language</label>
+                <select id="pr-export-lang">
+                  ${(p.targets || []).map(t => `<option value="${esc(t.code)}">${esc(t.name || t.code)}${t.region ? ' (' + esc(t.region) + ')' : ''}</option>`).join('')}
+                </select>
+              </div>
+              <div class="pr-form-row" style="margin:0">
+                <label for="pr-export-fmt">Format</label>
+                <select id="pr-export-fmt">
+                  <option value="auto">Auto (match source)</option>
+                  <option value="xml">Android XML</option>
+                  <option value="strings">iOS .strings</option>
+                  <option value="json">JSON / ARB</option>
+                </select>
+              </div>
+            </div>
+            <button type="button" class="bl-btn primary" data-drawer-act="export" style="margin-top:10px">Download bundle</button>
+          </section>
+
+          <section class="pr-section">
+            <h3 class="pr-section-title">Wire into CI</h3>
+            <p class="pr-toggle-hint" style="margin:0 0 8px">Trigger a translation run from any CI step. Drop your JWT in <code>$TL_TOKEN</code>:</p>
+            <pre class="pr-ci-snippet" data-ci-snippet><code>curl -X POST \\
+  -H "Authorization: Bearer $TL_TOKEN" \\
+  ${location.origin}/transloom/api/projects/${esc(p.id)}/sync</code></pre>
+            <button type="button" class="bl-btn" data-drawer-act="copy-ci" style="margin-top:8px;padding:6px 12px;font-size:12px">Copy snippet</button>
+          </section>
         `;
 
         // Wire toggles and reinstall.
@@ -432,6 +464,8 @@
             el.addEventListener('change', () => saveBasicSetting(p.id, el));
         });
         body.querySelector('[data-drawer-act="reinstall-webhook"]')?.addEventListener('click', e => reinstallWebhook(p.id, e.currentTarget));
+        body.querySelector('[data-drawer-act="export"]')?.addEventListener('click', e => exportBundle(p.id, e.currentTarget, body));
+        body.querySelector('[data-drawer-act="copy-ci"]')?.addEventListener('click', e => copyCiSnippet(e.currentTarget, body));
 
         const foot = mount.querySelector('.pr-drawer-foot');
         foot.innerHTML = `
@@ -530,6 +564,43 @@
         } catch {
             toast('Delete failed', 'error');
             setBusy(btn, false, 'Delete project');
+        }
+    }
+
+    async function exportBundle(projectId, btn, body) {
+        const lang = body.querySelector('#pr-export-lang')?.value;
+        const fmt = body.querySelector('#pr-export-fmt')?.value || 'auto';
+        if (!lang) { toast('Pick a language to export', 'error'); return; }
+        setBusy(btn, true, 'Preparing');
+        try {
+            const url = `${API}/${encodeURIComponent(projectId)}/export?lang=${encodeURIComponent(lang)}&format=${encodeURIComponent(fmt)}`;
+            const r = await tlFetch(url);
+            if (r.status === 204) { toast('Nothing to export yet for this language', 'error'); return; }
+            if (!r.ok) throw new Error('export failed');
+            const blob = await r.blob();
+            const disp = r.headers.get('Content-Disposition') || '';
+            const m = disp.match(/filename="?([^"]+)"?/);
+            const filename = m ? m[1] : `${lang}.txt`;
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+            toast('Bundle downloaded', 'success');
+        } catch {
+            toast('Export failed', 'error');
+        } finally {
+            setBusy(btn, false, 'Download bundle');
+        }
+    }
+
+    async function copyCiSnippet(btn, body) {
+        const snippet = body.querySelector('[data-ci-snippet]')?.innerText || '';
+        try {
+            await navigator.clipboard.writeText(snippet);
+            toast('Copied to clipboard', 'success');
+        } catch {
+            toast('Copy failed — select manually', 'error');
         }
     }
 

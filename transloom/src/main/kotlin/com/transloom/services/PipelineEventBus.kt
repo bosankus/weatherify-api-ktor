@@ -1,5 +1,6 @@
 package com.transloom.services
 
+import com.transloom.domain.LocaleProgressState
 import com.transloom.domain.PipelineRunState
 import com.transloom.domain.PipelineStepState
 import com.transloom.domain.initialSteps
@@ -47,7 +48,13 @@ data class PipelineEvent(
     val notificationMessage: String? = null,
     val notificationLevel: String? = null,
     val notificationActionUrl: String? = null,
-    val notificationActionLabel: String? = null
+    val notificationActionLabel: String? = null,
+    // Per-locale lane updates emitted during the TRANSLATING phase.
+    // type = "locale" carries one entry; the snapshot caches the full set.
+    val locale: LocaleProgressState? = null,
+    val locales: List<LocaleProgressState>? = null,
+    val progressDone: Int? = null,
+    val progressTotal: Int? = null
 )
 
 /**
@@ -217,6 +224,33 @@ class PipelineEventBus(private val redisUrl: String? = null) {
             cdnBundleVersion = bundleVersion,
             cdnLocales = locales
         ))
+    }
+
+    /**
+     * Seeds the per-locale lanes for this run at the start of the TRANSLATING phase.
+     * Each lane is initialised with total=0 (filled in once we know batch counts) and
+     * status="queued". Subsequent [emitLocaleProgress] calls advance individual lanes.
+     */
+    fun seedLocales(userId: String, runId: String, locales: List<LocaleProgressState>) {
+        mutateRun(userId, runId) { it.copy(locales = locales, progressDone = 0, progressTotal = locales.sumOf { l -> l.total }) }
+        emit(userId, PipelineEvent(type = "locales", runId = runId, locales = locales,
+            progressDone = 0, progressTotal = locales.sumOf { it.total }))
+    }
+
+    /**
+     * Advances one locale lane and refreshes the aggregate progress counters.
+     * Safe to call from concurrent locale coroutines — the snapshot mutation
+     * runs serially on [ioScope] and the wire event is fire-and-forget.
+     */
+    fun emitLocaleProgress(userId: String, runId: String, locale: LocaleProgressState) {
+        mutateRun(userId, runId) { current ->
+            val updated = current.locales.map { if (it.code == locale.code) locale else it }
+                .let { if (it.none { l -> l.code == locale.code }) it + locale else it }
+            val done = updated.sumOf { it.done }
+            val total = updated.sumOf { it.total }.coerceAtLeast(current.progressTotal)
+            current.copy(locales = updated, progressDone = done, progressTotal = total)
+        }
+        emit(userId, PipelineEvent(type = "locale", runId = runId, locale = locale))
     }
 
     fun stepRunning(userId: String, runId: String, stepId: String, detail: String? = null) =
