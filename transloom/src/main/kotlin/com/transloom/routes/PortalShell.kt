@@ -37,7 +37,7 @@ internal fun HTML.portalShell(
         title { +"Transloom — $pageTitle" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
-        style { unsafe { +"$SHARED_CSS$ONBOARDING_CSS" } }
+        style { unsafe { +"$SHARED_CSS$SHELL_LAYOUT_CSS$ONBOARDING_CSS" } }
         staticStylesheets.forEach { href ->
             link(rel = "stylesheet", href = href)
         }
@@ -107,6 +107,36 @@ internal fun HTML.comingSoonPage(label: String, navKey: String) {
  * Kept inline (rather than served as a static file) because it must run before
  * any other script — extracting it would require an extra blocking <script src>.
  */
+/**
+ * Layout chrome shared by every authenticated portal page rendered through
+ * [portalShell]: the flex container that pairs the sidebar with the scrollable
+ * main column, the sidebar/nav styling, and the basic page-header typography.
+ *
+ * Kept separate from [SHARED_CSS] (which is also used by unauthenticated
+ * landing pages that don't have a sidebar) and from `DASHBOARD_CSS` (which
+ * holds dashboard-only widgets and modals). Dashboard renders pull this in
+ * alongside `DASHBOARD_CSS` so the two stay in sync.
+ */
+internal const val SHELL_LAYOUT_CSS = """
+.app-layout{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 0}
+.sidebar-logo{font-size:16px;font-weight:700;padding:2px 20px 18px;border-bottom:1px solid var(--border);margin-bottom:12px;color:var(--text);gap:10px!important}
+.sidebar-logo span{color:var(--text)}
+.sidebar-nav{flex:1;display:flex;flex-direction:column;gap:2px;padding:0 10px}
+.nav-item{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:var(--radius-sm);color:var(--text-muted);font-size:13px;transition:all .12s}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500}
+.nav-badge{font-size:11px;font-weight:700;border-radius:10px;padding:1px 7px;min-width:20px;text-align:center}
+.review-badge{background:var(--accent-dim);color:var(--accent);display:none}
+.sidebar-footer{padding:16px 16px 0;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.user-chip{font-size:12px;color:var(--text-muted);padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.logout-btn{width:100%;font-size:12px;padding:7px 12px}
+.main-content{flex:1;overflow-y:auto;padding:28px 32px}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:12px}
+.page-title{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:3px}
+.page-sub{font-size:13px;color:var(--text-muted)}
+"""
+
 private val SHELL_RUNTIME_JS = """
 (function(){
   var token=localStorage.getItem('transloom_token');
