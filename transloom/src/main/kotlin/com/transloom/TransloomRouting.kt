@@ -6,6 +6,7 @@ import com.transloom.repository.BillingRepository
 import com.transloom.repository.CdnPublishRepository
 import com.transloom.repository.GlossaryRepository
 import com.transloom.repository.NotificationRepository
+import com.transloom.repository.ProjectMembershipRepository
 import com.transloom.repository.ProjectRepository
 import com.transloom.repository.TranslationRepository
 import com.transloom.repository.UserRepository
@@ -28,10 +29,13 @@ import com.transloom.services.BillingService
 import com.transloom.services.CdnPublishService
 import com.transloom.services.CloudflareKvService
 import com.transloom.services.GitHubService
+import com.transloom.services.InAppNotificationService
+import com.transloom.services.NotificationService
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.RazorpayBillingService
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
+import com.transloom.routes.configureMemberRoutes
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.ratelimit.RateLimitName
@@ -48,6 +52,7 @@ class TransloomDeps(
     val translationRepository: TranslationRepository,
     val glossaryRepository: GlossaryRepository,
     val notificationRepository: NotificationRepository,
+    val membershipRepository: ProjectMembershipRepository,
     val cdnPublishRepository: CdnPublishRepository,
     val billingService: BillingService,
     val razorpayService: RazorpayBillingService,
@@ -57,6 +62,8 @@ class TransloomDeps(
     val cdnPublishService: CdnPublishService,
     val cfKvService: CloudflareKvService,
     val translationService: TranslationService,
+    val notificationService: NotificationService? = null,
+    val inAppNotificationService: InAppNotificationService? = null,
 )
 
 /**
@@ -89,7 +96,8 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
             configureApiRoutes(
                 d.billingService, d.billingRepository, d.githubService, d.projectRepository,
                 d.userRepository, d.translationRepository, d.pipelineEventBus, d.jobQueue,
-                d.glossaryRepository, d.userActivityService, d.cdnPublishService, d.translationService
+                d.glossaryRepository, d.userActivityService, d.membershipRepository,
+                d.cdnPublishService, d.translationService
             )
             configureDashboardRoutes(d.projectRepository, d.translationRepository, d.billingRepository, d.cdnPublishRepository)
             configureBillingRoutes(d.razorpayService, d.billingRepository, d.userRepository, d.jwtSecret, d.userActivityService)
@@ -97,6 +105,10 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
             configureOnboardingRoutes(d.userRepository, d.billingRepository, d.projectRepository, d.translationRepository)
             configureCdnPublishRoute(d.projectRepository, d.cdnPublishService)
             configureNotificationRoutes(d.notificationRepository)
+            configureMemberRoutes(
+                d.membershipRepository, d.projectRepository, d.userRepository,
+                d.notificationService, d.inAppNotificationService
+            )
         }
     }
 }

@@ -27,6 +27,8 @@ import com.transloom.services.SemanticChangeAnalyzer
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import com.transloom.services.UserLifecycleMonitor
+import com.transloom.services.backfillProjectMemberships
+import kotlinx.coroutines.launch
 import domain.service.RefundService
 import io.ktor.server.application.*
 import kotlinx.coroutines.runBlocking
@@ -71,6 +73,12 @@ fun Application.configureTransloom(refundService: RefundService) {
     val culturalSensitivityAnalyzer = CulturalSensitivityAnalyzer(MongoCulturalAnalysisCacheRepository(db))
     val cdnPublishRepository: CdnPublishRepository = MongoCdnPublishRepository(db)
     val notificationRepository = MongoNotificationRepository(db)
+    val membershipRepository = MongoProjectMembershipRepository(db)
+    // Idempotent OWNER backfill for legacy projects — runs in background, doesn't gate startup.
+    launch {
+        runCatching { backfillProjectMemberships(projectRepository, userRepository, membershipRepository) }
+            .onFailure { log.warn("Membership backfill failed: {}", it.message) }
+    }
     val cfKvService = CloudflareKvService(
         accountId = getSecretValue("cloudflare-account-id"),
         namespaceId = getSecretValue("cloudflare-kv-namespace-id"),
@@ -132,6 +140,7 @@ fun Application.configureTransloom(refundService: RefundService) {
         translationRepository = translationRepository,
         glossaryRepository = glossaryRepository,
         notificationRepository = notificationRepository,
+        membershipRepository = membershipRepository,
         cdnPublishRepository = cdnPublishRepository,
         billingService = billingService,
         razorpayService = razorpayService,
@@ -140,5 +149,6 @@ fun Application.configureTransloom(refundService: RefundService) {
         pipelineEventBus = pipelineEventBus,
         cdnPublishService = cdnPublishService,
         cfKvService = cfKvService,
+        translationService = translationService,
     ))
 }

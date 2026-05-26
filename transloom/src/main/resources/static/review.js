@@ -200,8 +200,7 @@
                 <div class="rv-empty-icon">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <div class="rv-empty-title">Inbox zero</div>
-                <div class="rv-empty-sub">${esc(reason)}</div>
+                <div class="rv-empty-title">${esc(reason)}</div>
             </div>`;
     }
 

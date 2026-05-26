@@ -1,0 +1,45 @@
+package com.transloom.repository
+
+import com.transloom.domain.ProjectMembership
+import com.transloom.domain.ProjectRole
+
+interface ProjectMembershipRepository {
+    /** All memberships for a project, including INVITED and REVOKED, newest first. */
+    suspend fun list(projectId: String): List<ProjectMembership>
+
+    suspend fun findById(membershipId: String): ProjectMembership?
+
+    suspend fun findByToken(inviteToken: String): ProjectMembership?
+
+    suspend fun findByProjectAndUser(projectId: String, userId: String): ProjectMembership?
+
+    /** Resolves to the user's effective role on a project, or null if not ACTIVE. */
+    suspend fun roleFor(projectId: String, userId: String): ProjectRole?
+
+    /**
+     * Creates an INVITED row keyed on (projectId, lowercased email). If a row already
+     * exists for that pair the role is updated and a fresh inviteToken is issued — this
+     * lets an admin re-invite a stale email without a duplicate-key crash.
+     */
+    suspend fun upsertInvite(
+        projectId: String,
+        email: String,
+        role: ProjectRole,
+        invitedBy: String,
+        inviteToken: String
+    ): ProjectMembership
+
+    /**
+     * Materializes the owner as an ACTIVE membership. Idempotent — used by startup
+     * backfill and by the project-create flow. No-op if a row already exists.
+     */
+    suspend fun ensureOwner(projectId: String, userId: String, email: String): ProjectMembership
+
+    /** Binds [userId] to the invite and flips status to ACTIVE. Clears the token (single-use). */
+    suspend fun markAccepted(membershipId: String, userId: String): ProjectMembership?
+
+    suspend fun updateRole(membershipId: String, role: ProjectRole): ProjectMembership?
+
+    /** Soft-delete: status -> REVOKED, stamps revokedAt. Keeps the row for audit. */
+    suspend fun revoke(membershipId: String): Boolean
+}

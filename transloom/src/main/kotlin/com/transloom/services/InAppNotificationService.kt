@@ -112,6 +112,22 @@ class InAppNotificationService(
         dedupMs = DEDUP_6H
     )
 
+    suspend fun notifyInviteAccepted(
+        ownerId: String,
+        memberName: String,
+        projectName: String,
+        projectId: String
+    ) = notify(
+        userId = ownerId,
+        type = NotificationType.INVITE_ACCEPTED,
+        title = "$memberName joined $projectName",
+        message = "They now have access based on the role you assigned.",
+        level = "success",
+        actionUrl = "/transloom/members/$projectId",
+        actionLabel = "Manage members",
+        dedupMs = 0
+    )
+
     // ── Core create + push ─────────────────────────────────────────────────────
 
     private suspend fun notify(

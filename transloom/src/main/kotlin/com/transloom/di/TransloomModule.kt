@@ -28,6 +28,7 @@ fun transloomModule(encryptionKey: String) = module {
     single<CdnPublishRepository> { MongoCdnPublishRepository(get()) }
     single<NotificationRepository> { MongoNotificationRepository(get()) }
     single<SharedTranslationMemoryRepository> { MongoSharedTranslationMemoryRepository(get()) }
+    single<ProjectMembershipRepository> { MongoProjectMembershipRepository(get()) }
 }
 
 fun transloomIndexes(): List<IndexSpec> {
@@ -83,5 +84,18 @@ fun transloomIndexes(): List<IndexSpec> {
         // Translation history: query by project + stringKey, sorted by time
         IndexSpec("translation_history", Document(mapOf("projectId" to 1, "stringKey" to 1, "changedAt" to -1))),
         IndexSpec("translation_history", Document("translationId", 1)),
+        // Project members: unique (projectId, userId) so an ACTIVE user can't double-join.
+        // Partial filter — userId is null on pending INVITED rows; without the filter
+        // every pending invite for a project would collide on (projectId, null).
+        IndexSpec(
+            "project_members",
+            Document(mapOf("projectId" to 1, "userId" to 1)),
+            IndexOptions().unique(true).partialFilterExpression(Document("userId", Document("\$exists", true)))
+        ),
+        // Email is always set, so uniqueness on (projectId, email) prevents duplicate invites.
+        IndexSpec("project_members", Document(mapOf("projectId" to 1, "email" to 1)), unique),
+        IndexSpec("project_members", Document("projectId", 1)),
+        IndexSpec("project_members", Document("userId", 1)),
+        IndexSpec("project_members", Document("inviteToken", 1)),
     )
 }

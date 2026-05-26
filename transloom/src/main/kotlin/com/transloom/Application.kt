@@ -156,6 +156,13 @@ fun Application.module() {
     val cdnPublishRepository: CdnPublishRepository by inject()
     val notificationRepository: NotificationRepository by inject()
     val sharedMemoryRepository: SharedTranslationMemoryRepository by inject()
+    val membershipRepository: ProjectMembershipRepository by inject()
+    // Materialize OWNER membership rows for legacy projects so the new permission
+    // helper has a single code path. Idempotent — safe across restarts.
+    launch {
+        runCatching { backfillProjectMemberships(projectRepository, userRepository, membershipRepository) }
+            .onFailure { log.warn("Membership backfill failed: {}", it.message) }
+    }
 
     val cfAccountId = getSecretValue("cloudflare-account-id")
     val cfNamespaceId = getSecretValue("cloudflare-kv-namespace-id")
@@ -320,6 +327,7 @@ fun Application.module() {
         translationRepository = translationRepository,
         glossaryRepository = glossaryRepository,
         notificationRepository = notificationRepository,
+        membershipRepository = membershipRepository,
         cdnPublishRepository = cdnPublishRepository,
         billingService = billingService,
         razorpayService = razorpayService,
@@ -329,5 +337,7 @@ fun Application.module() {
         cdnPublishService = cdnPublishService,
         cfKvService = cfKvService,
         translationService = translationService,
+        notificationService = notificationService,
+        inAppNotificationService = inAppNotificationService,
     ))
 }

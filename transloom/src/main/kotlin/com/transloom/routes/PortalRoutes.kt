@@ -64,6 +64,21 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
             call.issueBootstrapCookie()
             call.respondHtml { reviewPortal() }
         }
+        // Members landing — no projectId. Client will pick the first project after
+        // it loads /api/projects; if there are none, the server-rendered empty state shows.
+        get("/members") {
+            call.issueBootstrapCookie()
+            call.respondHtml { membersApp(projectId = null) }
+        }
+        get("/members/{projectId}") {
+            call.issueBootstrapCookie()
+            call.respondHtml { membersApp(projectId = call.parameters["projectId"]) }
+        }
+        // Public invite landing — no session required. The page itself decides whether
+        // to offer Accept (logged in) or Continue with GitHub (logged out).
+        get("/invite/{token}") {
+            call.respondHtml { invitePage() }
+        }
         get("/favicon.svg") {
             call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
         }
@@ -104,6 +119,10 @@ internal fun appSidebar(active: String, reviewBadge: Boolean = false) = """
     <a href="/transloom/projects" class="nav-item${if (active=="projects") " active" else ""}">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       Projects
+    </a>
+    <a href="/transloom/members" class="nav-item${if (active=="members") " active" else ""}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Members
     </a>
     <a href="/transloom/review-portal" class="nav-item${if (active=="review") " active" else ""}">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>

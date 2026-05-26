@@ -2,10 +2,12 @@ package com.transloom.routes
 
 import com.transloom.domain.CreateProjectInput
 import com.transloom.domain.PipelineRunState
+import com.transloom.domain.ProjectRole
 import com.transloom.domain.Translation
 import com.transloom.domain.TranslationHistoryEntry
 import com.transloom.repository.BillingRepository
 import com.transloom.repository.GlossaryRepository
+import com.transloom.repository.ProjectMembershipRepository
 import com.transloom.repository.ProjectRepository
 import com.transloom.repository.TranslationRepository
 import com.transloom.repository.UserRepository
@@ -14,6 +16,8 @@ import com.transloom.domain.UserEvent
 import com.transloom.services.BillingService
 import com.transloom.services.GitHubService
 import com.transloom.services.CdnPublishService
+import com.transloom.services.effectiveRole
+import com.transloom.services.requireProjectRole
 import com.transloom.services.TranslationContext
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
@@ -98,6 +102,7 @@ fun Route.configureApiRoutes(
     jobQueue: TranslationJobQueue,
     glossaryRepository: GlossaryRepository,
     userActivityService: UserActivityService,
+    memberships: ProjectMembershipRepository,
     cdnPublishService: CdnPublishService? = null,
     translationService: TranslationService
 ) {
@@ -269,6 +274,12 @@ fun Route.configureApiRoutes(
                     return@post call.respond(HttpStatusCode.InternalServerError, ApiError("Failed to create project"))
                 }
 
+                // Materialize OWNER membership immediately so the permission helper sees the
+                // creator without waiting on the startup backfill. Idempotent on retries.
+                runCatching {
+                    memberships.ensureOwner(project.id, userId, preflightUser?.email ?: "")
+                }.onFailure { apiLog.warn("ensureOwner failed for new project={}: {}", project.id, it.message) }
+
                 call.application.launch {
                     userActivityService.record(
                         userId, UserEvent.PROJECT_CREATED,
@@ -312,9 +323,8 @@ fun Route.configureApiRoutes(
                     ?: return@put call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@put call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                    ?: return@put
                 val body = runCatching { call.receive<UpdateProjectBody>() }.getOrElse {
                     return@put call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
                 }
@@ -369,9 +379,8 @@ fun Route.configureApiRoutes(
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+                    ?: return@get
                 call.respond(
                     HttpStatusCode.OK,
                     ProjectDetailResponse(
@@ -401,9 +410,8 @@ fun Route.configureApiRoutes(
                     ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@delete call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.OWNER, memberships)
+                    ?: return@delete
                 projectRepository.delete(projectId)
                 call.application.launch {
                     userActivityService.record(
@@ -433,9 +441,8 @@ fun Route.configureApiRoutes(
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing lang query parameter"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+                    ?: return@get
                 val target = project.targets.firstOrNull { it.code == lang }
                     ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("Language '$lang' not configured on this project"))
 
@@ -480,9 +487,8 @@ fun Route.configureApiRoutes(
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+                    ?: return@get
 
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 100
                 val offset = call.request.queryParameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
@@ -501,9 +507,8 @@ fun Route.configureApiRoutes(
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing string key"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+                    ?: return@get
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 30
                 val history = translationRepository.listHistory(projectId, stringKey, limit)
                 call.respond(HttpStatusCode.OK, TranslationHistoryResponse(history = history, stringKey = stringKey))
@@ -564,9 +569,10 @@ fun Route.configureApiRoutes(
                 val translation = translationRepository.getTranslation(translationId)
                     ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
                 val project = projectRepository.findById(translation.projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
-                }
+                call.requireProjectRole(
+                    project, userId, ProjectRole.TRANSLATOR, memberships,
+                    denyStatus = HttpStatusCode.Forbidden, denyMessage = "Access denied"
+                ) ?: return@post
 
                 val body = runCatching { call.receive<ApproveBody>() }.getOrElse { ApproveBody() }
                 val editedText = body.editedText?.takeIf { it.isNotBlank() }
@@ -591,7 +597,7 @@ fun Route.configureApiRoutes(
                     return@post call.respond(HttpStatusCode.BadRequest, ApiError("Batch size cannot exceed 200"))
                 }
 
-                // Validate IDs are UUIDs and verify the caller owns all projects referenced.
+                // Validate IDs are UUIDs and verify the caller has TRANSLATOR+ on every project referenced.
                 val validIds = body.ids.mapNotNull { runCatching { UUID.fromString(it).toString() }.getOrNull() }
                 if (validIds.size != body.ids.size) {
                     return@post call.respond(HttpStatusCode.BadRequest, ApiError("One or more invalid translation ids"))
@@ -603,7 +609,15 @@ fun Route.configureApiRoutes(
                 val projects = coroutineScope {
                     projectIds.map { id -> async { projectRepository.findById(id) } }.awaitAll().filterNotNull()
                 }
-                if (projects.any { it.ownerId != userId }) {
+                // Reject if any referenced project is missing OR the caller lacks TRANSLATOR access on it.
+                if (projects.size != projectIds.size) {
+                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied to one or more translations"))
+                }
+                val rolesOk = coroutineScope {
+                    projects.map { p -> async { effectiveRole(p, userId, memberships)?.atLeast(ProjectRole.TRANSLATOR) == true } }
+                        .awaitAll()
+                }
+                if (rolesOk.any { !it }) {
                     return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied to one or more translations"))
                 }
 
@@ -635,9 +649,10 @@ fun Route.configureApiRoutes(
                 val translation = translationRepository.getTranslation(translationId)
                     ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
                 val project = projectRepository.findById(translation.projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
-                }
+                call.requireProjectRole(
+                    project, userId, ProjectRole.TRANSLATOR, memberships,
+                    denyStatus = HttpStatusCode.Forbidden, denyMessage = "Access denied"
+                ) ?: return@post
 
                 translationRepository.reject(translationId, body.reason)
                 call.respond(HttpStatusCode.OK, mapOf("status" to "rejected", "id" to translationId))
@@ -660,9 +675,10 @@ fun Route.configureApiRoutes(
                 val translation = translationRepository.getTranslation(translationId)
                     ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
                 val project = projectRepository.findById(translation.projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
-                }
+                call.requireProjectRole(
+                    project, userId, ProjectRole.TRANSLATOR, memberships,
+                    denyStatus = HttpStatusCode.Forbidden, denyMessage = "Access denied"
+                ) ?: return@post
                 if (!project.otaEnabled) {
                     return@post call.respond(HttpStatusCode.Conflict, ApiError("Enable OTA for this project before hotfixing translations"))
                 }
@@ -708,9 +724,10 @@ fun Route.configureApiRoutes(
                 val translation = translationRepository.getTranslation(translationId)
                     ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
                 val project = projectRepository.findById(translation.projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
-                }
+                call.requireProjectRole(
+                    project, userId, ProjectRole.TRANSLATOR, memberships,
+                    denyStatus = HttpStatusCode.Forbidden, denyMessage = "Access denied"
+                ) ?: return@post
                 val locked = translationRepository.lock(translationId, userId)
                 if (locked) call.respond(HttpStatusCode.OK, mapOf("status" to "locked", "id" to translationId))
                 else call.respond(HttpStatusCode.Conflict, ApiError("Translation is already locked"))
@@ -726,9 +743,10 @@ fun Route.configureApiRoutes(
                 val translation = translationRepository.getTranslation(translationId)
                     ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
                 val project = projectRepository.findById(translation.projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
-                }
+                call.requireProjectRole(
+                    project, userId, ProjectRole.TRANSLATOR, memberships,
+                    denyStatus = HttpStatusCode.Forbidden, denyMessage = "Access denied"
+                ) ?: return@post
                 translationRepository.unlock(translationId)
                 call.respond(HttpStatusCode.OK, mapOf("status" to "unlocked", "id" to translationId))
             }
@@ -746,9 +764,10 @@ fun Route.configureApiRoutes(
                 val translation = translationRepository.getTranslation(translationId)
                     ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Translation not found"))
                 val project = projectRepository.findById(translation.projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Access denied"))
-                }
+                call.requireProjectRole(
+                    project, userId, ProjectRole.TRANSLATOR, memberships,
+                    denyStatus = HttpStatusCode.Forbidden, denyMessage = "Access denied"
+                ) ?: return@post
 
                 val target = project.targets.firstOrNull { it.code == translation.targetLanguage }
                     ?: return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError("Target language no longer configured on project"))
@@ -792,9 +811,8 @@ fun Route.configureApiRoutes(
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+                    ?: return@get
 
                 val entries = glossaryRepository.listWithIds(projectId).map { e ->
                     GlossaryEntryResponse(id = e.id, languageCode = e.languageCode, sourceTerm = e.sourceTerm, targetTerm = e.targetTerm)
@@ -810,9 +828,8 @@ fun Route.configureApiRoutes(
                     ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                    ?: return@post
 
                 val body = runCatching { call.receive<GlossaryEntryBody>() }.getOrElse {
                     return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
@@ -832,9 +849,8 @@ fun Route.configureApiRoutes(
                     ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("Invalid entry id"))
 
                 val project = projectRepository.findById(projectId)
-                if (project == null || project.ownerId != userId) {
-                    return@delete call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-                }
+                call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                    ?: return@delete
 
                 val deleted = glossaryRepository.deactivate(entryId, projectId)
                 if (deleted) call.respond(HttpStatusCode.OK, mapOf("status" to "Glossary entry removed"))
@@ -921,9 +937,8 @@ fun Route.configureApiRoutes(
 
             // Verify the user still owns the project before requeuing
             val project = projectRepository.findById(projectId)
-            if (project == null || project.ownerId != userId) {
-                return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-            }
+            call.requireProjectRole(project, userId, ProjectRole.TRANSLATOR, memberships)
+                ?: return@post
 
             val attempt = count.incrementAndGet()
             val payload = WebhookPayload(
@@ -954,9 +969,8 @@ fun Route.configureApiRoutes(
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
             val project = projectRepository.findById(projectId)
-            if (project == null || project.ownerId != userId) {
-                return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-            }
+            call.requireProjectRole(project, userId, ProjectRole.TRANSLATOR, memberships)
+                ?: return@post
             val owner = userRepository.findById(userId)
             val token = owner?.githubToken
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("No GitHub token on file. Re-authenticate."))
@@ -992,9 +1006,8 @@ fun Route.configureApiRoutes(
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
             val project = projectRepository.findById(projectId)
-            if (project == null || project.ownerId != userId) {
-                return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-            }
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@post
             val owner = userRepository.findById(userId)
             val token = owner?.githubToken
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("No GitHub token on file. Re-authenticate."))

@@ -1,0 +1,294 @@
+package com.transloom.routes
+
+import com.transloom.domain.MembershipStatus
+import com.transloom.domain.ProjectMembership
+import com.transloom.domain.ProjectRole
+import com.transloom.model.ApiError
+import com.transloom.repository.ProjectMembershipRepository
+import com.transloom.repository.ProjectRepository
+import com.transloom.repository.UserRepository
+import com.transloom.services.InAppNotificationService
+import com.transloom.services.NotificationService
+import com.transloom.services.requireProjectRole
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.*
+import io.ktor.server.plugins.origin
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
+import java.security.SecureRandom
+import java.util.Base64
+import java.util.UUID
+
+private val memberLog = LoggerFactory.getLogger("MemberRoutes")
+private val secureRandom = SecureRandom()
+
+@Serializable
+data class MemberDto(
+    val id: String,
+    val userId: String?,
+    val email: String,
+    val role: String,
+    val status: String,
+    val invitedAt: Long,
+    val acceptedAt: Long?,
+    val displayName: String?
+)
+
+@Serializable
+data class MemberListResponse(val members: List<MemberDto>)
+
+@Serializable
+data class InviteBody(val email: String, val role: String)
+
+@Serializable
+data class UpdateRoleBody(val role: String)
+
+@Serializable
+data class InvitePreview(
+    val projectId: String,
+    val projectName: String,
+    val role: String,
+    val email: String,
+    val invitedBy: String?,
+    val expired: Boolean
+)
+
+@Serializable
+data class AcceptResponse(val projectId: String, val role: String)
+
+fun Route.configureMemberRoutes(
+    memberships: ProjectMembershipRepository,
+    projects: ProjectRepository,
+    users: UserRepository,
+    notifications: NotificationService?,
+    inApp: InAppNotificationService?
+) {
+    route("/transloom/api/projects/{id}/members") {
+        get {
+            val userId = call.userId()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["id"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+
+            val project = projects.findById(projectId)
+            call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+                ?: return@get
+
+            val rows = memberships.list(projectId)
+            // Fetch display names for bound users in one pass. Pending invites have no userId.
+            val userIds = rows.mapNotNull { it.userId }.distinct()
+            val nameById = userIds.associateWith { uid -> users.findById(uid)?.githubUsername }
+            call.respond(HttpStatusCode.OK, MemberListResponse(rows.map { it.toDto(nameById[it.userId]) }))
+        }
+
+        post {
+            val userId = call.userId()
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["id"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+
+            val project = projects.findById(projectId)
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@post
+
+            val body = runCatching { call.receive<InviteBody>() }.getOrElse {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("email and role required"))
+            }
+            val email = body.email.trim().lowercase()
+            if (!email.matches(EMAIL_REGEX)) {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid email address"))
+            }
+            val role = parseRole(body.role)
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("role must be ADMIN, TRANSLATOR, or VIEWER"))
+            if (role == ProjectRole.OWNER) {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("Cannot invite as OWNER — use transfer-ownership instead"))
+            }
+
+            val token = newInviteToken()
+            val membership = memberships.upsertInvite(projectId, email, role, userId, token)
+
+            // Best-effort email — invite is created even if SMTP is down so the link
+            // can be shared manually from the dashboard.
+            val acceptUrl = buildAcceptUrl(call, token)
+            val inviter = users.findById(userId)
+            if (notifications?.isConfigured == true) {
+                runCatching {
+                    notifications.sendInviteEmail(
+                        to = email,
+                        inviterName = inviter?.githubUsername ?: "A Transloom user",
+                        projectName = project!!.name,
+                        role = role.name,
+                        acceptUrl = acceptUrl
+                    )
+                }.onFailure { memberLog.warn("Invite email failed: {}", it.message) }
+            }
+
+            memberLog.info("Invite created: project={} email={} role={} by={}", projectId, email, role, userId)
+            call.respond(HttpStatusCode.Created, membership.toDto(null))
+        }
+
+        patch("/{membershipId}") {
+            val userId = call.userId()
+                ?: return@patch call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["id"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@patch call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+            val membershipId = call.parameters["membershipId"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@patch call.respond(HttpStatusCode.BadRequest, ApiError("Invalid membership id"))
+
+            val project = projects.findById(projectId)
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@patch
+
+            val body = runCatching { call.receive<UpdateRoleBody>() }.getOrElse {
+                return@patch call.respond(HttpStatusCode.BadRequest, ApiError("role required"))
+            }
+            val newRole = parseRole(body.role)
+                ?: return@patch call.respond(HttpStatusCode.BadRequest, ApiError("role must be OWNER, ADMIN, TRANSLATOR, or VIEWER"))
+
+            val target = memberships.findById(membershipId)
+            if (target == null || target.projectId != projectId) {
+                return@patch call.respond(HttpStatusCode.NotFound, ApiError("Member not found"))
+            }
+            // Demoting the sole OWNER would orphan the project — block it.
+            if (target.role == ProjectRole.OWNER && newRole != ProjectRole.OWNER) {
+                return@patch call.respond(HttpStatusCode.Conflict, ApiError("Transfer ownership before demoting the owner"))
+            }
+            val updated = memberships.updateRole(membershipId, newRole)
+                ?: return@patch call.respond(HttpStatusCode.NotFound, ApiError("Member not found"))
+            call.respond(HttpStatusCode.OK, updated.toDto(target.userId?.let { users.findById(it)?.githubUsername }))
+        }
+
+        delete("/{membershipId}") {
+            val userId = call.userId()
+                ?: return@delete call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["id"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+            val membershipId = call.parameters["membershipId"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("Invalid membership id"))
+
+            val project = projects.findById(projectId)
+                ?: return@delete call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
+            val target = memberships.findById(membershipId)
+            if (target == null || target.projectId != projectId) {
+                return@delete call.respond(HttpStatusCode.NotFound, ApiError("Member not found"))
+            }
+            // Self-leave: a non-OWNER can revoke their own membership without ADMIN.
+            // Otherwise require ADMIN+ to remove someone else.
+            val isSelfLeave = target.userId == userId && target.role != ProjectRole.OWNER
+            if (!isSelfLeave) {
+                call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                    ?: return@delete
+            }
+            if (target.role == ProjectRole.OWNER) {
+                return@delete call.respond(HttpStatusCode.Conflict, ApiError("Transfer ownership before removing the owner"))
+            }
+            memberships.revoke(membershipId)
+            call.respond(HttpStatusCode.NoContent)
+        }
+    }
+
+    route("/transloom/api/invites/{token}") {
+        // Unauthenticated preview so the invitee can see what they're accepting
+        // before logging in. Returns 404 for any token mismatch or already-consumed invite.
+        get {
+            val token = call.parameters["token"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Missing token"))
+            val membership = memberships.findByToken(token)
+                ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("Invite not found or already used"))
+            val project = projects.findById(membership.projectId)
+                ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("Project no longer exists"))
+            val inviter = users.findById(membership.invitedBy)?.githubUsername
+            call.respond(
+                HttpStatusCode.OK,
+                InvitePreview(
+                    projectId = project.id,
+                    projectName = project.name,
+                    role = membership.role.name,
+                    email = membership.email,
+                    invitedBy = inviter,
+                    expired = membership.status != MembershipStatus.INVITED
+                )
+            )
+        }
+
+        post("/accept") {
+            val userId = call.userId()
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val token = call.parameters["token"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Missing token"))
+
+            val membership = memberships.findByToken(token)
+                ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Invite not found or already used"))
+            if (membership.status != MembershipStatus.INVITED) {
+                return@post call.respond(HttpStatusCode.Conflict, ApiError("Invite already used"))
+            }
+            val project = projects.findById(membership.projectId)
+                ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Project no longer exists"))
+
+            // Block accept-as-different-user when the invitee already has an active row
+            // on this project (e.g. they were re-invited after being added another way).
+            val existing = memberships.findByProjectAndUser(membership.projectId, userId)
+            if (existing != null && existing.status == MembershipStatus.ACTIVE) {
+                return@post call.respond(HttpStatusCode.Conflict, ApiError("You are already a member of this project"))
+            }
+
+            val accepted = memberships.markAccepted(membership.id, userId)
+                ?: return@post call.respond(HttpStatusCode.InternalServerError, ApiError("Failed to accept invite"))
+
+            // Notify the project owner so they see the join in the dashboard bell.
+            inApp?.runCatching {
+                val acceptingUser = users.findById(userId)
+                notifyInviteAccepted(
+                    ownerId = project.ownerId,
+                    memberName = acceptingUser?.githubUsername ?: accepted.email,
+                    projectName = project.name,
+                    projectId = project.id
+                )
+            }?.onFailure { memberLog.warn("Invite-accepted notify failed: {}", it.message) }
+
+            memberLog.info("Invite accepted: project={} role={} user={}", project.id, accepted.role, userId)
+            call.respond(HttpStatusCode.OK, AcceptResponse(projectId = project.id, role = accepted.role.name))
+        }
+    }
+}
+
+private fun ProjectMembership.toDto(displayName: String?): MemberDto = MemberDto(
+    id = id,
+    userId = userId,
+    email = email,
+    role = role.name,
+    status = status.name,
+    invitedAt = invitedAt.toEpochMilliseconds(),
+    acceptedAt = acceptedAt?.toEpochMilliseconds(),
+    displayName = displayName
+)
+
+private fun parseRole(raw: String): ProjectRole? =
+    runCatching { ProjectRole.valueOf(raw.trim().uppercase()) }.getOrNull()
+
+private fun newInviteToken(): String {
+    val bytes = ByteArray(32).also { secureRandom.nextBytes(it) }
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+}
+
+private fun buildAcceptUrl(call: ApplicationCall, token: String): String {
+    val origin = call.request.origin
+    val scheme = if (origin.scheme.isNullOrBlank()) "https" else origin.scheme
+    val host = origin.serverHost
+    val port = origin.serverPort
+    val portPart = if ((scheme == "https" && port == 443) || (scheme == "http" && port == 80)) "" else ":$port"
+    return "$scheme://$host$portPart/transloom/invite/$token"
+}
+
+// Pragmatic email regex — good enough for "did the user fat-finger this" and matches
+// the level of validation used elsewhere in the codebase.
+private val EMAIL_REGEX = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")

@@ -146,6 +146,17 @@ private val SHELL_RUNTIME_JS = """
     var m=document.cookie.match(/(?:^|;\s*)tl_token_bootstrap=([^;]*)/);
     if(m&&m[1]){token=decodeURIComponent(m[1]);localStorage.setItem('transloom_token',token);}
   }
+  // Post-OAuth invite handoff: if the user came back from GitHub with a pending
+  // invite token stashed by invite.js, bounce them straight to the invite page
+  // so the now-authenticated session can accept in one click. Skip when we're
+  // already on the invite page (avoids a redirect loop) or have no session.
+  if(token){
+    var pending=localStorage.getItem('pending_invite_token');
+    if(pending && !/^\/transloom\/invite\//.test(location.pathname)){
+      window.location.replace('/transloom/invite/'+encodeURIComponent(pending));
+      return;
+    }
+  }
   window.authHeaders=function(){
     return token?{'Authorization':'Bearer '+token,'Content-Type':'application/json'}
                 :{'Content-Type':'application/json'};

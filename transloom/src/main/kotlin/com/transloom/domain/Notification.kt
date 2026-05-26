@@ -28,4 +28,5 @@ object NotificationType {
     const val ONBOARDING          = "ONBOARDING"
     const val GITHUB_TOKEN_INVALID = "GITHUB_TOKEN_INVALID"
     const val PIPELINE_FAILED     = "PIPELINE_FAILED"
+    const val INVITE_ACCEPTED     = "INVITE_ACCEPTED"
 }

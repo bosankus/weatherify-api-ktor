@@ -160,6 +160,28 @@ class NotificationService(private val config: SmtpConfig?) {
         )
     }
 
+    suspend fun sendInviteEmail(
+        to: String,
+        inviterName: String,
+        projectName: String,
+        role: String,
+        acceptUrl: String
+    ) {
+        send(
+            to = to,
+            subject = "$inviterName invited you to $projectName on Transloom",
+            html = buildHtml(
+                title = "You're invited to collaborate",
+                bodyHtml = """
+                    <p style="$TEXT"><b>${esc(inviterName)}</b> invited you to <b>${esc(projectName)}</b> as a <b>${esc(role.lowercase())}</b>.</p>
+                    <p style="$TEXT">Accept the invite to start reviewing or translating strings on this project.</p>
+                    ${ctaButton("Accept Invite", acceptUrl)}
+                    <p style="$HINT">This invite link is single-use and expires after acceptance. If you weren't expecting this email, you can safely ignore it.</p>
+                """.trimIndent()
+            )
+        )
+    }
+
     // ── Core SMTP send ─────────────────────────────────────────────────────────
 
     private suspend fun send(to: String, subject: String, html: String) {
