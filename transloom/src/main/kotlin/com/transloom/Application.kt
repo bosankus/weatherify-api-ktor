@@ -33,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
+import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.slf4j.LoggerFactory
@@ -59,7 +60,15 @@ fun Application.module() {
     runBlocking { MongoIndexer.ensure(db, transloomIndexes()) }
 
     install(ContentNegotiation) {
-        json()
+        // encodeDefaults = true: otherwise response fields whose value equals
+        // their Kotlin default (e.g. ProjectDetailResponse.autoPromote = true)
+        // are dropped from the JSON, making the client see `undefined` and
+        // mis-render toggles. ignoreUnknownKeys = true: tolerate forward-compatible
+        // payloads from clients that send fields older builds don't model.
+        json(Json {
+            encodeDefaults = true
+            ignoreUnknownKeys = true
+        })
     }
 
     install(CORS) {

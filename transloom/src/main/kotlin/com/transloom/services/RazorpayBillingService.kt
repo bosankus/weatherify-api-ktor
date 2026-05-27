@@ -165,14 +165,22 @@ class RazorpayBillingService(
         val subscriptionId = sub.razorpaySubscriptionId
             ?: throw IllegalStateException("No active subscription found for userId=$userId")
         if (!sub.inTrial) throw IllegalStateException("Subscription is not in trial for userId=$userId")
-        val now = Clock.System.now().epochSeconds
+        val nowEpoch = Clock.System.now().epochSeconds
         withContext(Dispatchers.IO) {
             http.patch("$RAZORPAY_API/subscriptions/$subscriptionId") {
                 header(HttpHeaders.Authorization, authHeader)
                 contentType(ContentType.Application.Json)
-                setBody("""{"start_at":$now}""")
+                setBody("""{"start_at":$nowEpoch}""")
             }
         }
+        // Optimistically mark billing as started so the UI immediately reflects the
+        // non-trial state without waiting for the subscription.charged webhook.
+        val estimatedPeriodEnd = Clock.System.now() + 30.days
+        billingRepository.upsertSubscription(
+            userId = userId,
+            plan = sub.plan,
+            currentPeriodEnd = estimatedPeriodEnd
+        )
         billingRepository.setLimitHitAt(userId, null)
         log.info("Trial activated immediately for userId={} sub={}", userId, subscriptionId)
     }

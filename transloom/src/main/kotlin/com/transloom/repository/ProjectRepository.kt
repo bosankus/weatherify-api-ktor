@@ -27,7 +27,8 @@ interface ProjectRepository {
         culturalSensitivityEnabled: Boolean? = null,
         autoApproveEnabled: Boolean? = null,
         otaEnabled: Boolean? = null,
-        autoPromote: Boolean? = null
+        autoPromote: Boolean? = null,
+        sharedMemoryOptIn: Boolean? = null
     ): Boolean
 
     suspend fun delete(projectId: String)

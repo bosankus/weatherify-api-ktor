@@ -340,7 +340,8 @@ fun Route.configureApiRoutes(
                     culturalSensitivityEnabled = body.culturalSensitivityEnabled,
                     autoApproveEnabled = body.autoApproveEnabled,
                     otaEnabled = body.otaEnabled,
-                    autoPromote = body.autoPromote
+                    autoPromote = body.autoPromote,
+                    sharedMemoryOptIn = body.sharedMemoryOptIn
                 )
 
                 val updated = projectRepository.findById(projectId)
@@ -1116,11 +1117,36 @@ private fun launchFollowUpPr(
 
                     if (added) {
                         apiLog.info("Review commit pushed to existing PR branch={} ({} translations, {} languages)", latestPrBranch, pending.size, langCount)
+                        // Reuse the latest run's existing prUrl (set when that run created the PR)
+                        // so the activity card now shows "View pull request" instead of
+                        // "No translatable strings approved".
+                        val existingPrUrl = recentRuns
+                            .filter { it.projectId == projectId && it.prBranch == latestPrBranch && it.prUrl != null }
+                            .maxByOrNull { it.startedAt }
+                            ?.prUrl
+                        var cdnDetail: String? = null
+                        var cdnBundleVersion: String? = null
+                        var cdnLocales: List<String> = emptyList()
                         if (cdnPublishService != null) {
                             runCatching { cdnPublishService.publish(projectId) }
-                                .onSuccess { receipt -> apiLog.info("CDN auto-publish after review commit: project={} locales={}", projectId, receipt.locales) }
+                                .onSuccess { receipt ->
+                                    apiLog.info("CDN auto-publish after review commit: project={} locales={}", projectId, receipt.locales)
+                                    if (!receipt.skipped) {
+                                        cdnDetail = "${receipt.locales.size} locale${if (receipt.locales.size != 1) "s" else ""} live on edge"
+                                        cdnBundleVersion = receipt.bundleVersion
+                                        cdnLocales = receipt.locales
+                                    }
+                                }
                                 .onFailure { e -> apiLog.warn("CDN publish failed after review commit: project={}: {}", projectId, e.message) }
                         }
+                        eventBus?.recordPostApprovalUpdate(
+                            projectId = projectId,
+                            ownerId = project.ownerId,
+                            prUrl = existingPrUrl,
+                            cdnDetail = cdnDetail,
+                            cdnBundleVersion = cdnBundleVersion,
+                            cdnLocales = cdnLocales
+                        )
                         return@launch
                     }
                     // Branch no longer exists — fall through to create a new PR
@@ -1174,11 +1200,29 @@ private fun launchFollowUpPr(
                     token         = githubToken
                 )
                 apiLog.info("New follow-up PR created: {} ({} translations, {} languages)", pr.prUrl, pending.size, langCount)
+                var cdnDetail: String? = null
+                var cdnBundleVersion: String? = null
+                var cdnLocales: List<String> = emptyList()
                 if (cdnPublishService != null) {
                     runCatching { cdnPublishService.publish(projectId) }
-                        .onSuccess { receipt -> apiLog.info("CDN auto-publish after follow-up PR: project={} locales={}", projectId, receipt.locales) }
+                        .onSuccess { receipt ->
+                            apiLog.info("CDN auto-publish after follow-up PR: project={} locales={}", projectId, receipt.locales)
+                            if (!receipt.skipped) {
+                                cdnDetail = "${receipt.locales.size} locale${if (receipt.locales.size != 1) "s" else ""} live on edge"
+                                cdnBundleVersion = receipt.bundleVersion
+                                cdnLocales = receipt.locales
+                            }
+                        }
                         .onFailure { e -> apiLog.warn("CDN publish failed after follow-up PR: project={}: {}", projectId, e.message) }
                 }
+                eventBus?.recordPostApprovalUpdate(
+                    projectId = projectId,
+                    ownerId = project.ownerId,
+                    prUrl = pr.prUrl,
+                    cdnDetail = cdnDetail,
+                    cdnBundleVersion = cdnBundleVersion,
+                    cdnLocales = cdnLocales
+                )
                 return@launch
             } catch (e: Exception) {
                 lastError = e

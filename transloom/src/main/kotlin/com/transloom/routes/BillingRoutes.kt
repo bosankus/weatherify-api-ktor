@@ -590,11 +590,11 @@ private fun buildInvoiceReceipt(
 
 internal fun Subscription.toResponse(): SubscriptionResponse {
     val now = Clock.System.now()
-    val trialEndsOn = if (inTrial && startedAt != null)
-        (startedAt + 7.days).toLocalDateTime(TimeZone.UTC).date.toString()
+    val trialEndsOn = if (inTrial && trialStartedAt != null)
+        (trialStartedAt + 7.days).toLocalDateTime(TimeZone.UTC).date.toString()
     else null
     val daysUntilRenewal = when {
-        inTrial && startedAt != null -> ((startedAt + 7.days) - now).inWholeDays.toInt().coerceAtLeast(0)
+        inTrial && trialStartedAt != null -> ((trialStartedAt + 7.days) - now).inWholeDays.toInt().coerceAtLeast(0)
         currentPeriodEnd != null -> (currentPeriodEnd - now).inWholeDays.toInt().coerceAtLeast(0)
         else -> null
     }

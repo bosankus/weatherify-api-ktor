@@ -103,7 +103,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         culturalSensitivityEnabled: Boolean?,
         autoApproveEnabled: Boolean?,
         otaEnabled: Boolean?,
-        autoPromote: Boolean?
+        autoPromote: Boolean?,
+        sharedMemoryOptIn: Boolean?
     ): Boolean {
         val updates = mutableListOf<org.bson.conversions.Bson>()
 
@@ -117,7 +118,7 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         autoApproveEnabled?.let { updates.add(Updates.set("autoApproveEnabled", it)) }
         otaEnabled?.let { updates.add(Updates.set("otaEnabled", it)) }
         autoPromote?.let { updates.add(Updates.set("autoPromote", it)) }
-        // sharedMemoryOptIn is not exposed in the update API (only set at creation time)
+        sharedMemoryOptIn?.let { updates.add(Updates.set("sharedMemoryOptIn", it)) }
 
         if (updates.isEmpty()) return false
 

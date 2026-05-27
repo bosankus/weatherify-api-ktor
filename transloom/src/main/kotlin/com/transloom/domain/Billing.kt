@@ -1,6 +1,7 @@
 package com.transloom.domain
 
 import com.androidplay.core.secrets.getSecretValue
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 
 enum class BillingPlan(
@@ -42,9 +43,15 @@ data class Subscription(
      */
     val trialStartedAt: Instant? = null
 ) {
-    val inTrial: Boolean get() =
-        plan != BillingPlan.FREE && plan != BillingPlan.ENTERPRISE &&
-        razorpaySubscriptionId != null && currentPeriodEnd == null
+    val inTrial: Boolean get() {
+        if (plan == BillingPlan.FREE || plan == BillingPlan.ENTERPRISE) return false
+        if (razorpaySubscriptionId == null || currentPeriodEnd != null) return false
+        // Only "in trial" when trialStartedAt is set and less than 7 days ago.
+        // This prevents re-subscribers (whose trialStartedAt is old) and expired trials
+        // from appearing as in-trial while waiting for the subscription.charged webhook.
+        val trialStart = trialStartedAt ?: return false
+        return (Clock.System.now() - trialStart).inWholeDays < 7
+    }
 }
 
 data class InvoiceRecord(

@@ -246,6 +246,66 @@ class PipelineEventBus(
     }
 
     /**
+     * Patches an already-finished run with the outcome of an out-of-band
+     * post-approval follow-up: the PR that was created (or appended to) and any
+     * CDN publish that ran afterwards. The original run card on every open
+     * dashboard is updated in place — CREATING_PR / CDN_PUBLISH steps flip to
+     * "done", the PR link appears, and the CDN widget refreshes — instead of
+     * being stuck on "No translatable strings approved".
+     *
+     * Bypasses [updateStep] / [activeSteps] because those are scoped to in-flight
+     * runs; this writes directly to the stored snapshot and re-emits the same
+     * SSE event shapes the client already handles. Safe to call when no recent
+     * run exists for the project (it's a no-op).
+     */
+    suspend fun recordPostApprovalUpdate(
+        projectId: String,
+        ownerId: String,
+        prUrl: String?,
+        cdnDetail: String? = null,
+        cdnBundleVersion: String? = null,
+        cdnLocales: List<String> = emptyList()
+    ) {
+        val target = runCatching { recentRuns(ownerId) }.getOrElse { emptyList() }
+            .filter { it.projectId == projectId }
+            .maxByOrNull { it.startedAt } ?: return
+        val runId = target.runId
+
+        mutateRun(ownerId, runId) { current ->
+            val newSteps = current.steps.map { step ->
+                when {
+                    step.id == "CREATING_PR" && prUrl != null ->
+                        step.copy(status = "done", detail = prUrl)
+                    step.id == "CDN_PUBLISH" && cdnDetail != null ->
+                        step.copy(status = "done", detail = cdnDetail)
+                    else -> step
+                }
+            }
+            current.copy(steps = newSteps, prUrl = prUrl ?: current.prUrl)
+        }
+
+        if (prUrl != null) {
+            emit(ownerId, PipelineEvent(
+                type = "step", runId = runId, stepId = "CREATING_PR", status = "done", detail = prUrl
+            ))
+            // Re-emit finish so the client populates run.prUrl and the footer
+            // shows the "View pull request" link instead of "No changes found".
+            emit(ownerId, PipelineEvent(type = "finish", runId = runId, prUrl = prUrl))
+        }
+        if (cdnDetail != null) {
+            emit(ownerId, PipelineEvent(
+                type = "step", runId = runId, stepId = "CDN_PUBLISH", status = "done", detail = cdnDetail
+            ))
+        }
+        if (cdnBundleVersion != null) {
+            emit(ownerId, PipelineEvent(
+                type = "cdn_ready", runId = runId,
+                cdnBundleVersion = cdnBundleVersion, cdnLocales = cdnLocales
+            ))
+        }
+    }
+
+    /**
      * Seeds the per-locale lanes for this run at the start of the TRANSLATING phase.
      * Each lane is initialised with total=0 (filled in once we know batch counts) and
      * status="queued". Subsequent [emitLocaleProgress] calls advance individual lanes.

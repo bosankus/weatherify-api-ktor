@@ -113,32 +113,37 @@ private const val LOGO_SVG = """
 """
 
 internal fun appSidebar(active: String, reviewBadge: Boolean = false) = """
-<aside class="sidebar">
-  <div class="sidebar-logo brand">$LOGO_SVG<span>Transloom</span></div>
+<aside class="sidebar" id="app-sidebar">
+  <div class="sidebar-head">
+    <div class="sidebar-logo brand">$LOGO_SVG<span class="brand-text">Transloom</span></div>
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Collapse sidebar" title="Collapse sidebar">
+      <svg class="sb-toggle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+  </div>
   <nav class="sidebar-nav">
-    <a href="/transloom/app" class="nav-item${if (active=="dash") " active" else ""}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      Dashboard
+    <a href="/transloom/app" class="nav-item${if (active=="dash") " active" else ""}" title="Dashboard">
+      <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="nav-label">Dashboard</span>
     </a>
-    <a href="/transloom/projects" class="nav-item${if (active=="projects") " active" else ""}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      Projects
+    <a href="/transloom/projects" class="nav-item${if (active=="projects") " active" else ""}" title="Projects">
+      <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span class="nav-label">Projects</span>
     </a>
-    <a href="/transloom/members" class="nav-item${if (active=="members") " active" else ""}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Members
+    <a href="/transloom/members" class="nav-item${if (active=="members") " active" else ""}" title="Members">
+      <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span class="nav-label">Members</span>
     </a>
-    <a href="/transloom/review-portal" class="nav-item${if (active=="review") " active" else ""}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-      Review ${if (reviewBadge) """<span class="nav-badge review-badge" id="review-count"></span>""" else ""}
+    <a href="/transloom/review-portal" class="nav-item${if (active=="review") " active" else ""}" title="Review">
+      <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span class="nav-label">Review</span>${if (reviewBadge) """<span class="nav-badge review-badge" id="review-count"></span>""" else ""}
     </a>
-    <a href="/transloom/billing/analytics" class="nav-item${if (active=="analytics") " active" else ""}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      Analytics
+    <a href="/transloom/billing/analytics" class="nav-item${if (active=="analytics") " active" else ""}" title="Analytics">
+      <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span class="nav-label">Analytics</span>
     </a>
-    <a href="/transloom/billing" class="nav-item${if (active=="billing") " active" else ""}">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-      Billing
+    <a href="/transloom/billing" class="nav-item${if (active=="billing") " active" else ""}" title="Billing">
+      <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+      <span class="nav-label">Billing</span>
     </a>
   </nav>
   <div class="sidebar-footer">
@@ -1248,6 +1253,7 @@ private fun HTML.dashboardApp() {
         }
         div("toast") { id = "toast" }
         div { id = "ob-host" }
+        script { unsafe { +SHELL_RUNTIME_JS } }
         script { unsafe { +BILLING_CACHE_JS } }
         script { unsafe { +SIDEBAR_QUOTA_JS } }
         script { unsafe { +DASHBOARD_JS } }
@@ -2132,7 +2138,7 @@ function updateCdnWidget(publishes){
   }
   const sorted=publishes.slice().sort(function(a,b){return(b.publishedAt||0)-(a.publishedAt||0);});
   const latest=sorted[0];
-  if(badge){badge.textContent='&#9679; Live';badge.className='cdn-widget-badge live';}
+  if(badge){badge.textContent='● Live';badge.className='cdn-widget-badge live';}
   const ver=esc((latest.bundleVersion||'').substring(0,12));
   const ago=timeAgo(latest.publishedAt||Date.now());
   const locales=latest.locales||[];

@@ -102,7 +102,8 @@ data class UpdateProjectBody(
     val culturalSensitivityEnabled: Boolean? = null,
     val autoApproveEnabled: Boolean? = null,
     val otaEnabled: Boolean? = null,
-    val autoPromote: Boolean? = null
+    val autoPromote: Boolean? = null,
+    val sharedMemoryOptIn: Boolean? = null
 )
 
 @Serializable
