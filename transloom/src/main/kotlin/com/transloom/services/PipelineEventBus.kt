@@ -487,5 +487,5 @@ class PipelineEventBus(
     }
 
     private fun memFlowFor(userId: String) =
-        memFlows.getOrPut(userId) { MutableSharedFlow(replay = 40, extraBufferCapacity = 64) }
+        memFlows.getOrPut(userId) { MutableSharedFlow(replay = 0, extraBufferCapacity = 64) }
 }

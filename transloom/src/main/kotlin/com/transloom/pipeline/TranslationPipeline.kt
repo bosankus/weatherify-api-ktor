@@ -176,7 +176,12 @@ class TranslationPipeline(
         val newStrings = allChangedStrings.filter { (key, _) -> !existingDbStrings.containsKey(key) }
         val modifiedStrings = allChangedStrings.filter { (key, _) -> existingDbStrings.containsKey(key) }
 
-        val (surfaceKeys, semanticKeys) = classifyModifiedStrings(modifiedStrings, existingDbStrings)
+        val (surfaceKeys, semanticKeys) = if (payload.forceTranslate) {
+            // User explicitly overrode the classifier — treat every modified string as semantic.
+            emptySet<String>() to modifiedStrings.keys
+        } else {
+            classifyModifiedStrings(modifiedStrings, existingDbStrings)
+        }
 
         // Surface changes: source text drifted cosmetically (capitalization, punctuation, phrasing).
         // Persist the updated text but skip retranslation — existing translations stay valid.
@@ -300,17 +305,17 @@ class TranslationPipeline(
                 return
             }
             eventBus.stepDone(userId, runId, "CREATING_PR", pr.prUrl)
-            eventBus.finishRun(userId, runId, prUrl = pr.prUrl, prBranch = pr.branchName, surfaceSkipped = surfaceKeys.size,
-                stringsTranslated = total, stringsPerLocale = perLocaleCounts)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             log.info("Translation PR created: {}", pr.prUrl)
             maybePublishCdn(project, userId, runId)
+            eventBus.finishRun(userId, runId, prUrl = pr.prUrl, prBranch = pr.branchName, surfaceSkipped = surfaceKeys.size,
+                stringsTranslated = total, stringsPerLocale = perLocaleCounts)
         } else {
             eventBus.stepSkipped(userId, runId, "CREATING_PR", "No translatable strings approved")
-            eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size,
-                stringsTranslated = total, stringsPerLocale = perLocaleCounts)
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             maybePublishCdn(project, userId, runId)
+            eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size,
+                stringsTranslated = total, stringsPerLocale = perLocaleCounts)
         }
 
         if (total > 0) {

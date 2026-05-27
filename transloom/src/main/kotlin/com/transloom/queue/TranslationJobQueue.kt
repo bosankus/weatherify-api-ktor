@@ -22,7 +22,8 @@ data class WebhookPayload(
     // [triggeredByEmail] is known at receipt time; the worker resolves it to a
     // userId against project_members before invoking the pipeline.
     val triggeredByUserId: String? = null,
-    val triggeredByEmail: String? = null
+    val triggeredByEmail: String? = null,
+    val forceTranslate: Boolean = false
 )
 
 private const val QUEUE_KEY = "transloom:jobs"

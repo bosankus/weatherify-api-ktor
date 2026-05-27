@@ -922,6 +922,9 @@ fun Route.configureApiRoutes(
             val runId = call.parameters["runId"]
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Missing runId"))
 
+            @Serializable data class RetryRequest(val forceTranslate: Boolean = false)
+            val body = runCatching { call.receive<RetryRequest>() }.getOrDefault(RetryRequest())
+
             val count = retryCount(runId)
             if (count.get() >= MAX_RETRIES) {
                 return@post call.respond(
@@ -948,7 +951,8 @@ fun Route.configureApiRoutes(
                 branchName = run.branch,
                 projectId = projectId,
                 retriedFromRunId = runId,
-                triggeredByUserId = userId
+                triggeredByUserId = userId,
+                forceTranslate = body.forceTranslate
             )
             jobQueue.enqueueJob(payload)
             call.application.launch {
@@ -957,7 +961,7 @@ fun Route.configureApiRoutes(
                     mapOf("originalRunId" to runId, "attempt" to attempt.toString(), "repo" to run.repo)
                 )
             }
-            apiLog.info("Retry enqueued: originalRunId={} attempt={}/{} project={} repo={}", runId, attempt, MAX_RETRIES, projectId, run.repo)
+            apiLog.info("Retry enqueued: originalRunId={} attempt={}/{} project={} repo={} forceTranslate={}", runId, attempt, MAX_RETRIES, projectId, run.repo, body.forceTranslate)
             call.respond(RetryEnqueuedResponse(queued = true, originalRunId = runId, attempt = attempt, maxRetries = MAX_RETRIES))
         }
 

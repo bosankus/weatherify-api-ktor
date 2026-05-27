@@ -1427,6 +1427,9 @@ private const val DASHBOARD_CSS = """
 .cdnw-sdk-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:var(--text-muted);line-height:1.55;padding-top:10px;border-top:1px solid var(--border)}
 .cdnw-sdk-note svg{flex-shrink:0;margin-top:1px;opacity:.6}
 .run-no-retranslation{font-size:12px;color:var(--accent);opacity:.8}
+.force-translate-btn{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;color:var(--text-muted);background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px 9px;cursor:pointer;transition:border-color .15s,color .15s;margin-left:8px}
+.force-translate-btn:hover{border-color:var(--accent);color:var(--accent)}
+.force-translate-btn:disabled{opacity:.4;cursor:not-allowed}
 /* ── Per-locale lanes + ETA ─────────────────────────────────────────────── */
 .run-locales{padding:6px 18px 14px;display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--border)}
 .run-locales-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;padding-bottom:2px}
@@ -1787,9 +1790,14 @@ function buildRunHtml(runId){
       +'<svg class="step-spin" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M2.5 9.5l1.4-1.4M8.1 3.9l1.4-1.4"/></svg>'
       +' Retrying…</button>';
   } else if(!isActive){
-    left=skipped>0
-      ?'<span class="run-no-retranslation">Surface rewrites only — retranslation skipped</span>'
-      :'<span class="run-duration">No changes found</span>';
+    if(skipped>0){
+      left='<span class="run-no-retranslation">Surface rewrites only — retranslation skipped</span>'
+        +'<button class="force-translate-btn" onclick="forceTranslateRun(\''+runId+'\')" title="Override classifier and retranslate these strings">'
+        +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>'
+        +' Retranslate anyway</button>';
+    } else {
+      left='<span class="run-duration">No changes found</span>';
+    }
   }
   if(run.finishedAt) right='<span class="run-duration">'+runDuration(run.startedAt,run.finishedAt)+'</span>';
 
@@ -1961,6 +1969,26 @@ async function retriggerRun(runId){
   }
   toast('Retry queued — watching for new run…');
   // The SSE "start" event for the new run will arrive shortly and clear retryPending via handlePipelineEvent
+}
+
+async function forceTranslateRun(runId){
+  const run=runState.get(runId);
+  if(!run||run.retryPending)return;
+  run.retryPending=true;
+  scheduleRender(runId);
+
+  const res=await api('/pipeline/runs/'+encodeURIComponent(runId)+'/retry',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({forceTranslate:true})
+  });
+  if(!res||!res.ok){
+    run.retryPending=false;
+    scheduleRender(runId);
+    toast('Failed to queue retranslation — please try again','error');
+    return;
+  }
+  toast('Retranslation queued — classifier overridden…');
 }
 
 // ── SSE connection via fetch (Bearer auth — no token in URL) ──────────────────
