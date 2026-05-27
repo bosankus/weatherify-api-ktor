@@ -174,6 +174,49 @@ class MongoBillingRepository(
         )
     }
 
+    override suspend fun incrementUsageIfUnderLimit(userId: String, amount: Int, limit: Int): Boolean {
+        if (amount > limit) return false
+        val ym = currentYearMonth()
+        // Server-side conditional: only increment if current + amount <= limit.
+        // $ifNull handles the case where stringsTranslated doesn't exist yet (first use of month).
+        val filter = and(
+            eq("userId", userId),
+            eq("yearMonth", ym),
+            Document("\$expr", Document("\$lte", listOf(
+                Document("\$add", listOf(
+                    Document("\$ifNull", listOf("\$stringsTranslated", 0)),
+                    amount
+                )),
+                limit
+            )))
+        )
+        val update = Updates.combine(
+            Updates.inc("stringsTranslated", amount),
+            Updates.set("updatedAt", System.currentTimeMillis())
+        )
+        val updated = usageLogs.updateOne(filter, update)
+        if (updated.modifiedCount > 0L) return true
+
+        // No existing doc for this month — safe to create since usage starts at 0.
+        return try {
+            val doc = Document().apply {
+                put("_id", UUID.randomUUID().toString())
+                put("userId", userId)
+                put("yearMonth", ym)
+                put("stringsTranslated", amount)
+                put("tokensUsed", 0)
+                put("createdAt", System.currentTimeMillis())
+            }
+            usageLogs.insertOne(doc)
+            true
+        } catch (e: com.mongodb.MongoWriteException) {
+            if (e.error.code == 11000) {
+                // Concurrent insert won the race — retry the conditional update once.
+                usageLogs.updateOne(filter, update).modifiedCount > 0L
+            } else throw e
+        }
+    }
+
     override suspend fun insertInvoice(
         userId: String,
         razorpayPaymentId: String,

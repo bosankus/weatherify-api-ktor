@@ -19,6 +19,7 @@ import domain.service.RefundService
 import io.ktor.server.application.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlin.time.Duration.Companion.minutes
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
 
@@ -117,7 +118,13 @@ fun Application.configureTransloom(refundService: RefundService) {
             log.warn("Project owner has no GitHub token — cannot process webhook")
             return@startWorker
         }
-        pipeline.processWebhookPayload(payload, project, config, githubToken)
+        try {
+            kotlinx.coroutines.withTimeout(10.minutes) {
+                pipeline.processWebhookPayload(payload, project, config, githubToken)
+            }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            log.error("Pipeline timed out after 10 minutes for repo={} project={}", project.githubRepo, project.id)
+        }
     }
 
     monitor.subscribe(ApplicationStopped) {
@@ -136,6 +143,8 @@ fun Application.configureTransloom(refundService: RefundService) {
         TransloomDeps(
             jwtSecret = jwtSecret,
             jobQueue = jobQueue,
+            db = db,
+            jobQueueRepository = jobQueueRepository,
             webhookDispatcher = webhookDispatcher,
             projectRepository = projectRepository,
             userRepository = userRepository,

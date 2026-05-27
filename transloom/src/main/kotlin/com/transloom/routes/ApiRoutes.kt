@@ -795,8 +795,10 @@ fun Route.configureApiRoutes(
                 )
                 val outcome = translationService.translateBatch(mapOf(translation.stringKey to ctx))[translation.stringKey]
                 if (outcome == null || outcome.isFailure) {
-                    val err = outcome?.exceptionOrNull()?.message ?: "Retry failed"
-                    return@post call.respond(HttpStatusCode.BadGateway, ApiError(err))
+                    apiLog.error("Translation retry failed: key={} error={}", translation.stringKey,
+                        outcome?.exceptionOrNull()?.message)
+                    return@post call.respond(HttpStatusCode.BadGateway,
+                        ApiError("Translation service temporarily unavailable. Please try again."))
                 }
                 val result = outcome.getOrThrow()
                 val status = if (result.flags.isNotEmpty()) "review" else "auto"
@@ -1006,7 +1008,9 @@ fun Route.configureApiRoutes(
             val commitHash = runCatching {
                 githubService.getLatestCommitHash(project.githubRepo, project.watchBranch, token)
             }.getOrElse {
-                return@post call.respond(HttpStatusCode.BadGateway, ApiError("Could not resolve HEAD of '${project.watchBranch}': ${it.message}"))
+                apiLog.error("Failed to resolve HEAD for repo={} branch={}: {}", project.githubRepo, project.watchBranch, it.message)
+                return@post call.respond(HttpStatusCode.BadGateway,
+                    ApiError("Failed to resolve branch HEAD. Check repository access and try again."))
             }
 
             jobQueue.enqueueJob(WebhookPayload(
@@ -1052,7 +1056,11 @@ fun Route.configureApiRoutes(
                     }
                     call.respond(HttpStatusCode.OK, mapOf("status" to "Webhook installed for ${project.githubRepo}"))
                 }
-                .onFailure { call.respond(HttpStatusCode.InternalServerError, ApiError(it.message ?: "Failed to install webhook")) }
+                .onFailure {
+                    apiLog.error("Webhook install failed for repo={}: {}", project.githubRepo, it.message)
+                    call.respond(HttpStatusCode.InternalServerError,
+                        ApiError("Webhook installation failed. Check your repository permissions and try again."))
+                }
         }
     }
 }

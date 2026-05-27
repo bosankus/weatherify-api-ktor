@@ -104,8 +104,9 @@ fun Route.configureAuthRoutes(
                 return@get
             }
 
-            if (clientId == "dummy_client_id") {
-                log.info("Mocking GitHub OAuth (no GITHUB_CLIENT_ID set)")
+            val isDevMode = System.getenv("APP_ENV")?.lowercase() != "production"
+            if (isDevMode && clientId == "dummy_client_id") {
+                log.info("Mocking GitHub OAuth (no GITHUB_CLIENT_ID set — dev mode only)")
                 val mockResult = userRepository.upsert(12345L, "mock-developer", "mock@transloom.dev", null, null)
                 val mockUser = mockResult.user
                 call.application.launch {
@@ -129,10 +130,7 @@ fun Route.configureAuthRoutes(
 
             if (tokenResponse.access_token == null) {
                 log.warn("GitHub token exchange failed: {}", tokenResponse.error_description)
-                call.respondText(
-                    "Failed to retrieve access token: ${tokenResponse.error_description}",
-                    status = HttpStatusCode.Unauthorized
-                )
+                call.respondText("Authorization failed", status = HttpStatusCode.Unauthorized)
                 return@get
             }
 

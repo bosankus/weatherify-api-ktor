@@ -37,15 +37,31 @@ import com.transloom.services.RazorpayBillingService
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import com.transloom.routes.configureMemberRoutes
+import com.androidplay.core.queue.JobQueueRepository
+import com.mongodb.kotlin.client.coroutine.MongoDatabase
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
+import io.ktor.server.response.respond
+import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
+import org.bson.Document
+
+@Serializable
+data class HealthStatus(val status: String)
+
+@Serializable
+data class ReadinessStatus(val db: String, val redis: String)
 
 class TransloomDeps(
     val jwtSecret: String,
     val jobQueue: TranslationJobQueue,
+    val db: MongoDatabase,
+    val jobQueueRepository: JobQueueRepository,
     val webhookDispatcher: RazorpayWebhookDispatcher,
     val projectRepository: ProjectRepository,
     val userRepository: UserRepository,
@@ -75,6 +91,25 @@ class TransloomDeps(
  */
 fun Application.installTransloomRoutes(d: TransloomDeps) {
     routing {
+        // Liveness probe — always 200 if the JVM is running.
+        get("/health") { call.respond(HealthStatus("ok")) }
+
+        // Readiness probe — checks DB and Redis reachability.
+        // Returns 503 if any dependency is unhealthy so the load balancer stops routing traffic.
+        get("/ready") {
+            val dbStatus = try {
+                withTimeoutOrNull(2_000) { d.db.runCommand(Document("ping", 1)); "ok" } ?: "timeout"
+            } catch (e: Exception) { "error" }
+
+            val redisStatus = if (d.jobQueueRepository.isConnected()) "ok" else "unavailable"
+
+            val overallOk = dbStatus == "ok"
+            call.respond(
+                if (overallOk) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable,
+                ReadinessStatus(db = dbStatus, redis = redisStatus)
+            )
+        }
+
         // Serve portal CSS/JS bundles from src/main/resources/static at /transloom/static/*.
         // Cached aggressively in prod via the etag plugin (default Ktor behavior).
         staticResources("/transloom/static", "static")

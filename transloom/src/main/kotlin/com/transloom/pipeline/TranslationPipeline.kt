@@ -28,6 +28,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -80,7 +81,12 @@ class TranslationPipeline(
             projectId = project.id, retriedFromRunId = payload.retriedFromRunId,
             triggeredByUserId = payload.triggeredByUserId
         )
+        MDC.put("userId", userId)
+        MDC.put("projectId", project.id)
+        MDC.put("runId", runId)
         log.info("Pipeline: repo={} branch={} commit={}", payload.repositoryFullName, payload.branchName, payload.commitHash.take(7))
+
+        try {
 
         // ── Pre-flight billing check ───────────────────────────────────────────
         // Fail fast before any GitHub API calls or MongoDB reads if the user has
@@ -284,11 +290,18 @@ class TranslationPipeline(
         val perLocaleCounts: Map<String, Int> = translatedCounts.toMap()
         val total = perLocaleCounts.values.sum()
 
-        // Bill before creating the PR — Gemini calls were made and strings were stored in
-        // DB regardless of PR outcome. Recording here prevents a free-translation window
-        // when the GitHub API is flaky (the early-return path would otherwise skip billing).
+        // Atomically record usage and enforce the limit in one MongoDB op.
+        // If the limit was exceeded by a concurrent pipeline that raced past the pre-check,
+        // we abort here rather than creating a PR for a quota-exceeded run.
         if (total > 0) {
-            billingService.recordUsage(project.ownerId, total)
+            val billed = billingService.recordUsageAtomic(project.ownerId, total)
+            if (!billed) {
+                val msg = "Monthly string quota exceeded mid-run — PR suppressed. Upgrade your plan."
+                eventBus.stepError(userId, runId, "BILLING_CHECK", msg)
+                eventBus.finishRun(userId, runId, error = msg)
+                log.warn("Pipeline aborted post-translation: userId={} hit quota on atomic billing check", userId)
+                return
+            }
             memberUsageService?.record(
                 projectId = project.id,
                 triggeredByUserId = payload.triggeredByUserId,
@@ -330,6 +343,17 @@ class TranslationPipeline(
             maybePublishCdn(project, userId, runId)
             eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size,
                 stringsTranslated = total, stringsPerLocale = perLocaleCounts)
+        }
+        } catch (e: Exception) {
+            // Catches TimeoutCancellationException from the caller's withTimeout wrapper,
+            // any other unexpected exception that escaped the per-stage try-catch.
+            val msg = "Pipeline failed unexpectedly: ${e.message}"
+            log.error("Pipeline unhandled exception for repo={}: {}", payload.repositoryFullName, e.message, e)
+            eventBus.finishRun(userId, runId, error = msg)
+        } finally {
+            MDC.remove("userId")
+            MDC.remove("projectId")
+            MDC.remove("runId")
         }
     }
 

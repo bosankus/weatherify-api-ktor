@@ -32,7 +32,6 @@ private val recentCommits = object : java.util.LinkedHashMap<String, Long>(16, 0
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>) = size > 10_000
 }
 private val recentCommitsLock = Any()
-private val lastPushPerRepo = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
 private fun verifySignature(body: ByteArray, signatureHeader: String?): Boolean {
     // No secret configured → allow in dev mode (webhookSecret is only null locally)
@@ -81,16 +80,24 @@ fun Route.configureWebhookRoutes(
                 return@post
             }
 
-            val now = System.currentTimeMillis()
-
-            val lastPush = lastPushPerRepo[repo] ?: 0L
-            if (now - lastPush < 10000) {
+            // Distributed per-repo rate-limit (1 per 10s across all instances via Redis SETNX).
+            // Falls back to in-memory if Redis is unavailable.
+            if (jobQueue.isWebhookRateLimited(repo)) {
                 log.info("Ignored webhook: rate limited for repo {}", repo)
                 call.respond(HttpStatusCode.TooManyRequests, "Rate limit exceeded (1 per 10s)")
                 return@post
             }
-            lastPushPerRepo[repo] = now
 
+            // Delivery-level dedup: GitHub sends a unique X-GitHub-Delivery UUID.
+            // Prevents GitHub's own retry from double-processing the same delivery.
+            val deliveryId = call.request.headers["X-GitHub-Delivery"]
+            if (deliveryId != null && jobQueue.isDeliveryAlreadySeen(deliveryId)) {
+                log.info("Ignored webhook: duplicate delivery {}", deliveryId)
+                call.respond(HttpStatusCode.Accepted, "Ignored: duplicate delivery")
+                return@post
+            }
+
+            val now = System.currentTimeMillis()
             val isDuplicate = synchronized(recentCommitsLock) {
                 if (recentCommits.containsKey(commitHash)) true
                 else { recentCommits[commitHash] = now; false }
@@ -99,13 +106,6 @@ fun Route.configureWebhookRoutes(
                 log.info("Ignored webhook: duplicate commit {}", commitHash)
                 call.respond(HttpStatusCode.Accepted, "Ignored: duplicate commit")
                 return@post
-            }
-
-            // Age-based eviction: remove entries older than 5 minutes rather than a full clear,
-            // which would race with concurrent reads and lose rate-limit state for active repos.
-            if (lastPushPerRepo.size > 2000) {
-                val cutoff = now - 300_000L
-                lastPushPerRepo.entries.removeIf { it.value < cutoff }
             }
 
             val project = projectRepository.findByGithubRepo(repo)

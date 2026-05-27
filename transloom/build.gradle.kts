@@ -37,6 +37,8 @@ dependencies {
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.auth0.jwt)
     implementation(libs.logback.classic)
+    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
+    implementation(libs.ktor.server.default.headers)
 
     // Client
     implementation(libs.ktor.client.core)

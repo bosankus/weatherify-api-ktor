@@ -46,6 +46,25 @@ class BillingService(
         return true
     }
 
+    /**
+     * Atomically records usage and enforces the plan limit in one MongoDB operation.
+     * Returns false if the limit would be exceeded — the caller should abort the run without
+     * creating a PR. Use this AFTER translations are complete to replace the separate
+     * recordUsage() call, eliminating the read-then-write race under concurrent pipelines.
+     */
+    suspend fun recordUsageAtomic(userId: String, stringsTranslated: Int): Boolean {
+        val subscription = billingRepository.getSubscription(userId)
+        val limit = subscription.plan.stringLimit ?: return run {
+            billingRepository.recordUsage(userId, stringsTranslated)
+            true
+        }
+        val ok = billingRepository.incrementUsageIfUnderLimit(userId, stringsTranslated, limit)
+        if (!ok) {
+            recordLimitHit(subscription)
+        }
+        return ok
+    }
+
     // Marks limitHitAt so isLimitAlreadyExceeded() can fast-fail future webhooks without
     // running the full pipeline. Applies to all plans with a string limit, not just trials.
     private suspend fun recordLimitHit(subscription: com.transloom.domain.Subscription) {

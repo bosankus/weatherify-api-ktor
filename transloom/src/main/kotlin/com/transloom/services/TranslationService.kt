@@ -361,7 +361,9 @@ class TranslationService(
                 response.status.value in GEMINI_RETRYABLE_CODES -> {
                     lastException = Exception("Gemini API transient error: ${response.status}")
                     if (attempt < GEMINI_MAX_RETRIES - 1) {
-                        val backoffMs = GEMINI_RETRY_BASE_MS * (1L shl attempt)
+                        val base = GEMINI_RETRY_BASE_MS * (1L shl attempt)
+                        val jitter = (base * 0.3 * Math.random()).toLong()
+                        val backoffMs = base + jitter
                         log.warn("Gemini {} on attempt {}/{}, retrying in {}ms", response.status, attempt + 1, GEMINI_MAX_RETRIES, backoffMs)
                         delay(backoffMs)
                     }

@@ -44,6 +44,14 @@ interface BillingRepository {
 
     suspend fun recordUsage(userId: String, stringsTranslated: Int)
 
+    /**
+     * Atomically increments the usage counter only if the resulting total would not exceed [limit].
+     * Returns true if the increment succeeded (under limit), false if it was rejected (over limit).
+     * This eliminates the read-then-write race where two concurrent pipelines both pass a limit
+     * check and both proceed, causing over-billing.
+     */
+    suspend fun incrementUsageIfUnderLimit(userId: String, amount: Int, limit: Int): Boolean
+
     suspend fun insertInvoice(
         userId: String,
         razorpayPaymentId: String,

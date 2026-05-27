@@ -39,6 +39,7 @@ import org.koin.ktor.plugin.Koin
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 private val WEBHOOK_HEAL_STALENESS = 7.days
@@ -53,12 +54,27 @@ fun Application.module() {
     val encryptionKey = getSecretValue("token-encryption-key")
     val redisUrl = getSecretValue("redis-url")
 
+    val missingSecrets = buildList {
+        if (jwtSecret.isBlank()) add("jwt-secret")
+        if (mongoUri.isBlank()) add("mongo-uri")
+        if (encryptionKey.isBlank()) add("token-encryption-key")
+    }
+    if (missingSecrets.isNotEmpty()) {
+        log.error("Missing required secrets: {} — refusing to start.", missingSecrets)
+        kotlin.system.exitProcess(1)
+    }
+    if (redisUrl.isBlank()) {
+        log.warn("redis-url not configured — job queue will use in-memory fallback only")
+    }
+
     install(Koin) {
         modules(coreInfraModule(mongoUri, "transloom", redisUrl), transloomModule(encryptionKey))
     }
 
     val db: MongoDatabase by inject()
     runBlocking { MongoIndexer.ensure(db, transloomIndexes()) }
+
+    install(com.transloom.plugins.RequestContextPlugin)
 
     install(ContentNegotiation) {
         // encodeDefaults = true: otherwise response fields whose value equals
@@ -125,6 +141,15 @@ fun Application.module() {
             rateLimiter(limit = 60, refillPeriod = 60.seconds)
             requestKey { clientIp(it) }
         }
+    }
+
+    install(io.ktor.server.plugins.defaultheaders.DefaultHeaders) {
+        header("X-Frame-Options", "DENY")
+        header("X-Content-Type-Options", "nosniff")
+        header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+        header("X-XSS-Protection", "0")
+        header("Referrer-Policy", "strict-origin-when-cross-origin")
+        header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
     }
 
     install(Compression) { gzip() }
@@ -262,7 +287,13 @@ fun Application.module() {
             }.getOrNull()
             payload.copy(triggeredByUserId = matched?.userId)
         }
-        pipeline.processWebhookPayload(resolvedPayload, project, config, githubToken)
+        try {
+            kotlinx.coroutines.withTimeout(10.minutes) {
+                pipeline.processWebhookPayload(resolvedPayload, project, config, githubToken)
+            }
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            log.error("Pipeline timed out after 10 minutes for repo={} project={}", project.githubRepo, project.id)
+        }
 
         // Create in-app notification + optional email when pipeline produces a PR.
         val completedRun = runCatching { pipelineEventBus.recentRuns(project.ownerId) }
@@ -353,6 +384,8 @@ fun Application.module() {
     installTransloomRoutes(TransloomDeps(
         jwtSecret = jwtSecret,
         jobQueue = jobQueue,
+        db = db,
+        jobQueueRepository = jobQueueRepository,
         webhookDispatcher = webhookDispatcher,
         projectRepository = projectRepository,
         userRepository = userRepository,

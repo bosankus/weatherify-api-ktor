@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import redis.clients.jedis.JedisPool
+import redis.clients.jedis.params.SetParams
 
 /**
  * JobQueueRepository backed by a direct TCP Redis connection (rediss:// for TLS).
@@ -48,6 +49,26 @@ class UpstashJobQueueRepository(
             }
         } catch (e: Exception) {
             throw QueueConnectionException("BRPOP failed: ${e.message}", e)
+        }
+    }
+
+    override suspend fun setNxExpire(key: String, ttlSeconds: Long): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                pool!!.resource.use {
+                    it.set(key, "1", SetParams.setParams().nx().ex(ttlSeconds)) == "OK"
+                }
+            }
+        } catch (e: Exception) {
+            throw QueueConnectionException("SETNX failed: ${e.message}", e)
+        }
+    }
+
+    override suspend fun deleteKey(key: String) {
+        try {
+            withContext(Dispatchers.IO) { pool!!.resource.use { it.del(key) } }
+        } catch (e: Exception) {
+            throw QueueConnectionException("DEL failed: ${e.message}", e)
         }
     }
 
