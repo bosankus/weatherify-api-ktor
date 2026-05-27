@@ -84,7 +84,7 @@ class PipelineEventBus(
 
     private val pool: JedisPool? = redisUrl?.takeIf { it.isNotBlank() }?.let { url ->
         runCatching {
-            JedisPool(JedisPoolConfig().apply { maxTotal = 6; maxIdle = 3 }, URI(url))
+            JedisPool(JedisPoolConfig().apply { maxTotal = 16; maxIdle = 6 }, URI(url))
                 .also { p -> p.resource.use { j -> j.ping() } }
         }.onSuccess { log.info("PipelineEventBus: Redis pool enabled") }
          .onFailure { log.warn("PipelineEventBus: Redis unavailable ({}), using in-memory fallback", it.message) }

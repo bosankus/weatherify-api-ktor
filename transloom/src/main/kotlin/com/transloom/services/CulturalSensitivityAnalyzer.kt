@@ -6,6 +6,7 @@ import com.transloom.repository.CulturalAnalysisCacheRepository
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -38,6 +39,11 @@ class CulturalSensitivityAnalyzer(private val cache: CulturalAnalysisCacheReposi
 
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 45_000
+            connectTimeoutMillis = 10_000
+            socketTimeoutMillis  = 45_000
+        }
     }
 
     // Single-string API kept for callers that don't have a batch — delegates to analyzeBatch.

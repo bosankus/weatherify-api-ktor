@@ -9,10 +9,12 @@ import com.transloom.pipeline.TokenExtractor
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -100,6 +102,10 @@ fun requiredPluralForms(languageName: String): List<String> =
 
 private val PLURAL_QUANTITIES = setOf("zero", "one", "two", "few", "many", "other")
 
+private const val GEMINI_MAX_RETRIES = 3
+private const val GEMINI_RETRY_BASE_MS = 1_000L
+private val GEMINI_RETRYABLE_CODES = setOf(429, 500, 502, 503, 504)
+
 class TranslationService(
     private val memoryStore: TranslationMemoryRepository,
     private val sharedMemoryStore: SharedTranslationMemoryRepository? = null
@@ -113,6 +119,11 @@ class TranslationService(
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
+        }
+        install(HttpTimeout) {
+            requestTimeoutMillis = 60_000
+            connectTimeoutMillis = 10_000
+            socketTimeoutMillis  = 60_000
         }
     }
 
@@ -335,18 +346,30 @@ class TranslationService(
     }
 
     private suspend fun postToGemini(payload: GeminiRequest): String {
-        val response = client.post(
-            "$GEMINI_ENDPOINT?key=$geminiApiKey"
-        ) {
-            contentType(ContentType.Application.Json)
-            setBody(payload)
+        var lastException: Exception? = null
+        repeat(GEMINI_MAX_RETRIES) { attempt ->
+            val response = client.post("$GEMINI_ENDPOINT?key=$geminiApiKey") {
+                contentType(ContentType.Application.Json)
+                setBody(payload)
+            }
+            when {
+                response.status.isSuccess() -> {
+                    val geminiResponse: GeminiResponse = response.body()
+                    return geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                        ?: throw Exception("Empty response from Gemini API")
+                }
+                response.status.value in GEMINI_RETRYABLE_CODES -> {
+                    lastException = Exception("Gemini API transient error: ${response.status}")
+                    if (attempt < GEMINI_MAX_RETRIES - 1) {
+                        val backoffMs = GEMINI_RETRY_BASE_MS * (1L shl attempt)
+                        log.warn("Gemini {} on attempt {}/{}, retrying in {}ms", response.status, attempt + 1, GEMINI_MAX_RETRIES, backoffMs)
+                        delay(backoffMs)
+                    }
+                }
+                else -> throw Exception("Gemini API failed with status: ${response.status}")
+            }
         }
-        if (!response.status.isSuccess()) {
-            throw Exception("Gemini API failed with status: ${response.status}")
-        }
-        val geminiResponse: GeminiResponse = response.body()
-        return geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
-            ?: throw Exception("Empty response from Gemini API")
+        throw lastException ?: Exception("Gemini API failed after $GEMINI_MAX_RETRIES attempts")
     }
 
     // Cache key covers every input that changes the Gemini output: source text, target

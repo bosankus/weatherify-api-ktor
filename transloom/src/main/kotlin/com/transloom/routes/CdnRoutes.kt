@@ -1,10 +1,13 @@
 package com.transloom.routes
 
+import com.transloom.domain.ProjectRole
 import com.transloom.model.ApiError
 import com.transloom.repository.CdnPublishRepository
+import com.transloom.repository.ProjectMembershipRepository
 import com.transloom.repository.ProjectRepository
 import com.transloom.services.CdnPublishException
 import com.transloom.services.CdnPublishService
+import com.transloom.services.requireProjectRole
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -48,10 +51,14 @@ data class VersionsResponse(
     val versions: List<VersionEntry>
 )
 
+// BCP-47 locale code: up to 8-char primary tag + optional script/region subtags, max 20 chars total.
+private val LOCALE_REGEX = Regex("""^[a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{2,8})*$""")
+
 fun Route.configureCdnBundleRoutes(
     projectRepository: ProjectRepository,
     cdnPublishRepository: CdnPublishRepository,
-    cdnPublishService: CdnPublishService
+    cdnPublishService: CdnPublishService,
+    memberships: ProjectMembershipRepository
 ) {
     route("/transloom/api/projects/{id}/bundle") {
         get {
@@ -86,7 +93,8 @@ fun Route.configureCdnBundleRoutes(
                 ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
                 ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
-            val locale = call.parameters["locale"]?.takeIf { it.isNotBlank() }
+            val locale = call.parameters["locale"]
+                ?.takeIf { it.isNotBlank() && it.length <= 20 && LOCALE_REGEX.matches(it) }
                 ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid locale"))
 
             val resolved = cdnPublishService.fetchActiveBundle(projectId, locale)
@@ -124,7 +132,7 @@ fun Route.configureCdnBundleRoutes(
         }
     }
 
-    // ── Versions, promote, rollback (owner-gated) ──────────────────────────────
+    // ── Versions, promote, rollback (ADMIN-gated) ─────────────────────────────
     route("/transloom/api/projects/{id}/versions") {
         get {
             val userId = call.userId()
@@ -133,9 +141,8 @@ fun Route.configureCdnBundleRoutes(
                 ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
                 ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
             val project = projectRepository.findById(projectId)
-            if (project == null || project.ownerId != userId) {
-                return@get call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-            }
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@get
 
             val active = cdnPublishRepository.getActiveVersion(projectId)
             val versions = cdnPublishRepository.listPublishes(projectId, limit = 20).map {
@@ -158,9 +165,8 @@ fun Route.configureCdnBundleRoutes(
             val version = call.parameters["version"]?.takeIf { it.isNotBlank() }
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid version"))
             val project = projectRepository.findById(projectId)
-            if (project == null || project.ownerId != userId) {
-                return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-            }
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@post
 
             runCatching { cdnPublishService.promote(projectId, version) }
                 .onSuccess { receipt ->
@@ -189,9 +195,8 @@ fun Route.configureCdnBundleRoutes(
                 ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
             val project = projectRepository.findById(projectId)
-            if (project == null || project.ownerId != userId) {
-                return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-            }
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@post
 
             val receipt = runCatching { cdnPublishService.rollback(projectId) }
                 .getOrElse { e ->
@@ -209,7 +214,8 @@ fun Route.configureCdnBundleRoutes(
 
 fun Route.configureCdnPublishRoute(
     projectRepository: ProjectRepository,
-    cdnPublishService: CdnPublishService
+    cdnPublishService: CdnPublishService,
+    memberships: ProjectMembershipRepository
 ) {
     route("/transloom/api/projects/{id}/publish") {
         post {
@@ -221,9 +227,8 @@ fun Route.configureCdnPublishRoute(
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
 
             val project = projectRepository.findById(projectId)
-            if (project == null || project.ownerId != userId) {
-                return@post call.respond(HttpStatusCode.NotFound, ApiError("Project not found"))
-            }
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@post
 
             runCatching { cdnPublishService.publish(projectId, promote = project.autoPromote) }
                 .onSuccess { receipt ->

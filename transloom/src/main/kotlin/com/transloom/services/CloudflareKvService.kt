@@ -44,6 +44,20 @@ class CloudflareR2Service(
     }
     private val host = "$accountId.r2.cloudflarestorage.com"
 
+    init {
+        val missing = buildList {
+            if (accountId.isBlank()) add("accountId")
+            if (bucketName.isBlank()) add("bucketName")
+            if (accessKeyId.isBlank()) add("accessKeyId")
+            if (secretAccessKey.isBlank()) add("secretAccessKey")
+        }
+        if (missing.isNotEmpty()) {
+            log.error("CloudflareR2Service initialized with BLANK credentials: {} — R2 writes will fail. Check GCP Secret Manager entries: cloudflare-account-id, cloudflare-r2-bucket-name, cloudflare-r2-access-key-id, cloudflare-r2-secret-access-key", missing)
+        } else {
+            log.info("CloudflareR2Service ready: host={} bucket={} accessKeyIdLen={}", host, bucketName, accessKeyId.length)
+        }
+    }
+
     /**
      * Returns the value stored under [key], or null if the object does not exist.
      * Throws [CdnPublishException] on unexpected errors.
@@ -69,8 +83,8 @@ class CloudflareR2Service(
         if (response.status == HttpStatusCode.NotFound) return null
         if (!response.status.isSuccess()) {
             val body = runCatching { response.bodyAsText() }.getOrElse { "" }
-            log.error("R2 GET failed: key={} status={} body={}", key, response.status, body)
-            throw CdnPublishException("R2 GET returned ${response.status} for key '$key'")
+            log.error("R2 GET failed: host={} bucket={} key={} status={} body={}", host, bucketName, key, response.status, body)
+            throw CdnPublishException("R2 GET returned ${response.status} for key '$key' (bucket=$bucketName)")
         }
         return response.bodyAsText()
     }
@@ -113,8 +127,8 @@ class CloudflareR2Service(
 
         if (!response.status.isSuccess()) {
             val body = runCatching { response.bodyAsText() }.getOrElse { "" }
-            log.error("R2 PUT failed: key={} status={} body={}", key, response.status, body)
-            throw CdnPublishException("R2 PUT returned ${response.status} for key '$key'")
+            log.error("R2 PUT failed: host={} bucket={} key={} status={} contentType={} bodyLen={} respBody={}", host, bucketName, key, response.status, contentType, bodyBytes.size, body)
+            throw CdnPublishException("R2 PUT returned ${response.status} for key '$key' (bucket=$bucketName): $body")
         }
         return true
     }

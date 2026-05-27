@@ -91,7 +91,7 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
         configurePublicCheckoutRoute(d.razorpayService, d.userRepository, d.billingRepository, d.jwtSecret, d.userActivityService)
         configureBillingReceiptRoute(d.jwtSecret, d.billingRepository, d.userRepository, d.userActivityService)
         rateLimit(RateLimitName("bundle_fetch")) {
-            configureCdnBundleRoutes(d.projectRepository, d.cdnPublishRepository, d.cdnPublishService)
+            configureCdnBundleRoutes(d.projectRepository, d.cdnPublishRepository, d.cdnPublishService, d.membershipRepository)
         }
         authenticate("auth-jwt") {
             configureApiRoutes(
@@ -105,7 +105,7 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
             configureAnalyticsRoutes(d.analyticsService, d.billingRepository)
             configureInsightsRoutes(d.userActivityService)
             configureOnboardingRoutes(d.userRepository, d.billingRepository, d.projectRepository, d.translationRepository)
-            configureCdnPublishRoute(d.projectRepository, d.cdnPublishService)
+            configureCdnPublishRoute(d.projectRepository, d.cdnPublishService, d.membershipRepository)
             configureNotificationRoutes(d.notificationRepository)
             configureMemberRoutes(
                 d.membershipRepository, d.projectRepository, d.userRepository,

@@ -146,9 +146,21 @@
         // Renewal / trial / projects
         $('bl-plan-renewal').textContent = sub.currentPeriodEnd
             ? fmtDate(sub.currentPeriodEnd)
-            : (sub.inTrial ? 'After trial' : '—');
-        $('bl-plan-trial').textContent = sub.trialEndsOn ? fmtDate(sub.trialEndsOn) : '—';
-        $('bl-plan-projects').textContent = sub.maxProjects === -1 ? 'Unlimited' : String(sub.maxProjects);
+            : sub.inTrial
+                ? 'After trial'
+                : isFree
+                    ? 'No renewal'
+                    : sub.plan === 'ENTERPRISE'
+                        ? 'Custom billing'
+                        : '—';
+        $('bl-plan-trial').textContent = sub.trialEndsOn
+            ? fmtDate(sub.trialEndsOn)
+            : isFree
+                ? 'Not in trial'
+                : isPaid
+                    ? 'Trial ended'
+                    : '—';
+        renderPlanProjects();
 
         // Action buttons
         const actions = $('bl-plan-actions');
@@ -218,7 +230,24 @@
         }
     }
 
+    function renderPlanProjects() {
+        const el = $('bl-plan-projects');
+        if (!el) return;
+        const sub = currentSub;
+        const u = currentUsage;
+        if (!sub) { el.textContent = '—'; return; }
+        const unlimited = sub.maxProjects === -1;
+        if (u != null && typeof u.projectsUsed === 'number') {
+            el.textContent = unlimited
+                ? `${fmtInt(u.projectsUsed)} (unlimited)`
+                : `${fmtInt(u.projectsUsed)} / ${fmtInt(sub.maxProjects)}`;
+        } else {
+            el.textContent = unlimited ? 'Unlimited' : `0 / ${fmtInt(sub.maxProjects)}`;
+        }
+    }
+
     function renderUsage(u) {
+        renderPlanProjects();
         // Strings
         const strLimit = u.stringLimit;
         $('bl-usage-strings').textContent = strLimit

@@ -339,7 +339,10 @@ class TranslationPipeline(
             return
         }
         runCatching { runCdnPublish(userId, runId, project.id, project.autoPromote) }
-            .onFailure { log.warn("CDN publish failed for project={}: {}", project.id, it.message) }
+            .onFailure { e ->
+                log.error("CDN publish failed for project={}: {}", project.id, e.message, e)
+                eventBus.stepError(userId, runId, "CDN_PUBLISH", e.message ?: e.javaClass.simpleName)
+            }
     }
 
     private suspend fun runCdnPublish(userId: String, runId: String, projectId: String, promote: Boolean) {

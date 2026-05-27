@@ -274,6 +274,7 @@ internal const val BILLING_CACHE_JS = """
 internal val SIDEBAR_QUOTA_JS = """
 (function(){
   var PRICE={FREE:0,SOLO:499,TEAM:1999};
+  var CACHE_KEY='tl_quota_cache';
   function fmt(n){return n>=10?n.toFixed(0):n.toFixed(2);}
   function pad2(n){n=String(n);return n.length<2?'0'+n:n;}
   function lastMonthKey(){
@@ -338,10 +339,21 @@ internal val SIDEBAR_QUOTA_JS = """
     host.className='sb-quota visible';
     host.innerHTML=html;
   }
+  function readCache(){
+    try{var v=localStorage.getItem(CACHE_KEY);return v?JSON.parse(v):null;}catch(_){return null;}
+  }
+  function writeCache(sub,usage){
+    try{localStorage.setItem(CACHE_KEY,JSON.stringify({sub:sub,usage:usage}));}catch(_){}
+  }
   function boot(){
     var host=document.getElementById('sb-quota');
     if(!host||!window.tlSubscription||!window.tlUsage)return;
-    Promise.all([window.tlSubscription(),window.tlUsage()]).then(function(r){render(host,r[0],r[1]);});
+    var cached=readCache();
+    if(cached&&cached.sub&&cached.usage)render(host,cached.sub,cached.usage);
+    Promise.all([window.tlSubscription(),window.tlUsage()]).then(function(r){
+      if(r[0]&&r[1])writeCache(r[0],r[1]);
+      render(host,r[0],r[1]);
+    });
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);
   else boot();
