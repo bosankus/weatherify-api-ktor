@@ -284,6 +284,20 @@ class TranslationPipeline(
         val perLocaleCounts: Map<String, Int> = translatedCounts.toMap()
         val total = perLocaleCounts.values.sum()
 
+        // Bill before creating the PR — Gemini calls were made and strings were stored in
+        // DB regardless of PR outcome. Recording here prevents a free-translation window
+        // when the GitHub API is flaky (the early-return path would otherwise skip billing).
+        if (total > 0) {
+            billingService.recordUsage(project.ownerId, total)
+            memberUsageService?.record(
+                projectId = project.id,
+                triggeredByUserId = payload.triggeredByUserId,
+                ownerId = project.ownerId,
+                stringsTranslated = total,
+                perLocale = perLocaleCounts
+            )
+        }
+
         // ── Step: Create PR ────────────────────────────────────────────────────
         if (updatedFiles.isNotEmpty()) {
             eventBus.stepRunning(userId, runId, "CREATING_PR")
@@ -316,19 +330,6 @@ class TranslationPipeline(
             maybePublishCdn(project, userId, runId)
             eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size,
                 stringsTranslated = total, stringsPerLocale = perLocaleCounts)
-        }
-
-        if (total > 0) {
-            billingService.recordUsage(project.ownerId, total)
-            // Per-member rollup writes after billing to mirror the same counts —
-            // analytics invariants depend on these staying in lockstep.
-            memberUsageService?.record(
-                projectId = project.id,
-                triggeredByUserId = payload.triggeredByUserId,
-                ownerId = project.ownerId,
-                stringsTranslated = total,
-                perLocale = perLocaleCounts
-            )
         }
     }
 

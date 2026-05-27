@@ -206,6 +206,33 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
         return translationsCol.countDocuments(filter).toInt()
     }
 
+    override suspend fun listPendingReviewsForProjects(
+        projectIds: List<String>,
+        limit: Int,
+        offset: Int,
+        language: String?,
+        statusFilter: String?
+    ): List<Translation> {
+        if (projectIds.isEmpty()) return emptyList()
+        val filter = and(`in`("projectId", projectIds), reviewMatch(language, statusFilter))
+        return translationsCol.find(filter)
+            .sort(Sorts.descending("updatedAt"))
+            .skip(offset)
+            .limit(limit)
+            .toList()
+            .map { it.toTranslation() }
+    }
+
+    override suspend fun countPendingReviewsForProjects(
+        projectIds: List<String>,
+        language: String?,
+        statusFilter: String?
+    ): Int {
+        if (projectIds.isEmpty()) return 0
+        val filter = and(`in`("projectId", projectIds), reviewMatch(language, statusFilter))
+        return translationsCol.countDocuments(filter).toInt()
+    }
+
     /**
      * Returns project IDs owned by the given user. Used as the join key for dashboard/review
      * queries instead of the denormalized `ownerId` field on translations, which is unreliable

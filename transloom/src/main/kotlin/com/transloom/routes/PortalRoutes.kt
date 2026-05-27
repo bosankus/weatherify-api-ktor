@@ -1404,6 +1404,7 @@ private const val DASHBOARD_CSS = """
 .cdn-widget-badge{font-size:11px;font-weight:700;border-radius:20px;padding:2px 8px;transition:all .3s}
 .cdn-widget-badge.live{color:var(--accent);background:var(--accent-dim);border:1px solid rgba(0,229,160,.25)}
 .cdnw-empty{font-size:12px;color:var(--text-muted);padding:4px 0}
+.cdnw-proj-name{font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px;letter-spacing:.2px}
 .cdnw-stat-row{display:flex;gap:0;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
 .cdnw-stat{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 8px;border-right:1px solid var(--border)}
 .cdnw-stat:last-child{border-right:none}
@@ -1413,17 +1414,15 @@ private const val DASHBOARD_CSS = """
 .cdnw-locales{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
 .cdnw-locale-chip{font-size:10px;font-weight:600;padding:2px 7px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text-muted)}
 .cdnw-locale-more{color:var(--accent);background:var(--accent-dim);border-color:rgba(0,229,160,.2)}
-.cdnw-propagation{margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
-.cdnw-prop-row{display:flex;flex-direction:column;gap:6px}
-.cdnw-prop-nodes{display:flex;flex-wrap:wrap;gap:6px}
-.cdnw-pop{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text-dim)}
-.cdnw-pop-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);flex-shrink:0;animation:cdnPopPulse 2.4s ease-in-out infinite}
-.cdnw-pop:nth-child(2) .cdnw-pop-dot{animation-delay:.48s}
-.cdnw-pop:nth-child(3) .cdnw-pop-dot{animation-delay:.96s}
-.cdnw-pop:nth-child(4) .cdnw-pop-dot{animation-delay:1.44s}
-.cdnw-pop:nth-child(5) .cdnw-pop-dot{animation-delay:1.92s}
-@keyframes cdnPopPulse{0%,100%{opacity:1}50%{opacity:.35}}
-.cdnw-prop-label{font-size:10px;color:var(--text-muted);margin-top:2px}
+.cdnw-kv-note{font-size:10px;color:var(--text-muted);margin-bottom:10px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;letter-spacing:.2px}
+.cdnw-proj-list{display:flex;flex-direction:column;gap:0;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.cdnw-proj-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px}
+.cdnw-proj-row:last-child{border-bottom:none}
+.cdnw-status-dot{width:6px;height:6px;border-radius:50%;background:var(--border);flex-shrink:0}
+.cdnw-status-dot.live{background:var(--accent);box-shadow:0 0 5px var(--accent)}
+.cdnw-proj-label{flex:1;font-weight:600;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cdnw-proj-meta{color:var(--text-muted);white-space:nowrap}
+.cdnw-proj-time{color:var(--text-muted);white-space:nowrap;margin-left:4px}
 .cdnw-sdk-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:var(--text-muted);line-height:1.55;padding-top:10px;border-top:1px solid var(--border)}
 .cdnw-sdk-note svg{flex-shrink:0;margin-top:1px;opacity:.6}
 .run-no-retranslation{font-size:12px;color:var(--accent);opacity:.8}
@@ -1944,9 +1943,7 @@ function handlePipelineEvent(evt){
   }else if(d.type==='cdn_ready'){
     const run=runState.get(d.runId);
     if(run){scheduleRender(d.runId);}
-    if(d.cdnBundleVersion){
-      updateCdnWidget([{bundleVersion:d.cdnBundleVersion,locales:d.cdnLocales||[],publishedAt:Date.now(),status:'success'}]);
-    }
+    if(d.cdnBundleVersion){loadCdnStatus();}
     toast('Translations live on edge — SDK consumers will refresh on next launch');
   }else if(d.type==='notification'){
     if(typeof window.pushInAppNotification==='function')window.pushInAppNotification(d);
@@ -2165,29 +2162,47 @@ function updateCdnWidget(publishes){
     return;
   }
   const sorted=publishes.slice().sort(function(a,b){return(b.publishedAt||0)-(a.publishedAt||0);});
-  const latest=sorted[0];
-  if(badge){badge.textContent='● Live';badge.className='cdn-widget-badge live';}
-  const ver=esc((latest.bundleVersion||'').substring(0,12));
-  const ago=timeAgo(latest.publishedAt||Date.now());
-  const locales=latest.locales||[];
-  const localeChips=locales.slice(0,8).map(function(l){return '<span class="cdnw-locale-chip">'+esc(l)+'</span>';}).join('');
-  const moreLocales=locales.length>8?'<span class="cdnw-locale-chip cdnw-locale-more">+'+( locales.length-8)+'</span>':'';
-  body.innerHTML=''
-    +'<div class="cdnw-stat-row">'
-    +'<div class="cdnw-stat"><span class="cdnw-stat-val">'+locales.length+'</span><span class="cdnw-stat-lbl">locales</span></div>'
-    +'<div class="cdnw-stat"><span class="cdnw-stat-val cdnw-mono">'+ver+'</span><span class="cdnw-stat-lbl">bundle</span></div>'
-    +'<div class="cdnw-stat"><span class="cdnw-stat-val">'+esc(ago)+'</span><span class="cdnw-stat-lbl">published</span></div>'
-    +'</div>'
-    +(localeChips?'<div class="cdnw-locales">'+localeChips+moreLocales+'</div>':'')
-    +'<div class="cdnw-propagation">'
-    +'<div class="cdnw-prop-row"><div class="cdnw-prop-nodes">'
-    +['Mumbai','Singapore','Frankfurt','New York','Tokyo'].map(function(n){return '<span class="cdnw-pop"><span class="cdnw-pop-dot"></span>'+esc(n)+'</span>';}).join('')
-    +'</div><div class="cdnw-prop-label">Cloudflare PoPs &mdash; translations replicated</div></div>'
-    +'</div>'
-    +'<div class="cdnw-sdk-note">'
+  const liveCount=sorted.filter(function(p){return p.status==='success';}).length;
+  if(badge){
+    if(liveCount===0){badge.textContent='';badge.className='cdn-widget-badge';}
+    else if(liveCount===sorted.length){badge.textContent='● Live';badge.className='cdn-widget-badge live';}
+    else{badge.textContent='● '+liveCount+' live';badge.className='cdn-widget-badge live';}
+  }
+  const sdkNote='<div class="cdnw-sdk-note">'
     +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>'
     +' SDK consumers receive updated translations on next app launch or background refresh'
     +'</div>';
+  const kvNote='<div class="cdnw-kv-note">Cloudflare KV &mdash; globally replicated</div>';
+  if(sorted.length===1){
+    const p=sorted[0];
+    const ver=esc((p.bundleVersion||'').substring(0,12));
+    const ago=timeAgo(p.publishedAt||Date.now());
+    const locales=p.locales||[];
+    const localeChips=locales.slice(0,8).map(function(l){return '<span class="cdnw-locale-chip">'+esc(l)+'</span>';}).join('');
+    const moreLocales=locales.length>8?'<span class="cdnw-locale-chip cdnw-locale-more">+'+(locales.length-8)+'</span>':'';
+    body.innerHTML=''
+      +(p.projectName?'<div class="cdnw-proj-name">'+esc(p.projectName)+'</div>':'')
+      +'<div class="cdnw-stat-row">'
+      +'<div class="cdnw-stat"><span class="cdnw-stat-val">'+locales.length+'</span><span class="cdnw-stat-lbl">locales</span></div>'
+      +'<div class="cdnw-stat"><span class="cdnw-stat-val cdnw-mono">'+ver+'</span><span class="cdnw-stat-lbl">bundle</span></div>'
+      +'<div class="cdnw-stat"><span class="cdnw-stat-val">'+esc(ago)+'</span><span class="cdnw-stat-lbl">published</span></div>'
+      +'</div>'
+      +(localeChips?'<div class="cdnw-locales">'+localeChips+moreLocales+'</div>':'')
+      +kvNote+sdkNote;
+  }else{
+    const rows=sorted.map(function(p){
+      const isLive=p.status==='success';
+      const localeCount=(p.locales||[]).length;
+      const ago=timeAgo(p.publishedAt||Date.now());
+      return '<div class="cdnw-proj-row">'
+        +'<span class="cdnw-status-dot'+(isLive?' live':'')+'"></span>'
+        +'<span class="cdnw-proj-label">'+esc(p.projectName||p.projectId)+'</span>'
+        +'<span class="cdnw-proj-meta">'+localeCount+' locales</span>'
+        +'<span class="cdnw-proj-time">'+esc(ago)+'</span>'
+        +'</div>';
+    }).join('');
+    body.innerHTML='<div class="cdnw-proj-list">'+rows+'</div>'+kvNote+sdkNote;
+  }
 }
 
 // ── Free-plan post-run conversion nudge ─────────────────────────────────────

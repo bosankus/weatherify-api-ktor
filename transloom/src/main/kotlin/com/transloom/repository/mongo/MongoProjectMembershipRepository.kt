@@ -156,6 +156,13 @@ class MongoProjectMembershipRepository(
         )?.toMembership()
     }
 
+    override suspend fun listProjectIdsByMember(userId: String): List<String> =
+        collection.find(and(eq("userId", userId), eq("status", MembershipStatus.ACTIVE.name)))
+            .projection(Document("projectId", 1))
+            .toList()
+            .mapNotNull { it.getString("projectId") }
+            .distinct()
+
     override suspend fun revoke(membershipId: String): Boolean {
         val now = Clock.System.now().toEpochMilliseconds()
         val result = collection.updateOne(

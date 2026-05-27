@@ -78,10 +78,11 @@ fun Application.configureTransloom(refundService: RefundService) {
         runCatching { backfillProjectMemberships(projectRepository, userRepository, membershipRepository) }
             .onFailure { log.warn("Membership backfill failed: {}", it.message) }
     }
-    val cfKvService = CloudflareKvService(
+    val cfKvService = CloudflareR2Service(
         accountId = getSecretValue("cloudflare-account-id"),
-        namespaceId = getSecretValue("cloudflare-kv-namespace-id"),
-        apiToken = getSecretValue("cloudflare-api-token")
+        bucketName = getSecretValue("cloudflare-r2-bucket-name"),
+        accessKeyId = getSecretValue("cloudflare-r2-access-key-id"),
+        secretAccessKey = getSecretValue("cloudflare-r2-secret-access-key")
     )
     val cdnPublishService = CdnPublishService(translationRepository, cfKvService, cdnPublishRepository)
     val pipeline = TranslationPipeline(
@@ -127,6 +128,7 @@ fun Application.configureTransloom(refundService: RefundService) {
         culturalSensitivityAnalyzer.close()
         razorpayService.close()
         lifecycleMonitor.stop()
+        cfKvService.close()
         log.info("Transloom resources closed")
     }
 
@@ -149,7 +151,6 @@ fun Application.configureTransloom(refundService: RefundService) {
             userActivityService = userActivityService,
             pipelineEventBus = pipelineEventBus,
             cdnPublishService = cdnPublishService,
-            cfKvService = cfKvService,
             translationService = translationService,
             analyticsService = analyticsService,
         )

@@ -5,7 +5,6 @@ import com.transloom.repository.CdnPublishRepository
 import com.transloom.repository.ProjectRepository
 import com.transloom.services.CdnPublishException
 import com.transloom.services.CdnPublishService
-import com.transloom.services.CloudflareKvService
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -52,8 +51,7 @@ data class VersionsResponse(
 fun Route.configureCdnBundleRoutes(
     projectRepository: ProjectRepository,
     cdnPublishRepository: CdnPublishRepository,
-    cdnPublishService: CdnPublishService,
-    cfKv: CloudflareKvService
+    cdnPublishService: CdnPublishService
 ) {
     route("/transloom/api/projects/{id}/bundle") {
         get {
@@ -91,21 +89,11 @@ fun Route.configureCdnBundleRoutes(
             val locale = call.parameters["locale"]?.takeIf { it.isNotBlank() }
                 ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid locale"))
 
-            // Resolve the active version via the publish service (KV pointer → versioned bundle).
-            // If no active pointer exists yet, fall back to the most recent successful publish so
-            // pre-Phase-2 projects keep working until they're republished.
             val resolved = cdnPublishService.fetchActiveBundle(projectId, locale)
-            val (version, rawBundle, publishedAt) = if (resolved != null) {
-                val pubAt = cdnPublishRepository.findByVersion(projectId, resolved.version)?.publishedAt
-                    ?: System.currentTimeMillis()
-                Triple(resolved.version, resolved.json, pubAt)
-            } else {
-                val last = cdnPublishRepository.lastPublish(projectId)
-                    ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("No bundles published for this project"))
-                val raw = cfKv.get("$projectId:$locale")
-                    ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("Bundle not found for locale '$locale'"))
-                Triple(last.bundleVersion, raw, last.publishedAt)
-            }
+                ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("No active bundle for locale '$locale'"))
+            val publishedAt = cdnPublishRepository.findByVersion(projectId, resolved.version)?.publishedAt
+                ?: System.currentTimeMillis()
+            val (version, rawBundle) = resolved.version to resolved.json
 
             val clientEtag = call.request.headers[HttpHeaders.IfNoneMatch]
             if (clientEtag == version) {
@@ -113,7 +101,7 @@ fun Route.configureCdnBundleRoutes(
             }
 
             val bundleObj = runCatching { Json.parseToJsonElement(rawBundle) as JsonObject }.getOrElse {
-                cdnLog.error("Failed to parse KV bundle for project={} locale={} version={}", projectId, locale, version)
+                cdnLog.error("Failed to parse R2 bundle for project={} locale={} version={}", projectId, locale, version)
                 return@get call.respond(HttpStatusCode.InternalServerError, ApiError("Bundle parse error"))
             }
 

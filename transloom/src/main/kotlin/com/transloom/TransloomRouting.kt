@@ -29,7 +29,6 @@ import io.ktor.server.http.content.staticResources
 import com.transloom.services.AnalyticsService
 import com.transloom.services.BillingService
 import com.transloom.services.CdnPublishService
-import com.transloom.services.CloudflareKvService
 import com.transloom.services.GitHubService
 import com.transloom.services.InAppNotificationService
 import com.transloom.services.NotificationService
@@ -62,7 +61,6 @@ class TransloomDeps(
     val userActivityService: UserActivityService,
     val pipelineEventBus: PipelineEventBus,
     val cdnPublishService: CdnPublishService,
-    val cfKvService: CloudflareKvService,
     val translationService: TranslationService,
     val analyticsService: AnalyticsService,
     val notificationService: NotificationService? = null,
@@ -93,7 +91,7 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
         configurePublicCheckoutRoute(d.razorpayService, d.userRepository, d.billingRepository, d.jwtSecret, d.userActivityService)
         configureBillingReceiptRoute(d.jwtSecret, d.billingRepository, d.userRepository, d.userActivityService)
         rateLimit(RateLimitName("bundle_fetch")) {
-            configureCdnBundleRoutes(d.projectRepository, d.cdnPublishRepository, d.cdnPublishService, d.cfKvService)
+            configureCdnBundleRoutes(d.projectRepository, d.cdnPublishRepository, d.cdnPublishService)
         }
         authenticate("auth-jwt") {
             configureApiRoutes(

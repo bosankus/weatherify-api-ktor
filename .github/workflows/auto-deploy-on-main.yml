@@ -59,6 +59,7 @@ jobs:
             --update-secrets=GITHUB_WEBHOOK_SECRET=github-webhook-secret:latest \
             --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
             --update-secrets=CLOUDFLARE_ACCOUNT_ID=cloudflare-account-id:latest \
-            --update-secrets=CLOUDFLARE_KV_NAMESPACE_ID=cloudflare-kv-namespace-id:latest \
-            --update-secrets=CLOUDFLARE_API_TOKEN=cloudflare-api-token:latest \
+            --update-secrets=CLOUDFLARE_R2_BUCKET_NAME=cloudflare-r2-bucket-name:latest \
+            --update-secrets=CLOUDFLARE_R2_ACCESS_KEY_ID=cloudflare-r2-access-key-id:latest \
+            --update-secrets=CLOUDFLARE_R2_SECRET_ACCESS_KEY=cloudflare-r2-secret-access-key:latest \
             --update-secrets=FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest

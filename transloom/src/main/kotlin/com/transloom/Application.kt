@@ -38,6 +38,7 @@ import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 private val WEBHOOK_HEAL_STALENESS = 7.days
@@ -95,8 +96,11 @@ fun Application.module() {
         }
     }
 
+    // Cloud Run appends the true client IP as the *last* entry in X-Forwarded-For.
+    // Using the first entry is a spoofing vector — a client can inject a fake IP
+    // as the leftmost value. The rightmost entry is set by the infrastructure.
     val clientIp: (ApplicationCall) -> Any = { call ->
-        call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+        call.request.headers["X-Forwarded-For"]?.split(",")?.lastOrNull()?.trim()
             ?: call.request.origin.remoteHost
     }
     install(RateLimit) {
@@ -177,9 +181,10 @@ fun Application.module() {
     }
 
     val cfAccountId = getSecretValue("cloudflare-account-id")
-    val cfNamespaceId = getSecretValue("cloudflare-kv-namespace-id")
-    val cfApiToken = getSecretValue("cloudflare-api-token")
-    val cfKvService = CloudflareKvService(cfAccountId, cfNamespaceId, cfApiToken)
+    val cfR2BucketName = getSecretValue("cloudflare-r2-bucket-name")
+    val cfR2AccessKeyId = getSecretValue("cloudflare-r2-access-key-id")
+    val cfR2SecretAccessKey = getSecretValue("cloudflare-r2-secret-access-key")
+    val cfKvService = CloudflareR2Service(cfAccountId, cfR2BucketName, cfR2AccessKeyId, cfR2SecretAccessKey)
     val cdnPublishService = CdnPublishService(translationRepository, cfKvService, cdnPublishRepository)
 
     val jobQueue = TranslationJobQueue(jobQueueRepository)
@@ -286,39 +291,44 @@ fun Application.module() {
         }
     }
 
+    // Runs 10s after startup then every 24h. A one-shot launch would leave broken
+    // webhooks unfixed until the next deploy if they break after the startup window.
     launch {
         delay(10_000)
-        val staleBefore = Clock.System.now() - WEBHOOK_HEAL_STALENESS
-        val staleProjects = runCatching { projectRepository.listProjectsNeedingWebhookHeal(staleBefore) }.getOrElse {
-            log.error("Webhook self-heal: failed to query stale projects — {}", it.message); emptyList()
-        }
-        if (staleProjects.isEmpty()) {
-            log.info("Webhook self-heal: all webhooks verified within the last {} days", WEBHOOK_HEAL_STALENESS.inWholeDays)
-            return@launch
-        }
-        log.info("Webhook self-heal: {} project(s) need webhook verification", staleProjects.size)
-
-        // Fetch each unique owner's token once — many projects may share the same owner.
-        val ownerTokens: Map<String, String?> = staleProjects.map { it.ownerId }.distinct()
-            .associateWith { ownerId -> userRepository.findById(ownerId)?.githubToken }
-
-        var healed = 0
-        for (project in staleProjects) {
-            val token = ownerTokens[project.ownerId]
-            if (token == null) {
-                log.debug("Webhook self-heal: skipping project {} — owner has no GitHub token", project.id)
-                continue
+        while (true) {
+            val staleBefore = Clock.System.now() - WEBHOOK_HEAL_STALENESS
+            val staleProjects = runCatching { projectRepository.listProjectsNeedingWebhookHeal(staleBefore) }.getOrElse {
+                log.error("Webhook self-heal: failed to query stale projects — {}", it.message); emptyList()
             }
-            runCatching { githubService.ensureWebhook(project.githubRepo, token) }
-                .onSuccess { changed ->
-                    runCatching { projectRepository.markWebhookVerified(project.id) }
-                    if (changed) healed++
+            if (staleProjects.isEmpty()) {
+                log.info("Webhook self-heal: all webhooks verified within the last {} days", WEBHOOK_HEAL_STALENESS.inWholeDays)
+            } else {
+                log.info("Webhook self-heal: {} project(s) need webhook verification", staleProjects.size)
+
+                // Fetch each unique owner's token once — many projects may share the same owner.
+                val ownerTokens: Map<String, String?> = staleProjects.map { it.ownerId }.distinct()
+                    .associateWith { ownerId -> userRepository.findById(ownerId)?.githubToken }
+
+                var healed = 0
+                for (project in staleProjects) {
+                    val token = ownerTokens[project.ownerId]
+                    if (token == null) {
+                        log.debug("Webhook self-heal: skipping project {} — owner has no GitHub token", project.id)
+                        continue
+                    }
+                    runCatching { githubService.ensureWebhook(project.githubRepo, token) }
+                        .onSuccess { changed ->
+                            runCatching { projectRepository.markWebhookVerified(project.id) }
+                            if (changed) healed++
+                        }
+                        .onFailure { log.warn("Webhook self-heal failed for {}: {}", project.githubRepo, it.message) }
+                    delay(500)
                 }
-                .onFailure { log.warn("Webhook self-heal failed for {}: {}", project.githubRepo, it.message) }
-            delay(500)
+                log.info("Webhook self-heal complete: {}/{} project(s) processed, {} webhook(s) updated",
+                    staleProjects.size, staleProjects.size, healed)
+            }
+            delay(24.hours.inWholeMilliseconds)
         }
-        log.info("Webhook self-heal complete: {}/{} project(s) processed, {} webhook(s) updated",
-            staleProjects.size, staleProjects.size, healed)
     }
 
     monitor.subscribe(ApplicationStopped) {
@@ -333,7 +343,7 @@ fun Application.module() {
             "cultural analyzer"      to { culturalSensitivityAnalyzer.close() },
             "razorpay service"       to { razorpayService.close() },
             "lifecycle monitor"      to { lifecycleMonitor.stop() },
-            "cloudflare kv service"  to { cfKvService.close() }
+            "cloudflare r2 service"  to { cfKvService.close() }
         ).forEach { (name, closer) ->
             runCatching(closer).onFailure { log.error("Failed to close {}: {}", name, it.message) }
         }
@@ -358,7 +368,6 @@ fun Application.module() {
         userActivityService = userActivityService,
         pipelineEventBus = pipelineEventBus,
         cdnPublishService = cdnPublishService,
-        cfKvService = cfKvService,
         translationService = translationService,
         analyticsService = analyticsService,
         notificationService = notificationService,

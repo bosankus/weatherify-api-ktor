@@ -11,6 +11,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -91,19 +92,23 @@ fun Route.configureDashboardRoutes(
                 ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
 
             val projectsList = projectRepository.listForUser(userId)
-            val items = projectsList.flatMap { project ->
-                val glossary = projectRepository.getGlossary(project.id)
-                glossary.flatMap { (lang, terms) ->
-                    terms.entries.map { (source, target) ->
-                        GlossaryItem(
-                            id = "${project.id}-$lang-$source",
-                            source = source,
-                            targetLanguage = lang,
-                            translation = target,
-                            status = "Active"
-                        )
+            val items = coroutineScope {
+                projectsList.map { project ->
+                    async {
+                        val glossary = projectRepository.getGlossary(project.id)
+                        glossary.flatMap { (lang, terms) ->
+                            terms.entries.map { (source, target) ->
+                                GlossaryItem(
+                                    id = "${project.id}-$lang-$source",
+                                    source = source,
+                                    targetLanguage = lang,
+                                    translation = target,
+                                    status = "Active"
+                                )
+                            }
+                        }
                     }
-                }
+                }.awaitAll().flatten()
             }
             call.respond(items)
         }
@@ -133,6 +138,7 @@ fun Route.configureDashboardRoutes(
             @kotlinx.serialization.Serializable
             data class CdnPublishInfo(
                 val projectId: String,
+                val projectName: String,
                 val bundleVersion: String,
                 val publishedAt: Long,
                 val locales: List<String>,
@@ -147,6 +153,7 @@ fun Route.configureDashboardRoutes(
                     ?.let { log ->
                         CdnPublishInfo(
                             projectId = proj.id,
+                            projectName = proj.name,
                             bundleVersion = log.bundleVersion,
                             publishedAt = log.publishedAt,
                             locales = log.locales,

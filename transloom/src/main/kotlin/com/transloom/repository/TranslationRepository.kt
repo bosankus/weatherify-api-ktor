@@ -41,6 +41,26 @@ interface TranslationRepository {
     /** Total count of pending reviews — run in parallel with listPendingReviews for pagination. */
     suspend fun countPendingReviews(ownerId: String, language: String? = null, statusFilter: String? = null): Int
 
+    /**
+     * Like [listPendingReviews] but scoped to an explicit set of project IDs rather than
+     * owner-derived projects. Use when the caller already resolved the access-controlled
+     * set (e.g. owned projects ∪ member projects for the review portal).
+     */
+    suspend fun listPendingReviewsForProjects(
+        projectIds: List<String>,
+        limit: Int = 50,
+        offset: Int = 0,
+        language: String? = null,
+        statusFilter: String? = null
+    ): List<Translation>
+
+    /** Pair of [listPendingReviewsForProjects] — run in parallel for pagination. */
+    suspend fun countPendingReviewsForProjects(
+        projectIds: List<String>,
+        language: String? = null,
+        statusFilter: String? = null
+    ): Int
+
     suspend fun approve(translationId: String, editedText: String? = null): Boolean
 
     /** Bulk-approve a list of review-status translations. Returns the number actually modified. */

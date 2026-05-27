@@ -527,16 +527,29 @@ fun Route.configureApiRoutes(
                 val language = call.request.queryParameters["language"]?.takeIf { it.isNotBlank() }
                 val statusFilter = call.request.queryParameters["status"]?.takeIf { it.isNotBlank() }
 
-                // Fetch items, total, and the user's project list in parallel. The project
-                // list is needed for the OTA-enabled lookup on each review item; reading it
-                // once here avoids N+1 per-translation queries.
-                val (items, total, ownedProjects) = coroutineScope {
-                    val itemsDeferred = async { translationRepository.listPendingReviews(userId, limit, offset, language, statusFilter) }
-                    val totalDeferred = async { translationRepository.countPendingReviews(userId, language, statusFilter) }
-                    val projectsDeferred = async { projectRepository.listForUser(userId) }
-                    Triple(itemsDeferred.await(), totalDeferred.await(), projectsDeferred.await())
+                // Resolve the full set of projects the caller can review: owned projects union
+                // projects where they hold an ACTIVE membership (TRANSLATOR or above).
+                // Legacy owned projects that predate the membership backfill are covered by
+                // listForUser; member-only projects are captured by listProjectIdsByMember.
+                val (items, total, projectById) = coroutineScope {
+                    // Fetch owned projects and member project IDs in parallel — both independent reads.
+                    val ownedProjectsD = async { projectRepository.listForUser(userId) }
+                    val memberProjectIdsD = async { memberships.listProjectIdsByMember(userId) }
+                    val (ownedProjects, memberProjectIds) = ownedProjectsD.await() to memberProjectIdsD.await()
+                    val allProjectIds = (ownedProjects.map { it.id } + memberProjectIds).distinct()
+
+                    // Now fire translations queries and supplemental project fetches in parallel.
+                    val itemsDeferred = async { translationRepository.listPendingReviewsForProjects(allProjectIds, limit, offset, language, statusFilter) }
+                    val totalDeferred = async { translationRepository.countPendingReviewsForProjects(allProjectIds, language, statusFilter) }
+                    // Fetch member-only projects (not in ownedProjects) to build the OTA map.
+                    val memberOnlyIds = memberProjectIds.filterNot { id -> ownedProjects.any { it.id == id } }
+                    val memberProjectsD = async {
+                        memberOnlyIds.map { async { projectRepository.findById(it) } }.awaitAll().filterNotNull()
+                    }
+                    val allProjects = ownedProjects + memberProjectsD.await()
+                    Triple(itemsDeferred.await(), totalDeferred.await(), allProjects.associateBy { it.id })
                 }
-                val otaByProject: Map<String, Boolean> = ownedProjects.associate { it.id to it.otaEnabled }
+                val otaByProject: Map<String, Boolean> = projectById.mapValues { it.value.otaEnabled }
                 val response = items.map { t ->
                     ReviewItemResponse(
                         id = t.id,
@@ -835,6 +848,15 @@ fun Route.configureApiRoutes(
                 val body = runCatching { call.receive<GlossaryEntryBody>() }.getOrElse {
                     return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
                 }
+                if (body.sourceTerm.isBlank() || body.targetTerm.isBlank()) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("sourceTerm and targetTerm must not be empty"))
+                }
+                if (body.sourceTerm.length > 200) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("sourceTerm must be 200 characters or less"))
+                }
+                if (body.targetTerm.length > 500) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("targetTerm must be 500 characters or less"))
+                }
                 glossaryRepository.upsert(projectId, body.languageCode, body.sourceTerm, body.targetTerm)
                 call.respond(HttpStatusCode.OK, mapOf("status" to "Glossary updated"))
             }
@@ -1095,8 +1117,10 @@ private fun launchFollowUpPr(
                     val updatedFiles: Map<String, String> = coroutineScope {
                         fileTranslations.entries.map { (filePath, translations) ->
                             async {
+                                // Fetch from the PR branch so previous commits on it aren't
+                                // overwritten by merging against the base branch (watchBranch).
                                 val existing = githubService.fetchFileContent(
-                                    repo = project.githubRepo, branch = project.watchBranch,
+                                    repo = project.githubRepo, branch = latestPrBranch,
                                     filePath = filePath, token = githubToken
                                 )
                                 val merged = when {
@@ -1132,7 +1156,7 @@ private fun launchFollowUpPr(
                         var cdnBundleVersion: String? = null
                         var cdnLocales: List<String> = emptyList()
                         if (cdnPublishService != null) {
-                            runCatching { cdnPublishService.publish(projectId) }
+                            runCatching { cdnPublishService.publish(projectId, promote = project.autoPromote) }
                                 .onSuccess { receipt ->
                                     apiLog.info("CDN auto-publish after review commit: project={} locales={}", projectId, receipt.locales)
                                     if (!receipt.skipped) {
@@ -1208,7 +1232,7 @@ private fun launchFollowUpPr(
                 var cdnBundleVersion: String? = null
                 var cdnLocales: List<String> = emptyList()
                 if (cdnPublishService != null) {
-                    runCatching { cdnPublishService.publish(projectId) }
+                    runCatching { cdnPublishService.publish(projectId, promote = project.autoPromote) }
                         .onSuccess { receipt ->
                             apiLog.info("CDN auto-publish after follow-up PR: project={} locales={}", projectId, receipt.locales)
                             if (!receipt.skipped) {

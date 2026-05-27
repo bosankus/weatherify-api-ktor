@@ -24,7 +24,7 @@ data class PublishReceipt(
 
 class CdnPublishService(
     private val translationRepository: TranslationRepository,
-    private val cfKv: CloudflareKvService,
+    private val cfKv: CloudflareR2Service,
     private val publishLog: CdnPublishRepository
 ) {
 
@@ -32,8 +32,8 @@ class CdnPublishService(
 
     /**
      * Compile approved translations into per-locale bundles, write each one as an immutable
-     * versioned KV entry (`{projectId}:{locale}:{version}`). When [promote] is true, also update
-     * the per-locale active pointer (`{projectId}:{locale}:active`) and record the active version
+     * versioned R2 object (`{projectId}/{locale}/{version}`). When [promote] is true, also update
+     * the per-locale active pointer (`{projectId}/{locale}/active`) and record the active version
      * for the project.
      */
     suspend fun publish(projectId: String, promote: Boolean = true): PublishReceipt {
@@ -65,7 +65,7 @@ class CdnPublishService(
             val activeNow = runCatching { publishLog.getActiveVersion(projectId) }.getOrNull()
             if (promote && activeNow != bundleVersion) {
                 promoteInternal(projectId, bundleVersion, locales)
-                log.info("CDN publish: bundle {} already on KV, re-promoted active pointer for project={}", bundleVersion, projectId)
+                log.info("CDN publish: bundle {} already on R2, re-promoted active pointer for project={}", bundleVersion, projectId)
                 return PublishReceipt(
                     publishedAt = alreadyPublished.publishedAt,
                     locales = locales,
@@ -73,7 +73,7 @@ class CdnPublishService(
                     promoted = true
                 )
             }
-            log.info("CDN publish: bundle unchanged (version={}) for project={}, skipping KV writes", bundleVersion, projectId)
+            log.info("CDN publish: bundle unchanged (version={}) for project={}, skipping R2 writes", bundleVersion, projectId)
             return PublishReceipt(
                 publishedAt = alreadyPublished.publishedAt,
                 locales = locales,
@@ -84,7 +84,7 @@ class CdnPublishService(
             )
         }
 
-        // Write each locale bundle to KV in parallel, under an immutable versioned key.
+        // Write each locale bundle to R2 in parallel, under an immutable versioned key.
         val metadataTemplate = """{"bundleVersion":"$bundleVersion"}"""
         val publishedAt = System.currentTimeMillis()
 
@@ -94,7 +94,7 @@ class CdnPublishService(
                     val kvKey = versionedKey(projectId, locale, bundleVersion)
                     val kvValue = minJson.encodeToString(bundle)
                     cfKv.put(kvKey, kvValue, metadataTemplate, expirationTtl = 2_592_000)
-                    log.debug("CDN KV written: key={} strings={}", kvKey, bundle.size)
+                    log.debug("CDN R2 written: key={} strings={}", kvKey, bundle.size)
                 }
             }.awaitAll()
         }
@@ -154,7 +154,7 @@ class CdnPublishService(
     }
 
     private suspend fun promoteInternal(projectId: String, bundleVersion: String, locales: List<String>) {
-        // The active pointer is *both* a per-locale KV key (so the read path can resolve without
+        // The active pointer is *both* a per-locale R2 object (so the read path can resolve without
         // round-tripping to Mongo) and a Mongo record (so the dashboard can read it cheaply).
         coroutineScope {
             locales.map { locale ->
@@ -186,8 +186,8 @@ class CdnPublishService(
     }
 
     companion object {
-        internal fun versionedKey(projectId: String, locale: String, version: String) = "$projectId:$locale:$version"
-        internal fun activeKey(projectId: String, locale: String) = "$projectId:$locale:active"
+        internal fun versionedKey(projectId: String, locale: String, version: String) = "$projectId/$locale/$version"
+        internal fun activeKey(projectId: String, locale: String) = "$projectId/$locale/active"
     }
 }
 

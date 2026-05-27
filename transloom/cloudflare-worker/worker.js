@@ -1,16 +1,17 @@
 /**
- * Transloom CDN Worker
+ * Transloom CDN Worker — R2 edition
  *
  * Routes:
  *   GET /{projectId}/{locale}/strings.json
  *
- * KV key format: "{projectId}:{locale}"
- * KV metadata format: { "bundleVersion": "<hex>" }
+ * R2 key format:
+ *   Active pointer: "{projectId}/{locale}/active"  (plain text, contains the version string)
+ *   Versioned bundle: "{projectId}/{locale}/{version}"  (JSON, has x-amz-meta-bundle-version)
  *
  * Deploy:
  *   wrangler deploy
  *
- * wrangler.toml binding: [[kv_namespaces]] binding = "BUNDLES" id = "<namespace_id>"
+ * wrangler.toml binding: [[r2_buckets]] binding = "BUCKET" bucket_name = "<bucket-name>"
  */
 
 export default {
@@ -31,22 +32,32 @@ export default {
     }
 
     const [, projectId, locale] = match;
-    const kvKey = `${projectId}:${locale}`;
 
-    let valueWithMeta;
+    // Resolve active version via the pointer object
+    let activeObj;
     try {
-      valueWithMeta = await env.BUNDLES.getWithMetadata(kvKey, { type: "text" });
+      activeObj = await env.BUCKET.get(`${projectId}/${locale}/active`);
     } catch (err) {
-      // KV is unavailable — degrade to 503 so stale-while-revalidate can serve cached response.
       return jsonResponse({ error: "upstream_unavailable" }, 503);
     }
+    if (activeObj === null) {
+      return jsonResponse({ error: "bundle_not_found" }, 404);
+    }
+    const version = await activeObj.text();
 
-    if (valueWithMeta.value === null) {
+    // Fetch the versioned bundle
+    let bundleObj;
+    try {
+      bundleObj = await env.BUCKET.get(`${projectId}/${locale}/${version}`);
+    } catch (err) {
+      return jsonResponse({ error: "upstream_unavailable" }, 503);
+    }
+    if (bundleObj === null) {
       return jsonResponse({ error: "bundle_not_found" }, 404);
     }
 
-    const { value, metadata } = valueWithMeta;
-    const bundleVersion = metadata?.bundleVersion ?? hashValue(value);
+    const value = await bundleObj.text();
+    const bundleVersion = bundleObj.customMetadata?.["bundle-version"] ?? version;
 
     // Conditional GET: return 304 if client's ETag matches.
     const clientETag = request.headers.get("If-None-Match");
@@ -94,14 +105,4 @@ function jsonResponse(body, status = 200) {
       ...corsHeaders(),
     },
   });
-}
-
-// Fallback: simple djb2 hash when KV metadata is absent.
-function hashValue(str) {
-  let h = 5381;
-  for (let i = 0; i < str.length; i++) {
-    h = ((h << 5) + h) ^ str.charCodeAt(i);
-    h = h >>> 0;
-  }
-  return h.toString(16);
 }

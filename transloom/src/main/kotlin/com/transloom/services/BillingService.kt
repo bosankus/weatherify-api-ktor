@@ -35,7 +35,7 @@ class BillingService(
         if (stringLimit != null) {
             val projected = usage.stringsTranslated + stringsToTranslate
             if (projected > stringLimit) {
-                recordTrialLimitHit(subscription)
+                recordLimitHit(subscription)
                 val msg = if (plan == BillingPlan.FREE)
                     "Free plan limit of $stringLimit strings/month reached. Upgrade to continue translating."
                 else
@@ -46,8 +46,10 @@ class BillingService(
         return true
     }
 
-    private suspend fun recordTrialLimitHit(subscription: com.transloom.domain.Subscription) {
-        if (subscription.inTrial && subscription.limitHitAt == null) {
+    // Marks limitHitAt so isLimitAlreadyExceeded() can fast-fail future webhooks without
+    // running the full pipeline. Applies to all plans with a string limit, not just trials.
+    private suspend fun recordLimitHit(subscription: com.transloom.domain.Subscription) {
+        if (subscription.limitHitAt == null) {
             billingRepository.setLimitHitAt(subscription.userId, Clock.System.now())
             userActivityService?.record(
                 subscription.userId, UserEvent.TRIAL_LIMIT_HIT,

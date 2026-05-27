@@ -108,7 +108,7 @@ class RazorpayBillingService(
         val startAt = if (trialEligible) {
             now.epochSeconds + (TRIAL_DAYS * 24 * 3600)
         } else {
-            now.epochSeconds
+            now.epochSeconds + 60 // small buffer so Razorpay doesn't reject as past
         }
         log.info("createSubscriptionForUser userId={} plan={} trialEligible={} (priorTrial={}, signupAgeDays={})",
             userId, plan.name, trialEligible, existing.trialStartedAt != null, signupAge?.inWholeDays)

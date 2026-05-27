@@ -51,4 +51,7 @@ interface ProjectMembershipRepository {
 
     /** Soft-delete: status -> REVOKED, stamps revokedAt. Keeps the row for audit. */
     suspend fun revoke(membershipId: String): Boolean
+
+    /** Returns IDs of all projects where [userId] has an ACTIVE membership (any role). */
+    suspend fun listProjectIdsByMember(userId: String): List<String>
 }

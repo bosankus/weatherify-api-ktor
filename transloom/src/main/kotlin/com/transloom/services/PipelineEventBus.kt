@@ -12,6 +12,7 @@ import io.lettuce.core.pubsub.StatefulRedisPubSubConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -418,6 +419,9 @@ class PipelineEventBus(
     }
 
     fun close() {
+        // Cancel the ioScope first so in-flight launch coroutines don't try to use
+        // the Jedis pool after it's closed, which would log spurious errors.
+        ioScope.cancel()
         runCatching { pubSubConn?.close() }
         runCatching { lettuceClient?.shutdown() }
         runCatching { pool?.close() }
@@ -427,9 +431,14 @@ class PipelineEventBus(
 
     private fun updateStep(userId: String, runId: String, stepId: String, status: String, detail: String?) {
         val steps = activeSteps[runId] ?: return
-        val idx = steps.indexOfFirst { it.id == stepId }
-        if (idx >= 0) steps[idx] = steps[idx].copy(status = status, detail = detail)
-        mutateRun(userId, runId) { it.copy(steps = steps.toList()) }
+        // Locale coroutines call stepRunning/stepDone concurrently — synchronize on the
+        // list itself so concurrent indexed writes don't corrupt the step array.
+        val snapshot = synchronized(steps) {
+            val idx = steps.indexOfFirst { it.id == stepId }
+            if (idx >= 0) steps[idx] = steps[idx].copy(status = status, detail = detail)
+            steps.toList()
+        }
+        mutateRun(userId, runId) { it.copy(steps = snapshot) }
         emit(userId, PipelineEvent(type = "step", runId = runId, stepId = stepId, status = status, detail = detail))
     }
 
