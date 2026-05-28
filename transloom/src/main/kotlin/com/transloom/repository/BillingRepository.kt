@@ -15,7 +15,7 @@ interface BillingRepository {
         plan: BillingPlan,
         razorpayCustomerId: String? = null,
         razorpaySubscriptionId: String? = null,
-        cancelAtPeriodEnd: Boolean = false,
+        cancelAtPeriodEnd: Boolean? = null,
         currentPeriodEnd: Instant? = null,
         pendingPlan: BillingPlan? = null
     )

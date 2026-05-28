@@ -28,7 +28,8 @@ interface ProjectRepository {
         autoApproveEnabled: Boolean? = null,
         otaEnabled: Boolean? = null,
         autoPromote: Boolean? = null,
-        sharedMemoryOptIn: Boolean? = null
+        sharedMemoryOptIn: Boolean? = null,
+        prBranchPattern: String? = null
     ): Boolean
 
     suspend fun delete(projectId: String)

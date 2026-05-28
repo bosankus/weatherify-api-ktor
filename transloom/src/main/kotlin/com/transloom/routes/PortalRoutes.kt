@@ -1378,9 +1378,9 @@ private const val DASHBOARD_CSS = """
 .run-status-dot.retrying{background:var(--yellow);animation:livePulse 1.8s infinite}
 .run-retried-badge{font-size:10px;font-weight:700;letter-spacing:.5px;padding:1px 7px;border-radius:10px;background:rgba(250,173,20,.12);color:var(--yellow);border:1px solid rgba(250,173,20,.25);white-space:nowrap}
 .run-steps{padding:12px 18px;display:flex;flex-direction:column;gap:0}
-.step-row{display:flex;align-items:center;gap:12px;padding:7px 0;position:relative}
+.step-row{display:flex;align-items:flex-start;gap:12px;padding:7px 0;position:relative}
 .step-row:not(:last-child)::after{content:'';position:absolute;left:11px;top:28px;width:1px;height:calc(100% - 10px);background:var(--border);z-index:0}
-.step-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;position:relative;z-index:1;transition:all .3s ease}
+.step-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;position:relative;z-index:1;transition:all .3s ease;margin-top:1px}
 .step-icon.pending{background:var(--surface2);border:1.5px solid var(--border);color:var(--text-muted)}
 .step-icon.running{background:rgba(0,229,160,.12);border:1.5px solid rgba(0,229,160,.4);color:var(--accent)}
 .step-icon.done{background:rgba(0,229,160,.15);border:1.5px solid rgba(0,229,160,.5);color:var(--accent)}
@@ -1388,16 +1388,16 @@ private const val DASHBOARD_CSS = """
 .step-icon.skipped{background:var(--surface2);border:1.5px solid var(--border);color:var(--text-muted);opacity:.5}
 .step-spin{animation:spin .9s linear infinite}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-.step-body{flex:1;display:flex;align-items:center;justify-content:space-between;min-width:0}
+.step-body{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}
 .step-label{font-size:13px;transition:color .2s}
 .step-label.running{color:var(--text);font-weight:500}
 .step-label.done{color:var(--text-dim)}
 .step-label.error{color:var(--red)}
 .step-label.skipped{color:var(--text-muted);opacity:.6}
 .step-label.pending{color:var(--text-muted)}
-.step-detail{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;text-align:right}
+.step-detail{font-size:11.5px;color:var(--text-muted);word-break:break-word;overflow-wrap:anywhere;line-height:1.4}
 .step-detail.done{color:var(--text-dim)}
-.step-detail.error{color:var(--red)}
+.step-detail.error{color:var(--red);opacity:.9}
 .run-savings-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.25);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;flex-shrink:0}
 .run-cdn-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(0,229,160,.08);color:var(--accent);border:1px solid rgba(0,229,160,.22);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;flex-shrink:0}
 /* ── CDN Status Widget ───────────────────────────────────────────────────── */

@@ -49,6 +49,13 @@ interface ProjectMembershipRepository {
 
     suspend fun updateRole(membershipId: String, role: ProjectRole): ProjectMembership?
 
+    /**
+     * Resets an INVITED row with a fresh token and a new 7-day expiry window.
+     * Updates invitedAt to now so the resend cooldown starts from this moment.
+     * Returns null if the row no longer exists.
+     */
+    suspend fun resetInvite(membershipId: String, inviteToken: String): ProjectMembership?
+
     /** Soft-delete: status -> REVOKED, stamps revokedAt. Keeps the row for audit. */
     suspend fun revoke(membershipId: String): Boolean
 

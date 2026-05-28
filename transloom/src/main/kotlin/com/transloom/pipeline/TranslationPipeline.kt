@@ -322,7 +322,8 @@ class TranslationPipeline(
                     commitMessage = "chore(i18n): auto-translate strings to ${config.targets.map { it.code }.joinToString()}",
                     prTitle = "Transloom: Auto-Translations for ${payload.commitHash.take(7)}",
                     prBody = buildPrBody(newStrings.size, semanticKeys.size, surfaceKeys.size, config.targets.size),
-                    token = githubToken
+                    token = githubToken,
+                    branchPattern = project.prBranchPattern
                 )
             } catch (e: Exception) {
                 eventBus.stepError(userId, runId, "CREATING_PR", e.message)

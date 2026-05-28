@@ -149,7 +149,9 @@ internal fun HTML.billingAnalyticsApp() {
                 h2 { id = "bla-runs-title"; +"Pipeline runs" }
                 span("bl-eyebrow") { id = "bla-runs-count" }
             }
+            div("bla-runs-toolbar") { id = "bla-runs-toolbar" }
             div("bla-table-wrap") { id = "bla-runs-body" }
+            div("bla-runs-pagination") { id = "bla-runs-pagination" }
         }
     }
 }

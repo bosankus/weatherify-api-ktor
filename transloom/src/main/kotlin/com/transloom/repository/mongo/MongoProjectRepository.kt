@@ -48,6 +48,7 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             put("sharedMemoryOptIn", input.sharedMemoryOptIn)
             put("otaEnabled", input.otaEnabled)
             put("autoPromote", input.autoPromote)
+            put("prBranchPattern", input.prBranchPattern)
             put("createdAt", now)
             put("updatedAt", now)
         }
@@ -68,7 +69,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             autoApproveEnabled = input.autoApproveEnabled,
             sharedMemoryOptIn = input.sharedMemoryOptIn,
             otaEnabled = input.otaEnabled,
-            autoPromote = input.autoPromote
+            autoPromote = input.autoPromote,
+            prBranchPattern = input.prBranchPattern
         )
     }
 
@@ -104,7 +106,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         autoApproveEnabled: Boolean?,
         otaEnabled: Boolean?,
         autoPromote: Boolean?,
-        sharedMemoryOptIn: Boolean?
+        sharedMemoryOptIn: Boolean?,
+        prBranchPattern: String?
     ): Boolean {
         val updates = mutableListOf<org.bson.conversions.Bson>()
 
@@ -119,6 +122,11 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         otaEnabled?.let { updates.add(Updates.set("otaEnabled", it)) }
         autoPromote?.let { updates.add(Updates.set("autoPromote", it)) }
         sharedMemoryOptIn?.let { updates.add(Updates.set("sharedMemoryOptIn", it)) }
+        // "" means "clear the pattern" (caller uses null to mean "no change")
+        prBranchPattern?.let {
+            if (it.isBlank()) updates.add(Updates.unset("prBranchPattern"))
+            else updates.add(Updates.set("prBranchPattern", it))
+        }
 
         if (updates.isEmpty()) return false
 
@@ -250,7 +258,8 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             webhookVerifiedAt = webhookVerifiedAt,
             lastSourceFileHash = getString("lastSourceFileHash"),
             otaEnabled = getBoolean("otaEnabled") ?: false,
-            autoPromote = getBoolean("autoPromote") ?: true
+            autoPromote = getBoolean("autoPromote") ?: true,
+            prBranchPattern = getString("prBranchPattern")
         )
     }
 }

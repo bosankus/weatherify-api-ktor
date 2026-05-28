@@ -22,6 +22,9 @@ interface UserRepository {
 
     suspend fun findById(userId: String): User?
 
+    /** Batch lookup by id. Returns only users that exist; order is not guaranteed. */
+    suspend fun findByIds(userIds: Collection<String>): List<User>
+
     /** Bumps lastActiveAt to now. Fire-and-forget; failures don't block requests. */
     suspend fun touchLastActive(userId: String, at: Instant)
 

@@ -247,6 +247,8 @@ class RazorpayBillingService(
             razorpaySubscriptionId = subscriptionId,
             currentPeriodEnd = currentEnd
         )
+        // Clear any stale pendingPlan now that the subscription is definitively active.
+        billingRepository.clearPendingPlan(userId)
 
         if (payment != null) {
             val paymentId = payment["id"]?.jsonPrimitive?.contentOrNull
@@ -306,6 +308,45 @@ class RazorpayBillingService(
         var result = 0
         for (i in a.indices) result = result or (a[i].code xor b[i].code)
         return result == 0
+    }
+
+    /**
+     * Fetches captured payments for [subscriptionId] from the Razorpay API and inserts any that
+     * are missing from our invoice_records collection. Safe to call repeatedly — the unique index
+     * on razorpayPaymentId silently drops duplicates. Used as a fallback when the subscription.charged
+     * webhook was missed (delivery failure, server restart during trial expiry, etc.).
+     */
+    suspend fun syncSubscriptionInvoices(userId: String, subscriptionId: String) {
+        val response = withContext(Dispatchers.IO) {
+            http.get("$RAZORPAY_API/payments?subscription_id=$subscriptionId&count=50") {
+                header(HttpHeaders.Authorization, authHeader)
+            }.body<JsonObject>()
+        }
+        val items = response["items"]?.jsonArray ?: run {
+            log.warn("syncSubscriptionInvoices: no items in response for sub={}", subscriptionId)
+            return
+        }
+        var synced = 0
+        for (item in items) {
+            val p = item.jsonObject
+            val paymentId = p["id"]?.jsonPrimitive?.contentOrNull ?: continue
+            val status = p["status"]?.jsonPrimitive?.contentOrNull ?: continue
+            if (status != "captured") continue
+            val amount = p["amount"]?.jsonPrimitive?.intOrNull ?: 0
+            val currency = p["currency"]?.jsonPrimitive?.contentOrNull ?: "INR"
+            val createdAt = p["created_at"]?.jsonPrimitive?.longOrNull
+                ?.let { Instant.fromEpochSeconds(it) } ?: Clock.System.now()
+            billingRepository.insertInvoice(
+                userId = userId,
+                razorpayPaymentId = paymentId,
+                amountPaise = amount,
+                currency = currency,
+                status = status,
+                periodEnd = createdAt + 30.days
+            )
+            synced++
+        }
+        if (synced > 0) log.info("syncSubscriptionInvoices: backfilled {} invoice(s) for userId={} sub={}", synced, userId, subscriptionId)
     }
 
     fun close() = http.close()

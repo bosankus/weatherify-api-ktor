@@ -104,6 +104,11 @@ class MongoUserRepository(
     override suspend fun findById(userId: String): User? =
         collection.find(eq("_id", userId)).firstOrNull()?.toUser()
 
+    override suspend fun findByIds(userIds: Collection<String>): List<User> {
+        if (userIds.isEmpty()) return emptyList()
+        return collection.find(`in`("_id", userIds)).toList().map { it.toUser() }
+    }
+
     override suspend fun touchLastActive(userId: String, at: Instant) {
         collection.updateOne(
             eq("_id", userId),

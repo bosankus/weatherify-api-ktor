@@ -28,11 +28,15 @@ private val DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffs
  * Object Read & Write permissions and note the Access Key ID + Secret.
  */
 class CloudflareR2Service(
-    private val accountId: String,
-    private val bucketName: String,
-    private val accessKeyId: String,
-    private val secretAccessKey: String
+    accountId: String,
+    bucketName: String,
+    accessKeyId: String,
+    secretAccessKey: String
 ) : AutoCloseable {
+    private val accountId = accountId.trim()
+    private val bucketName = bucketName.trim()
+    private val accessKeyId = accessKeyId.trim()
+    private val secretAccessKey = secretAccessKey.trim()
 
     private val log = LoggerFactory.getLogger(CloudflareR2Service::class.java)
     private val http = HttpClient(CIO) {

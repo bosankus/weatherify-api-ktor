@@ -131,17 +131,32 @@ class GitHubService {
         }
     }
 
+    /**
+     * Expands {timestamp}, {date}, and {branch} tokens in a branch name pattern.
+     * Returns the default pattern if [pattern] is null or blank.
+     */
+    private fun expandBranchPattern(pattern: String?, baseBranch: String, timestamp: Long): String {
+        val base = pattern?.takeIf { it.isNotBlank() } ?: "transloom/translations-{timestamp}"
+        val date = java.time.LocalDate.now().toString()
+        val safeBranch = baseBranch.replace(Regex("[^a-zA-Z0-9_\\-]"), "-").trimEnd('-')
+        return base
+            .replace("{timestamp}", timestamp.toString())
+            .replace("{date}", date)
+            .replace("{branch}", safeBranch)
+    }
+
     suspend fun createBranchAndPr(
-        repo: String, 
-        baseBranch: String, 
-        files: Map<String, String>, 
+        repo: String,
+        baseBranch: String,
+        files: Map<String, String>,
         commitMessage: String,
         prTitle: String,
         prBody: String,
-        token: String
+        token: String,
+        branchPattern: String? = null
     ): PrSummary {
         val timestamp = System.currentTimeMillis()
-        var newBranchName = "transloom/translations-$timestamp"
+        var newBranchName = expandBranchPattern(branchPattern, baseBranch, timestamp)
 
         val refResponse: GitRefResponse = client.get("https://api.github.com/repos/$repo/git/ref/heads/$baseBranch") {
             gitHubAuth(token)
@@ -155,10 +170,10 @@ class GitHubService {
             contentType(ContentType.Application.Json)
             setBody(mapOf("ref" to "refs/heads/$newBranchName", "sha" to baseSha))
         }
-        
-        // GitHub returns 422 if the branch name already exists; retry once with +1 timestamp.
+
+        // GitHub returns 422 if the branch name already exists; retry with +1 timestamp suffix.
         if (createRefResponse.status == io.ktor.http.HttpStatusCode.UnprocessableEntity) {
-            newBranchName = "transloom/translations-${timestamp + 1}"
+            newBranchName = expandBranchPattern(branchPattern, baseBranch, timestamp + 1)
             createRefResponse = client.post("https://api.github.com/repos/$repo/git/refs") {
                 gitHubAuth(token)
                 header(HttpHeaders.Accept, "application/vnd.github+json")

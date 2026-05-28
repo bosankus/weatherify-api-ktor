@@ -25,7 +25,9 @@ data class Project(
     /** When true, pipeline publishes translation bundles to the CDN (OTA) at the end of each run. */
     val otaEnabled: Boolean = false,
     /** When true, a successful publish is auto-promoted to the active version. When false, devs must promote manually. */
-    val autoPromote: Boolean = true
+    val autoPromote: Boolean = true,
+    /** Custom PR branch name pattern. Supports {timestamp}, {date}, {branch} tokens. Solo/Team only. */
+    val prBranchPattern: String? = null
 )
 
 @Serializable
@@ -48,5 +50,6 @@ data class CreateProjectInput(
     val autoApproveEnabled: Boolean = false,
     val sharedMemoryOptIn: Boolean = false,
     val otaEnabled: Boolean = false,
-    val autoPromote: Boolean = true
+    val autoPromote: Boolean = true,
+    val prBranchPattern: String? = null
 )

@@ -232,6 +232,17 @@ fun Route.configureApiRoutes(
                         ApiError("Project limit (${plan.maxProjects}) reached for ${plan.displayName} plan. Please upgrade.")
                     )
                 }
+                if (!body.prBranchPattern.isNullOrBlank() && plan == com.transloom.domain.BillingPlan.FREE) {
+                    return@post call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiError("Custom PR branch patterns require a Solo or Team plan.")
+                    )
+                }
+                val validatedBranchPattern = body.prBranchPattern?.takeIf { it.isNotBlank() }?.also { pat ->
+                    if (pat.length > 120 || pat.contains("..") || pat.any { c -> c == ' ' || c == '~' || c == '^' || c == ':' || c == '?' || c == '*' || c == '[' }) {
+                        return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid PR branch pattern. Avoid spaces and special characters (~ ^ : ? * [ ..)"))
+                    }
+                }
                 if (preflightUser?.githubToken.isNullOrBlank()) {
                     return@post call.respond(
                         HttpStatusCode.UnprocessableEntity,
@@ -264,7 +275,8 @@ fun Route.configureApiRoutes(
                     tone = body.tone,
                     targets = body.targets,
                     culturalSensitivityEnabled = false,
-                    sharedMemoryOptIn = body.sharedMemoryOptIn
+                    sharedMemoryOptIn = body.sharedMemoryOptIn,
+                    prBranchPattern = validatedBranchPattern
                 )
                 val project = runCatching { projectRepository.create(userId, input) }.getOrElse {
                     if (it.message?.contains("E11000") == true || it.message?.contains("duplicate") == true) {
@@ -329,6 +341,41 @@ fun Route.configureApiRoutes(
                     return@put call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
                 }
 
+                // Gate and validate prBranchPattern — only paid plans may set it.
+                // null = no change; "" = clear (unset); non-blank = validate and set.
+                val validatedBranchPattern: String? = when {
+                    body.prBranchPattern == null -> null  // not in request — no change
+                    body.prBranchPattern.isBlank() -> ""  // explicitly clearing the pattern
+                    else -> {
+                        val pat = body.prBranchPattern
+                        val plan = billingService.getPlan(userId)
+                        if (plan == com.transloom.domain.BillingPlan.FREE) {
+                            return@put call.respond(HttpStatusCode.Forbidden, ApiError("Custom PR branch patterns require a Solo or Team plan."))
+                        }
+                        if (pat.length > 120 || pat.contains("..") || pat.any { c -> c == ' ' || c == '~' || c == '^' || c == ':' || c == '?' || c == '*' || c == '[' }) {
+                            return@put call.respond(HttpStatusCode.BadRequest, ApiError("Invalid PR branch pattern. Avoid spaces and special characters (~ ^ : ? * [ ..)"))
+                        }
+                        pat
+                    }
+                }
+
+                // Validate targets update: enforce language limits per plan.
+                if (body.targets != null) {
+                    if (body.targets.isEmpty()) {
+                        return@put call.respond(HttpStatusCode.BadRequest, ApiError("At least one target language is required"))
+                    }
+                    if (body.targets.size > 25) {
+                        return@put call.respond(HttpStatusCode.BadRequest, ApiError("Maximum 25 target languages per project"))
+                    }
+                    val plan = billingService.getPlan(userId)
+                    if (body.targets.size > plan.maxLanguages) {
+                        return@put call.respond(
+                            HttpStatusCode.Forbidden,
+                            ApiError("Your ${plan.displayName} plan supports up to ${plan.maxLanguages} language${if (plan.maxLanguages == 1) "" else "s"}. Upgrade to add more.")
+                        )
+                    }
+                }
+
                 projectRepository.update(
                     projectId = projectId,
                     name = body.name,
@@ -341,7 +388,8 @@ fun Route.configureApiRoutes(
                     autoApproveEnabled = body.autoApproveEnabled,
                     otaEnabled = body.otaEnabled,
                     autoPromote = body.autoPromote,
-                    sharedMemoryOptIn = body.sharedMemoryOptIn
+                    sharedMemoryOptIn = body.sharedMemoryOptIn,
+                    prBranchPattern = validatedBranchPattern
                 )
 
                 val updated = projectRepository.findById(projectId)
@@ -367,7 +415,8 @@ fun Route.configureApiRoutes(
                         sharedMemoryOptIn = updated.sharedMemoryOptIn,
                         otaEnabled = updated.otaEnabled,
                         autoPromote = updated.autoPromote,
-                        webhookVerifiedAt = updated.webhookVerifiedAt?.toString()
+                        webhookVerifiedAt = updated.webhookVerifiedAt?.toString(),
+                        prBranchPattern = updated.prBranchPattern
                     )
                 )
             }
@@ -398,7 +447,8 @@ fun Route.configureApiRoutes(
                         sharedMemoryOptIn = project.sharedMemoryOptIn,
                         otaEnabled = project.otaEnabled,
                         autoPromote = project.autoPromote,
-                        webhookVerifiedAt = project.webhookVerifiedAt?.toString()
+                        webhookVerifiedAt = project.webhookVerifiedAt?.toString(),
+                        prBranchPattern = project.prBranchPattern
                     )
                 )
             }
@@ -1233,7 +1283,8 @@ private fun launchFollowUpPr(
                     commitMessage = "chore(i18n): add $stringCount reviewed translation${if (stringCount != 1) "s" else ""} for $langCount language${if (langCount != 1) "s" else ""}",
                     prTitle       = "Transloom: $stringCount reviewed translation${if (stringCount != 1) "s" else ""} · $langCount language${if (langCount != 1) "s" else ""}",
                     prBody        = buildApprovalPrBody(pending),
-                    token         = githubToken
+                    token         = githubToken,
+                    branchPattern = project.prBranchPattern
                 )
                 apiLog.info("New follow-up PR created: {} ({} translations, {} languages)", pr.prUrl, pending.size, langCount)
                 var cdnDetail: String? = null

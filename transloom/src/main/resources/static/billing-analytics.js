@@ -15,6 +15,7 @@
   'use strict';
 
   var STATE = { range: '30d', plan: null };
+  var RUNS_PAG = { rows: [], page: 1, pageSize: 10 };
 
   // ── Utilities ─────────────────────────────────────────────────────────────
   function $(id) { return document.getElementById(id); }
@@ -205,14 +206,68 @@
   }
 
   function renderRuns(rows) {
+    RUNS_PAG.rows = rows || [];
+    RUNS_PAG.page = 1;
+    renderRunsView();
+  }
+
+  function renderRunsView() {
+    var allRows = RUNS_PAG.rows;
+    var pageSize = RUNS_PAG.pageSize;
+    var page = RUNS_PAG.page;
+    var total = allRows.length;
+    var totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (page > totalPages) page = RUNS_PAG.page = totalPages;
+
+    var start = (page - 1) * pageSize;
+    var end = Math.min(start + pageSize, total);
+    var pageRows = allRows.slice(start, end);
+
+    // Toolbar: "Show X entries" select on left, "Showing X–Y of Z" on right
+    var toolbar = $('bla-runs-toolbar');
+    toolbar.innerHTML = '';
+    var leftDiv = el('div', 'bla-runs-toolbar-left');
+    var label = document.createElement('label');
+    label.className = 'bla-page-size-label';
+    label.appendChild(document.createTextNode('Show '));
+    var sel = document.createElement('select');
+    sel.className = 'bla-page-size-select';
+    [10, 20, 50].forEach(function (n) {
+      var opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      if (n === pageSize) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function () {
+      RUNS_PAG.pageSize = parseInt(sel.value, 10);
+      RUNS_PAG.page = 1;
+      renderRunsView();
+    });
+    label.appendChild(sel);
+    label.appendChild(document.createTextNode(' entries'));
+    leftDiv.appendChild(label);
+    toolbar.appendChild(leftDiv);
+    if (total > 0) {
+      var infoDiv = el('div', 'bla-runs-info');
+      infoDiv.textContent = 'Showing ' + (start + 1) + '–' + end + ' of ' + total + ' run' + (total === 1 ? '' : 's');
+      toolbar.appendChild(infoDiv);
+    }
+
+    // Table
     var host = $('bla-runs-body');
-    if (!rows || rows.length === 0) { setEmpty(host, 'No pipeline runs in this range yet.'); return; }
+    if (!total) {
+      setEmpty(host, 'No pipeline runs in this range yet.');
+      $('bla-runs-count').textContent = '';
+      renderRunsPagination(1, 1);
+      return;
+    }
     var t = el('table', 'bla-table');
     t.innerHTML =
       '<thead><tr><th>When</th><th>Project</th><th>Commit</th><th>Triggered by</th>' +
       '<th class="bla-num">Strings</th><th class="bla-num">Duration</th><th>Status</th></tr></thead>';
     var tb = el('tbody');
-    rows.forEach(function (r) {
+    pageRows.forEach(function (r) {
       var trigger = r.triggeredByDisplayName || (r.triggeredByLabel === 'external' ? 'External (webhook)' : (r.triggeredByLabel === 'owner' ? 'Owner' : '—'));
       var tr = el('tr');
       tr.innerHTML =
@@ -227,7 +282,51 @@
     });
     t.appendChild(tb);
     host.innerHTML = ''; host.appendChild(t);
-    $('bla-runs-count').textContent = rows.length + ' run' + (rows.length === 1 ? '' : 's');
+    $('bla-runs-count').textContent = total + ' run' + (total === 1 ? '' : 's');
+    renderRunsPagination(page, totalPages);
+  }
+
+  function renderRunsPagination(page, totalPages) {
+    var host = $('bla-runs-pagination');
+    host.innerHTML = '';
+    if (totalPages <= 1) return;
+
+    function pageBtn(label, targetPage, active, disabled) {
+      var btn = el('button', 'bla-page-btn' + (active ? ' active' : '') + (disabled ? ' disabled' : ''));
+      btn.textContent = label;
+      btn.disabled = disabled;
+      if (!disabled && !active) {
+        btn.addEventListener('click', function () {
+          RUNS_PAG.page = targetPage;
+          renderRunsView();
+        });
+      }
+      return btn;
+    }
+
+    host.appendChild(pageBtn('‹', page - 1, false, page === 1));
+    paginationPages(page, totalPages).forEach(function (p) {
+      if (p === '…') {
+        host.appendChild(el('span', 'bla-page-ellipsis', '…'));
+      } else {
+        host.appendChild(pageBtn(p, p, p === page, false));
+      }
+    });
+    host.appendChild(pageBtn('›', page + 1, false, page === totalPages));
+  }
+
+  function paginationPages(current, total) {
+    if (total <= 7) {
+      var arr = [];
+      for (var i = 1; i <= total; i++) arr.push(i);
+      return arr;
+    }
+    var pages = [1];
+    if (current > 3) pages.push('…');
+    for (var p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) pages.push(p);
+    if (current < total - 2) pages.push('…');
+    pages.push(total);
+    return pages;
   }
 
   function renderMembers(rows) {
@@ -318,7 +417,8 @@
 
     api('/transloom/api/analytics/projects?range=' + r).then(function (d) { if (!d._forbidden) renderProjects(d); });
     api('/transloom/api/analytics/locales?range=' + r).then(function (d) { if (!d._forbidden) renderLocales(d); });
-    api('/transloom/api/analytics/runs?range=' + r).then(function (d) { if (!d._forbidden) renderRuns(d); });
+    RUNS_PAG.page = 1;
+    api('/transloom/api/analytics/runs?range=' + r + '&limit=500').then(function (d) { if (!d._forbidden) renderRuns(d); });
     api('/transloom/api/analytics/quality').then(function (d) { if (!d._forbidden) renderQuality(d); });
 
     // Team-only sections — server returns 403 for non-Team; renderOverview also hides them.

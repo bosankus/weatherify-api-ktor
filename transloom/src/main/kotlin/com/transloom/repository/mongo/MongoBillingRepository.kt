@@ -45,16 +45,16 @@ class MongoBillingRepository(
         plan: BillingPlan,
         razorpayCustomerId: String?,
         razorpaySubscriptionId: String?,
-        cancelAtPeriodEnd: Boolean,
+        cancelAtPeriodEnd: Boolean?,
         currentPeriodEnd: Instant?,
         pendingPlan: BillingPlan?
     ) {
         val now = System.currentTimeMillis()
         val setUpdates = mutableListOf(
             Updates.set("plan", plan.name),
-            Updates.set("cancelAtPeriodEnd", cancelAtPeriodEnd),
             Updates.set("updatedAt", now)
         )
+        cancelAtPeriodEnd?.let { setUpdates += Updates.set("cancelAtPeriodEnd", it) }
         razorpayCustomerId?.let { setUpdates += Updates.set("razorpayCustomerId", it) }
         razorpaySubscriptionId?.let { setUpdates += Updates.set("razorpaySubscriptionId", it) }
         currentPeriodEnd?.let { setUpdates += Updates.set("currentPeriodEnd", it.toEpochMilliseconds()) }
@@ -102,6 +102,7 @@ class MongoBillingRepository(
                 Updates.unset("razorpaySubscriptionId"),
                 Updates.set("cancelAtPeriodEnd", false),
                 Updates.unset("currentPeriodEnd"),
+                Updates.unset("pendingPlan"),
                 Updates.unset("limitHitAt"),
                 Updates.set("updatedAt", System.currentTimeMillis())
             )

@@ -12,7 +12,8 @@ data class CreateProjectBody(
     val category: String,
     val tone: String,
     val targets: List<TargetConfig>,
-    val sharedMemoryOptIn: Boolean = false
+    val sharedMemoryOptIn: Boolean = false,
+    val prBranchPattern: String? = null
 )
 
 @Serializable
@@ -103,7 +104,8 @@ data class UpdateProjectBody(
     val autoApproveEnabled: Boolean? = null,
     val otaEnabled: Boolean? = null,
     val autoPromote: Boolean? = null,
-    val sharedMemoryOptIn: Boolean? = null
+    val sharedMemoryOptIn: Boolean? = null,
+    val prBranchPattern: String? = null
 )
 
 @Serializable
@@ -122,7 +124,8 @@ data class ProjectDetailResponse(
     val otaEnabled: Boolean = false,
     val autoPromote: Boolean = true,
     /** ISO-8601 date-time of the last successful webhook verification, or null if never verified. */
-    val webhookVerifiedAt: String? = null
+    val webhookVerifiedAt: String? = null,
+    val prBranchPattern: String? = null
 )
 
 @Serializable

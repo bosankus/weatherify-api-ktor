@@ -130,7 +130,17 @@
     function openCreateModal() {
         const mount = $('pr-modal-mount');
         if (!mount || mount.firstElementChild) return;
-        mount.innerHTML = renderCreateModalHtml();
+        // Resolve plan async to gate the branch pattern field; render optimistically as free.
+        const isPaidPromise = window.tlSubscription
+            ? window.tlSubscription().then(s => s && s.plan !== 'FREE').catch(() => false)
+            : Promise.resolve(false);
+        isPaidPromise.then(isPaid => {
+            mount.innerHTML = renderCreateModalHtml(isPaid);
+            _initCreateModal(mount);
+        });
+    }
+
+    function _initCreateModal(mount) {
         // firstElementChild skips the leading whitespace text node from the template literal.
         const overlay = mount.firstElementChild;
         requestAnimationFrame(() => overlay.classList.add('show'));
@@ -198,7 +208,7 @@
         document.removeEventListener('keydown', escCreate);
     }
 
-    function renderCreateModalHtml() {
+    function renderCreateModalHtml(isPaid) {
         return `
         <div class="pr-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="pr-create-title">
           <div class="pr-modal">
@@ -253,6 +263,18 @@
               <div class="pr-form-hint">Up to 25 languages.</div>
             </div>
 
+            <div class="pr-form-row" id="pr-branch-pattern-row" style="${isPaid ? '' : 'opacity:0.55'}">
+              <label for="pr-branch-pattern">PR branch name pattern
+                ${isPaid ? '' : '<span class="pr-locked-badge" style="vertical-align:middle">Solo+</span>'}
+              </label>
+              <input type="text" id="pr-branch-pattern" maxlength="120"
+                placeholder="transloom/translations-{timestamp}"
+                ${isPaid ? '' : 'disabled'}>
+              <div class="pr-form-hint">Tokens: <code>{timestamp}</code>, <code>{date}</code>, <code>{branch}</code>.
+                ${isPaid ? 'Leave blank for the default.' : '<a href="/transloom/billing" style="color:var(--accent)">Upgrade to Solo</a> to customise.'}
+              </div>
+            </div>
+
             <div class="pr-modal-actions">
               <button type="button" class="bl-btn" data-modal-act="close">Cancel</button>
               <button type="button" class="bl-btn primary" data-modal-act="submit">Create project</button>
@@ -268,6 +290,10 @@
         const source = overlay.querySelector('#pr-source').value.trim() || 'values/strings.xml';
         const category = overlay.querySelector('#pr-category').value;
         const tone = overlay.querySelector('#pr-tone').value;
+        const branchPatternInput = overlay.querySelector('#pr-branch-pattern');
+        const prBranchPattern = (branchPatternInput && !branchPatternInput.disabled)
+            ? branchPatternInput.value.trim() || null
+            : null;
 
         // Inline validation — server will validate too, but failing here is
         // faster and lets us highlight individual fields.
@@ -286,17 +312,19 @@
 
         setBusy(btn, true, 'Creating');
         try {
+            const payload = {
+                name, githubRepo: repo, watchBranch: branch,
+                sourceFilePaths: [source],
+                category, tone,
+                targets: selectedLangs.map(l => ({
+                    code: l.code, name: l.name, region: l.region || null, file: l.file,
+                })),
+                sharedMemoryOptIn: false,
+            };
+            if (prBranchPattern) payload.prBranchPattern = prBranchPattern;
             const r = await tlFetch(API, {
                 method: 'POST',
-                body: JSON.stringify({
-                    name, githubRepo: repo, watchBranch: branch,
-                    sourceFilePaths: [source],
-                    category, tone,
-                    targets: selectedLangs.map(l => ({
-                        code: l.code, name: l.name, region: l.region || null, file: l.file,
-                    })),
-                    sharedMemoryOptIn: false,
-                }),
+                body: JSON.stringify(payload),
             });
             if (!r.ok) {
                 const err = await r.json().catch(() => ({ error: 'Failed to create project' }));
@@ -391,8 +419,31 @@
               <dt>Webhook</dt><dd>${webhookOk
                 ? '<span class="pr-webhook-pill connected">● Connected</span>'
                 : '<span class="pr-webhook-pill disconnected">● Not verified</span> <button type="button" class="bl-btn" style="margin-left:8px;padding:4px 10px;font-size:11px" data-drawer-act="reinstall-webhook">Reinstall</button>'}</dd>
-              <dt>Targets</dt><dd>${(p.targets || []).length} languages</dd>
             </dl>
+            <div class="pr-form-row" id="pr-branch-pattern-section" style="margin-top:12px">
+              <label for="pr-edit-branch-pattern">PR branch pattern <span class="pr-locked-badge" id="pr-branch-pattern-badge" style="display:none">Solo+</span></label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="text" id="pr-edit-branch-pattern" maxlength="120"
+                  value="${esc(p.prBranchPattern || '')}"
+                  placeholder="transloom/translations-{timestamp}"
+                  style="flex:1">
+                <button type="button" class="bl-btn" data-drawer-act="save-branch-pattern" style="flex-shrink:0">Save</button>
+              </div>
+              <div class="pr-form-hint" id="pr-branch-pattern-hint">
+                Tokens: <code>{timestamp}</code>, <code>{date}</code>, <code>{branch}</code>. Leave blank for the default.
+              </div>
+            </div>
+          </section>
+
+          <section class="pr-section">
+            <h3 class="pr-section-title">Languages</h3>
+            <div class="pr-lang-list" id="pr-drawer-lang-chips"></div>
+            <div class="pr-lang-add" style="margin-top:8px">
+              <select id="pr-drawer-lang-select"></select>
+              <button type="button" class="bl-btn" id="pr-drawer-lang-add-btn">Add</button>
+            </div>
+            <div class="pr-form-hint" id="pr-drawer-lang-limit-hint"></div>
+            <button type="button" class="bl-btn primary" data-drawer-act="save-languages" style="margin-top:10px">Save languages</button>
           </section>
 
           <section class="pr-section">
@@ -470,6 +521,13 @@
         body.querySelector('[data-drawer-act="reinstall-webhook"]')?.addEventListener('click', e => reinstallWebhook(p.id, e.currentTarget));
         body.querySelector('[data-drawer-act="export"]')?.addEventListener('click', e => exportBundle(p.id, e.currentTarget, body));
         body.querySelector('[data-drawer-act="copy-ci"]')?.addEventListener('click', e => copyCiSnippet(e.currentTarget, body));
+
+        // Wire language manager.
+        initDrawerLanguages(p, body);
+
+        // Wire PR branch pattern — gate to paid plan.
+        initDrawerBranchPattern(p, body);
+
         renderLockedFeatures(body);
 
         const foot = mount.querySelector('.pr-drawer-foot');
@@ -524,6 +582,147 @@
                 </div>`).join(''));
             host.style.display = '';
         }).catch(() => {});
+    }
+
+    // ── Drawer: language manager ─────────────────────────────────────────────
+    function initDrawerLanguages(p, body) {
+        const currentLangs = (p.targets || []).map(t => ({ ...t }));
+        const chips = body.querySelector('#pr-drawer-lang-chips');
+        const select = body.querySelector('#pr-drawer-lang-select');
+        const addBtn = body.querySelector('#pr-drawer-lang-add-btn');
+        const limitHint = body.querySelector('#pr-drawer-lang-limit-hint');
+
+        let editLangs = currentLangs.slice();
+
+        function renderChips() {
+            if (!editLangs.length) {
+                chips.innerHTML = '<span style="color:var(--text-muted);font-size:12px;padding:6px">No languages configured</span>';
+                return;
+            }
+            chips.innerHTML = editLangs.map((l, i) =>
+                `<span class="pr-lang-chip">${esc(langLabel(l))}<button type="button" data-rm-lang="${i}" aria-label="Remove ${esc(langLabel(l))}">×</button></span>`
+            ).join('');
+        }
+
+        function refreshSelect() {
+            const taken = new Set(editLangs.map(langKey));
+            const remaining = LANGUAGES.filter(l => !taken.has(langKey(l)));
+            select.innerHTML = '<option value="">Add a language…</option>' +
+                remaining.map((l, i) => `<option value="${i}">${esc(langLabel(l))}</option>`).join('');
+            select.dataset.options = JSON.stringify(remaining);
+        }
+
+        renderChips();
+        refreshSelect();
+
+        chips.addEventListener('click', e => {
+            const btn = e.target.closest('[data-rm-lang]');
+            if (!btn) return;
+            const idx = parseInt(btn.dataset.rmLang, 10);
+            editLangs.splice(idx, 1);
+            renderChips();
+            refreshSelect();
+        });
+
+        addBtn.addEventListener('click', () => {
+            const idx = select.value;
+            if (!idx) return;
+            const remaining = JSON.parse(select.dataset.options);
+            const pick = remaining[parseInt(idx, 10)];
+            editLangs.push({ ...pick, file: defaultLangFile(pick) });
+            renderChips();
+            refreshSelect();
+        });
+
+        body.querySelector('[data-drawer-act="save-languages"]').addEventListener('click', async function () {
+            if (!editLangs.length) { toast('At least one language is required', 'error'); return; }
+            if (editLangs.length > 25) { toast('Maximum 25 languages', 'error'); return; }
+            const btn = this;
+            setBusy(btn, true, 'Saving');
+            try {
+                const r = await tlFetch(`${API}/${encodeURIComponent(p.id)}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ targets: editLangs.map(l => ({ code: l.code, name: l.name, region: l.region || null, file: l.file })) }),
+                });
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({}));
+                    throw new Error(err.error || 'Save failed');
+                }
+                toast('Languages saved', 'success');
+                // Refresh the export dropdown to match.
+                const exportSel = body.querySelector('#pr-export-lang');
+                if (exportSel) {
+                    exportSel.innerHTML = editLangs.map(t =>
+                        `<option value="${esc(t.code)}">${esc(t.name || t.code)}${t.region ? ' (' + esc(t.region) + ')' : ''}</option>`
+                    ).join('');
+                }
+                // Also update the card grid count.
+                const proj = projectsState.find(pr => pr.id === p.id);
+                if (proj) { proj.targetCount = editLangs.length; renderGrid(); }
+            } catch (err) {
+                toast(err.message, 'error');
+            } finally {
+                setBusy(btn, false, 'Save languages');
+            }
+        });
+
+        // Apply language limit hint from plan.
+        if (window.tlSubscription) {
+            window.tlSubscription().then(sub => {
+                if (!sub) return;
+                const maxLang = { FREE: 3, SOLO: Infinity, TEAM: Infinity, ENTERPRISE: Infinity }[sub.plan] ?? Infinity;
+                if (maxLang !== Infinity) {
+                    limitHint.textContent = `Your ${sub.plan === 'FREE' ? 'Free' : sub.plan} plan supports up to ${maxLang} languages.`;
+                }
+                if (sub.plan === 'FREE') {
+                    addBtn.title = 'Free plan: up to 3 languages';
+                }
+            }).catch(() => {});
+        }
+    }
+
+    // ── Drawer: PR branch pattern ────────────────────────────────────────────
+    function initDrawerBranchPattern(p, body) {
+        const input = body.querySelector('#pr-edit-branch-pattern');
+        const badge = body.querySelector('#pr-branch-pattern-badge');
+        const hint = body.querySelector('#pr-branch-pattern-hint');
+        const saveBtn = body.querySelector('[data-drawer-act="save-branch-pattern"]');
+
+        if (window.tlSubscription) {
+            window.tlSubscription().then(sub => {
+                const isPaid = sub && sub.plan !== 'FREE';
+                if (!isPaid) {
+                    input.disabled = true;
+                    input.style.opacity = '0.55';
+                    saveBtn.disabled = true;
+                    badge.style.display = '';
+                    hint.innerHTML = 'Custom branch patterns require Solo or Team. <a href="/transloom/billing" style="color:var(--accent)">Upgrade</a>';
+                }
+            }).catch(() => {});
+        }
+
+        saveBtn.addEventListener('click', async function () {
+            // Send "" to explicitly clear; backend distinguishes null (no-op) from "" (unset).
+            const pattern = input.value.trim();
+            const btn = this;
+            setBusy(btn, true, 'Saving');
+            try {
+                const body2 = { prBranchPattern: pattern };
+                const r = await tlFetch(`${API}/${encodeURIComponent(p.id)}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(body2),
+                });
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({}));
+                    throw new Error(err.error || 'Save failed');
+                }
+                toast('Branch pattern saved', 'success');
+            } catch (err) {
+                toast(err.message, 'error');
+            } finally {
+                setBusy(btn, false, 'Save');
+            }
+        });
     }
 
     function toggleRow(field, label, hint, value) {

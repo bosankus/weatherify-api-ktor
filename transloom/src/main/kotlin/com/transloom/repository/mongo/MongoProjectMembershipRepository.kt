@@ -15,8 +15,12 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import org.bson.Document
 import java.util.UUID
+
+private val INVITE_TTL = 7.days
 
 class MongoProjectMembershipRepository(
     db: MongoDatabase
@@ -70,7 +74,9 @@ class MongoProjectMembershipRepository(
         invitedBy: String,
         inviteToken: String
     ): ProjectMembership {
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now()
+        val nowMs = now.toEpochMilliseconds()
+        val expiresAtMs = (now + INVITE_TTL).toEpochMilliseconds()
         val normalizedEmail = email.trim().lowercase()
 
         val update = Updates.combine(
@@ -80,7 +86,8 @@ class MongoProjectMembershipRepository(
             Updates.set("status", MembershipStatus.INVITED.name),
             Updates.set("inviteToken", inviteToken),
             Updates.set("invitedBy", invitedBy),
-            Updates.set("invitedAt", now),
+            Updates.set("invitedAt", nowMs),
+            Updates.set("expiresAt", expiresAtMs),
             Updates.unset("acceptedAt"),
             Updates.unset("revokedAt"),
             Updates.setOnInsert("_id", UUID.randomUUID().toString())
@@ -156,6 +163,18 @@ class MongoProjectMembershipRepository(
         )?.toMembership()
     }
 
+    override suspend fun resetInvite(membershipId: String, inviteToken: String): ProjectMembership? {
+        val now = Clock.System.now()
+        val update = Updates.combine(
+            Updates.set("inviteToken", inviteToken),
+            Updates.set("invitedAt", now.toEpochMilliseconds()),
+            Updates.set("expiresAt", (now + INVITE_TTL).toEpochMilliseconds()),
+            Updates.set("status", MembershipStatus.INVITED.name)
+        )
+        val options = FindOneAndUpdateOptions().returnDocument(ReturnDocument.AFTER)
+        return collection.findOneAndUpdate(eq("_id", membershipId), update, options)?.toMembership()
+    }
+
     override suspend fun listProjectIdsByMember(userId: String): List<String> =
         collection.find(and(eq("userId", userId), eq("status", MembershipStatus.ACTIVE.name)))
             .projection(Document("projectId", 1))
@@ -188,6 +207,8 @@ class MongoProjectMembershipRepository(
             ?.let { Instant.fromEpochMilliseconds(it) }
         val revokedAt = (get("revokedAt") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
+        val expiresAt = (get("expiresAt") as? Number)?.toLong()
+            ?.let { Instant.fromEpochMilliseconds(it) }
         return ProjectMembership(
             id = getString("_id"),
             projectId = getString("projectId") ?: "",
@@ -199,7 +220,8 @@ class MongoProjectMembershipRepository(
             invitedBy = getString("invitedBy") ?: "",
             invitedAt = invitedAt,
             acceptedAt = acceptedAt,
-            revokedAt = revokedAt
+            revokedAt = revokedAt,
+            expiresAt = expiresAt
         )
     }
 }

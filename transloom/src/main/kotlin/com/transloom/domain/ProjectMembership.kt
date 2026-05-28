@@ -21,7 +21,9 @@ data class ProjectMembership(
     val invitedBy: String,
     val invitedAt: Instant,
     val acceptedAt: Instant?,
-    val revokedAt: Instant?
+    val revokedAt: Instant?,
+    /** Null for OWNER rows and legacy rows created before expiry was introduced. */
+    val expiresAt: Instant?
 )
 
 enum class ProjectRole {

@@ -150,7 +150,20 @@ fun Route.configureBillingRoutes(
 
         get("/invoices") {
             val userId = call.userId() ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
-            val invoices = billingRepository.listInvoices(userId).map { inv ->
+            val sub = billingRepository.getSubscription(userId)
+            var records = billingRepository.listInvoices(userId)
+            // If the user is on a paid plan with an active billing period but has no stored invoices,
+            // pull from Razorpay to recover from any missed subscription.charged webhooks.
+            if (records.isEmpty()
+                && sub.plan != BillingPlan.FREE
+                && sub.currentPeriodEnd != null
+                && sub.razorpaySubscriptionId != null
+            ) {
+                runCatching { razorpayService.syncSubscriptionInvoices(userId, sub.razorpaySubscriptionId) }
+                    .onFailure { log.warn("Invoice sync failed for userId={}: {}", userId, it.message) }
+                records = billingRepository.listInvoices(userId)
+            }
+            val invoices = records.map { inv ->
                 val dateStr = inv.createdAt.toLocalDateTime(TimeZone.UTC).date.toString()
                 val rupees = "₹${"%.2f".format(inv.amountPaise / 100.0)}"
                 InvoiceResponse(

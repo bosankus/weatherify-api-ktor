@@ -45,6 +45,7 @@
     let seatLimit = 0;           // -1 means unlimited
     let seatsUsed = 0;
     let myPlan = null;           // current user's own plan + maxMembers, from /billing/subscription
+    let showRevoked = false;
 
     // ── Boot ─────────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', init);
@@ -200,17 +201,35 @@
             host.outerHTML = '<div class="mb-empty" id="mb-list"><h3>No members yet</h3><p>Send an invite to start collaborating.</p></div>';
             return;
         }
-        // Sort: ACTIVE first (OWNER, ADMIN, TRANSLATOR, VIEWER), then INVITED, then REVOKED.
         const roleOrder = { OWNER: 0, ADMIN: 1, TRANSLATOR: 2, VIEWER: 3 };
         const statusOrder = { ACTIVE: 0, INVITED: 1, REVOKED: 2 };
-        const sorted = members.slice().sort((a, b) => {
+        const allSorted = members.slice().sort((a, b) => {
             const s = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
             if (s !== 0) return s;
             return (roleOrder[a.role] ?? 9) - (roleOrder[b.role] ?? 9);
         });
-        // Restore mb-list element if previous render swapped it for empty state.
-        host.outerHTML = `<div class="mb-list" id="mb-list">${sorted.map(renderRow).join('')}</div>`;
+        const visible = showRevoked ? allSorted : allSorted.filter(m => m.status !== 'REVOKED');
+        const revokedCount = allSorted.filter(m => m.status === 'REVOKED').length;
+        const toggleHtml = revokedCount > 0 ? `
+            <div class="mb-revoked-toggle">
+                <button class="mb-revoked-toggle-btn" id="mb-revoked-toggle">
+                    ${showRevoked ? `Hide revoked members` : `Show ${revokedCount} revoked member${revokedCount === 1 ? '' : 's'}`}
+                </button>
+            </div>` : '';
+        host.outerHTML = `<div class="mb-list" id="mb-list">${visible.map(renderRow).join('')}${toggleHtml}</div>`;
         wireRowEvents();
+        $('mb-revoked-toggle')?.addEventListener('click', () => {
+            showRevoked = !showRevoked;
+            renderList();
+        });
+    }
+
+    function inviteExpiry(m) {
+        if (m.status !== 'INVITED' || !m.expiresAt) return null;
+        const msLeft = m.expiresAt - Date.now();
+        if (msLeft <= 0) return { expired: true, label: 'Expired' };
+        const daysLeft = Math.ceil(msLeft / 86400000);
+        return { expired: false, label: daysLeft === 1 ? 'Expires tomorrow' : `Expires in ${daysLeft}d` };
     }
 
     function renderRow(m) {
@@ -218,11 +237,16 @@
         const isOwner = m.role === 'OWNER';
         const manage = canManage();
         const displayName = m.displayName ? `@${m.displayName}` : (m.email || 'Pending invite');
-        const statusClass = m.status.toLowerCase();
-        // OWNER can't be edited or removed from this UI — transfer-ownership lives elsewhere.
-        // Non-managers see disabled controls. Self-leave is allowed for any non-OWNER own row.
+        const expiry = inviteExpiry(m);
+        const isExpired = expiry?.expired === true;
+        const statusLabel = isExpired ? 'EXPIRED' : m.status;
+        const statusClass = isExpired ? 'expired' : m.status.toLowerCase();
         const roleEditable = manage && !isOwner;
         const removable = (manage && !isOwner) || (isMe && !isOwner);
+        const resendable = manage && m.status === 'INVITED';
+        const expiryHtml = expiry
+            ? `<div class="mb-expiry ${expiry.expired ? 'mb-expiry-warn' : ''}">${esc(expiry.label)}</div>`
+            : '';
         return `
             <div class="mb-row" data-membership-id="${esc(m.id)}" data-role="${esc(m.role)}" data-status="${esc(m.status)}">
                 <div class="mb-identity">
@@ -230,6 +254,7 @@
                     <div class="mb-identity-text">
                         <div class="mb-name">${esc(displayName)}${isMe ? ' <span style="color:var(--text-muted);font-weight:400">(you)</span>' : ''}</div>
                         <div class="mb-email">${esc(m.email)}</div>
+                        ${expiryHtml}
                     </div>
                 </div>
                 <div class="mb-role-cell">
@@ -238,10 +263,15 @@
                         ${ROLES.map(r => `<option value="${r}" ${r === m.role ? 'selected' : ''}>${esc(ROLE_LABELS[r])}</option>`).join('')}
                     </select>
                 </div>
-                <span class="mb-status ${statusClass}">${esc(m.status)}</span>
-                <button class="mb-remove-btn" data-act="remove" title="${isMe ? 'Leave project' : 'Remove member'}" ${removable ? '' : 'disabled'}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
-                </button>
+                <span class="mb-status ${statusClass}">${esc(statusLabel)}</span>
+                <div class="mb-actions">
+                    ${resendable ? `<button class="mb-resend-btn" data-act="resend" title="Resend invite email">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    </button>` : ''}
+                    <button class="mb-remove-btn" data-act="remove" title="${isMe ? 'Leave project' : 'Remove member'}" ${removable ? '' : 'disabled'}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+                    </button>
+                </div>
             </div>`;
     }
 
@@ -250,6 +280,7 @@
             const id = row.dataset.membershipId;
             row.querySelector('[data-act="role"]')?.addEventListener('change', e => updateRole(id, e.target.value, row));
             row.querySelector('[data-act="remove"]')?.addEventListener('click', () => removeMember(id, row));
+            row.querySelector('[data-act="resend"]')?.addEventListener('click', e => resendInvite(id, e.currentTarget));
         });
     }
 
@@ -293,6 +324,51 @@
             await loadMembers();
         } catch (err) {
             toast(err.message || 'Could not remove member', 'error');
+        }
+    }
+
+    async function resendInvite(membershipId, btn) {
+        setBusy(btn, true, '');
+        try {
+            const r = await tlFetch(`${PROJECTS_API}/${currentProjectId}/members/${membershipId}/resend`, { method: 'POST' });
+            if (!r.ok) {
+                const j = await r.json().catch(() => ({}));
+                throw new Error(j.error || 'status ' + r.status);
+            }
+            const data = await r.json();
+            if (data.inviteLink) {
+                await copyToClipboard(data.inviteLink, null);
+                toast('Invite resent — link copied to clipboard', 'success');
+            } else {
+                toast('Invite resent', 'success');
+            }
+            await loadMembers();
+        } catch (err) {
+            toast(err.message || 'Could not resend invite', 'error');
+            setBusy(btn, false);
+        }
+    }
+
+    async function copyToClipboard(text, btn) {
+        try {
+            await navigator.clipboard.writeText(text);
+            if (btn) {
+                const orig = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.disabled = true;
+                setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+            }
+        } catch (_) {
+            // Fallback for browsers without clipboard API
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy link'; }, 2000); }
         }
     }
 
@@ -380,13 +456,37 @@
                 const j = await r.json().catch(() => ({}));
                 throw new Error(j.error || 'status ' + r.status);
             }
-            toast('Invite sent', 'success');
-            closeInviteModal();
+            const data = await r.json();
+            showInviteSentState(overlay, email, data.inviteLink);
             await loadMembers();
         } catch (err) {
             toast(err.message || 'Could not send invite', 'error');
-        } finally {
             setBusy(btn, false);
+        }
+    }
+
+    function showInviteSentState(overlay, email, inviteLink) {
+        const modal = overlay.querySelector('.mb-modal');
+        if (!modal) return;
+        modal.innerHTML = `
+            <div class="mb-modal-head">
+                <h3 id="mb-invite-title">Invite sent</h3>
+                <button type="button" class="mb-modal-close" data-modal-act="close" aria-label="Close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <p class="mb-modal-sub">An email was sent to <b>${esc(email)}</b>. If delivery fails, share this link directly:</p>
+            ${inviteLink ? `
+            <div class="mb-invite-link-row">
+                <input type="text" class="mb-invite-link-input" readonly value="${esc(inviteLink)}" aria-label="Invite link">
+                <button type="button" class="bl-btn mb-copy-link-btn" id="mb-copy-link-btn">Copy link</button>
+            </div>` : ''}
+            <div class="mb-modal-actions">
+                <button type="button" class="bl-btn primary" data-modal-act="close">Done</button>
+            </div>`;
+        modal.querySelector('[data-modal-act="close"]')?.addEventListener('click', closeInviteModal);
+        if (inviteLink) {
+            modal.querySelector('#mb-copy-link-btn')?.addEventListener('click', () => copyToClipboard(inviteLink, modal.querySelector('#mb-copy-link-btn')));
         }
     }
 

@@ -18,13 +18,17 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import kotlinx.datetime.Clock
 import org.slf4j.LoggerFactory
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.UUID
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 
 private val memberLog = LoggerFactory.getLogger("MemberRoutes")
 private val secureRandom = SecureRandom()
+private val RESEND_COOLDOWN = 1.hours
 
 @Serializable
 data class MemberDto(
@@ -35,7 +39,11 @@ data class MemberDto(
     val status: String,
     val invitedAt: Long,
     val acceptedAt: Long?,
-    val displayName: String?
+    val displayName: String?,
+    /** Epoch-millis when the pending invite link expires. Null for ACTIVE/REVOKED rows. */
+    val expiresAt: Long?,
+    /** Full accept URL — only present in invite-create and resend responses, never in list. */
+    val inviteLink: String? = null
 )
 
 @Serializable
@@ -89,9 +97,8 @@ fun Route.configureMemberRoutes(
                 ?: return@get
 
             val rows = memberships.list(projectId)
-            // Fetch display names for bound users in one pass. Pending invites have no userId.
             val userIds = rows.mapNotNull { it.userId }.distinct()
-            val nameById = userIds.associateWith { uid -> users.findById(uid)?.githubUsername }
+            val nameById = users.findByIds(userIds).associate { it.id to it.githubUsername }
             val ownerPlan = billing.getPlan(project!!.ownerId)
             val seatsUsed = countSeats(rows)
             call.respond(
@@ -171,7 +178,7 @@ fun Route.configureMemberRoutes(
             }
 
             memberLog.info("Invite created: project={} email={} role={} by={}", projectId, email, role, userId)
-            call.respond(HttpStatusCode.Created, membership.toDto(null))
+            call.respond(HttpStatusCode.Created, membership.toDto(null, acceptUrl))
         }
 
         patch("/{membershipId}") {
@@ -236,6 +243,60 @@ fun Route.configureMemberRoutes(
             memberships.revoke(membershipId)
             call.respond(HttpStatusCode.NoContent)
         }
+
+        post("/{membershipId}/resend") {
+            val userId = call.userId()
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["id"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+            val membershipId = call.parameters["membershipId"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid membership id"))
+
+            val project = projects.findById(projectId)
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@post
+
+            val target = memberships.findById(membershipId)
+            if (target == null || target.projectId != projectId) {
+                return@post call.respond(HttpStatusCode.NotFound, ApiError("Member not found"))
+            }
+            if (target.status != MembershipStatus.INVITED) {
+                return@post call.respond(HttpStatusCode.Conflict, ApiError("Can only resend to a pending invite"))
+            }
+
+            // Cooldown: invitedAt is updated on each send, so it tracks when the last invite went out.
+            val cooldownExpiry = target.invitedAt + RESEND_COOLDOWN
+            if (Clock.System.now() < cooldownExpiry) {
+                val waitMins = ((cooldownExpiry - Clock.System.now()).inWholeSeconds / 60).coerceAtLeast(1)
+                return@post call.respond(
+                    HttpStatusCode.TooManyRequests,
+                    ApiError("Invite was sent recently. Wait $waitMins minute(s) before resending.")
+                )
+            }
+
+            val newToken = newInviteToken()
+            val updated = memberships.resetInvite(membershipId, newToken)
+                ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Member not found"))
+
+            val acceptUrl = buildAcceptUrl(call, newToken)
+            val inviter = users.findById(userId)
+            if (notifications?.isConfigured == true) {
+                runCatching {
+                    notifications.sendInviteEmail(
+                        to = target.email,
+                        inviterName = inviter?.githubUsername ?: "A Transloom user",
+                        projectName = project!!.name,
+                        role = target.role.name,
+                        acceptUrl = acceptUrl
+                    )
+                }.onFailure { memberLog.warn("Resend invite email failed: {}", it.message) }
+            }
+
+            memberLog.info("Invite resent: project={} email={} by={}", projectId, target.email, userId)
+            call.respond(HttpStatusCode.OK, updated.toDto(null, acceptUrl))
+        }
     }
 
     route("/transloom/api/invites/{token}") {
@@ -249,6 +310,8 @@ fun Route.configureMemberRoutes(
             val project = projects.findById(membership.projectId)
                 ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("Project no longer exists"))
             val inviter = users.findById(membership.invitedBy)?.githubUsername
+            val isExpired = membership.status != MembershipStatus.INVITED ||
+                (membership.expiresAt != null && Clock.System.now() > membership.expiresAt)
             call.respond(
                 HttpStatusCode.OK,
                 InvitePreview(
@@ -257,7 +320,7 @@ fun Route.configureMemberRoutes(
                     role = membership.role.name,
                     email = membership.email,
                     invitedBy = inviter,
-                    expired = membership.status != MembershipStatus.INVITED
+                    expired = isExpired
                 )
             )
         }
@@ -272,6 +335,9 @@ fun Route.configureMemberRoutes(
                 ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Invite not found or already used"))
             if (membership.status != MembershipStatus.INVITED) {
                 return@post call.respond(HttpStatusCode.Conflict, ApiError("Invite already used"))
+            }
+            if (membership.expiresAt != null && Clock.System.now() > membership.expiresAt) {
+                return@post call.respond(HttpStatusCode.Gone, ApiError("Invite link has expired. Ask an admin to send a new invite."))
             }
             val project = projects.findById(membership.projectId)
                 ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Project no longer exists"))
@@ -303,7 +369,7 @@ fun Route.configureMemberRoutes(
     }
 }
 
-private fun ProjectMembership.toDto(displayName: String?): MemberDto = MemberDto(
+private fun ProjectMembership.toDto(displayName: String?, inviteLink: String? = null): MemberDto = MemberDto(
     id = id,
     userId = userId,
     email = email,
@@ -311,7 +377,9 @@ private fun ProjectMembership.toDto(displayName: String?): MemberDto = MemberDto
     status = status.name,
     invitedAt = invitedAt.toEpochMilliseconds(),
     acceptedAt = acceptedAt?.toEpochMilliseconds(),
-    displayName = displayName
+    displayName = displayName,
+    expiresAt = expiresAt?.toEpochMilliseconds(),
+    inviteLink = inviteLink
 )
 
 // Seats counted = active members + pending invites, excluding the OWNER (who is implicit, not a seat).
