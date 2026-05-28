@@ -37,6 +37,8 @@ import com.transloom.services.RazorpayBillingService
 import com.transloom.services.TranslationService
 import com.transloom.services.UserActivityService
 import com.transloom.routes.configureMemberRoutes
+import com.transloom.routes.configureCdnSigningKeyRoute
+import com.transloom.repository.PipelineRunRepository
 import com.androidplay.core.queue.JobQueueRepository
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import io.ktor.http.HttpStatusCode
@@ -81,6 +83,7 @@ class TransloomDeps(
     val analyticsService: AnalyticsService,
     val notificationService: NotificationService? = null,
     val inAppNotificationService: InAppNotificationService? = null,
+    val pipelineRunRepository: PipelineRunRepository? = null,
 )
 
 /**
@@ -133,7 +136,7 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
                 d.billingService, d.billingRepository, d.githubService, d.projectRepository,
                 d.userRepository, d.translationRepository, d.pipelineEventBus, d.jobQueue,
                 d.glossaryRepository, d.userActivityService, d.membershipRepository,
-                d.cdnPublishService, d.translationService
+                d.cdnPublishService, d.translationService, d.pipelineRunRepository
             )
             configureDashboardRoutes(d.projectRepository, d.translationRepository, d.billingRepository, d.cdnPublishRepository)
             configureBillingRoutes(d.razorpayService, d.billingRepository, d.userRepository, d.jwtSecret, d.userActivityService)
@@ -141,6 +144,7 @@ fun Application.installTransloomRoutes(d: TransloomDeps) {
             configureInsightsRoutes(d.userActivityService)
             configureOnboardingRoutes(d.userRepository, d.billingRepository, d.projectRepository, d.translationRepository)
             configureCdnPublishRoute(d.projectRepository, d.cdnPublishService, d.membershipRepository)
+            configureCdnSigningKeyRoute(d.projectRepository, d.cdnPublishService, d.membershipRepository)
             configureNotificationRoutes(d.notificationRepository)
             configureMemberRoutes(
                 d.membershipRepository, d.projectRepository, d.userRepository,

@@ -22,4 +22,8 @@ interface MemberUsageRepository {
 
     /** All rollup rows for a single project in a given yearMonth. */
     suspend fun listForProject(projectId: String, yearMonth: String): List<MemberUsage>
+
+    /** Total strings translated for a project in a given yearMonth (sum across all members). */
+    suspend fun totalForProject(projectId: String, yearMonth: String): Int =
+        listForProject(projectId, yearMonth).sumOf { it.stringsTranslated }
 }

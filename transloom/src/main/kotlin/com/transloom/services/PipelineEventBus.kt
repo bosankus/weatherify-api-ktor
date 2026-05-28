@@ -353,7 +353,8 @@ class PipelineEventBus(
         error: String? = null,
         surfaceSkipped: Int = 0,
         stringsTranslated: Int = 0,
-        stringsPerLocale: Map<String, Int> = emptyMap()
+        stringsPerLocale: Map<String, Int> = emptyMap(),
+        cacheHits: Int = 0
     ) {
         val finishedAt = System.currentTimeMillis()
         mutateRun(userId, runId) {
@@ -364,12 +365,13 @@ class PipelineEventBus(
             type = "finish", runId = runId, prUrl = prUrl, error = error,
             surfaceSkipped = surfaceSkipped.takeIf { it > 0 }
         ))
-        persistRunSummary(userId, runId, finishedAt, error, stringsTranslated, stringsPerLocale)
+        persistRunSummary(userId, runId, finishedAt, error, stringsTranslated, stringsPerLocale, cacheHits)
     }
 
     private fun persistRunSummary(
         userId: String, runId: String, finishedAt: Long,
-        error: String?, stringsTranslated: Int, stringsPerLocale: Map<String, Int>
+        error: String?, stringsTranslated: Int, stringsPerLocale: Map<String, Int>,
+        cacheHits: Int = 0
     ) {
         val repo = runRepository ?: return
         // Read back the snapshot we just mutated so the summary includes the
@@ -398,7 +400,8 @@ class PipelineEventBus(
                     status = status,
                     stringsTranslated = stringsTranslated,
                     stringsPerLocale = stringsPerLocale,
-                    error = error
+                    error = error,
+                    cacheHits = cacheHits
                 )
                 repo.persist(summary)
             }.onFailure { log.warn("persistRunSummary failed runId={}: {}", runId, it.message) }

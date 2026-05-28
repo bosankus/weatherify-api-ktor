@@ -230,7 +230,7 @@ fun Route.configureCdnPublishRoute(
             call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
                 ?: return@post
 
-            runCatching { cdnPublishService.publish(projectId, promote = project.autoPromote) }
+            runCatching { cdnPublishService.publish(projectId, promote = project.autoPromote, rolloutPercent = project.rolloutPercent) }
                 .onSuccess { receipt ->
                     call.respond(HttpStatusCode.OK, receipt.toResponse())
                 }
@@ -247,6 +247,36 @@ fun Route.configureCdnPublishRoute(
                     }
                 }
         }
+    }
+}
+
+/**
+ * Returns the per-project HMAC signing key for the given project's CDN bundles.
+ * Clients use this key to verify `{version}.sig` files alongside downloaded bundles.
+ * Requires authentication and VIEWER access. Only available when OTA is enabled.
+ */
+fun Route.configureCdnSigningKeyRoute(
+    projectRepository: ProjectRepository,
+    cdnPublishService: CdnPublishService,
+    memberships: ProjectMembershipRepository
+) {
+    get("/transloom/api/projects/{id}/bundle-signing-key") {
+        val userId = call.userId()
+            ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+        val projectId = call.parameters["id"]
+            ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+            ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+
+        val project = projectRepository.findById(projectId)
+        call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+            ?: return@get
+        if (!project.otaEnabled) {
+            return@get call.respond(HttpStatusCode.Conflict, ApiError("OTA is not enabled for this project"))
+        }
+        val key = cdnPublishService.signingKeyForProject(projectId)
+            ?: return@get call.respond(HttpStatusCode.ServiceUnavailable,
+                ApiError("Bundle signing is not configured on this server"))
+        call.respond(HttpStatusCode.OK, mapOf("projectId" to projectId, "signingKey" to key))
     }
 }
 

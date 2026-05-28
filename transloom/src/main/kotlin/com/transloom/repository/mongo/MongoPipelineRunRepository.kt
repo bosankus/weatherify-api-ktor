@@ -32,6 +32,7 @@ class MongoPipelineRunRepository(db: MongoDatabase) : PipelineRunRepository {
             put("stringsTranslated", summary.stringsTranslated)
             put("stringsPerLocale", Document(summary.stringsPerLocale))
             put("error", summary.error)
+            put("cacheHits", summary.cacheHits)
         }
         col.findOneAndReplace(eq("_id", summary.runId), doc, FindOneAndReplaceOptions().upsert(true))
     }
@@ -86,7 +87,8 @@ class MongoPipelineRunRepository(db: MongoDatabase) : PipelineRunRepository {
             status = getString("status") ?: "succeeded",
             stringsTranslated = (get("stringsTranslated") as? Number)?.toInt() ?: 0,
             stringsPerLocale = perLocale,
-            error = getString("error")
+            error = getString("error"),
+            cacheHits = (get("cacheHits") as? Number)?.toInt() ?: 0
         )
     }
 }

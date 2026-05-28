@@ -39,6 +39,16 @@ class MemberUsageService(private val repository: MemberUsageRepository) {
         }
     }
 
+    /** Total strings translated for [projectId] in the current calendar month. */
+    suspend fun totalForProject(projectId: String): Int {
+        return runCatching {
+            repository.totalForProject(projectId, currentYearMonth())
+        }.getOrElse {
+            log.warn("MemberUsageService.totalForProject failed project={}: {}", projectId, it.message)
+            0
+        }
+    }
+
     private fun currentYearMonth(): String {
         val ldt = Clock.System.now().toLocalDateTime(TimeZone.UTC)
         return "${ldt.year}-${ldt.monthNumber.toString().padStart(2, '0')}"

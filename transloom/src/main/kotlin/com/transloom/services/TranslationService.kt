@@ -129,6 +129,12 @@ class TranslationService(
 
     data class TranslationResult(val text: String, val flags: List<String>)
 
+    /** Wraps translateBatch results together with cache accounting for dashboard display. */
+    data class BatchOutcome(
+        val results: Map<String, Result<TranslationResult>>,
+        val cacheHits: Int
+    )
+
     suspend fun translate(context: TranslationContext): String = translateWithFlags(context).text
 
     suspend fun translateWithFlags(context: TranslationContext): TranslationResult {
@@ -148,16 +154,27 @@ class TranslationService(
         return processAndStore(context.sourceText, extraction, llmOutput, hashKey)
     }
 
+    /** Like [translateBatch] but also returns the number of strings served from cache. */
+    suspend fun translateBatchTracked(keyedContexts: Map<String, TranslationContext>): BatchOutcome {
+        val outcome = translateBatchInternal(keyedContexts)
+        return BatchOutcome(outcome.first, outcome.second)
+    }
+
     // Translates a batch of strings in a single Gemini call.
     // All contexts must share the same language, category, tone, and glossary.
     // Returns a map of key → Result<TranslationResult>; cache hits are resolved before the API call.
     suspend fun translateBatch(
         keyedContexts: Map<String, TranslationContext>
-    ): Map<String, Result<TranslationResult>> {
-        if (keyedContexts.isEmpty()) return emptyMap()
+    ): Map<String, Result<TranslationResult>> = translateBatchInternal(keyedContexts).first
+
+    private suspend fun translateBatchInternal(
+        keyedContexts: Map<String, TranslationContext>
+    ): Pair<Map<String, Result<TranslationResult>>, Int> {
+        if (keyedContexts.isEmpty()) return emptyMap<String, Result<TranslationResult>>() to 0
 
         val results = mutableMapOf<String, Result<TranslationResult>>()
         val toTranslate = mutableMapOf<String, Pair<TranslationContext, ExtractionResult>>()
+        var cacheHits = 0
 
         for ((key, ctx) in keyedContexts) {
             val hashKey = cacheKey(ctx)
@@ -166,6 +183,7 @@ class TranslationService(
             if (cached != null) {
                 memoryStore.incrementUsage(hashKey)
                 results[key] = Result.success(TranslationResult(cached, emptyList()))
+                cacheHits++
             } else {
                 val extraction = TokenExtractor.extract(ctx.sourceText)
                 if (extraction.isTruncated) {
@@ -176,7 +194,7 @@ class TranslationService(
             }
         }
 
-        if (toTranslate.isEmpty()) return results
+        if (toTranslate.isEmpty()) return results to cacheHits
 
         val firstCtx = keyedContexts.values.first()
         val batchInput = toTranslate.mapValues { (_, pair) -> pair.second.cleanText }
@@ -187,7 +205,7 @@ class TranslationService(
         } catch (e: Exception) {
             log.warn("Batch Gemini call failed for {} strings: {}", toTranslate.size, e.message)
             toTranslate.keys.forEach { key -> results[key] = Result.failure(e) }
-            return results
+            return results to cacheHits
         }
 
         val parsed: Map<String, String> = try {
@@ -195,7 +213,7 @@ class TranslationService(
         } catch (e: Exception) {
             log.warn("Batch JSON parse failed for {} strings: {}", toTranslate.size, e.message)
             toTranslate.keys.forEach { key -> results[key] = Result.failure(e) }
-            return results
+            return results to cacheHits
         }
 
         for ((key, pair) in toTranslate) {
@@ -212,7 +230,7 @@ class TranslationService(
             }
         }
 
-        return results
+        return results to cacheHits
     }
 
     private suspend fun processAndStore(

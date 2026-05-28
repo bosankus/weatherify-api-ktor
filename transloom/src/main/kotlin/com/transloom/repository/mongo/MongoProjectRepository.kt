@@ -107,7 +107,11 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         otaEnabled: Boolean?,
         autoPromote: Boolean?,
         sharedMemoryOptIn: Boolean?,
-        prBranchPattern: String?
+        prBranchPattern: String?,
+        outboundWebhookUrl: String?,
+        outboundWebhookSecret: String?,
+        monthlyStringQuota: Int?,
+        rolloutPercent: Int?
     ): Boolean {
         val updates = mutableListOf<org.bson.conversions.Bson>()
 
@@ -127,6 +131,21 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             if (it.isBlank()) updates.add(Updates.unset("prBranchPattern"))
             else updates.add(Updates.set("prBranchPattern", it))
         }
+        // "" clears the webhook URL/secret; non-blank sets it; null = no change
+        outboundWebhookUrl?.let {
+            if (it.isBlank()) updates.add(Updates.unset("outboundWebhookUrl"))
+            else updates.add(Updates.set("outboundWebhookUrl", it))
+        }
+        outboundWebhookSecret?.let {
+            if (it.isBlank()) updates.add(Updates.unset("outboundWebhookSecret"))
+            else updates.add(Updates.set("outboundWebhookSecret", it))
+        }
+        // -1 clears the quota; positive value sets it; null = no change
+        monthlyStringQuota?.let {
+            if (it < 0) updates.add(Updates.unset("monthlyStringQuota"))
+            else updates.add(Updates.set("monthlyStringQuota", it))
+        }
+        rolloutPercent?.let { updates.add(Updates.set("rolloutPercent", it.coerceIn(0, 100))) }
 
         if (updates.isEmpty()) return false
 
@@ -259,7 +278,11 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             lastSourceFileHash = getString("lastSourceFileHash"),
             otaEnabled = getBoolean("otaEnabled") ?: false,
             autoPromote = getBoolean("autoPromote") ?: true,
-            prBranchPattern = getString("prBranchPattern")
+            prBranchPattern = getString("prBranchPattern"),
+            outboundWebhookUrl = getString("outboundWebhookUrl"),
+            outboundWebhookSecret = getString("outboundWebhookSecret"),
+            monthlyStringQuota = (get("monthlyStringQuota") as? Number)?.toInt(),
+            rolloutPercent = (get("rolloutPercent") as? Number)?.toInt() ?: 100
         )
     }
 }

@@ -251,9 +251,10 @@ fun Application.module() {
     )
     val githubService = GitHubService()
     val translationService = TranslationService(memoryRepository, sharedMemoryRepository)
+    val outboundWebhookService = OutboundWebhookService()
     val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
     val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
-    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService, sharedMemoryRepository, memberUsageService)
+    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService, sharedMemoryRepository, memberUsageService, outboundWebhookService)
 
     jobQueue.startWorker { payload ->
         val projectUuid = runCatching { java.util.UUID.fromString(payload.projectId) }.getOrElse {
@@ -374,7 +375,8 @@ fun Application.module() {
             "cultural analyzer"      to { culturalSensitivityAnalyzer.close() },
             "razorpay service"       to { razorpayService.close() },
             "lifecycle monitor"      to { lifecycleMonitor.stop() },
-            "cloudflare r2 service"  to { cfKvService.close() }
+            "cloudflare r2 service"  to { cfKvService.close() },
+            "outbound webhook service" to { outboundWebhookService.close() }
         ).forEach { (name, closer) ->
             runCatching(closer).onFailure { log.error("Failed to close {}: {}", name, it.message) }
         }
@@ -405,5 +407,6 @@ fun Application.module() {
         analyticsService = analyticsService,
         notificationService = notificationService,
         inAppNotificationService = inAppNotificationService,
+        pipelineRunRepository = pipelineRunRepository,
     ))
 }

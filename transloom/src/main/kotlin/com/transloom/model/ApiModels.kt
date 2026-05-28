@@ -105,7 +105,15 @@ data class UpdateProjectBody(
     val otaEnabled: Boolean? = null,
     val autoPromote: Boolean? = null,
     val sharedMemoryOptIn: Boolean? = null,
-    val prBranchPattern: String? = null
+    val prBranchPattern: String? = null,
+    /** Set to "" to clear the webhook URL. Solo/Team only. */
+    val outboundWebhookUrl: String? = null,
+    /** Set to "" to clear the signing secret. Solo/Team only. */
+    val outboundWebhookSecret: String? = null,
+    /** Set to -1 to remove the project-level cap. Solo/Team only. */
+    val monthlyStringQuota: Int? = null,
+    /** 0–100. 100 = full traffic to active; 1–99 = canary rollout. Solo/Team only. */
+    val rolloutPercent: Int? = null
 )
 
 @Serializable
@@ -125,7 +133,11 @@ data class ProjectDetailResponse(
     val autoPromote: Boolean = true,
     /** ISO-8601 date-time of the last successful webhook verification, or null if never verified. */
     val webhookVerifiedAt: String? = null,
-    val prBranchPattern: String? = null
+    val prBranchPattern: String? = null,
+    /** Configured outbound webhook URL, or null if not set. Secret is never returned. */
+    val outboundWebhookUrl: String? = null,
+    val monthlyStringQuota: Int? = null,
+    val rolloutPercent: Int = 100
 )
 
 @Serializable

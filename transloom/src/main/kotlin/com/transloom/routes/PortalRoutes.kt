@@ -639,9 +639,9 @@ private const val LANDING_JS = """
 
 private fun HTML.landingPage() {
     head {
-        title { +"Transloom — Build once. Deliver in every language, from the edge." }
+        title { +"Transloom — Push a commit. Go global in 45 seconds." }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
-        meta(name = "description", content = "Push a commit. Transloom translates your strings, publishes them to a global CDN, and serves them to your users in under 20ms — via native Android and iOS SDKs.")
+        meta(name = "description", content = "Transloom detects what changed in your mobile app strings, translates with AI, and publishes to a global CDN automatically — no app release needed. Android and iOS SDKs serve from the nearest edge node in under 20ms.")
         favicon()
         style { unsafe { +"$SHARED_CSS$LANDING_CSS" } }
     }
@@ -658,7 +658,7 @@ private fun HTML.landingPage() {
                 }
                 div("nav-links") {
                     id = "nav-menu"
-                    a("#architecture") { +"Architecture" }
+                    a("#how") { +"How it works" }
                     a("#features") { +"Features" }
                     a("#pricing") { +"Pricing" }
                     a("/transloom/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
@@ -671,25 +671,25 @@ private fun HTML.landingPage() {
             div("hero-glow") {}
             div("hero-glow2") {}
             div("hero-inner") {
-                span("badge fade-up") { +"Production CDN · SDK Beta · Free to start" }
+                span("badge fade-up") { +"Powered by Claude AI · SDKs in Production · Free to start" }
                 h1("hero-title fade-up d1") {
-                    +"Build once. Deliver in "; span("accent") { +"every language" }; +", from the edge."
+                    +"Push a commit."; br {}; +"Go global in "; span("accent") { +"45 seconds." }
                 }
                 p("hero-sub fade-up d2") {
-                    +"Push a commit. Transloom translates your strings, publishes them to a global CDN, and serves them to your users in under 20ms — via native Android and iOS SDKs."
+                    +"Transloom detects what changed, translates into every target language, and publishes to a global CDN automatically — no manual steps, no app release required."
                 }
                 div("hero-actions fade-up d3") {
-                    a("#pricing") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started free" }
-                    a("#architecture") { classes = setOf("btn", "btn-ghost"); +"See the architecture →" }
+                    a("/transloom/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started free" }
+                    a("#how") { classes = setOf("btn", "btn-ghost"); +"See how it works →" }
                 }
                 div("hero-stats fade-up d4") {
                     div("hero-stat") { span("hero-stat-val") { +"<20ms" }; span("hero-stat-label") { +"Edge delivery" } }
                     div("hero-stat-div") {}
                     div("hero-stat") { span("hero-stat-val") { +"10+" }; span("hero-stat-label") { +"Languages" } }
                     div("hero-stat-div") {}
-                    div("hero-stat") { span("hero-stat-val") { +"2" }; span("hero-stat-label") { +"Native SDKs" } }
-                    div("hero-stat-div") {}
                     div("hero-stat") { span("hero-stat-val") { +"~45s" }; span("hero-stat-label") { +"Commit to CDN" } }
+                    div("hero-stat-div") {}
+                    div("hero-stat") { span("hero-stat-val") { +"250+" }; span("hero-stat-label") { +"CDN PoPs" } }
                 }
                 div("hero-lang-strip fade-up") {
                     listOf("🇪🇸 ES","🇫🇷 FR","🇩🇪 DE","🇯🇵 JA","🇰🇷 KO","🇨🇳 ZH","🇮🇳 HI","🇧🇷 PT","🇮🇹 IT","🇸🇦 AR")
@@ -698,13 +698,73 @@ private fun HTML.landingPage() {
             }
         }
 
-        section("arch-section") {
-            id = "architecture"
+        section("pipeline-section") {
+            id = "how"
             div("section-inner") {
-                p("section-label fade-up") { +"TRANSLOOM ARCHITECTURE" }
-                h2("fade-up d1") { +"How Transloom takes you from commit to global delivery." }
-                p("arch-sub fade-up d2") { +"Transloom listens to your GitHub pushes, runs AI-powered semantic detection, translates with Claude, validates every string, and publishes to Cloudflare's global KV — so your app serves any language in under 20ms." }
-                div("arch-diagram fade-up d3") { unsafe { +CDN_ARCH_SVG } }
+                p("section-label fade-up") { +"HOW IT WORKS" }
+                h2("fade-up d1") { +"From commit to globally served. Nothing else to set up." }
+                div("pipeline-demo fade-up d2") {
+                    div("term-window") {
+                        div("term-header") {
+                            div("term-dots") {
+                                span("term-dot term-red") {}
+                                span("term-dot term-yellow") {}
+                                span("term-dot term-green") {}
+                            }
+                            span("term-title") { +"transloom — pipeline run" }
+                        }
+                        div("term-body") {
+                            div("term-prompt") {
+                                span("term-ps1") { +"$ " }
+                                span("term-cmd") { +"git push origin main" }
+                            }
+                            div("term-line l1") {
+                                span("term-check") { +"✓" }
+                                span("term-text") { +" Webhook received "; span("term-dim") { +"(0.3s)" } }
+                            }
+                            div("term-line l2") {
+                                span("term-check") { +"✓" }
+                                span("term-text") { +" Semantic diff: "; span("term-accent") { +"3 changed" }; span("term-dim") { +", 12 skipped — no semantic change" } }
+                            }
+                            div("term-line l3") {
+                                span("term-check") { +"✓" }
+                                span("term-text") { +" Placeholder validation "; span("term-ok") { +"passed" }; span("term-dim") { +" · %1\$s %d %@ all present" } }
+                            }
+                            div("term-line l4") {
+                                span("term-check") { +"✓" }
+                                span("term-text") { +" Glossary enforced · Cultural flags "; span("term-ok") { +"clear" } }
+                            }
+                            div("term-line l5") {
+                                span("term-check") { +"✓" }
+                                span("term-text") { +" Translated → ES FR DE JA KO ZH HI PT IT AR "; span("term-dim") { +"(42s)" } }
+                            }
+                            div("term-line l6") {
+                                span("term-check") { +"✓" }
+                                span("term-text") { +" Bundle signed + published to Cloudflare R2 "; span("term-dim") { +"(0.8s)" } }
+                            }
+                            div("term-line l7 term-final") {
+                                span("term-arrow") { +"→" }
+                                span("term-text term-result") { +" Users served in "; span("term-accent") { +"<20ms" }; +" from the nearest PoP" }
+                            }
+                        }
+                    }
+                }
+                div("pipeline-steps fade-up d3") {
+                    data class PStep(val n: String, val t: String, val d: String)
+                    listOf(
+                        PStep("01", "Git push", "Transloom's webhook fires within seconds of any push to your configured branch."),
+                        PStep("02", "Semantic detection", "AI classifier skips surface rewrites — only real semantic changes consume API quota."),
+                        PStep("03", "Translate + validate", "Claude translates into all targets. Placeholders, glossary, and cultural flags are all checked."),
+                        PStep("04", "Sign + publish", "Signed bundle written to Cloudflare R2 — replicated to 250+ PoPs globally in seconds."),
+                        PStep("05", "SDK serves edge", "Android and iOS SDKs fetch from the nearest PoP, cached locally for instant subsequent loads.")
+                    ).forEach { s ->
+                        div("pstep") {
+                            span("pstep-num") { +s.n }
+                            h4("pstep-title") { +s.t }
+                            p("pstep-desc") { +s.d }
+                        }
+                    }
+                }
             }
         }
 
@@ -736,12 +796,6 @@ Transloom.init(this, apiKey = <span class="sdk-str">"YOUR_API_KEY"</span>)
 <span class="sdk-comment">// Usage</span>
 val title = Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>)</pre>""" }
                         }
-                        div("sdk-footer") {
-                            span("sdk-release-badge") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>""" }
-                                +"Releasing publicly soon"
-                            }
-                        }
                     }
                     div("sdk-card sdk-ios fade-up d3") {
                         div("sdk-card-top") {
@@ -764,64 +818,12 @@ Transloom.configure(apiKey: <span class="sdk-str">"YOUR_API_KEY"</span>)
 <span class="sdk-comment">// SwiftUI</span>
 Text(Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</pre>""" }
                         }
-                        div("sdk-footer") {
-                            span("sdk-release-badge") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>""" }
-                                +"Releasing publicly soon"
-                            }
-                        }
                     }
                 }
                 div("sdk-bottom") {
                     div("sdk-compat") {
                         unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>""" }
-                        +"Both SDKs are live in internal production — public release coming imminently"
-                    }
-                }
-            }
-        }
-
-        section("how-section") {
-            id = "how"
-            div("section-inner") {
-                p("section-label fade-up") { +"HOW IT WORKS" }
-                h2("fade-up d1") { +"Five steps. Fully automatic." }
-                p("how-sub fade-up d2") { +"From your git push to a globally-served, edge-cached translation — nothing to configure." }
-
-                div("how-steps fade-up d3") {
-                    data class Step(val num: String, val icon: String, val title: String, val desc: String, val tag: String)
-                    listOf(
-                        Step("01", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>""", "Push to GitHub", "Add a new string to your strings.xml or .strings file and push. Transloom's webhook fires within seconds.", "Webhook"),
-                        Step("02", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg>""", "AI detects changes", "Our semantic classifier decides if strings need retranslation or just a surface update. Only real changes bill API quota.", "Smart diff"),
-                        Step("03", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""", "Translate + validate", "Claude translates into every target language. Placeholders are guarded, glossary terms enforced, cultural flags checked.", "AI pipeline"),
-                        Step("04", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""", "Publish to CDN", "Translations are compiled into a versioned bundle and written to Cloudflare KV — replicated to 250+ PoPs instantly.", "~45 sec total"),
-                        Step("05", """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""", "SDK serves from edge", "Your Android or iOS SDK fetches from the nearest PoP. First hit is cached locally — subsequent calls are instant.", "<20ms")
-                    ).forEach { s ->
-                        div("how-step-card") {
-                            div("hsc-left") {
-                                span("hsc-num") { +s.num }
-                                div("hsc-line") {}
-                            }
-                            div("hsc-body") {
-                                div("hsc-head") {
-                                    div("hsc-icon") { unsafe { +s.icon } }
-                                    h4("hsc-title") { +s.title }
-                                    span("hsc-tag") { +s.tag }
-                                }
-                                p("hsc-desc") { +s.desc }
-                            }
-                        }
-                    }
-                }
-
-                div("how-footer fade-up") {
-                    div("time-pill") {
-                        span("time-dot") {}
-                        +"Commit to CDN: "
-                        strong { +"~45 seconds" }
-                        span("time-sep") { +"·" }
-                        +"Edge response: "
-                        strong { +"<20ms" }
+                        +"Both SDKs are live in internal production"
                     }
                 }
             }
@@ -831,17 +833,93 @@ Text(Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>))<
             id = "features"
             div("section-inner") {
                 p("section-label fade-up") { +"FEATURES" }
-                h2("fade-up d1") { +"Everything you need to ship globally." }
-                div("features-grid") {
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""","Global CDN delivery","Translations compiled and pushed to Cloudflare's global KV. Served from the nearest PoP to your user.","fade-up")
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><polyline points="21 3 21 8 16 8"/></svg>""","Instant OTA updates","Fix a typo in any language without a new app release. Every publish is versioned — promote or roll back in one click.","fade-up d1")
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""","Android + iOS SDKs","Native SDKs in production. Drop-in init, edge delivery, offline cache — no networking code to write.","fade-up d1")
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/><path d="M18.5 5c-.3 1-.7 1.3-1.5 1.5.8.2 1.2.5 1.5 1.5.3-1 .7-1.3 1.5-1.5-.8-.2-1.2-.5-1.5-1.5z"/></svg>""","Smart change detection","AI classifier skips retranslation for surface rewrites. Only semantic changes trigger the pipeline.","fade-up d2")
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""","Placeholder guard","Automatic detection of %1\$s, %d, %@ — bad translations are blocked before they reach the CDN.","fade-up d3")
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>""","Glossary enforcement","Brand terms defined once per language, applied consistently across every string, every CDN publish.","fade-up d4")
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>""","Review portal","Flag anomalous translations for human review before they hit the CDN and go live globally.","fade-up d4")
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""","Translation memory","Identical strings reuse cached translations — faster throughput, lower API cost, instant CDN updates.","fade-up d4")
-                    featureCard("""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""","Cultural sensitivity","Post-translation AI check flags formality mismatches and idiom issues before strings publish to CDN.","fade-up d4")
+                h2("fade-up d1") { +"Everything your team needs to ship globally." }
+                div("bento-grid") {
+                    div("bento-card bento-large fade-up") {
+                        div("bento-card-icon accent-icon") {
+                            unsafe { +"""<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Global CDN delivery" }
+                        p("bento-card-desc") { +"Translations compiled into signed bundles and published to Cloudflare R2 — replicated to 250+ PoPs. Your users get strings from the nearest node in under 20ms, always." }
+                        div("bento-metrics") {
+                            div("bento-metric") { span("bento-metric-val") { +"<20ms" }; span("bento-metric-label") { +"P99 response" } }
+                            div("bento-metric") { span("bento-metric-val") { +"250+" }; span("bento-metric-label") { +"Global PoPs" } }
+                        }
+                    }
+                    div("bento-card bento-medium fade-up d1") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><polyline points="21 3 21 8 16 8"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Instant OTA updates" }
+                        p("bento-card-desc") { +"Fix a typo in any language without a new app store release. Every CDN publish is versioned — promote or roll back in one click from the dashboard." }
+                    }
+                    div("bento-card bento-medium fade-up d2") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Smart semantic detection" }
+                        p("bento-card-desc") { +"AI classifier skips retranslation for surface rewrites. Only real semantic changes consume API quota — saving cost on every commit." }
+                    }
+                    div("bento-card bento-small fade-up") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Placeholder guard" }
+                        p("bento-card-desc") { +"Auto-detects %1\$s, %d, %@ — malformed translations are blocked before they reach CDN." }
+                    }
+                    div("bento-card bento-small fade-up d1") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Glossary enforcement" }
+                        p("bento-card-desc") { +"Brand terms defined once per language, applied consistently across every string and every publish." }
+                    }
+                    div("bento-card bento-small fade-up d2") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Cultural sensitivity" }
+                        p("bento-card-desc") { +"Post-translation AI check flags formality mismatches and regional idiom issues before strings go live." }
+                    }
+                    div("bento-card bento-small fade-up d3") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Human review portal" }
+                        p("bento-card-desc") { +"Flag anomalous translations for team review before they publish to CDN and go live globally." }
+                    }
+                    div("bento-card bento-medium fade-up") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Team collaboration" }
+                        p("bento-card-desc") { +"Invite translators and reviewers with role-based access. Per-project quotas, per-member usage tracking, and expiring invite links." }
+                    }
+                    div("bento-card bento-medium fade-up d1") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Outbound webhooks" }
+                        p("bento-card-desc") { +"Get notified when a CDN publish completes. Connect Transloom to your CI/CD pipeline, Slack, or any downstream service." }
+                    }
+                    div("bento-card bento-medium fade-up d2") {
+                        div("bento-card-icon") {
+                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Translation memory" }
+                        p("bento-card-desc") { +"Identical strings reuse cached translations — faster throughput, lower API cost, instant CDN updates without re-calling the model." }
+                    }
+                    div("bento-card bento-large bento-analytics fade-up d3") {
+                        div("bento-card-icon accent-icon") {
+                            unsafe { +"""<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>""" }
+                        }
+                        h3("bento-card-title") { +"Billing analytics" }
+                        p("bento-card-desc") { +"Track cost-per-string over time, see month-over-month deltas, project your end-of-month spend, and understand quota usage per project and per language." }
+                        div("bento-metrics") {
+                            div("bento-metric") { span("bento-metric-val") { +"₹/string" }; span("bento-metric-label") { +"Cost tracking" } }
+                            div("bento-metric") { span("bento-metric-val") { +"MoM" }; span("bento-metric-label") { +"Trend delta" } }
+                        }
+                    }
                 }
             }
         }
@@ -879,6 +957,7 @@ Text(Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>))<
                             li { +"Glossary enforcement" }
                             li { +"Translation memory" }
                             li { +"Review portal" }
+                            li { +"Outbound webhooks" }
                             li { +"CDN + SDK access" }
                         }
                         a("/transloom/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
@@ -893,6 +972,7 @@ Text(Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>))<
                             li { +"10 projects" }
                             li { +"All target languages" }
                             li { +"Everything in Solo" }
+                            li { +"Team members + per-project quotas" }
                             li { +"Priority support" }
                             li { +"Priority CDN SLA" }
                         }
@@ -924,7 +1004,7 @@ Text(Transloom.string(<span class="sdk-str">"onboarding_welcome_title"</span>))<
 
 private const val LANDING_CSS = """
 @keyframes heroDrift{0%,100%{transform:translate(-50%,0) scale(1)}50%{transform:translate(-50%,30px) scale(1.08)}}
-@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+@keyframes termIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
 .nav-inner{max-width:1140px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .nav-links{display:flex;align-items:center;gap:24px}
@@ -942,7 +1022,7 @@ nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.85);backdrop-filter
 .hero-sub{color:var(--text-muted);font-size:clamp(15px,2vw,17px);line-height:1.7;margin-bottom:36px}
 .hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:40px}
 .hero-btn{padding:13px 24px;font-size:15px}
-.hero-stats{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:40px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 24px;max-width:640px;margin-left:auto;margin-right:auto}
+.hero-stats{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:40px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 24px;max-width:680px;margin-left:auto;margin-right:auto}
 .hero-stat{display:flex;flex-direction:column;align-items:center;padding:0 20px}
 .hero-stat-val{font-size:22px;font-weight:800;color:var(--accent);line-height:1.2}
 .hero-stat-label{font-size:12px;color:var(--text-muted);margin-top:2px}
@@ -954,30 +1034,57 @@ section{padding:80px 24px}
 .section-inner{max-width:1140px;margin:0 auto}
 .section-label{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:12px}
 h2{font-size:clamp(24px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bottom:48px}
-.arch-section{padding:80px 24px;background:var(--bg);border-top:1px solid var(--border)}
-.arch-diagram{max-width:1200px;margin:0 auto;overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:36px 28px}
+.pipeline-section{padding:88px 24px 100px;background:var(--bg);border-top:1px solid var(--border)}
+.term-window{max-width:760px;margin:0 auto 56px;background:#0d0d0d;border:1px solid #1e1e1e;border-radius:12px;overflow:hidden;box-shadow:0 32px 64px -24px rgba(0,0,0,.8),0 0 0 1px rgba(0,229,160,.05)}
+.term-header{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#111;border-bottom:1px solid #1a1a1a}
+.term-dots{display:flex;gap:6px}
+.term-dot{width:12px;height:12px;border-radius:50%}
+.term-red{background:#ff5f57}
+.term-yellow{background:#febc2e}
+.term-green{background:#28c840}
+.term-title{flex:1;text-align:center;font-size:12px;color:#333;letter-spacing:.3px}
+.term-body{padding:20px 24px 24px;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13.5px;line-height:1.9;display:flex;flex-direction:column;gap:0}
+.term-prompt{display:flex;gap:0;margin-bottom:10px}
+.term-ps1{color:#555;font-weight:600}
+.term-cmd{color:var(--text)}
+.term-line{opacity:0;display:flex;gap:6px;align-items:baseline}
+.term-check{color:var(--accent);font-weight:700;flex-shrink:0;width:14px}
+.term-arrow{color:var(--accent);flex-shrink:0;width:14px}
+.term-text{color:var(--text-dim)}
+.term-result{color:var(--text);font-weight:500}
+.term-accent{color:var(--accent);font-weight:600}
+.term-ok{color:#3DDC84;font-weight:600}
+.term-dim{color:#3a3a3a}
+.term-final{margin-top:10px;padding-top:12px;border-top:1px solid #1a1a1a}
+.pipeline-demo.in-view .term-line{animation:termIn .3s cubic-bezier(.2,.7,.2,1) forwards}
+.pipeline-demo.in-view .l1{animation-delay:.5s}
+.pipeline-demo.in-view .l2{animation-delay:1.2s}
+.pipeline-demo.in-view .l3{animation-delay:2s}
+.pipeline-demo.in-view .l4{animation-delay:2.6s}
+.pipeline-demo.in-view .l5{animation-delay:3.2s}
+.pipeline-demo.in-view .l6{animation-delay:4.4s}
+.pipeline-demo.in-view .l7{animation-delay:5.1s}
 .arch-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:48px;max-width:640px;line-height:1.6}
-.how-section{padding:88px 24px 100px}
-.how-sub{color:var(--text-muted);font-size:16px;margin-top:-28px;margin-bottom:48px;max-width:580px;line-height:1.6}
-.how-steps{display:flex;flex-direction:column;gap:0;max-width:760px;margin:0 auto 64px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface)}
-.how-step-card{display:flex;gap:0;border-bottom:1px solid var(--border);transition:background .2s}
-.how-step-card:last-child{border-bottom:none}
-.how-step-card:hover{background:var(--surface2)}
-.hsc-left{display:flex;flex-direction:column;align-items:center;padding:24px 20px;min-width:64px;border-right:1px solid var(--border)}
-.hsc-num{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:.5px;line-height:1}
-.hsc-line{flex:1;width:1px;background:var(--border);margin-top:10px}
-.how-step-card:last-child .hsc-line{display:none}
-.hsc-body{padding:20px 24px;display:flex;flex-direction:column;gap:8px;flex:1}
-.hsc-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.hsc-icon{color:var(--accent);display:flex;align-items:center;flex-shrink:0}
-.hsc-title{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.2px}
-.hsc-tag{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,229,160,.2);border-radius:20px;padding:1px 9px;font-size:11px;font-weight:600;margin-left:auto}
-.hsc-desc{font-size:13.5px;color:var(--text-muted);line-height:1.65;max-width:580px}
-.how-footer{display:flex;justify-content:center}
-.time-pill{display:inline-flex;align-items:center;gap:10px;background:var(--surface);border:1px solid rgba(0,229,160,.3);border-radius:30px;padding:10px 22px;font-size:13.5px;color:var(--text-dim);box-shadow:0 8px 24px -12px rgba(0,229,160,.2)}
-.time-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:livePulse 1.4s ease-in-out infinite}
-.time-pill strong{color:var(--accent);font-weight:700;margin:0 2px}
-.time-sep{color:var(--text-muted);margin:0 4px}
+.pipeline-steps{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.pstep{background:var(--surface);padding:20px;transition:background .15s}
+.pstep:hover{background:var(--surface2)}
+.pstep-num{display:block;font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.5px;margin-bottom:10px}
+.pstep-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px}
+.pstep-desc{font-size:12px;color:var(--text-muted);line-height:1.55}
+.features-section{background:var(--surface2);border-top:1px solid var(--border);padding:88px 24px}
+.bento-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.bento-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:12px;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}
+.bento-card:hover{border-color:rgba(0,229,160,.25);transform:translateY(-2px);box-shadow:0 16px 40px -20px rgba(0,229,160,.12)}
+.bento-large{grid-column:span 2}
+.bento-analytics{background:linear-gradient(145deg,var(--surface) 60%,rgba(0,229,160,.04) 100%)}
+.bento-card-icon{color:var(--text-muted);line-height:0;flex-shrink:0}
+.bento-card-icon.accent-icon{color:var(--accent)}
+.bento-card-title{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.2px}
+.bento-card-desc{font-size:13px;color:var(--text-muted);line-height:1.65;flex:1}
+.bento-metrics{display:flex;gap:24px;margin-top:auto;padding-top:14px;border-top:1px solid var(--border)}
+.bento-metric{display:flex;flex-direction:column;gap:3px}
+.bento-metric-val{font-size:20px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1}
+.bento-metric-label{font-size:11px;color:var(--text-muted)}
 .sdk-section{padding:88px 24px;background:var(--bg);border-top:1px solid var(--border)}
 .sdk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px;margin-top:48px}
 .sdk-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;display:flex;flex-direction:column;gap:20px;transition:border-color .3s,transform .3s,box-shadow .3s}
@@ -994,18 +1101,9 @@ h2{font-size:clamp(24px,4vw,40px);font-weight:700;letter-spacing:-.5px;margin-bo
 .sdk-code{padding:16px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;line-height:1.7;color:var(--text-dim);white-space:pre;overflow-x:auto;margin:0}
 .sdk-comment{color:var(--text-muted);opacity:.7}
 .sdk-str{color:#a8d8a8}
-.sdk-footer{margin-top:auto}
-.sdk-release-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(250,173,20,.1);color:#faad14;border:1px solid rgba(250,173,20,.25);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600}
 .sdk-bottom{margin-top:32px;display:flex;justify-content:center}
 .sdk-compat{display:inline-flex;align-items:center;gap:10px;font-size:14px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 20px}
 .sdk-compat svg{color:var(--accent);flex-shrink:0}
-.features-section{background:var(--surface2);border-top:1px solid var(--border)}
-.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
-.feature-card{padding:24px}
-.feature-card:hover{border-color:rgba(0,229,160,.3);transform:translateY(-2px);box-shadow:0 12px 32px -16px rgba(0,229,160,.18)}
-.feature-icon{font-size:28px;margin-bottom:12px;color:var(--accent);line-height:0}
-.feature-card h3{font-size:15px;font-weight:600;margin-bottom:8px}
-.feature-card p{font-size:13px;color:var(--text-muted);line-height:1.6}
 .pricing-section{background:var(--bg);border-top:1px solid var(--border)}
 .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:20px;padding-top:4px}
 .pricing-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;display:flex;flex-direction:column;position:relative;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}
@@ -1036,9 +1134,10 @@ footer{padding:28px 24px;border-top:1px solid var(--border)}
 .footer-inner{max-width:1140px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
 .text-muted{color:var(--text-muted)}
 @media(max-width:1024px){
+  .bento-grid{grid-template-columns:repeat(2,1fr)}
+  .bento-large{grid-column:span 2}
   .sdk-grid{grid-template-columns:repeat(2,1fr)}
-  .features-grid{grid-template-columns:repeat(2,1fr)}
-  .arch-diagram svg{min-width:760px}
+  .pipeline-steps{grid-template-columns:repeat(3,1fr)}
 }
 @media(max-width:768px){
   .nav-hamburger{display:flex}
@@ -1050,9 +1149,11 @@ footer{padding:28px 24px;border-top:1px solid var(--border)}
   .hero{padding:80px 20px 56px}
   section{padding:64px 20px}
   h2{margin-bottom:32px}
-  .arch-sub{font-size:15px}
-  .how-section{padding:64px 20px 80px}
+  .pipeline-section{padding:64px 20px 80px}
+  .features-section{padding:64px 20px}
   .sdk-section{padding:64px 20px}
+  .bento-large{grid-column:span 2}
+  .pipeline-steps{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:640px){
   .hero{padding:72px 16px 48px}
@@ -1065,26 +1166,20 @@ footer{padding:28px 24px;border-top:1px solid var(--border)}
   .hero-actions .btn{text-align:center;width:100%}
   .hero-lang-strip{gap:6px}
   .lang-chip{font-size:12px;padding:4px 10px}
-  .arch-diagram{padding:16px 12px;border-radius:10px}
-  .how-steps{margin-left:0;margin-right:0;border-radius:10px}
-  .hsc-tag{display:none}
-  .hsc-body{padding:14px 16px}
-  .hsc-left{min-width:52px;padding:18px 14px}
+  .bento-grid{grid-template-columns:1fr}
+  .bento-large{grid-column:span 1}
   .sdk-grid{grid-template-columns:1fr}
-  .features-grid{grid-template-columns:1fr}
-  .pricing-grid{grid-template-columns:1fr}
+  .pipeline-steps{grid-template-columns:1fr}
+  .term-body{padding:14px 16px 16px;font-size:12px}
   .sdk-code{font-size:11px}
   section{padding:52px 16px}
-  .sdk-section,.how-section{padding:52px 16px 64px}
+  .pipeline-section,.sdk-section{padding:52px 16px 64px}
 }
 @media(max-width:400px){
   .hero-title{font-size:28px;letter-spacing:-1px}
   .hero-sub{font-size:14px}
   .hero-btn{font-size:14px;padding:12px 20px}
-  .hsc-head{flex-direction:column;align-items:flex-start;gap:6px}
-  .hsc-title{font-size:14px}
   .pricing-price{font-size:36px}
-  .time-pill{font-size:12px;padding:8px 16px;gap:8px}
   .nav-inner{padding:12px 16px}
 }
 """

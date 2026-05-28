@@ -22,9 +22,12 @@ import com.transloom.services.StringParserService
 import com.transloom.services.TranslationContext
 import com.transloom.services.TranslationService
 import com.transloom.services.requiredPluralForms
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.slf4j.LoggerFactory
@@ -64,6 +67,8 @@ class TranslationPipeline(
     private val sharedMemoryRepository: SharedTranslationMemoryRepository? = null,
     /** Per-member analytics rollup. Optional so tests can omit it. */
     private val memberUsageService: MemberUsageService? = null,
+    /** Outbound webhook notifications after each run. Optional — feature degrades gracefully when null. */
+    private val outboundWebhookService: com.transloom.services.OutboundWebhookService? = null,
     /** Max concurrent Gemini batch calls per translation run. */
     private val translationConcurrency: Int = 8
 ) {
@@ -222,9 +227,21 @@ class TranslationPipeline(
         log.info("{} string(s) to translate × {} language(s) ({} surface skipped)",
             addedStrings.size, config.targets.size, surfaceKeys.size)
 
-        // ── Step: Billing check ────────────────────────────────────────────────
+        // ── Step: Billing check (plan quota + optional per-project cap) ───────
         eventBus.stepRunning(userId, runId, "BILLING_CHECK")
         try {
+            // Per-project monthly cap check (independent of plan quota).
+            val projectQuota = project.monthlyStringQuota
+            if (projectQuota != null && memberUsageService != null) {
+                val usedThisMonth = memberUsageService.totalForProject(project.id)
+                val projected = usedThisMonth + addedStrings.size * config.targets.size
+                if (projected > projectQuota) {
+                    throw IllegalStateException(
+                        "Project quota ($projectQuota strings/month) reached. " +
+                        "Increase the project limit or wait until next month."
+                    )
+                }
+            }
             billingService.checkAndEnforceLimits(project.ownerId, addedStrings.size * config.targets.size)
         } catch (e: Exception) {
             val friendlyMsg = e.message?.let { humanizeBillingError(it) } ?: "Plan limit reached"
@@ -250,6 +267,7 @@ class TranslationPipeline(
         val updatedFiles = ConcurrentHashMap<String, String>()
         val translatedCounts = ConcurrentHashMap<String, Int>()
 
+        val totalCacheHits = AtomicInteger(0)
         coroutineScope {
             config.targets.map { target ->
                 async {
@@ -257,14 +275,16 @@ class TranslationPipeline(
                         code = target.code, name = target.name, status = "translating",
                         done = 0, total = perLocaleTotal
                     ))
-                    val (approved, count) = processTarget(payload, project, config, target, addedStrings, runId = runId, commitShort = payload.commitHash.take(7), userId = userId)
-                    translatedCounts[target.code] = count
+                    val outcome = processTarget(payload, project, config, target, addedStrings, runId = runId, commitShort = payload.commitHash.take(7), userId = userId)
+                    translatedCounts[target.code] = outcome.count
+                    totalCacheHits.addAndGet(outcome.cacheHits)
                     val done = completedLangs.incrementAndGet()
                     eventBus.stepRunning(userId, runId, "TRANSLATING", "$done / $totalLangs languages")
                     eventBus.emitLocaleProgress(userId, runId, LocaleProgressState(
                         code = target.code, name = target.name, status = "done",
                         done = perLocaleTotal, total = perLocaleTotal
                     ))
+                    val approved = outcome.approved
                     if (approved.isNotEmpty()) {
                         val existing = gitHubService.fetchFileContent(
                             repo = payload.repositoryFullName, branch = payload.branchName,
@@ -312,6 +332,8 @@ class TranslationPipeline(
         }
 
         // ── Step: Create PR ────────────────────────────────────────────────────
+        val cacheHitsTotal = totalCacheHits.get()
+
         if (updatedFiles.isNotEmpty()) {
             eventBus.stepRunning(userId, runId, "CREATING_PR")
             val pr = try {
@@ -328,8 +350,9 @@ class TranslationPipeline(
             } catch (e: Exception) {
                 eventBus.stepError(userId, runId, "CREATING_PR", e.message)
                 eventBus.finishRun(userId, runId, error = "PR creation failed: ${e.message}", surfaceSkipped = surfaceKeys.size,
-                    stringsTranslated = total, stringsPerLocale = perLocaleCounts)
+                    stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal)
                 log.warn("PR creation failed for {}: {}", payload.repositoryFullName, e.message)
+                fireOutboundWebhook(project, runId, prUrl = null, total, cacheHitsTotal, surfaceKeys.size, config, status = "failed")
                 return
             }
             eventBus.stepDone(userId, runId, "CREATING_PR", pr.prUrl)
@@ -337,13 +360,15 @@ class TranslationPipeline(
             log.info("Translation PR created: {}", pr.prUrl)
             maybePublishCdn(project, userId, runId)
             eventBus.finishRun(userId, runId, prUrl = pr.prUrl, prBranch = pr.branchName, surfaceSkipped = surfaceKeys.size,
-                stringsTranslated = total, stringsPerLocale = perLocaleCounts)
+                stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal)
+            fireOutboundWebhook(project, runId, pr.prUrl, total, cacheHitsTotal, surfaceKeys.size, config, status = "succeeded")
         } else {
             eventBus.stepSkipped(userId, runId, "CREATING_PR", "No translatable strings approved")
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             maybePublishCdn(project, userId, runId)
             eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size,
-                stringsTranslated = total, stringsPerLocale = perLocaleCounts)
+                stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal)
+            fireOutboundWebhook(project, runId, prUrl = null, total, cacheHitsTotal, surfaceKeys.size, config, status = "succeeded")
         }
         } catch (e: Exception) {
             // Catches TimeoutCancellationException from the caller's withTimeout wrapper,
@@ -358,21 +383,54 @@ class TranslationPipeline(
         }
     }
 
+    private fun fireOutboundWebhook(
+        project: Project,
+        runId: String,
+        prUrl: String?,
+        stringsTranslated: Int,
+        cacheHits: Int,
+        surfaceSkipped: Int,
+        config: com.transloom.model.TransloomConfig,
+        status: String
+    ) {
+        val svc = outboundWebhookService ?: return
+        if (project.outboundWebhookUrl.isNullOrBlank()) return
+        val payload = com.transloom.services.OutboundWebhookService.WebhookPayload(
+            event = "pipeline.completed",
+            projectId = project.id,
+            projectName = project.name,
+            repo = project.githubRepo,
+            branch = project.watchBranch,
+            commitShort = runId.take(7),
+            prUrl = prUrl,
+            stringsTranslated = stringsTranslated,
+            cacheHits = cacheHits,
+            surfaceSkipped = surfaceSkipped,
+            locales = config.targets.map { it.code },
+            status = status,
+            timestamp = System.currentTimeMillis()
+        )
+        // Fire-and-forget: failures are logged inside the service.
+        CoroutineScope(Dispatchers.IO).launch {
+            svc.fire(project, payload)
+        }
+    }
+
     private suspend fun maybePublishCdn(project: Project, userId: String, runId: String) {
         if (!project.otaEnabled) {
             eventBus.stepSkipped(userId, runId, "CDN_PUBLISH", "OTA disabled for project")
             return
         }
-        runCatching { runCdnPublish(userId, runId, project.id, project.autoPromote) }
+        runCatching { runCdnPublish(userId, runId, project.id, project.autoPromote, project.rolloutPercent) }
             .onFailure { e ->
                 log.error("CDN publish failed for project={}: {}", project.id, e.message, e)
                 eventBus.stepError(userId, runId, "CDN_PUBLISH", e.message ?: e.javaClass.simpleName)
             }
     }
 
-    private suspend fun runCdnPublish(userId: String, runId: String, projectId: String, promote: Boolean) {
+    private suspend fun runCdnPublish(userId: String, runId: String, projectId: String, promote: Boolean, rolloutPercent: Int = 100) {
         eventBus.stepRunning(userId, runId, "CDN_PUBLISH", "Compiling bundles…")
-        val receipt = cdnPublishService.publish(projectId, promote = promote)
+        val receipt = cdnPublishService.publish(projectId, promote = promote, rolloutPercent = rolloutPercent)
         if (receipt.skipped) {
             val reason = when (receipt.skipReason) {
                 "bundle_unchanged" -> "Bundle unchanged — already live"
@@ -381,7 +439,11 @@ class TranslationPipeline(
             }
             eventBus.stepSkipped(userId, runId, "CDN_PUBLISH", reason)
         } else {
-            val promotedNote = if (!promote) " (staged, not promoted)" else ""
+            val promotedNote = when (receipt.pointer) {
+                "canary" -> " (canary, ${rolloutPercent}% rollout)"
+                null -> " (staged, not promoted)"
+                else -> ""
+            }
             val detail = "${receipt.locales.size} locale${if (receipt.locales.size != 1) "s" else ""} live on edge$promotedNote"
             eventBus.stepDone(userId, runId, "CDN_PUBLISH", detail)
             if (promote) eventBus.emitCdnReady(userId, runId, receipt.bundleVersion, receipt.locales)
@@ -395,6 +457,12 @@ class TranslationPipeline(
         else -> msg
     }
 
+    private data class TargetOutcome(
+        val approved: Map<String, String>,
+        val count: Int,
+        val cacheHits: Int
+    )
+
     private suspend fun processTarget(
         payload: WebhookPayload,
         project: Project,
@@ -404,9 +472,10 @@ class TranslationPipeline(
         runId: String,
         commitShort: String,
         userId: String
-    ): Pair<Map<String, String>, Int> {
+    ): TargetOutcome {
         val laneTotal = addedStrings.size
         val laneDone = AtomicInteger(0)
+        val localeCacheHits = AtomicInteger(0)
         fun bumpLane(delta: Int) {
             if (delta <= 0) return
             val d = laneDone.addAndGet(delta).coerceAtMost(laneTotal)
@@ -495,7 +564,9 @@ class TranslationPipeline(
                                 sourceText = sourceText, targetLanguage = target.name, targetRegion = target.region
                             )
                         }
-                        val batchResults = translationService.translateBatch(keyedContexts)
+                        val batchOutcome = translationService.translateBatchTracked(keyedContexts)
+                        val batchResults = batchOutcome.results
+                        localeCacheHits.addAndGet(batchOutcome.cacheHits)
                         bumpLane(batch.size)
                         batch.keys.map { key ->
                             val sourceText = batch[key]!!
@@ -564,7 +635,7 @@ class TranslationPipeline(
             .filter { it.status == "auto" }
             .associate { it.key to it.text }
         val count = finalResults.count { it != null }
-        return approved to count
+        return TargetOutcome(approved, count, localeCacheHits.get())
     }
 
     private suspend fun classifyModifiedStrings(

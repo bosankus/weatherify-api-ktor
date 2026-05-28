@@ -25,6 +25,7 @@ import com.transloom.queue.TranslationJobQueue
 import com.transloom.queue.WebhookPayload
 import com.transloom.services.PipelineEventBus
 import com.transloom.services.StringParserService
+import com.transloom.repository.PipelineRunRepository
 import kotlinx.serialization.Serializable
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -104,7 +105,8 @@ fun Route.configureApiRoutes(
     userActivityService: UserActivityService,
     memberships: ProjectMembershipRepository,
     cdnPublishService: CdnPublishService? = null,
-    translationService: TranslationService
+    translationService: TranslationService,
+    pipelineRunRepository: PipelineRunRepository? = null
 ) {
 
     route("/transloom/api") {
@@ -376,6 +378,21 @@ fun Route.configureApiRoutes(
                     }
                 }
 
+                // Gate outbound webhook + quota + rollout on paid plans
+                val currentPlan = billingService.getPlan(userId)
+                val isPaidPlan = currentPlan != com.transloom.domain.BillingPlan.FREE
+
+                if (!body.outboundWebhookUrl.isNullOrBlank() && !isPaidPlan) {
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Outbound webhooks require a Solo or Team plan."))
+                }
+                if (body.monthlyStringQuota != null && !isPaidPlan) {
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Per-project string quotas require a Solo or Team plan."))
+                }
+                if (body.rolloutPercent != null && !isPaidPlan) {
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("CDN canary rollout requires a Solo or Team plan."))
+                }
+                val validatedRollout = body.rolloutPercent?.coerceIn(0, 100)
+
                 projectRepository.update(
                     projectId = projectId,
                     name = body.name,
@@ -389,7 +406,11 @@ fun Route.configureApiRoutes(
                     otaEnabled = body.otaEnabled,
                     autoPromote = body.autoPromote,
                     sharedMemoryOptIn = body.sharedMemoryOptIn,
-                    prBranchPattern = validatedBranchPattern
+                    prBranchPattern = validatedBranchPattern,
+                    outboundWebhookUrl = body.outboundWebhookUrl,
+                    outboundWebhookSecret = body.outboundWebhookSecret,
+                    monthlyStringQuota = body.monthlyStringQuota,
+                    rolloutPercent = validatedRollout
                 )
 
                 val updated = projectRepository.findById(projectId)
@@ -416,7 +437,10 @@ fun Route.configureApiRoutes(
                         otaEnabled = updated.otaEnabled,
                         autoPromote = updated.autoPromote,
                         webhookVerifiedAt = updated.webhookVerifiedAt?.toString(),
-                        prBranchPattern = updated.prBranchPattern
+                        prBranchPattern = updated.prBranchPattern,
+                        outboundWebhookUrl = updated.outboundWebhookUrl,
+                        monthlyStringQuota = updated.monthlyStringQuota,
+                        rolloutPercent = updated.rolloutPercent
                     )
                 )
             }
@@ -448,7 +472,10 @@ fun Route.configureApiRoutes(
                         otaEnabled = project.otaEnabled,
                         autoPromote = project.autoPromote,
                         webhookVerifiedAt = project.webhookVerifiedAt?.toString(),
-                        prBranchPattern = project.prBranchPattern
+                        prBranchPattern = project.prBranchPattern,
+                        outboundWebhookUrl = project.outboundWebhookUrl,
+                        monthlyStringQuota = project.monthlyStringQuota,
+                        rolloutPercent = project.rolloutPercent
                     )
                 )
             }
@@ -940,6 +967,33 @@ fun Route.configureApiRoutes(
             val userId = call.userId()
                 ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
             call.respond(mapOf("runs" to pipelineEventBus.recentRuns(userId)))
+        }
+
+        // Returns translation memory cache hit stats aggregated over the last 90 days.
+        // Shows paid users how much quota they saved via caching (both local TM and shared pool).
+        get("/pipeline/cache-stats") {
+            val userId = call.userId()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val repo = pipelineRunRepository
+            if (repo == null) {
+                call.respond(HttpStatusCode.OK, mapOf(
+                    "cacheHits" to 0, "stringsTranslated" to 0,
+                    "cacheHitRate" to 0.0, "geminiCallsSaved" to 0
+                ))
+                return@get
+            }
+            val since = System.currentTimeMillis() - 90L * 24 * 3600 * 1000
+            val runs = runCatching { repo.listForOwner(userId, since, limit = 500) }.getOrElse { emptyList() }
+            val totalCacheHits = runs.sumOf { it.cacheHits }
+            val totalTranslated = runs.sumOf { it.stringsTranslated }
+            val total = totalCacheHits + totalTranslated
+            val hitRate = if (total > 0) totalCacheHits.toDouble() / total else 0.0
+            call.respond(HttpStatusCode.OK, mapOf(
+                "cacheHits" to totalCacheHits,
+                "stringsTranslated" to totalTranslated,
+                "cacheHitRate" to hitRate,
+                "geminiCallsSaved" to totalCacheHits
+            ))
         }
 
         // SSE stream of real-time pipeline events. EventSource can't send Authorization headers,

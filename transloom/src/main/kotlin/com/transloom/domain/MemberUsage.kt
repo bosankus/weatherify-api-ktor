@@ -46,5 +46,7 @@ data class PipelineRunSummary(
     val status: String,            // succeeded | failed | partial
     val stringsTranslated: Int,
     val stringsPerLocale: Map<String, Int>,
-    val error: String?
+    val error: String?,
+    /** Number of strings served from translation memory cache (not billed, not Gemini calls). */
+    val cacheHits: Int = 0
 )

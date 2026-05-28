@@ -27,7 +27,23 @@ data class Project(
     /** When true, a successful publish is auto-promoted to the active version. When false, devs must promote manually. */
     val autoPromote: Boolean = true,
     /** Custom PR branch name pattern. Supports {timestamp}, {date}, {branch} tokens. Solo/Team only. */
-    val prBranchPattern: String? = null
+    val prBranchPattern: String? = null,
+    /** URL to POST outbound webhook payloads to after each pipeline run. Solo/Team only. */
+    val outboundWebhookUrl: String? = null,
+    /** HMAC-SHA256 signing secret for outbound webhook payloads. Stored encrypted. */
+    val outboundWebhookSecret: String? = null,
+    /**
+     * Per-project monthly string cap (independent of plan-level quota). When set, the pipeline
+     * hard-stops for this project once this many strings have been translated in the current month,
+     * even if the owner's plan quota has headroom. Solo/Team only. Null = no project-level cap.
+     */
+    val monthlyStringQuota: Int? = null,
+    /**
+     * CDN canary rollout percentage (0–100). When < 100 and OTA is enabled, a new publish writes
+     * the `canary` pointer instead of `active`. Client SDKs receive the canary bundle when
+     * hash(userId) % 100 < rolloutPercent. 100 = full rollout (writes `active`). Solo/Team only.
+     */
+    val rolloutPercent: Int = 100
 )
 
 @Serializable

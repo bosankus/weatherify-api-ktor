@@ -137,6 +137,32 @@ class CloudflareR2Service(
         return true
     }
 
+    /**
+     * Deletes the object at [key]. No-ops silently if the key does not exist.
+     */
+    suspend fun delete(key: String) {
+        val now = Instant.now()
+        val amzDate = DATE_TIME_FMT.format(now)
+        val dateStamp = DATE_FMT.format(now)
+        val path = "/$bucketName/$key"
+
+        val signedHeaders = treeMapOf(
+            "host" to host,
+            "x-amz-content-sha256" to EMPTY_HASH,
+            "x-amz-date" to amzDate
+        )
+        val auth = sign("DELETE", path, EMPTY_HASH, signedHeaders, dateStamp, amzDate)
+
+        val response: HttpResponse = http.delete("https://$host$path") {
+            header("x-amz-date", amzDate)
+            header("x-amz-content-sha256", EMPTY_HASH)
+            header(HttpHeaders.Authorization, auth)
+        }
+        if (!response.status.isSuccess() && response.status != HttpStatusCode.NotFound) {
+            log.warn("R2 DELETE non-fatal: key={} status={}", key, response.status)
+        }
+    }
+
     override fun close() = http.close()
 
     private fun sign(

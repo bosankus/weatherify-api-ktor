@@ -29,7 +29,11 @@ interface ProjectRepository {
         otaEnabled: Boolean? = null,
         autoPromote: Boolean? = null,
         sharedMemoryOptIn: Boolean? = null,
-        prBranchPattern: String? = null
+        prBranchPattern: String? = null,
+        outboundWebhookUrl: String? = null,
+        outboundWebhookSecret: String? = null,
+        monthlyStringQuota: Int? = null,
+        rolloutPercent: Int? = null
     ): Boolean
 
     suspend fun delete(projectId: String)
