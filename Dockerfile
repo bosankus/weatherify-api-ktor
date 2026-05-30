@@ -14,7 +14,7 @@ COPY gradlew.bat .
 # Copy submodule build files before dependency download so Gradle can resolve all projects
 COPY core/build.gradle.kts core/build.gradle.kts
 COPY weatherify/build.gradle.kts weatherify/build.gradle.kts
-COPY transloom/build.gradle.kts transloom/build.gradle.kts
+COPY syncling/build.gradle.kts syncling/build.gradle.kts
 
 # Make gradlew executable
 RUN chmod +x gradlew
@@ -27,7 +27,7 @@ RUN ./gradlew --version && \
 COPY src/ src/
 COPY core/src/ core/src/
 COPY weatherify/src/ weatherify/src/
-COPY transloom/src/ transloom/src/
+COPY syncling/src/ syncling/src/
 
 # Build the application using the gradle wrapper
 RUN echo "================================" && \
