@@ -113,7 +113,7 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "razorpay-key-id"          -> "dummy_razorpay_key_id"
     "razorpay-webhook-secret"  -> "dummy_razorpay_webhook_secret"
     "sendgrid-api-key"         -> ""
-    // Transloom
+    // Syncling
     "mongo-uri"                -> "mongodb://localhost:27017"
     "token-encryption-key"     -> "dev_token_encryption_key_32chars!"
     "allowed-origin"           -> "http://localhost:5173"

@@ -1,8 +1,19 @@
-name: Auto Deploy on Main
+name: Deploy Weatherify on Main
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'weatherify/src/**'
+      - 'syncling/src/**'
+      - 'core/src/**'
+      - 'Dockerfile'
+      - 'build.gradle.kts'
+      - 'weatherify/build.gradle.kts'
+      - 'core/build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/auto-deploy-on-main.yml'
 
 jobs:
   deploy:

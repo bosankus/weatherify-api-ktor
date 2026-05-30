@@ -1,0 +1,72 @@
+name: Deploy Syncling on Main
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'syncling/src/**'
+      - 'core/src/**'
+      - 'syncling/Dockerfile'
+      - 'syncling/cloudbuild.yaml'
+      - 'syncling/build.gradle.kts'
+      - 'core/build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/deploy-syncling.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Google Auth (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: '>= 468.0.0'
+
+      - name: Build and push Docker image via Cloud Build
+        run: |
+          gcloud builds submit \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --config syncling/cloudbuild.yaml \
+            --substitutions="_IMAGE=gcr.io/${{ secrets.GCP_PROJECT_ID }}/transloom-api" \
+            .
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy transloom-api \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/transloom-api" \
+            --platform managed \
+            --region asia-southeast1 \
+            --allow-unauthenticated \
+            --update-env-vars="FRONTEND_URL=https://data.androidplay.in/transloom/app,ALLOWED_ORIGIN=https://data.androidplay.in,APP_URL=https://data.androidplay.in" \
+            --update-secrets=MONGO_URI=mongo-uri:latest \
+            --update-secrets=JWT_SECRET=jwt-secret:latest \
+            --update-secrets=TOKEN_ENCRYPTION_KEY=token-encryption-key:latest \
+            --update-secrets=REDIS_URL=redis-url:latest \
+            --update-secrets=GITHUB_CLIENT_ID=github-client-id:latest \
+            --update-secrets=GITHUB_CLIENT_SECRET=github-client-secret:latest \
+            --update-secrets=GITHUB_WEBHOOK_SECRET=github-webhook-secret:latest \
+            --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
+            --update-secrets=CLOUDFLARE_ACCOUNT_ID=cloudflare-account-id:latest \
+            --update-secrets=CLOUDFLARE_R2_BUCKET_NAME=cloudflare-r2-bucket-name:latest \
+            --update-secrets=CLOUDFLARE_R2_ACCESS_KEY_ID=cloudflare-r2-access-key-id:latest \
+            --update-secrets=CLOUDFLARE_R2_SECRET_ACCESS_KEY=cloudflare-r2-secret-access-key:latest \
+            --update-secrets=RAZORPAY_KEY_ID=razorpay-key-id:latest \
+            --update-secrets=RAZORPAY_SECRET=razorpay-secret:latest \
+            --update-secrets=RAZORPAY_WEBHOOK_SECRET=razorpay-webhook-secret:latest \
+            --update-secrets=RAZORPAY_PLAN_ID_SOLO=razorpay-plan-id-solo:latest \
+            --update-secrets=RAZORPAY_PLAN_ID_TEAM=razorpay-plan-id-team:latest

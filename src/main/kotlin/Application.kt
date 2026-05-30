@@ -25,7 +25,7 @@ fun Application.module() {
     configureAuthentication()
     configureRouting()
     val refundService by inject<RefundService>()
-    configureTransloom(refundService)
+    configureSyncling(refundService)
     configureFirebase()
     configureServiceCatalogSeeding()
     configureServiceTypeResolver()

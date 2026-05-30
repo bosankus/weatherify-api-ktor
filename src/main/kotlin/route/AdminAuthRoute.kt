@@ -1583,6 +1583,63 @@ fun Route.adminAuthRoute() {
         }
     }
 
+    // Support ticket admin endpoints
+    route("/support") {
+        // GET /admin/support/tickets?status=open|acknowledged|resolved
+        get("/tickets") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
+            val status = call.request.queryParameters["status"]?.trim()?.lowercase()
+            logger.info("Admin ${admin.email} listing support tickets status={}", status ?: "all")
+            val repo = application.attributes.getOrNull(com.syncling.SupportTicketRepoKey)
+            if (repo == null) {
+                call.respondError("Support ticket repository not available", Unit, HttpStatusCode.ServiceUnavailable)
+                return@get
+            }
+            try {
+                val tickets = repo.listAll(status = status)
+                call.respondSuccess("Support tickets retrieved", mapOf("tickets" to tickets, "count" to tickets.size))
+            } catch (e: Exception) {
+                logger.error("Failed to list support tickets: {}", e.message)
+                call.respondError("Failed to retrieve tickets: ${e.message}", Unit, HttpStatusCode.InternalServerError)
+            }
+        }
+
+        // PATCH /admin/support/tickets/{id}/status
+        patch("/tickets/{id}/status") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@patch
+            val ticketId = call.parameters["id"]?.trim()
+            if (ticketId.isNullOrBlank()) {
+                call.respondError("Ticket ID is required", Unit, HttpStatusCode.BadRequest)
+                return@patch
+            }
+            @kotlinx.serialization.Serializable
+            data class StatusBody(val status: String)
+            val body = runCatching { call.receive<StatusBody>() }.getOrNull()
+            val newStatus = body?.status?.trim()?.lowercase()
+            if (newStatus == null || newStatus !in setOf("open", "acknowledged", "resolved")) {
+                call.respondError("status must be open, acknowledged, or resolved", Unit, HttpStatusCode.BadRequest)
+                return@patch
+            }
+            val repo = application.attributes.getOrNull(com.syncling.SupportTicketRepoKey)
+            if (repo == null) {
+                call.respondError("Support ticket repository not available", Unit, HttpStatusCode.ServiceUnavailable)
+                return@patch
+            }
+            try {
+                val updated = repo.updateStatus(ticketId, newStatus)
+                if (updated) {
+                    logger.info("Admin {} updated ticket {} to {}", admin.email, ticketId.take(8), newStatus)
+                    call.respondSuccess("Ticket status updated", mapOf("id" to ticketId, "status" to newStatus))
+                } else {
+                    call.respondError("Ticket not found", Unit, HttpStatusCode.NotFound)
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to update ticket status: {}", e.message)
+                call.respondError("Failed to update ticket: ${e.message}", Unit, HttpStatusCode.InternalServerError)
+            }
+        }
+    }
+
     get("/dashboard") {
         // Check authentication without responding (to allow redirect)
         when (val authResult = call.authenticateAdmin()) {
@@ -2498,6 +2555,13 @@ fun Route.adminAuthRoute() {
                                                     raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>notes</span> Notes")
                                                 }
                                             }
+                                            span {
+                                                classes = setOf("tab")
+                                                attributes["data-tab"] = "support"
+                                                unsafe {
+                                                    raw("<span class='material-icons' style='font-size:18px; vertical-align:middle; margin-right:6px;'>support_agent</span> Support <span id='support-open-badge' style='display:none;font-size:11px;font-weight:700;background:#f59e0b;color:#000;border-radius:10px;padding:1px 7px;margin-left:4px;vertical-align:middle;'></span>")
+                                                }
+                                            }
                                         }
 
                                         // Tabs content panels
@@ -3096,6 +3160,74 @@ fun Route.adminAuthRoute() {
                                                         }
                                                     }
 
+                                                }
+                                            }
+
+                                            // Support Tickets Panel
+                                            div {
+                                                classes = setOf("tab-panel")
+                                                id = "support"
+                                                style = "width: 100%; box-sizing: border-box;"
+                                                div {
+                                                    classes = setOf("dashboard-card")
+                                                    div {
+                                                        classes = setOf("dashboard-card-title")
+                                                        unsafe {
+                                                            raw("<span class='material-icons' style='font-size:18px;vertical-align:middle;margin-right:6px;'>support_agent</span> Support Tickets")
+                                                        }
+                                                    }
+                                                    div {
+                                                        classes = setOf("dashboard-card-content")
+                                                        unsafe {
+                                                            raw("""
+<div id="support-loader" class="skeleton" style="height:6px;width:100%;display:none;"></div>
+
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;">
+  <select id="support-status-filter" class="form-control" style="width:160px;">
+    <option value="">All tickets</option>
+    <option value="open">Open</option>
+    <option value="acknowledged">Acknowledged</option>
+    <option value="resolved">Resolved</option>
+  </select>
+  <button id="support-refresh-btn" class="btn btn-secondary">
+    <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">refresh</span>Refresh
+  </button>
+  <span id="support-count-label" style="font-size:0.875rem;color:var(--text-secondary);margin-left:auto;"></span>
+</div>
+
+<div style="overflow-x:auto;">
+<table class="payments-table" id="support-tickets-table" style="min-width:700px;">
+  <thead>
+    <tr>
+      <th style="width:100px">ID</th>
+      <th>User</th>
+      <th style="width:110px">Category</th>
+      <th>Subject</th>
+      <th style="width:120px">Status</th>
+      <th style="width:110px">Date</th>
+      <th style="width:130px;text-align:center">Action</th>
+    </tr>
+  </thead>
+  <tbody id="support-tickets-body">
+    <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-secondary);">Loading…</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- Ticket detail sliding panel (reuse sliding-panel pattern) -->
+<div id="support-detail-backdrop" class="sliding-backdrop" onclick="window.closeSupportDetail()"></div>
+<div id="support-detail-panel" class="sliding-panel" style="display:none;">
+  <div class="sliding-panel-header">
+    <h2 class="sliding-panel-title" id="support-detail-title">Ticket</h2>
+    <button class="sliding-panel-close" onclick="window.closeSupportDetail()" aria-label="Close panel">
+      <span class="material-icons">close</span>
+    </button>
+  </div>
+  <div id="support-detail-body" style="padding:1.5rem;overflow-y:auto;flex:1;"></div>
+</div>
+""")
+                                                        }
+                                                    }
                                                 }
                                             }
 

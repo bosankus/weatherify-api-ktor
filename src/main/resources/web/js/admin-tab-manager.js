@@ -443,8 +443,225 @@
                 window.AdminTabManager.markLoaded('tools');
             },
             refreshInterval: null // No auto-refresh
+        },
+
+        'support': {
+            name: 'Support',
+            loadFn: async function (forceRefresh = false) {
+                console.log('[Tab] Loading Support tab', { forceRefresh });
+
+                const tab = window.AdminTabManager.getTab('support');
+                if (!forceRefresh && tab && tab.loaded && !window.AdminTabManager.needsRefresh('support', 2 * 60 * 1000)) {
+                    console.log('[Tab] Support already loaded, skipping API call');
+                    return;
+                }
+
+                window.AdminTabManager.markLoading('support');
+
+                try {
+                    if (typeof window.loadSupportTickets === 'function') {
+                        await window.loadSupportTickets(forceRefresh);
+                    }
+                    window.AdminTabManager.markLoaded('support');
+                } catch (error) {
+                    console.error('[Tab] Error loading Support:', error);
+                    window.AdminTabManager.markError('support', error.message);
+                    throw error;
+                }
+            },
+            refreshInterval: 2 * 60 * 1000 // 2 minutes
         }
     };
+
+    // ── Support Tickets Module ────────────────────────────────────────────────
+
+    let _supportTickets = [];
+
+    function getCookieToken() {
+        const m = document.cookie.match(/(?:^|;\s*)jwt_token=([^;]*)/);
+        return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    function adminHeaders() {
+        const token = getCookieToken() || localStorage.getItem('jwt_token');
+        return token
+            ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+            : { 'Content-Type': 'application/json' };
+    }
+
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = String(s == null ? '' : s);
+        return d.innerHTML;
+    }
+
+    function fmtDate(ms) {
+        return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    const CAT_COLORS = {
+        bug: 'background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)',
+        question: 'background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)',
+        feature: 'background:rgba(139,92,246,.15);color:#8b5cf6;border:1px solid rgba(139,92,246,.3)',
+        billing: 'background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)',
+    };
+    const ST_COLORS = {
+        open: 'background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)',
+        acknowledged: 'background:rgba(99,102,241,.15);color:#6366f1;border:1px solid rgba(99,102,241,.3)',
+        resolved: 'background:rgba(107,114,128,.15);color:#6b7280;border:1px solid rgba(107,114,128,.3)',
+    };
+
+    function renderSupportTable(tickets) {
+        const tbody = document.getElementById('support-tickets-body');
+        if (!tbody) return;
+        if (!tickets || !tickets.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-secondary);">No tickets found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = tickets.map(t => {
+            const catStyle = CAT_COLORS[t.category] || '';
+            const stStyle = ST_COLORS[t.status] || '';
+            return `<tr>
+                <td><code style="font-size:0.78rem">${escHtml(t.id.substring(0, 8))}</code></td>
+                <td style="font-size:0.85rem">${escHtml(t.userEmail || t.userId.substring(0, 12))}</td>
+                <td><span class="status-badge" style="${catStyle}">${escHtml(t.category)}</span></td>
+                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" onclick="window.openSupportDetail('${escHtml(t.id)}')" title="${escHtml(t.subject)}">${escHtml(t.subject)}</td>
+                <td>
+                  <select class="form-control" style="font-size:0.8rem;padding:4px 6px;" onchange="window.updateTicketStatus('${escHtml(t.id)}', this.value)">
+                    <option value="open"${t.status==='open'?' selected':''}>Open</option>
+                    <option value="acknowledged"${t.status==='acknowledged'?' selected':''}>Acknowledged</option>
+                    <option value="resolved"${t.status==='resolved'?' selected':''}>Resolved</option>
+                  </select>
+                </td>
+                <td style="font-size:0.8rem;color:var(--text-secondary)">${fmtDate(t.createdAt)}</td>
+                <td style="text-align:center">
+                  <button class="btn btn-secondary" style="font-size:0.75rem;padding:4px 10px;" onclick="window.openSupportDetail('${escHtml(t.id)}')">View</button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    function updateOpenBadge(tickets) {
+        const badge = document.getElementById('support-open-badge');
+        if (!badge) return;
+        const openCount = (tickets || []).filter(t => t.status === 'open').length;
+        if (openCount > 0) {
+            badge.textContent = String(openCount);
+            badge.style.display = 'inline';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    window.loadSupportTickets = async function (forceRefresh = false) {
+        const statusFilter = document.getElementById('support-status-filter');
+        const status = statusFilter ? statusFilter.value : '';
+        const url = '/admin/support/tickets' + (status ? '?status=' + encodeURIComponent(status) : '');
+        const loader = document.getElementById('support-loader');
+        if (loader) loader.style.display = 'block';
+        try {
+            const res = await fetch(url, { headers: adminHeaders() });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            _supportTickets = data.data && data.data.tickets ? data.data.tickets : [];
+            renderSupportTable(_supportTickets);
+            updateOpenBadge(_supportTickets);
+            const label = document.getElementById('support-count-label');
+            if (label) label.textContent = _supportTickets.length + ' ticket' + (_supportTickets.length !== 1 ? 's' : '');
+        } catch (e) {
+            console.error('[Support] Failed to load tickets:', e);
+            const tbody = document.getElementById('support-tickets-body');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#ef4444;">Failed to load tickets: ' + escHtml(e.message) + '</td></tr>';
+        } finally {
+            if (loader) loader.style.display = 'none';
+        }
+    };
+
+    window.updateTicketStatus = async function (id, newStatus) {
+        try {
+            const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/status', {
+                method: 'PATCH',
+                headers: adminHeaders(),
+                body: JSON.stringify({ status: newStatus }),
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const t = _supportTickets.find(x => x.id === id);
+            if (t) t.status = newStatus;
+            updateOpenBadge(_supportTickets);
+            // Refresh detail panel if open
+            if (document.getElementById('support-detail-panel')?.style.display !== 'none') {
+                window.openSupportDetail(id);
+            }
+        } catch (e) {
+            alert('Failed to update status: ' + e.message);
+        }
+    };
+
+    window.openSupportDetail = function (id) {
+        const t = _supportTickets.find(x => x.id === id);
+        if (!t) return;
+        const stStyle = ST_COLORS[t.status] || '';
+        const catStyle = CAT_COLORS[t.category] || '';
+        const panel = document.getElementById('support-detail-panel');
+        const backdrop = document.getElementById('support-detail-backdrop');
+        const title = document.getElementById('support-detail-title');
+        const body = document.getElementById('support-detail-body');
+        if (!panel || !body) return;
+        if (title) title.textContent = 'Ticket ' + t.id.substring(0, 8);
+        body.innerHTML = `
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem;">
+              <span class="status-badge" style="${catStyle}">${escHtml(t.category)}</span>
+              <span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span>
+            </div>
+            <div style="margin-bottom:1rem;">
+              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Subject</div>
+              <div style="font-size:1rem;font-weight:600;color:var(--text-color);">${escHtml(t.subject)}</div>
+            </div>
+            <div style="margin-bottom:1rem;">
+              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">From</div>
+              <div style="font-size:0.875rem;color:var(--text-color);">${escHtml(t.userEmail || t.userId)}</div>
+            </div>
+            <div style="margin-bottom:1.25rem;">
+              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Message</div>
+              <div style="font-size:0.875rem;color:var(--text-color);background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;padding:12px 14px;white-space:pre-wrap;line-height:1.6;">${escHtml(t.message)}</div>
+            </div>
+            <div style="margin-bottom:1.5rem;">
+              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Submitted</div>
+              <div style="font-size:0.875rem;color:var(--text-color);">${fmtDate(t.createdAt)}</div>
+            </div>
+            <div>
+              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Update Status</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                ${['open','acknowledged','resolved'].map(s =>
+                  `<button onclick="window.updateTicketStatus('${escHtml(t.id)}','${s}');document.getElementById('support-detail-panel').querySelectorAll('button').forEach(b=>b.style.outline='none');this.style.outline='2px solid #6366f1';window.openSupportDetail('${escHtml(t.id)}')" class="btn ${t.status===s?'btn-primary':'btn-secondary'}" style="font-size:0.8rem;">${s.charAt(0).toUpperCase()+s.slice(1)}</button>`
+                ).join('')}
+              </div>
+            </div>`;
+        panel.style.display = 'flex';
+        if (backdrop) { backdrop.style.display = 'block'; backdrop.classList.add('open'); }
+        setTimeout(() => panel.classList.add('open'), 10);
+    };
+
+    window.closeSupportDetail = function () {
+        const panel = document.getElementById('support-detail-panel');
+        const backdrop = document.getElementById('support-detail-backdrop');
+        if (panel) { panel.classList.remove('open'); setTimeout(() => { panel.style.display = 'none'; }, 250); }
+        if (backdrop) { backdrop.classList.remove('open'); backdrop.style.display = 'none'; }
+    };
+
+    // Wire status filter dropdown + refresh button once DOM is ready
+    function wireSupportControls() {
+        const filter = document.getElementById('support-status-filter');
+        if (filter) filter.addEventListener('change', () => window.loadSupportTickets(true));
+        const refresh = document.getElementById('support-refresh-btn');
+        if (refresh) refresh.addEventListener('click', () => window.loadSupportTickets(true));
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', wireSupportControls);
+    } else {
+        wireSupportControls();
+    }
 
     /**
      * Initialize tab manager

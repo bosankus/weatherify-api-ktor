@@ -25,7 +25,7 @@ com.androidplay.core.common         # Result, shared exceptions
 com.androidplay.core.di             # coreInfraModule (Mongo + cache + queue beans only)
 ```
 
-Everything else moves to `:weatherify` (new module) or `:transloom` (existing).
+Everything else moves to `:weatherify` (new module) or `:syncling` (existing).
 
 ---
 
@@ -246,7 +246,7 @@ The legacy app at `src/main/kotlin` will become an application module that depen
 
 **Files:**
 - New `weatherify/build.gradle.kts` — mirrors `:core` plugins + `dependencies { api(project(":core")); implementation(libs.koin.core); ... }`
-- Update `settings.gradle.kts`: `include(":core", ":transloom", ":weatherify")`
+- Update `settings.gradle.kts`: `include(":core", ":syncling", ":weatherify")`
 - Create `weatherify/src/main/kotlin/.gitkeep`
 
 **Verification:** `./gradlew :weatherify:compileKotlin` (compiles empty module)
@@ -345,9 +345,9 @@ Once 3.7 builds green, the now-unused `MongoDatabaseFactory.weatherifyClientSett
 
 ---
 
-## Phase 4 — Move transloom-specific code out of `:core`
+## Phase 4 — Move syncling-specific code out of `:core`
 
-### Step 4.1 — Move `com.transloom.core.domain.*` to `:transloom`
+### Step 4.1 — Move `com.syncling.core.domain.*` to `:syncling`
 
 **Move:** every file in `core/src/main/kotlin/com/transloom/core/domain/` → `transloom/src/main/kotlin/com/transloom/domain/`. Package becomes `com.transloom.domain`.
 
@@ -355,9 +355,9 @@ Once 3.7 builds green, the now-unused `MongoDatabaseFactory.weatherifyClientSett
 
 **Subagent prompt:**
 
-> Move all files under `core/src/main/kotlin/com/transloom/core/domain/` to `transloom/src/main/kotlin/com/transloom/domain/`. Change each file's package declaration from `com.transloom.core.domain` to `com.transloom.domain`. Grep for `com.transloom.core.domain` and update all importers. Run `./gradlew build`.
+> Move all files under `core/src/main/kotlin/com/transloom/core/domain/` to `transloom/src/main/kotlin/com/transloom/domain/`. Change each file's package declaration from `com.syncling.core.domain` to `com.transloom.domain`. Grep for `com.syncling.core.domain` and update all importers. Run `./gradlew build`.
 
-### Step 4.2 — Move transloom repository interfaces
+### Step 4.2 — Move syncling repository interfaces
 
 **Move:** `core/src/main/kotlin/com/transloom/core/repository/*.kt` → `transloom/src/main/kotlin/com/transloom/repository/`. Package `com.transloom.repository`. Update importers.
 
@@ -365,9 +365,9 @@ Once 3.7 builds green, the now-unused `MongoDatabaseFactory.weatherifyClientSett
 
 **Subagent prompt:**
 
-> Move all six transloom repository interface files from `core/src/main/kotlin/com/transloom/core/repository/` to `transloom/src/main/kotlin/com/transloom/repository/`. Update package to `com.transloom.repository`. Grep `com.transloom.core.repository` and update imports. Run `./gradlew build`.
+> Move all six transloom repository interface files from `core/src/main/kotlin/com/transloom/core/repository/` to `transloom/src/main/kotlin/com/transloom/repository/`. Update package to `com.transloom.repository`. Grep `com.syncling.core.repository` and update imports. Run `./gradlew build`.
 
-### Step 4.3 — Move transloom Mongo repository impls
+### Step 4.3 — Move syncling Mongo repository impls
 
 **Move:** `core/src/main/kotlin/com/transloom/core/mongodb/Mongo*Repository.kt` → `transloom/src/main/kotlin/com/transloom/repository/mongo/`. Package `com.transloom.repository.mongo`. Leave `MongoDatabase.kt` (the factory) in core for now.
 
@@ -377,23 +377,23 @@ Once 3.7 builds green, the now-unused `MongoDatabaseFactory.weatherifyClientSett
 
 > Move the six `Mongo*Repository.kt` files from `core/src/main/kotlin/com/transloom/core/mongodb/` to `transloom/src/main/kotlin/com/transloom/repository/mongo/`. Update package to `com.transloom.repository.mongo`. Do NOT move `MongoDatabase.kt` (the factory) yet. Update importers. Run `./gradlew build`.
 
-### Step 4.4 — Move `coreModule` Koin DI to `:transloom` and port to `coreInfraModule`
+### Step 4.4 — Move `coreModule` Koin DI to `:syncling` and port to `coreInfraModule`
 
-Mirror of 3.7 for transloom.
+Mirror of 3.7 for syncling.
 
 **Move:** `core/src/main/kotlin/com/transloom/core/di/CoreModule.kt` → `transloom/src/main/kotlin/com/transloom/di/TransloomModule.kt`. Rename function `coreModule` → `transloomModule`. Package `com.transloom.di`.
 
-**Edit:** Rewrite to consume `MongoDatabase` from `coreInfraModule`. Export `transloomIndexes(): List<IndexSpec>` from the contents of `MongoDatabaseFactory.createTransloomIndexes`.
+**Edit:** Rewrite to consume `MongoDatabase` from `coreInfraModule`. Export `synclingIndexes(): List<IndexSpec>` from the contents of `MongoDatabaseFactory.createSynclingIndexes`.
 
-**Edit:** `transloom/src/main/kotlin/com/transloom/Application.kt` — replace `coreModule(uri, key, dbName) + cacheModule(redisUrl)` with `coreInfraModule(uri, dbName, redisUrl) + transloomModule(encryptionKey)`. Add `MongoIndexer.ensure(get(), transloomIndexes())` at startup.
+**Edit:** `transloom/src/main/kotlin/com/transloom/Application.kt` — replace `coreModule(uri, key, dbName) + cacheModule(redisUrl)` with `coreInfraModule(uri, dbName, redisUrl) + transloomModule(encryptionKey)`. Add `MongoIndexer.ensure(get(), synclingIndexes())` at startup.
 
 **Verification:** `./gradlew build`
 
 **Subagent prompt:**
 
 > Step 4.4 — see `docs/core-migration-plan.md`. Tasks:
-> 1. Move `core/src/main/kotlin/com/transloom/core/di/CoreModule.kt` to `transloom/src/main/kotlin/com/transloom/di/TransloomModule.kt`. Rename the function `coreModule` to `transloomModule(encryptionKey: String)` (drop mongoUri/databaseName parameters — those are owned by `coreInfraModule`). Do not create a `MongoDatabase` bean inside this module. Add a top-level `transloomIndexes(): List<IndexSpec>` containing the index specs currently in `MongoDatabaseFactory.createTransloomIndexes` (verbatim translation, lines 109–155 of `core/src/main/kotlin/com/transloom/core/mongodb/MongoDatabase.kt`).
-> 2. Edit `transloom/src/main/kotlin/com/transloom/Application.kt`: replace `coreModule(...) + cacheModule(...)` with `coreInfraModule(mongoUri, dbName, redisUrl) + transloomModule(encryptionKey)`. After `startKoin`, call `runBlocking { MongoIndexer.ensure(get<MongoDatabase>(), transloomIndexes()) }`.
+> 1. Move `core/src/main/kotlin/com/transloom/core/di/CoreModule.kt` to `transloom/src/main/kotlin/com/transloom/di/TransloomModule.kt`. Rename the function `coreModule` to `transloomModule(encryptionKey: String)` (drop mongoUri/databaseName parameters — those are owned by `coreInfraModule`). Do not create a `MongoDatabase` bean inside this module. Add a top-level `synclingIndexes(): List<IndexSpec>` containing the index specs currently in `MongoDatabaseFactory.createSynclingIndexes` (verbatim translation, lines 109–155 of `core/src/main/kotlin/com/transloom/core/mongodb/MongoDatabase.kt`).
+> 2. Edit `transloom/src/main/kotlin/com/transloom/Application.kt`: replace `coreModule(...) + cacheModule(...)` with `coreInfraModule(mongoUri, dbName, redisUrl) + transloomModule(encryptionKey)`. After `startKoin`, call `runBlocking { MongoIndexer.ensure(get<MongoDatabase>(), synclingIndexes()) }`.
 > 3. Run `./gradlew build`.
 
 ### Step 4.5 — Delete `MongoDatabaseFactory` and old DI modules from `:core`
@@ -409,7 +409,7 @@ Now nothing in core or any consumer references `MongoDatabaseFactory`, `cacheMod
 
 **Subagent prompt:**
 
-> Run `grep -rn "MongoDatabaseFactory\|cacheModule\|fun coreModule\|fun weatherifyModule" /Users/t0304iw/Desktop/androidplay/api/{core,src,transloom,weatherify}`. There must be zero hits outside the files about to be deleted. If any external reference remains, stop and report it. Otherwise delete:
+> Run `grep -rn "MongoDatabaseFactory\|cacheModule\|fun coreModule\|fun weatherifyModule" /Users/t0304iw/Desktop/androidplay/api/{core,src,syncling,weatherify}`. There must be zero hits outside the files about to be deleted. If any external reference remains, stop and report it. Otherwise delete:
 > - `core/src/main/kotlin/com/transloom/core/mongodb/MongoDatabase.kt`
 > - `core/src/main/kotlin/com/transloom/core/di/CacheModule.kt` (if it still exists with old `cacheModule` function)
 > - The empty `core/src/main/kotlin/com/transloom/` directory tree.
@@ -422,17 +422,17 @@ Now nothing in core or any consumer references `MongoDatabaseFactory`, `cacheMod
 
 ### Step 5.1 — Rename core artifact group
 
-`core/build.gradle.kts`: `group = "com.transloom.core"` → `group = "com.androidplay.core"`.
+`core/build.gradle.kts`: `group = "com.syncling.core"` → `group = "com.androidplay.core"`.
 
 **Verification:** `./gradlew build`
 
 **Subagent prompt:**
 
-> Edit `core/build.gradle.kts`: change `group = "com.transloom.core"` to `group = "com.androidplay.core"`. Run `./gradlew build`.
+> Edit `core/build.gradle.kts`: change `group = "com.syncling.core"` to `group = "com.androidplay.core"`. Run `./gradlew build`.
 
 ### Step 5.2 — Final audit
 
-Confirm no `bose.ankush`, `com.transloom.core`, unrooted `data.`/`domain.`/`util.` packages remain in `:core/src/main/kotlin`.
+Confirm no `bose.ankush`, `com.syncling.core`, unrooted `data.`/`domain.`/`util.` packages remain in `:core/src/main/kotlin`.
 
 **Verification:**
 - `find core/src/main/kotlin -type d` should show only `com/androidplay/core/{cache,common,di,mongo,queue,serialization}` (and `gcp` if added).
@@ -442,7 +442,7 @@ Confirm no `bose.ankush`, `com.transloom.core`, unrooted `data.`/`domain.`/`util
 
 > Run:
 > 1. `find /Users/t0304iw/Desktop/androidplay/api/core/src/main/kotlin -type d`
-> 2. `grep -rln "package bose.ankush\|package com.transloom.core\|package data\.\|package domain\.\|package util$" /Users/t0304iw/Desktop/androidplay/api/core`
+> 2. `grep -rln "package bose.ankush\|package com.syncling.core\|package data\.\|package domain\.\|package util$" /Users/t0304iw/Desktop/androidplay/api/core`
 > 3. `./gradlew clean build`
 >
 > The directory listing must contain only paths under `com/androidplay/core/`. The grep must return zero results. Build must succeed and total test count must match the baseline recorded in Step 0.1. Report any deviation.
@@ -456,5 +456,5 @@ Each step is one commit. If a later step uncovers that an earlier move was wrong
 ## Open questions to resolve before starting
 
 1. **GCP utilities.** None currently in `:core`. When/where do they get added? Phase 2 has a placeholder package; if GCP code lives elsewhere today, add a Phase 2.6 to move it. - Answer: GCPUtils should stay inside core module, with capabilities to provide all kinds of resources required by all the consumers.
-2. **Weatherify legacy module name.** This plan uses `:weatherify`. Confirm or pick a different name before Step 3.1. - Answer: in the legacy code i.e outside transloom module, our current code has weatherify API endpoints, and dashboard related endpoints, ideally we should have 2 different modules :weatherify & :dashboard with their own purposes. Probably that is huge change and we must do it. Also know that :dashboard will control all the features and monitor their items as it is doing now for weatherify, analyse it before decising."
+2. **Weatherify legacy module name.** This plan uses `:weatherify`. Confirm or pick a different name before Step 3.1. - Answer: in the legacy code i.e outside syncling module, our current code has weatherify API endpoints, and dashboard related endpoints, ideally we should have 2 different modules :weatherify & :dashboard with their own purposes. Probably that is huge change and we must do it. Also know that :dashboard will control all the features and monitor their items as it is doing now for weatherify, analyse it before decising."
 3. **Test module placement.** `src/test/kotlin/...` currently sits at root. After Phase 3, do tests stay at root (testing the app) or move into `:weatherify` (testing the library)? Default in this plan: stay at root, since they test routes/services. Confirm before Step 3.4. - Answers: ignore tests as of now. 

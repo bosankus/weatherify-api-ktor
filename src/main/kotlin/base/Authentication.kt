@@ -25,7 +25,7 @@ import util.Constants
 
 fun Application.configureAuthentication() {
     val logger = LoggerFactory.getLogger("Authentication")
-    val transloomJwtSecret = getSecretValue("jwt-secret")
+    val synclingJwtSecret = getSecretValue("jwt-secret")
 
     install(Authentication) {
         jwt("jwt-auth") {
@@ -75,9 +75,9 @@ fun Application.configureAuthentication() {
         }
 
         jwt("auth-jwt") {
-            realm = "Transloom API"
+            realm = "Syncling API"
             verifier(
-                JWT.require(Algorithm.HMAC256(transloomJwtSecret))
+                JWT.require(Algorithm.HMAC256(synclingJwtSecret))
                     .withAudience("transloom-app")
                     .withIssuer("transloom-backend")
                     .build()

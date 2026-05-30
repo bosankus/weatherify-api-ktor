@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory
 
 /**
  * Provides typed MongoDB collections and BSON helper utilities.
- * The [MongoDatabase] connection is created externally (via [com.transloom.core.mongodb.MongoDatabaseFactory])
+ * The [MongoDatabase] connection is created externally (via [com.androidplay.core.mongodb.MongoDatabaseFactory])
  * and injected here — this class owns no MongoClient and has no lifecycle responsibility.
  */
 class WeatherifyDb(private val database: MongoDatabase) {

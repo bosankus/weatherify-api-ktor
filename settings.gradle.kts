@@ -16,4 +16,4 @@ dependencyResolutionManagement {
     }
 }
 
-include(":core", ":transloom", ":weatherify")
+include(":core", ":syncling", ":weatherify")
