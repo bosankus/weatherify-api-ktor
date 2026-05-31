@@ -37,6 +37,10 @@ private const val FAVICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 fun Route.configurePortalRoutes(jwtSecret: String) {
     route("/syncling") {
         get {
+            if (call.request.host() == "data.androidplay.in") {
+                call.respondRedirect("https://syncling.space/", permanent = false)
+                return@get
+            }
             if (call.sessionUserId(jwtSecret) != null) {
                 call.respondRedirect("/syncling/app")
                 return@get
@@ -88,6 +92,10 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
             call.respondHtml { invitePage() }
         }
         get("/docs") {
+            if (call.request.host() == "data.androidplay.in") {
+                call.respondRedirect("https://syncling.space/syncling/docs", permanent = false)
+                return@get
+            }
             call.respondHtml { docsPage() }
         }
         get("/favicon.svg") {
