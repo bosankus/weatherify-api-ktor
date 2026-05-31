@@ -165,7 +165,17 @@ fun getSecretValue(secretName: String): String {
         return masterValue
     }
 
-    // 3. Local fallback — dev defaults, never used in production.
+    // 3. Individual Secret Manager fetch — backward-compat for services that haven't
+    //    migrated to the APP_SECRETS bundle yet (each secret stored under its own name).
+    if (gcpProjectId != null) {
+        val smValue = runCatching { fetchRawSecret(secretName) }.getOrNull()
+        if (!smValue.isNullOrBlank()) {
+            log.info("Secret '{}' resolved from individual Secret Manager entry", secretName)
+            return smValue
+        }
+    }
+
+    // 4. Local fallback — dev defaults, never used in production.
     return localFallback(secretName).also {
         log.warn("Secret '{}' using local fallback — not suitable for production", secretName)
     }

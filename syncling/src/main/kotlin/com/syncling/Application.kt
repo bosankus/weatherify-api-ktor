@@ -199,6 +199,7 @@ fun Application.module() {
     val membershipRepository: ProjectMembershipRepository by inject()
     val pipelineRunRepository: PipelineRunRepository by inject()
     val supportTicketRepository: com.syncling.repository.SupportTicketRepository by inject()
+    val apiTokenRepository: com.syncling.repository.ApiTokenRepository by inject()
     val memberUsageService: MemberUsageService by inject()
     val analyticsService: AnalyticsService by inject()
     // Materialize OWNER membership rows for legacy projects so the new permission
@@ -412,5 +413,6 @@ fun Application.module() {
         inAppNotificationService = inAppNotificationService,
         pipelineRunRepository = pipelineRunRepository,
         supportTicketRepository = supportTicketRepository,
+        apiTokenRepository = apiTokenRepository,
     ))
 }

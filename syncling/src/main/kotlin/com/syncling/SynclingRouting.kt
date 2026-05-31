@@ -146,7 +146,7 @@ Disallow: /health
 Disallow: /ready
 Disallow: /admin
 
-Sitemap: https://data.androidplay.in/sitemap.xml
+Sitemap: https://syncling.space/sitemap.xml
 """.trimIndent(), contentType = io.ktor.http.ContentType.Text.Plain)
         }
 
@@ -154,37 +154,37 @@ Sitemap: https://data.androidplay.in/sitemap.xml
             call.respondText("""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://data.androidplay.in/syncling</loc>
+    <loc>https://syncling.space/syncling</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/syncling#features</loc>
+    <loc>https://syncling.space/syncling#features</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/syncling#pricing</loc>
+    <loc>https://syncling.space/syncling#pricing</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/syncling#faq</loc>
+    <loc>https://syncling.space/syncling#faq</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/syncling#how</loc>
+    <loc>https://syncling.space/syncling#how</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/syncling#cli</loc>
+    <loc>https://syncling.space/syncling#cli</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/syncling/docs</loc>
+    <loc>https://syncling.space/syncling/docs</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>

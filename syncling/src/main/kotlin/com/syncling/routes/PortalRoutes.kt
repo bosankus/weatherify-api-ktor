@@ -651,7 +651,7 @@ private const val LANDING_JS = """
 })();
 """
 
-private const val CANONICAL_BASE = "https://data.androidplay.in"
+private const val CANONICAL_BASE = "https://syncling.space"
 
 private const val LANDING_JSON_LD = """{
   "@context":"https://schema.org",
@@ -662,7 +662,7 @@ private const val LANDING_JSON_LD = """{
       "applicationCategory":"DeveloperApplication",
       "operatingSystem":"Android, iOS, Web",
       "description":"AI-powered mobile app localization platform. Push a commit to GitHub and translations are automatically detected, translated into 10+ languages with Claude AI, and published to a global CDN in under 45 seconds — no app store release needed.",
-      "url":"https://data.androidplay.in/syncling",
+      "url":"https://syncling.space/syncling",
       "offers":[
         {"@type":"Offer","name":"Free","price":"0","priceCurrency":"INR","description":"500 strings per month, 1 project, 3 target languages, GitHub webhook, CDN delivery"},
         {"@type":"Offer","name":"Solo","price":"499","priceCurrency":"INR","description":"5000 strings per month, 3 projects, all languages, glossary, translation memory, review portal"},
@@ -684,7 +684,7 @@ private const val LANDING_JSON_LD = """{
     {
       "@type":"Organization",
       "name":"Syncling",
-      "url":"https://data.androidplay.in/syncling",
+      "url":"https://syncling.space/syncling",
       "description":"Automated mobile app localization platform for Android and iOS developers"
     },
     {
@@ -888,7 +888,7 @@ private fun HTML.landingPage() {
                                     }
                                     div("cli-t-out") {
                                         +"Create an API token at: "
-                                        span("term-accent") { +"data.androidplay.in/syncling/tokens" }
+                                        span("term-accent") { +"syncling.space/syncling/tokens" }
                                     }
                                     div("cli-t-out") {
                                         +"Paste your token (sli_…): "
@@ -1423,7 +1423,7 @@ private fun HTML.docsPage() {
                     p { +"Go to "; a("/syncling/tokens") { +"syncling/tokens" }; +" in the dashboard and click "; strong { +"New Token" }; +". Give it a descriptive name (e.g. "; code { +"my-laptop" }; +"). Copy the token — it's shown only once." }
                     h4 { +"Step 2 — Login" }
                     div("docs-code-block") {
-                        pre("docs-code") { +"syncling login\n\nCreate an API token at: https://data.androidplay.in/syncling/tokens\nPaste your token (sli_…): sli_xxxxxxxxxxxxxxxx\n\nLogged in. Plan: Solo · 3 project(s)" }
+                        pre("docs-code") { +"syncling login\n\nCreate an API token at: https://syncling.space/syncling/tokens\nPaste your token (sli_…): sli_xxxxxxxxxxxxxxxx\n\nLogged in. Plan: Solo · 3 project(s)" }
                     }
                     p { +"Credentials are stored in "; code { +"~/.syncling/config.json" }; +" on your machine. To remove them:" }
                     div("docs-code-block") {
@@ -1667,7 +1667,7 @@ struct ContentView: View {
                     }
                     h4 { +"Use in REST API calls" }
                     div("docs-code-block") {
-                        pre("docs-code") { +"curl -H \"Authorization: Bearer sli_xxxxxxxxxxxxxxxx\" \\\n     https://data.androidplay.in/syncling/api/projects" }
+                        pre("docs-code") { +"curl -H \"Authorization: Bearer sli_xxxxxxxxxxxxxxxx\" \\\n     https://syncling.space/syncling/api/projects" }
                     }
                     h4 { +"Revoking a token" }
                     p { +"Tokens can be revoked instantly from the dashboard or via the CLI:" }

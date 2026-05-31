@@ -59,7 +59,7 @@ fun Route.configureAuthRoutes(
 
     val clientId = getSecretValue("github-client-id")
     val clientSecret = getSecretValue("github-client-secret")
-    val redirectUri = "https://data.androidplay.in/syncling/auth/github/callback"
+    val redirectUri = "https://syncling.space/syncling/auth/github/callback"
     val frontendRedirectUrl = getSecretValue("frontend-url")
 
     route("/syncling/auth") {
