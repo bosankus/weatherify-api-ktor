@@ -1595,9 +1595,11 @@ fun Route.adminAuthRoute() {
                 call.respondError("Support ticket repository not available", Unit, HttpStatusCode.ServiceUnavailable)
                 return@get
             }
+            @Serializable
+            data class TicketsResponse(val tickets: List<com.syncling.domain.SupportTicket>, val count: Int)
             try {
                 val tickets = repo.listAll(status = status)
-                call.respondSuccess("Support tickets retrieved", mapOf("tickets" to tickets, "count" to tickets.size))
+                call.respondSuccess("Support tickets retrieved", TicketsResponse(tickets, tickets.size))
             } catch (e: Exception) {
                 logger.error("Failed to list support tickets: {}", e.message)
                 call.respondError("Failed to retrieve tickets: ${e.message}", Unit, HttpStatusCode.InternalServerError)

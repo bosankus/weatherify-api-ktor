@@ -37,7 +37,7 @@ private const val FAVICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 fun Route.configurePortalRoutes(jwtSecret: String) {
     route("/syncling") {
         get {
-            if (call.request.host() == "data.androidplay.in") {
+            if (call.request.headers[HttpHeaders.Host]?.substringBefore(':') == "data.androidplay.in") {
                 call.respondRedirect("https://syncling.space/", permanent = false)
                 return@get
             }
@@ -92,7 +92,7 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
             call.respondHtml { invitePage() }
         }
         get("/docs") {
-            if (call.request.host() == "data.androidplay.in") {
+            if (call.request.headers[HttpHeaders.Host]?.substringBefore(':') == "data.androidplay.in") {
                 call.respondRedirect("https://syncling.space/syncling/docs", permanent = false)
                 return@get
             }
@@ -1294,40 +1294,21 @@ private fun HTML.docsPage() {
             }
         }
 
-        div("docs-layout") {
-            aside("docs-sidebar") {
-                div("docs-sidebar-inner") {
-                    p("docs-sidebar-label") { +"Getting Started" }
-                    a(href = "#quickstart", classes = "docs-nav-link") { +"Quick Start" }
-                    a(href = "#connect-repo", classes = "docs-nav-link") { +"Connect a Repository" }
-                    a(href = "#add-sdk", classes = "docs-nav-link") { +"Add the SDK" }
-
-                    p("docs-sidebar-label") { +"CLI" }
-                    a(href = "#cli", classes = "docs-nav-link") { +"Installation" }
-                    a(href = "#cli-auth", classes = "docs-nav-link") { +"Authentication" }
-                    a(href = "#cli-commands", classes = "docs-nav-link") { +"Command Reference" }
-
-                    p("docs-sidebar-label") { +"SDKs" }
-                    a(href = "#android-sdk", classes = "docs-nav-link") { +"Android SDK" }
-                    a(href = "#ios-sdk", classes = "docs-nav-link") { +"iOS SDK" }
-
-                    p("docs-sidebar-label") { +"Platform" }
-                    a(href = "#projects", classes = "docs-nav-link") { +"Projects" }
-                    a(href = "#webhook", classes = "docs-nav-link") { +"GitHub Webhook" }
-                    a(href = "#api-tokens", classes = "docs-nav-link") { +"API Tokens" }
-                    a(href = "#glossary", classes = "docs-nav-link") { +"Glossary" }
-                    a(href = "#cdn", classes = "docs-nav-link") { +"CDN & OTA Updates" }
-                    a(href = "#semantic", classes = "docs-nav-link") { +"Semantic Change Detection" }
-
-                    p("docs-sidebar-label") { +"Plans & Billing" }
-                    a(href = "#pricing", classes = "docs-nav-link") { +"Pricing" }
-
-                    p("docs-sidebar-label") { +"Help" }
-                    a(href = "#faq", classes = "docs-nav-link") { +"FAQ" }
-                    a(href = "#support", classes = "docs-nav-link") { +"Support" }
-                }
+        div("docs-toc-bar") {
+            div("docs-toc-inner") {
+                a(href = "#quickstart", classes = "docs-toc-link") { +"Quick Start" }
+                a(href = "#cli", classes = "docs-toc-link") { +"CLI" }
+                a(href = "#android-sdk", classes = "docs-toc-link") { +"Android SDK" }
+                a(href = "#ios-sdk", classes = "docs-toc-link") { +"iOS SDK" }
+                a(href = "#webhook", classes = "docs-toc-link") { +"Webhook" }
+                a(href = "#api-tokens", classes = "docs-toc-link") { +"API Tokens" }
+                a(href = "#cdn", classes = "docs-toc-link") { +"CDN" }
+                a(href = "#pricing", classes = "docs-toc-link") { +"Pricing" }
+                a(href = "#faq", classes = "docs-toc-link") { +"FAQ" }
             }
+        }
 
+        div("docs-wrapper") {
             main("docs-main") {
 
                 // ── Quick Start ─────────────────────────────────────────────────────────
@@ -1871,10 +1852,10 @@ struct ContentView: View {
 
         script { unsafe { +"""
 (function(){
-  var links = document.querySelectorAll('a.docs-nav-link');
+  var links = document.querySelectorAll('a.docs-toc-link');
   var sections = Array.from(document.querySelectorAll('.docs-section[id]'));
   function activate(){
-    var scrollY = window.scrollY + 80;
+    var scrollY = window.scrollY + 100;
     var active = sections.reduce(function(a,s){ return s.offsetTop <= scrollY ? s : a; }, sections[0]);
     if(!active) return;
     links.forEach(function(l){ l.classList.toggle('active', l.getAttribute('href') === '#'+active.id); });
@@ -1887,29 +1868,28 @@ struct ContentView: View {
 }
 
 private const val DOCS_CSS = """
-nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
-.nav-inner{max-width:1280px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:100%;margin:0 auto;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .nav-links{display:flex;align-items:center;gap:24px}
 .nav-links a:not(.btn){color:var(--text-muted);font-size:14px;transition:color .2s ease}
 .nav-links a:not(.btn):hover{color:var(--text)}
 .nav-cta{padding:8px 16px!important;font-size:13px!important}
-.docs-layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 57px);max-width:1280px;margin:0 auto}
-.docs-sidebar{border-right:1px solid var(--border);background:var(--surface2)}
-.docs-sidebar-inner{position:sticky;top:57px;max-height:calc(100vh - 57px);overflow-y:auto;padding:28px 0 48px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-.docs-sidebar-label{font-size:10px;font-weight:800;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;padding:20px 20px 6px;margin-top:8px}
-.docs-sidebar-label:first-child{padding-top:0;margin-top:0}
-a.docs-nav-link{display:block;padding:7px 20px;font-size:13px;color:var(--text-muted);border-left:2px solid transparent;transition:color .15s,border-color .15s,background .15s}
-a.docs-nav-link:hover{color:var(--text);background:rgba(139,126,255,.04);border-left-color:rgba(139,126,255,.3)}
-a.docs-nav-link.active{color:var(--accent);border-left-color:var(--accent);background:rgba(139,126,255,.06)}
-.docs-main{padding:48px 56px;max-width:860px}
+.docs-toc-bar{position:sticky;top:57px;z-index:100;background:rgba(8,8,8,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.docs-toc-bar::-webkit-scrollbar{display:none}
+.docs-toc-inner{display:flex;align-items:center;gap:4px;padding:0 32px;min-width:max-content}
+a.docs-toc-link{display:inline-block;padding:10px 14px;font-size:13px;color:var(--text-muted);border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,border-color .15s}
+a.docs-toc-link:hover{color:var(--text);border-bottom-color:rgba(139,126,255,.4)}
+a.docs-toc-link.active{color:var(--accent);border-bottom-color:var(--accent)}
+.docs-wrapper{width:100%}
+.docs-main{max-width:960px;margin:0 auto;padding:56px 32px 80px}
 .docs-section{margin-bottom:72px;padding-bottom:72px;border-bottom:1px solid var(--border)}
 .docs-section:last-child{border-bottom:none}
 .docs-section-header{margin-bottom:32px}
 .docs-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(139,126,255,.2);border-radius:20px;padding:3px 10px;margin-bottom:12px}
-.docs-main h1{font-size:clamp(24px,3vw,36px);font-weight:800;letter-spacing:-.5px;margin-bottom:8px;line-height:1.2}
-.docs-main h2{font-size:clamp(20px,2.5vw,28px);font-weight:700;letter-spacing:-.3px;margin-bottom:8px;margin-top:0;padding-top:0}
+.docs-main h1{font-size:clamp(26px,3.5vw,40px);font-weight:800;letter-spacing:-.5px;margin-bottom:8px;line-height:1.2}
+.docs-main h2{font-size:clamp(21px,2.8vw,30px);font-weight:700;letter-spacing:-.3px;margin-bottom:8px;margin-top:0;padding-top:0}
 .docs-main h3{font-size:17px;font-weight:700;margin-bottom:8px;margin-top:0;color:var(--text)}
-.docs-main h4{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px;margin:28px 0 10px;text-transform:uppercase;letter-spacing:.8px}
+.docs-main h4{font-size:13px;font-weight:700;color:var(--text);margin:28px 0 10px;text-transform:uppercase;letter-spacing:.8px}
 .docs-lead{font-size:16px;color:var(--text-muted);line-height:1.7;margin-top:8px}
 .docs-main p{font-size:14px;color:var(--text-muted);line-height:1.75;margin-bottom:14px}
 .docs-main a{color:var(--accent);text-decoration:none}.docs-main a:hover{text-decoration:underline}
@@ -1933,7 +1913,7 @@ a.docs-nav-link.active{color:var(--accent);border-left-color:var(--accent);backg
 .cmd-doc-block{margin-bottom:36px;padding-bottom:36px;border-bottom:1px solid var(--border)}
 .cmd-doc-block:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
 .cmd-doc-name{font-size:16px;font-weight:700;color:var(--text);font-family:ui-monospace,'SF Mono',Menlo,monospace;margin-bottom:12px;display:block}
-.docs-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 20px}
+.docs-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 20px;overflow-x:auto;display:block}
 .docs-table th{text-align:left;padding:10px 14px;background:var(--surface2);color:var(--text);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border)}
 .docs-table td{padding:10px 14px;color:var(--text-muted);border-bottom:1px solid var(--border);vertical-align:top;line-height:1.55}
 .docs-table tr:last-child td{border-bottom:none}
@@ -1949,13 +1929,13 @@ a.docs-nav-link.active{color:var(--accent);border-left-color:var(--accent);backg
 .docs-support-icon{color:var(--accent);line-height:0}
 .docs-support-card h4{font-size:14px;font-weight:700;color:var(--text);margin:0;letter-spacing:0;text-transform:none}
 .docs-support-card p{font-size:13px;color:var(--text-muted);line-height:1.65;margin:0}
-footer{padding:28px 24px;border-top:1px solid var(--border)}
-.footer-inner{max-width:1280px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
+footer{padding:28px 32px;border-top:1px solid var(--border)}
+.footer-inner{max-width:100%;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
 .footer-nav{display:flex;gap:20px;flex-wrap:wrap}
 .footer-nav a{color:var(--text-muted);font-size:13px;transition:color .15s}.footer-nav a:hover{color:var(--accent)}
 .footer-copy{font-size:12px;color:var(--text-muted)}
-@media(max-width:900px){.docs-layout{grid-template-columns:1fr}.docs-sidebar{display:none}.docs-main{padding:32px 24px}}
-@media(max-width:640px){.docs-main{padding:24px 16px}.docs-support-grid{grid-template-columns:1fr}}
+@media(max-width:768px){.nav-inner{padding:12px 20px}.nav-links{gap:12px}.nav-links a:not(.btn):not(.nav-cta){display:none}.docs-toc-inner{padding:0 16px}.docs-main{padding:36px 20px 64px}.docs-support-grid{grid-template-columns:1fr}footer{padding:24px 20px}}
+@media(max-width:480px){.docs-main{padding:28px 16px 48px}.step-card{flex-direction:column;gap:12px}.docs-pricing-cta{flex-direction:column}.docs-pricing-cta .btn{width:100%;text-align:center}}
 """
 
 private const val LANDING_CSS = """
