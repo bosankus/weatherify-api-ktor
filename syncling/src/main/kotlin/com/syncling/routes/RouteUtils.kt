@@ -44,7 +44,7 @@ class ApiTokenAuthProvider(config: Config) : AuthenticationProvider(config) {
     override suspend fun onAuthenticate(context: AuthenticationContext) {
         val call = context.call
         val authHeader = call.request.headers[HttpHeaders.Authorization] ?: return
-        if (!authHeader.startsWith("Bearer sli_")) return
+        if (!authHeader.startsWith("Bearer sli_") && !authHeader.startsWith("Bearer slk_")) return
 
         val rawToken = authHeader.removePrefix("Bearer ")
         val hash = sha256(rawToken)

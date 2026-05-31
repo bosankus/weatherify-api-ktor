@@ -17,7 +17,7 @@ class MongoApiTokenRepository(db: MongoDatabase) : ApiTokenRepository {
 
     private val col = db.getCollection<Document>("api_tokens")
 
-    override suspend fun create(userId: String, name: String, tokenHash: String): ApiToken {
+    override suspend fun create(userId: String, name: String, tokenHash: String, type: String): ApiToken {
         val now = Clock.System.now()
         val id = UUID.randomUUID().toString()
         col.insertOne(
@@ -25,9 +25,10 @@ class MongoApiTokenRepository(db: MongoDatabase) : ApiTokenRepository {
                 .append("userId", userId)
                 .append("name", name)
                 .append("tokenHash", tokenHash)
+                .append("type", type)
                 .append("createdAt", now.toEpochMilliseconds())
         )
-        return ApiToken(id = id, userId = userId, name = name, tokenHash = tokenHash, createdAt = now)
+        return ApiToken(id = id, userId = userId, name = name, tokenHash = tokenHash, createdAt = now, type = type)
     }
 
     override suspend fun findByHash(tokenHash: String): ApiToken? =
@@ -52,6 +53,7 @@ class MongoApiTokenRepository(db: MongoDatabase) : ApiTokenRepository {
         name = getString("name"),
         tokenHash = getString("tokenHash"),
         createdAt = Instant.fromEpochMilliseconds(getLong("createdAt")),
-        lastUsedAt = getLong("lastUsedAt")?.let { Instant.fromEpochMilliseconds(it) }
+        lastUsedAt = getLong("lastUsedAt")?.let { Instant.fromEpochMilliseconds(it) },
+        type = getString("type") ?: "CLI",
     )
 }
