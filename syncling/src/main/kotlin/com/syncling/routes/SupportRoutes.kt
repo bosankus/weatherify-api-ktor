@@ -35,6 +35,7 @@ private data class TicketResponse(
     val message: String,
     val status: String,
     val createdAt: Long,
+    val adminReply: String? = null,
 )
 
 fun Route.configureSupportRoutes(
@@ -43,7 +44,7 @@ fun Route.configureSupportRoutes(
     notificationService: NotificationService?,
     adminEmail: String,
 ) {
-    route("/transloom/api/support") {
+    route("/syncling/api/support") {
         post {
             val userId = call.userId() ?: run {
                 call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))
@@ -113,6 +114,7 @@ fun Route.configureSupportRoutes(
                 message = ticket.message,
                 status = ticket.status,
                 createdAt = ticket.createdAt,
+                adminReply = null,
             ))
         }
 
@@ -123,7 +125,7 @@ fun Route.configureSupportRoutes(
             }
             val tickets = supportTicketRepository.listForUser(userId)
             call.respond(mapOf("tickets" to tickets.map {
-                TicketResponse(it.id, it.category, it.subject, it.message, it.status, it.createdAt)
+                TicketResponse(it.id, it.category, it.subject, it.message, it.status, it.createdAt, adminReply = it.adminReply)
             }))
         }
     }

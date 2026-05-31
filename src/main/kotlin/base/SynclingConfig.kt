@@ -14,6 +14,7 @@ import com.syncling.queue.TranslationJobQueue
 import com.syncling.repository.CdnPublishRepository
 import com.syncling.repository.GlossaryRepository
 import com.syncling.repository.mongo.*
+import com.syncling.repository.mongo.MongoApiTokenRepository
 import com.syncling.repository.mongo.MongoSupportTicketRepository
 import com.syncling.services.*
 import domain.service.RefundService
@@ -67,6 +68,7 @@ fun Application.configureSyncling(refundService: RefundService) {
     val notificationRepository = MongoNotificationRepository(db)
     val membershipRepository = MongoProjectMembershipRepository(db)
     val supportTicketRepository = MongoSupportTicketRepository(db)
+    val apiTokenRepository = MongoApiTokenRepository(db)
     val analyticsService = AnalyticsService(
         pipelineRunRepository = pipelineRunRepository,
         memberUsageRepository = memberUsageRepository,
@@ -165,6 +167,7 @@ fun Application.configureSyncling(refundService: RefundService) {
             translationService = translationService,
             analyticsService = analyticsService,
             supportTicketRepository = supportTicketRepository,
+            apiTokenRepository = apiTokenRepository,
         )
     )
 }

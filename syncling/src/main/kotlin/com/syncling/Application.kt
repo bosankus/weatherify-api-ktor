@@ -11,6 +11,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import com.syncling.di.synclingIndexes
 import com.syncling.di.synclingModule
+import com.syncling.routes.apiToken
 import com.syncling.pipeline.TranslationPipeline
 import com.syncling.pipeline.buildConfigWithGlossary
 import com.syncling.queue.TranslationJobQueue
@@ -172,6 +173,7 @@ fun Application.module() {
                 call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Token is not valid or has expired"))
             }
         }
+        apiToken("api-token")
     }
 
     val projectRepository: ProjectRepository by inject()

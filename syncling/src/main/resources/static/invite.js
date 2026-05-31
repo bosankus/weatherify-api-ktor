@@ -2,7 +2,7 @@
  * Invite landing page client.
  *
  * Flow:
- *   1. Read the token from the URL path (/transloom/invite/{token}).
+ *   1. Read the token from the URL path (/syncling/invite/{token}).
  *   2. Fetch GET /api/invites/{token} — public, returns project + role preview.
  *   3a. If logged in (token in localStorage), show "Accept invite" — POSTs accept
  *       and redirects to the project's members page on success.
@@ -25,7 +25,7 @@
     async function loadPreview() {
         try {
             // No auth header needed — endpoint is public.
-            const r = await fetch(`/transloom/api/invites/${encodeURIComponent(token)}`);
+            const r = await fetch(`/syncling/api/invites/${encodeURIComponent(token)}`);
             if (r.status === 404) {
                 renderBad('Invite not found', "This link is no longer valid. It may have already been used or revoked. Ask the person who invited you to send a fresh link.");
                 return;
@@ -68,13 +68,13 @@
             document.getElementById('inv-logout').addEventListener('click', () => {
                 localStorage.setItem('pending_invite_token', token);
                 localStorage.removeItem('syncling_token');
-                window.location.href = '/transloom/auth/github';
+                window.location.href = '/syncling/auth/github';
             });
         } else {
             document.getElementById('inv-login').addEventListener('click', () => {
                 // Stash the token so the dashboard can resume the flow after OAuth.
                 localStorage.setItem('pending_invite_token', token);
-                window.location.href = '/transloom/auth/github';
+                window.location.href = '/syncling/auth/github';
             });
         }
     }
@@ -83,18 +83,18 @@
         const btn = e.currentTarget;
         setBusy(btn, true, 'Joining');
         try {
-            const r = await tlFetch(`/transloom/api/invites/${encodeURIComponent(token)}/accept`, { method: 'POST' });
+            const r = await tlFetch(`/syncling/api/invites/${encodeURIComponent(token)}/accept`, { method: 'POST' });
             if (r.status === 401) {
                 // Session expired between the preview and the accept — route through OAuth.
                 localStorage.setItem('pending_invite_token', token);
-                window.location.href = '/transloom/auth/github';
+                window.location.href = '/syncling/auth/github';
                 return;
             }
             const j = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(j.error || 'status ' + r.status);
             localStorage.removeItem('pending_invite_token');
             toast('Welcome to the project!', 'success');
-            setTimeout(() => { window.location.href = `/transloom/members/${j.projectId}`; }, 600);
+            setTimeout(() => { window.location.href = `/syncling/members/${j.projectId}`; }, 600);
         } catch (err) {
             toast(err.message || 'Could not accept invite', 'error');
             setBusy(btn, false);
@@ -107,7 +107,7 @@
             <span class="inv-eyebrow">Invite</span>
             <h1 class="inv-title">${esc(title)}</h1>
             <p class="inv-sub">${esc(msg)}</p>
-            <a href="/transloom" class="inv-btn inv-btn-secondary" style="margin-top:0">Back to Syncling</a>
+            <a href="/syncling" class="inv-btn inv-btn-secondary" style="margin-top:0">Back to Syncling</a>
         `;
     }
 

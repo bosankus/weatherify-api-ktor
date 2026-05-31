@@ -1,6 +1,6 @@
 /* eslint-env browser */
 /**
- * Analytics page hydration. Pulls from /transloom/api/analytics/{...} and renders
+ * Analytics page hydration. Pulls from /syncling/api/analytics/{...} and renders
  * into the skeleton DOM that BillingAnalyticsApp.kt server-renders.
  *
  * Range switching re-fetches the range-dependent endpoints only (overview,
@@ -408,22 +408,22 @@
 
   function loadAll() {
     var r = STATE.range;
-    api('/transloom/api/analytics/overview').then(function (d) {
+    api('/syncling/api/analytics/overview').then(function (d) {
       if (showPlanGate(d._forbidden)) return;
       renderOverview(d);
     }).catch(function (e) {
       $('bla-tracking-banner').textContent = 'Could not load analytics: ' + e.message;
     });
 
-    api('/transloom/api/analytics/projects?range=' + r).then(function (d) { if (!d._forbidden) renderProjects(d); });
-    api('/transloom/api/analytics/locales?range=' + r).then(function (d) { if (!d._forbidden) renderLocales(d); });
+    api('/syncling/api/analytics/projects?range=' + r).then(function (d) { if (!d._forbidden) renderProjects(d); });
+    api('/syncling/api/analytics/locales?range=' + r).then(function (d) { if (!d._forbidden) renderLocales(d); });
     RUNS_PAG.page = 1;
-    api('/transloom/api/analytics/runs?range=' + r + '&limit=500').then(function (d) { if (!d._forbidden) renderRuns(d); });
-    api('/transloom/api/analytics/quality').then(function (d) { if (!d._forbidden) renderQuality(d); });
+    api('/syncling/api/analytics/runs?range=' + r + '&limit=500').then(function (d) { if (!d._forbidden) renderRuns(d); });
+    api('/syncling/api/analytics/quality').then(function (d) { if (!d._forbidden) renderQuality(d); });
 
     // Team-only sections — server returns 403 for non-Team; renderOverview also hides them.
-    api('/transloom/api/analytics/members?range=' + r).then(function (d) { if (!d._forbidden) renderMembers(d); });
-    api('/transloom/api/analytics/cost-breakdown').then(function (d) { if (!d._forbidden) renderCostBreakdown(d); });
+    api('/syncling/api/analytics/members?range=' + r).then(function (d) { if (!d._forbidden) renderMembers(d); });
+    api('/syncling/api/analytics/cost-breakdown').then(function (d) { if (!d._forbidden) renderCostBreakdown(d); });
   }
 
   function bindRangePicker() {

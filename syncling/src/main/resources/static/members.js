@@ -2,7 +2,7 @@
  * Members page client.
  *
  * Owns three things:
- *   - Project picker (#mb-project-select)         — fetches /transloom/api/projects
+ *   - Project picker (#mb-project-select)         — fetches /syncling/api/projects
  *   - Member list (#mb-list)                       — per-project list + role/revoke controls
  *   - Invite modal (#mb-modal-mount)               — built lazily on first open
  *
@@ -17,8 +17,8 @@
         return;
     }
 
-    const PROJECTS_API = '/transloom/api/projects';
-    const SUBSCRIPTION_API = '/transloom/api/billing/subscription';
+    const PROJECTS_API = '/syncling/api/projects';
+    const SUBSCRIPTION_API = '/syncling/api/billing/subscription';
     const ROLES = ['ADMIN', 'TRANSLATOR', 'VIEWER'];   // OWNER is implicit, set on create
     const ROLE_LABELS = { OWNER: 'Owner', ADMIN: 'Admin', TRANSLATOR: 'Translator', VIEWER: 'Viewer' };
 
@@ -85,7 +85,7 @@
             <div class="mb-empty" id="mb-list">
                 <h3>Inviting teammates is a Team-plan feature</h3>
                 <p>You're on the <b>${esc(myPlan?.displayName || 'Free')}</b> plan. Upgrade to the Team plan to invite up to 15 teammates per project.</p>
-                <a href="/transloom/billing" class="bl-btn primary">Upgrade plan</a>
+                <a href="/syncling/billing" class="bl-btn primary">Upgrade plan</a>
             </div>`;
     }
 
@@ -103,7 +103,7 @@
 
         const select = $('mb-project-select');
         if (!projects.length) {
-            // Server already renders an empty-state page for /transloom/members when
+            // Server already renders an empty-state page for /syncling/members when
             // there are no projects. If we somehow land here, swap in a soft empty state.
             renderEmpty('Create a project before inviting teammates.');
             select.style.display = 'none';
@@ -126,7 +126,7 @@
     function wireHeader() {
         $('mb-project-select').addEventListener('change', e => {
             const id = e.target.value;
-            history.replaceState(null, '', `/transloom/members/${id}`);
+            history.replaceState(null, '', `/syncling/members/${id}`);
             switchProject(id);
         });
         $('mb-invite-btn').addEventListener('click', () => {
@@ -318,7 +318,7 @@
             }
             toast(isMe ? 'You left the project' : 'Member removed', 'success');
             if (isMe) {
-                window.location.href = '/transloom/projects';
+                window.location.href = '/syncling/projects';
                 return;
             }
             await loadMembers();
@@ -509,6 +509,6 @@
     }
     function renderEmpty(msg) {
         const host = $('mb-list');
-        if (host) host.outerHTML = `<div class="mb-empty" id="mb-list"><h3>No projects</h3><p>${esc(msg)}</p><a href="/transloom/projects" class="bl-btn primary">Go to Projects</a></div>`;
+        if (host) host.outerHTML = `<div class="mb-empty" id="mb-list"><h3>No projects</h3><p>${esc(msg)}</p><a href="/syncling/projects" class="bl-btn primary">Go to Projects</a></div>`;
     }
 })();

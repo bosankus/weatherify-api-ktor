@@ -24,7 +24,7 @@ internal fun HTML.invitePage() {
     body {
         nav("inv-nav") {
             div("inv-nav-inner") {
-                a("/transloom") {
+                a("/syncling") {
                     classes = setOf("brand", "inv-brand")
                     unsafe { +LOGO_SVG }
                     span { +"Syncling" }

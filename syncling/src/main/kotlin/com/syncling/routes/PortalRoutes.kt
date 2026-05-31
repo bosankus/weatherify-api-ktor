@@ -20,17 +20,17 @@ private fun ApplicationCall.issueBootstrapCookie() {
 private const val FAVICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="favG" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#A890FF"/>
-      <stop offset="100%" stop-color="#5535DD"/>
+    <linearGradient id="favG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C084FC"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
     </linearGradient>
   </defs>
-  <rect width="32" height="32" rx="7" fill="url(#favG)"/>
-  <g stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.92">
-    <path d="M10 11 C10 6 22 6 22 11"/>
-    <path d="M19.5 8.5 L22 11 L24.5 8.5"/>
-    <path d="M22 21 C22 26 10 26 10 21"/>
-    <path d="M12.5 23.5 L10 21 L7.5 23.5"/>
+  <rect width="32" height="32" rx="9" fill="url(#favG)"/>
+  <g stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
+    <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+    <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/>
+    <polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
   </g>
 </svg>"""
 
@@ -87,6 +87,9 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
         get("/invite/{token}") {
             call.respondHtml { invitePage() }
         }
+        get("/docs") {
+            call.respondHtml { docsPage() }
+        }
         get("/favicon.svg") {
             call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
         }
@@ -105,16 +108,16 @@ private const val LOGO_SVG = """
 <svg class="brand-mark" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false">
   <defs>
     <linearGradient id="slGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#A890FF"/>
-      <stop offset="100%" stop-color="#5535DD"/>
+      <stop offset="0%" stop-color="#C084FC"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="0" width="32" height="32" rx="8" fill="url(#slGrad)"/>
-  <g class="sync-arrows" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.92">
-    <path d="M10 11 C10 6 22 6 22 11"/>
-    <path d="M19.5 8.5 L22 11 L24.5 8.5"/>
-    <path d="M22 21 C22 26 10 26 10 21"/>
-    <path d="M12.5 23.5 L10 21 L7.5 23.5"/>
+  <rect width="32" height="32" rx="9" fill="url(#slGrad)"/>
+  <g class="sync-arrows" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
+    <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+    <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/>
+    <polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
   </g>
 </svg>
 """
@@ -151,6 +154,10 @@ internal fun appSidebar(active: String, reviewBadge: Boolean = false) = """
     <a href="/syncling/billing" class="nav-item${if (active=="billing") " active" else ""}" title="Billing">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
       <span class="nav-label">Billing</span>
+    </a>
+    <a href="/syncling/tokens" class="nav-item${if (active=="tokens") " active" else ""}" title="API Tokens">
+      <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      <span class="nav-label">API Tokens</span>
     </a>
   </nav>
   <div class="sidebar-footer">
@@ -736,8 +743,10 @@ private fun HTML.landingPage() {
                     id = "nav-menu"
                     a("#how") { +"How it works" }
                     a("#features") { +"Features" }
+                    a("#cli") { +"CLI" }
                     a("#pricing") { +"Pricing" }
                     a("#faq") { +"FAQ" }
+                    a("/syncling/docs") { +"Docs" }
                     a("/syncling/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
                     a("#pricing") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
                 }
@@ -839,6 +848,116 @@ private fun HTML.landingPage() {
                             span("pstep-num") { +s.n }
                             h4("pstep-title") { +s.t }
                             p("pstep-desc") { +s.d }
+                        }
+                    }
+                }
+            }
+        }
+
+        section("cli-section") {
+            id = "cli"
+            div("section-inner") {
+                p("section-label fade-up") { +"DEVELOPER CLI" }
+                h2("fade-up d1") { +"Manage your translations from the terminal." }
+                p("arch-sub fade-up d2") {
+                    +"Install the Syncling CLI and get full control over your localization pipeline — trigger syncs, download translated files, manage API tokens, and monitor pipeline runs without leaving your terminal."
+                }
+                div("cli-layout fade-up d3") {
+                    div("cli-term-wrap") {
+                        div("term-window") {
+                            div("term-header") {
+                                div("term-dots") {
+                                    span("term-dot term-red") {}
+                                    span("term-dot term-yellow") {}
+                                    span("term-dot term-green") {}
+                                }
+                                span("term-title") { +"syncling — terminal" }
+                            }
+                            div("term-body cli-term-body") {
+                                div("cli-t-block") {
+                                    div("term-prompt") {
+                                        span("term-ps1") { +"$ " }
+                                        span("term-cmd") { +"npm install -g syncling" }
+                                    }
+                                    div("cli-t-out") { span("term-ok") { +"added 1 package · syncling@0.1.0 installed" } }
+                                }
+                                div("cli-t-block") {
+                                    div("term-prompt") {
+                                        span("term-ps1") { +"$ " }
+                                        span("term-cmd") { +"syncling login" }
+                                    }
+                                    div("cli-t-out") {
+                                        +"Create an API token at: "
+                                        span("term-accent") { +"data.androidplay.in/syncling/tokens" }
+                                    }
+                                    div("cli-t-out") {
+                                        +"Paste your token (sli_…): "
+                                        span("term-dim") { +"sli_••••••••••••••••" }
+                                    }
+                                    div("cli-t-out") {
+                                        span("term-ok") { +"Logged in." }
+                                        +" Plan: Solo · 3 project(s)"
+                                    }
+                                }
+                                div("cli-t-block") {
+                                    div("term-prompt") {
+                                        span("term-ps1") { +"$ " }
+                                        span("term-cmd") { +"syncling push proj_abc123" }
+                                    }
+                                    div("cli-t-out") {
+                                        span("term-ok") { +"Sync queued" }
+                                        +" for acme/my-app @ main "
+                                        span("term-dim") { +"(7f3a91b)" }
+                                    }
+                                }
+                                div("cli-t-block") {
+                                    div("term-prompt") {
+                                        span("term-ps1") { +"$ " }
+                                        span("term-cmd") { +"syncling status" }
+                                    }
+                                    div("cli-t-out") {
+                                        span("term-ok") { +"✓" }
+                                        +" my-app          acme/my-app@main  "
+                                        span("term-ok") { +"completed" }
+                                        span("term-dim") { +"  (43s · 15 strings)" }
+                                    }
+                                }
+                                div("cli-t-block") {
+                                    div("term-prompt") {
+                                        span("term-ps1") { +"$ " }
+                                        span("term-cmd") { +"syncling pull proj_abc123 -l es -l fr -o ./translations" }
+                                    }
+                                    div("cli-t-out") {
+                                        span("term-ok") { +"  ✓  es  →  ./translations/strings_es.xml" }
+                                    }
+                                    div("cli-t-out") {
+                                        span("term-ok") { +"  ✓  fr  →  ./translations/strings_fr.xml" }
+                                    }
+                                    div("cli-t-out") { +"Pulled 2 file(s)." }
+                                }
+                            }
+                        }
+                    }
+                    div("cli-cmds-list") {
+                        data class CliCmd(val cmd: String, val desc: String)
+                        listOf(
+                            CliCmd("syncling login", "Authenticate with an API token (sli_…) generated from the dashboard."),
+                            CliCmd("syncling projects", "List all connected repositories with their IDs and configured languages."),
+                            CliCmd("syncling push <id>", "Trigger a manual translation sync — useful for CI/CD pipelines or ad-hoc runs."),
+                            CliCmd("syncling pull <id>", "Download translated files for a project. Filter by --lang, set --out directory."),
+                            CliCmd("syncling status", "Show recent pipeline runs with status, duration, and string count."),
+                            CliCmd("syncling tokens list", "View all API tokens associated with your account."),
+                            CliCmd("syncling tokens create <name>", "Generate a new API token for CI pipelines or team members."),
+                            CliCmd("syncling tokens revoke <id>", "Immediately revoke an API token to block access.")
+                        ).forEach { c ->
+                            div("cli-cmd-row") {
+                                code("cli-cmd-name") { +c.cmd }
+                                span("cli-cmd-desc") { +c.desc }
+                            }
+                        }
+                        div("cli-cta-row") {
+                            a("/syncling/docs#cli") { classes = setOf("btn", "btn-ghost"); +"Full CLI reference →" }
+                            a("/syncling/docs") { classes = setOf("btn", "btn-primary"); +"Read the docs" }
                         }
                     }
                 }
@@ -1124,8 +1243,10 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
                 nav("footer-nav") {
                     a("#how") { +"How it works" }
                     a("#features") { +"Features" }
+                    a("#cli") { +"CLI" }
                     a("#pricing") { +"Pricing" }
                     a("#faq") { +"FAQ" }
+                    a("/syncling/docs") { +"Docs" }
                 }
                 p("footer-copy") { +"© 2026 Syncling · Automated app localization for Android & iOS developers." }
             }
@@ -1134,6 +1255,700 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
         script { unsafe { +LANDING_JS } }
     }
 }
+
+private fun HTML.docsPage() {
+    head {
+        title { +"Syncling Docs — Setup, CLI Reference & FAQ" }
+        meta(charset = "UTF-8")
+        meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        meta(name = "description", content = "Complete documentation for Syncling: quick start guide, CLI reference, Android & iOS SDK setup, GitHub webhook configuration, API tokens, and FAQ.")
+        meta(name = "robots", content = "index, follow")
+        link(rel = "canonical", href = "$CANONICAL_BASE/syncling/docs")
+        favicon()
+        style { unsafe { +"$SHARED_CSS$DOCS_CSS" } }
+    }
+    body {
+        nav {
+            div("nav-inner") {
+                div("brand") {
+                    a("/syncling") {
+                        style = "display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit"
+                        unsafe { +LOGO_SVG }; span { +"Syncling" }
+                    }
+                }
+                div("nav-links") {
+                    a("/syncling") { +"Home" }
+                    a("/syncling#features") { +"Features" }
+                    a("/syncling#pricing") { +"Pricing" }
+                    a("/syncling/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
+                    a("/syncling/auth/github") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started free" }
+                }
+            }
+        }
+
+        div("docs-layout") {
+            aside("docs-sidebar") {
+                div("docs-sidebar-inner") {
+                    p("docs-sidebar-label") { +"Getting Started" }
+                    a(href = "#quickstart", classes = "docs-nav-link") { +"Quick Start" }
+                    a(href = "#connect-repo", classes = "docs-nav-link") { +"Connect a Repository" }
+                    a(href = "#add-sdk", classes = "docs-nav-link") { +"Add the SDK" }
+
+                    p("docs-sidebar-label") { +"CLI" }
+                    a(href = "#cli", classes = "docs-nav-link") { +"Installation" }
+                    a(href = "#cli-auth", classes = "docs-nav-link") { +"Authentication" }
+                    a(href = "#cli-commands", classes = "docs-nav-link") { +"Command Reference" }
+
+                    p("docs-sidebar-label") { +"SDKs" }
+                    a(href = "#android-sdk", classes = "docs-nav-link") { +"Android SDK" }
+                    a(href = "#ios-sdk", classes = "docs-nav-link") { +"iOS SDK" }
+
+                    p("docs-sidebar-label") { +"Platform" }
+                    a(href = "#projects", classes = "docs-nav-link") { +"Projects" }
+                    a(href = "#webhook", classes = "docs-nav-link") { +"GitHub Webhook" }
+                    a(href = "#api-tokens", classes = "docs-nav-link") { +"API Tokens" }
+                    a(href = "#glossary", classes = "docs-nav-link") { +"Glossary" }
+                    a(href = "#cdn", classes = "docs-nav-link") { +"CDN & OTA Updates" }
+                    a(href = "#semantic", classes = "docs-nav-link") { +"Semantic Change Detection" }
+
+                    p("docs-sidebar-label") { +"Plans & Billing" }
+                    a(href = "#pricing", classes = "docs-nav-link") { +"Pricing" }
+
+                    p("docs-sidebar-label") { +"Help" }
+                    a(href = "#faq", classes = "docs-nav-link") { +"FAQ" }
+                    a(href = "#support", classes = "docs-nav-link") { +"Support" }
+                }
+            }
+
+            main("docs-main") {
+
+                // ── Quick Start ─────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "quickstart"
+                    div("docs-section-header") {
+                        span("docs-badge") { +"Getting Started" }
+                        h1 { +"Quick Start" }
+                        p("docs-lead") { +"Get from zero to globally localized in three steps. No credit card required." }
+                    }
+                    div("steps-list") {
+                        div("step-card") {
+                            div("step-number") { +"1" }
+                            div("step-body") {
+                                h3 { +"Sign up with GitHub" }
+                                p { +"Go to "; a("/syncling/auth/github") { +"syncling/auth/github" }; +" and authenticate with your GitHub account. The Free plan activates instantly — no card needed." }
+                            }
+                        }
+                        div("step-card") {
+                            div("step-number") { +"2" }
+                            div("step-body") {
+                                h3 { +"Create a project" }
+                                p { +"In the dashboard, click "; strong { +"New Project" }; +" and select your repository. Choose the branch Syncling should watch (e.g. "; code { +"main" }; +"), pick your source language and target languages, and save. Syncling automatically installs the webhook." }
+                            }
+                        }
+                        div("step-card") {
+                            div("step-number") { +"3" }
+                            div("step-body") {
+                                h3 { +"Add the SDK and push" }
+                                p { +"Drop the Android or iOS SDK into your app (one-line init). Make any string change in your source file and push to the watched branch. Translations appear on the CDN in ~45 seconds." }
+                            }
+                        }
+                    }
+                    div("docs-callout docs-callout-tip") {
+                        strong { +"Tip:" }
+                        +" You can also trigger a sync manually any time using "; code { +"syncling push <project-id>" }; +" from the CLI — useful before a release."
+                    }
+                }
+
+                // ── Connect Repo ────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "connect-repo"
+                    h2 { +"Connect a Repository" }
+                    p { +"Syncling uses GitHub webhooks to watch your repository for commits. When you create a project, Syncling registers the webhook automatically using the GitHub token you authorised at sign-up." }
+                    h4 { +"What Syncling reads from your repo" }
+                    ul("docs-list") {
+                        li { strong { +"Android:" }; +" "; code { +"src/main/res/values/strings.xml" }; +" (configurable path)" }
+                        li { strong { +"iOS:" }; +" "; code { +"*.lproj/Localizable.strings" }; +" (configurable path)" }
+                        li { +"Any file matching the configured source path pattern" }
+                    }
+                    h4 { +"Branch configuration" }
+                    p { +"During project setup you choose the "; strong { +"watch branch" }; +". Only pushes to that branch trigger the pipeline. You can also configure custom PR branch patterns from the project settings to run translation previews on pull requests." }
+                    div("docs-callout docs-callout-info") {
+                        strong { +"Note:" }
+                        +" Syncling only reads your string resource files — it never clones the full repository. The webhook payload contains the file diff, not your source code."
+                    }
+                }
+
+                // ── Add SDK ────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "add-sdk"
+                    h2 { +"Add the SDK to Your App" }
+                    p { +"The SDK fetches the latest translations from the nearest Cloudflare edge node on first launch and caches them locally. If the CDN is unreachable (offline / airplane mode), the last cached strings are served automatically." }
+                    p { +"For detailed setup instructions see the "; a("#android-sdk") { +"Android SDK" }; +" and "; a("#ios-sdk") { +"iOS SDK" }; +" sections below." }
+                }
+
+                // ── CLI Installation ────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "cli"
+                    div("docs-section-header") {
+                        span("docs-badge") { +"CLI" }
+                        h2 { +"CLI Installation" }
+                        p("docs-lead") { +"The Syncling CLI lets you manage your localization pipeline from any terminal. It's available via npm and works on macOS, Linux, and Windows." }
+                    }
+                    h4 { +"Requirements" }
+                    ul("docs-list") {
+                        li { +"Node.js 18 or later" }
+                        li { +"npm 9 or later (bundled with Node.js)" }
+                        li { +"A Syncling account and an API token ("; a("#api-tokens") { +"create one here" }; +")" }
+                    }
+                    h4 { +"Install globally" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"npm install -g syncling" }
+                    }
+                    h4 { +"Verify the installation" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"syncling --version\n# 0.1.0" }
+                    }
+                    h4 { +"Use without installing (npx)" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"npx syncling --help" }
+                    }
+                }
+
+                // ── CLI Auth ────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "cli-auth"
+                    h2 { +"CLI Authentication" }
+                    p { +"The CLI authenticates using an API token, not your GitHub session. Tokens start with "; code { +"sli_" }; +" and are scoped to your account." }
+                    h4 { +"Step 1 — Generate a token" }
+                    p { +"Go to "; a("/syncling/tokens") { +"syncling/tokens" }; +" in the dashboard and click "; strong { +"New Token" }; +". Give it a descriptive name (e.g. "; code { +"my-laptop" }; +"). Copy the token — it's shown only once." }
+                    h4 { +"Step 2 — Login" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"syncling login\n\nCreate an API token at: https://data.androidplay.in/syncling/tokens\nPaste your token (sli_…): sli_xxxxxxxxxxxxxxxx\n\nLogged in. Plan: Solo · 3 project(s)" }
+                    }
+                    p { +"Credentials are stored in "; code { +"~/.syncling/config.json" }; +" on your machine. To remove them:" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"syncling logout" }
+                    }
+                    h4 { +"CI/CD environments" }
+                    p { +"For non-interactive environments, set the "; code { +"SYNCLING_TOKEN" }; +" environment variable. The CLI picks it up automatically without needing "; code { +"syncling login" }; +"." }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"export SYNCLING_TOKEN=\"sli_xxxxxxxxxxxxxxxx\"\nsyncling push proj_abc123" }
+                    }
+                }
+
+                // ── CLI Commands ────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "cli-commands"
+                    h2 { +"CLI Command Reference" }
+                    p { +"All commands accept "; code { +"--help" }; +" for inline usage." }
+
+                    data class CmdDoc(val name: String, val usage: String, val desc: String, val example: String? = null, val flags: List<Pair<String,String>> = emptyList())
+                    listOf(
+                        CmdDoc("login", "syncling login [--api-base <url>]",
+                            "Authenticate with an API token. Stores credentials in ~/.syncling/config.json.",
+                            "syncling login",
+                            listOf("--api-base <url>" to "Override the default API base URL (for self-hosted instances).")
+                        ),
+                        CmdDoc("logout", "syncling logout",
+                            "Remove stored credentials from the machine.",
+                            "syncling logout"
+                        ),
+                        CmdDoc("whoami", "syncling whoami",
+                            "Display account info: plan, trial status, project count, strings translated.",
+                            "syncling whoami"
+                        ),
+                        CmdDoc("projects", "syncling projects",
+                            "List all projects linked to your account with IDs, repos, branches, and language counts.",
+                            "syncling projects"
+                        ),
+                        CmdDoc("push", "syncling push <project-id>",
+                            "Trigger a manual translation sync for a project. Useful in CI or before a release.",
+                            "syncling push proj_abc123"
+                        ),
+                        CmdDoc("pull", "syncling pull <project-id> [options]",
+                            "Download translated files for a project. By default pulls all configured languages.",
+                            "syncling pull proj_abc123 -l es -l fr -o ./translations",
+                            listOf(
+                                "-l, --lang <code>" to "Language code to pull (repeatable). Omit to pull all configured languages.",
+                                "-o, --out <dir>" to "Output directory (default: current directory).",
+                                "-f, --format <fmt>" to "Output format: xml | json | strings. Default: auto-detect from project type."
+                            )
+                        ),
+                        CmdDoc("status", "syncling status [options]",
+                            "Show recent pipeline runs with status, duration, string count, and timestamps.",
+                            "syncling status --project proj_abc123",
+                            listOf("-p, --project <id>" to "Filter runs by project ID.")
+                        ),
+                        CmdDoc("tokens list", "syncling tokens list",
+                            "List all API tokens on your account with creation date and last-used date.",
+                            "syncling tokens list"
+                        ),
+                        CmdDoc("tokens create", "syncling tokens create <name>",
+                            "Create a new API token. The token value is shown only once — copy it immediately.",
+                            "syncling tokens create ci-pipeline"
+                        ),
+                        CmdDoc("tokens revoke", "syncling tokens revoke <id>",
+                            "Immediately revoke an API token. Any system using that token loses access instantly.",
+                            "syncling tokens revoke tok_xyz"
+                        )
+                    ).forEach { cmd ->
+                        div("cmd-doc-block") {
+                            h4("cmd-doc-name") { +cmd.name }
+                            div("docs-code-block") {
+                                pre("docs-code") { +cmd.usage }
+                            }
+                            p { +cmd.desc }
+                            if (cmd.flags.isNotEmpty()) {
+                                table("docs-table") {
+                                    thead { tr { th { +"Flag" }; th { +"Description" } } }
+                                    tbody {
+                                        cmd.flags.forEach { (flag, desc) ->
+                                            tr { td { code { +flag } }; td { +desc } }
+                                        }
+                                    }
+                                }
+                            }
+                            cmd.example?.let {
+                                div("docs-code-block") {
+                                    pre("docs-code docs-code-example") { +it }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Android SDK ─────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "android-sdk"
+                    div("docs-section-header") {
+                        span("docs-badge") { +"SDKs" }
+                        h2 { +"Android SDK" }
+                        p("docs-lead") { +"Drop-in localization for Android apps built with Kotlin or Java. Works with your existing strings.xml workflow — offline-first, zero extra networking code." }
+                    }
+                    h4 { +"1. Add the dependency" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"""// build.gradle.kts (app module)
+dependencies {
+    implementation("com.syncling:android-sdk:1.0.0")
+}""" }
+                    }
+                    h4 { +"2. Initialize in Application" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"""// MyApplication.kt
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Syncling.init(
+            context = this,
+            apiKey  = "YOUR_API_KEY",   // project API key from dashboard
+        )
+    }
+}""" }
+                    }
+                    h4 { +"3. Fetch translated strings" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"""// Any Activity / Fragment
+val title   = Syncling.string("onboarding_welcome_title")
+val message = Syncling.string("onboarding_welcome_message")
+
+// With format args
+val greeting = Syncling.string("greeting_user", userName)""" }
+                    }
+                    h4 { +"Offline behaviour" }
+                    p { +"On first launch the SDK fetches the latest bundle from the nearest Cloudflare PoP and caches it to local storage. All subsequent calls are served from the cache. The cache is invalidated when a new CDN publish is detected — controlled by an ETag check that runs in the background, not on the critical path." }
+                    div("docs-callout docs-callout-info") {
+                        strong { +"API Key:" }
+                        +" Find your project API key under "; strong { +"Project Settings → SDK Keys" }; +" in the dashboard. Each project has a unique key."
+                    }
+                }
+
+                // ── iOS SDK ─────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "ios-sdk"
+                    h2 { +"iOS SDK" }
+                    p("docs-lead") { +"Swift-native localization with SwiftUI and UIKit support. Zero dependencies, offline-first, served from Cloudflare edge." }
+                    h4 { +"1. Add via Swift Package Manager" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"""// Package.swift
+dependencies: [
+    .package(
+        url: "https://github.com/syncling/ios-sdk",
+        from: "1.0.0"
+    )
+]""" }
+                    }
+                    h4 { +"2. Configure in AppDelegate / @main" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"""// AppDelegate.swift
+import Syncling
+
+@UIApplicationMain
+class AppDelegate: UIResponder, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions ...) -> Bool {
+        Syncling.configure(apiKey: "YOUR_API_KEY")
+        return true
+    }
+}""" }
+                    }
+                    h4 { +"3. Use in SwiftUI" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"""// ContentView.swift
+import SwiftUI
+import Syncling
+
+struct ContentView: View {
+    var body: some View {
+        Text(Syncling.string("onboarding_welcome_title"))
+    }
+}""" }
+                    }
+                    h4 { +"4. UIKit" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"""label.text = Syncling.string("onboarding_welcome_title")""" }
+                    }
+                }
+
+                // ── Projects ────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "projects"
+                    div("docs-section-header") {
+                        span("docs-badge") { +"Platform" }
+                        h2 { +"Projects" }
+                    }
+                    p { +"Each project maps to one GitHub repository. A project has exactly one source language and one or more target languages. The pipeline runs once per push to the configured watch branch." }
+                    h4 { +"Creating a project" }
+                    ol("docs-list") {
+                        li { +"Open "; a("/syncling/projects") { +"Projects" }; +" in the dashboard and click "; strong { +"New Project" }; +"." }
+                        li { +"Select the GitHub repository from the list (only repos you authorised are shown)." }
+                        li { +"Set the "; strong { +"Watch Branch" }; +" (default: "; code { +"main" }; +")." }
+                        li { +"Set the "; strong { +"Source File Path" }; +" — e.g. "; code { +"src/main/res/values/strings.xml" }; +" for Android." }
+                        li { +"Choose the "; strong { +"Source Language" }; +" (the language your strings are written in)." }
+                        li { +"Add one or more "; strong { +"Target Languages" }; +" from the supported list." }
+                        li { +"Click "; strong { +"Create" }; +". The webhook is installed automatically." }
+                    }
+                    h4 { +"Per-project quota" }
+                    p { +"Team plan users can set a "; strong { +"monthly string quota" }; +" per project. When a project's quota is reached, its pipeline pauses until the next billing cycle — other projects are unaffected." }
+                    h4 { +"Project API key" }
+                    p { +"Each project has a unique API key used by the SDK. Find it under "; strong { +"Project Settings → SDK Keys" }; +". Keys can be rotated at any time — update the key in your app and redeploy or wait for an OTA refresh." }
+                }
+
+                // ── Webhook ────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "webhook"
+                    h2 { +"GitHub Webhook" }
+                    p { +"Syncling registers a webhook on your repository automatically when you create a project. No manual GitHub configuration is needed." }
+                    h4 { +"What the webhook does" }
+                    ul("docs-list") {
+                        li { +"Fires on every "; code { +"push" }; +" event to the watched branch." }
+                        li { +"Syncling reads the changed files from the push payload and checks if your source strings file was modified." }
+                        li { +"If the strings file changed, the translation pipeline is queued." }
+                        li { +"If the push doesn't touch the strings file, the webhook is acknowledged and nothing else runs — no wasted quota." }
+                    }
+                    h4 { +"Manual sync" }
+                    p { +"You can trigger a sync at any time from the dashboard ("; strong { +"Project → Sync Now" }; +") or via the CLI:" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"syncling push <project-id>" }
+                    }
+                    h4 { +"Webhook security" }
+                    p { +"All webhook payloads are verified using a HMAC-SHA256 signature computed from your GitHub webhook secret. Requests with invalid or missing signatures are rejected with "; code { +"403 Forbidden" }; +"." }
+                }
+
+                // ── API Tokens ──────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "api-tokens"
+                    h2 { +"API Tokens" }
+                    p { +"API tokens authenticate the CLI and REST API calls on behalf of your account. Tokens start with "; code { +"sli_" }; +" and carry the same permissions as the account that created them." }
+                    h4 { +"Create a token" }
+                    p { +"Go to "; a("/syncling/tokens") { +"syncling/tokens" }; +" → "; strong { +"New Token" }; +". Give it a descriptive name. The full token value is shown only once at creation — store it securely (e.g. as a CI secret)." }
+                    h4 { +"Use in the CLI" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"syncling login   # interactive, stores token in ~/.syncling/config.json" }
+                    }
+                    h4 { +"Use in REST API calls" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"curl -H \"Authorization: Bearer sli_xxxxxxxxxxxxxxxx\" \\\n     https://data.androidplay.in/syncling/api/projects" }
+                    }
+                    h4 { +"Revoking a token" }
+                    p { +"Tokens can be revoked instantly from the dashboard or via the CLI:" }
+                    div("docs-code-block") {
+                        pre("docs-code") { +"syncling tokens revoke <token-id>" }
+                    }
+                    div("docs-callout docs-callout-warning") {
+                        strong { +"Security:" }
+                        +" Never commit API tokens to version control. Use environment variables or your CI secret store (GitHub Actions Secrets, Bitrise Secrets, etc.)."
+                    }
+                }
+
+                // ── Glossary ────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "glossary"
+                    h2 { +"Glossary" }
+                    p { +"The glossary lets you define brand terms, product names, and translation rules per language. Glossary terms are injected into every translation prompt — ensuring "; em { +"your" }; +" terminology is used consistently across all strings." }
+                    h4 { +"Example use cases" }
+                    ul("docs-list") {
+                        li { +"Lock "; em { +"\"Syncling\"" }; +" to remain untranslated in all languages." }
+                        li { +"Map "; em { +"\"free trial\"" }; +" → "; em { +"\"prueba gratuita\"" }; +" in Spanish." }
+                        li { +"Enforce formal address ("; em { +"\"Sie\"" }; +" not "; em { +"\"du\"" }; +") in German." }
+                    }
+                    h4 { +"Managing glossary entries" }
+                    p { +"Open "; strong { +"Project → Glossary" }; +" in the dashboard. Entries take effect on the next pipeline run." }
+                }
+
+                // ── CDN ─────────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "cdn"
+                    h2 { +"CDN & OTA Updates" }
+                    p { +"Translations are compiled into signed bundles and published to Cloudflare R2, then replicated to 250+ edge PoPs globally. The SDK fetches bundles from the nearest PoP, giving P99 response times under 20ms." }
+                    h4 { +"Bundle versioning" }
+                    p { +"Every publish creates an immutable versioned bundle. The SDK checks for a new bundle version in the background (via an ETag header) and swaps to it silently — no app restart required." }
+                    h4 { +"Rollback" }
+                    p { +"If a bad translation reaches the CDN, you can roll back to any previous version from "; strong { +"Project → CDN Publishes" }; +" in the dashboard with a single click. Rollback takes effect globally within seconds." }
+                    h4 { +"Bundle signing" }
+                    p { +"Bundles are signed with an HMAC-SHA256 key derived from your project's signing secret. The SDK validates the signature before applying any bundle — tampered or corrupt bundles are rejected." }
+                }
+
+                // ── Semantic Change Detection ───────────────────────────────────────────
+                section("docs-section") {
+                    id = "semantic"
+                    h2 { +"Semantic Change Detection" }
+                    p { +"Not every string edit is a meaningful change. If a developer fixes whitespace, reorders parameters, or tweaks capitalisation, the translation stays valid — re-translating wastes API quota." }
+                    p { +"Syncling runs an AI classifier on every changed string before calling the translation model. Strings classified as semantically identical to their current translation are skipped. Only real semantic changes consume quota." }
+                    h4 { +"Impact" }
+                    ul("docs-list") {
+                        li { +"Typical savings of 40–70% of translatable strings per commit in mature projects." }
+                        li { +"Quota is tracked per string change, not per pipeline run." }
+                        li { +"Skipped strings still get their existing translations refreshed in the published bundle." }
+                    }
+                }
+
+                // ── Pricing ─────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "pricing"
+                    div("docs-section-header") {
+                        span("docs-badge") { +"Plans & Billing" }
+                        h2 { +"Pricing" }
+                        p("docs-lead") { +"All plans include a 7-day free trial. No charge until the trial ends — cancel any time." }
+                    }
+                    table("docs-table docs-pricing-table") {
+                        thead {
+                            tr {
+                                th { +"Feature" }
+                                th { +"Free" }
+                                th { +"Solo  ₹499/mo" }
+                                th { +"Team  ₹1,999/mo" }
+                            }
+                        }
+                        tbody {
+                            data class PRow(val feature: String, val free: String, val solo: String, val team: String)
+                            listOf(
+                                PRow("Monthly strings", "500", "5,000", "Unlimited"),
+                                PRow("Projects", "1", "3", "10"),
+                                PRow("Target languages", "3", "All (10+)", "All (10+)"),
+                                PRow("GitHub webhook", "✓", "✓", "✓"),
+                                PRow("AI translation", "✓", "✓", "✓"),
+                                PRow("CDN delivery", "✓", "✓", "✓"),
+                                PRow("Glossary enforcement", "—", "✓", "✓"),
+                                PRow("Translation memory", "—", "✓", "✓"),
+                                PRow("Human review portal", "—", "✓", "✓"),
+                                PRow("Outbound webhooks", "—", "✓", "✓"),
+                                PRow("Team members", "—", "—", "✓"),
+                                PRow("Per-project quotas", "—", "—", "✓"),
+                                PRow("Priority CDN SLA", "—", "—", "✓"),
+                                PRow("Priority support", "—", "—", "✓"),
+                                PRow("7-day free trial", "—", "✓", "✓")
+                            ).forEach { r ->
+                                tr {
+                                    td { +r.feature }
+                                    td { +r.free }
+                                    td { +r.solo }
+                                    td { +r.team }
+                                }
+                            }
+                        }
+                    }
+                    div("docs-pricing-cta") {
+                        a("/syncling/auth/github") { classes = setOf("btn", "btn-ghost"); +"Start free →" }
+                        a("/syncling/billing/start-subscription?plan=SOLO") { classes = setOf("btn", "btn-primary"); +"Start Solo trial" }
+                        a("/syncling/billing/start-subscription?plan=TEAM") { classes = setOf("btn", "btn-primary"); +"Start Team trial" }
+                    }
+                }
+
+                // ── FAQ ─────────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "faq"
+                    div("docs-section-header") {
+                        span("docs-badge") { +"Help" }
+                        h2 { +"FAQ" }
+                    }
+                    data class DocFaq(val q: String, val a: String)
+                    listOf(
+                        DocFaq("What is Syncling?",
+                            "Syncling is an automated mobile app localization platform. It hooks into your GitHub repository, detects semantic string changes, translates them into 10+ languages with Claude AI, and publishes the result to a global Cloudflare CDN within ~45 seconds of a git push."),
+                        DocFaq("Do I need to set up the webhook manually?",
+                            "No. Syncling registers the GitHub webhook automatically when you create a project. You just need to authorise the GitHub App during sign-up."),
+                        DocFaq("Can I update translations without releasing a new app version?",
+                            "Yes — this is a core feature. Translations are served over-the-air from Cloudflare's CDN via the SDK. Fix a typo or add a language at any time; changes go live in under 45 seconds with no App Store or Google Play submission required."),
+                        DocFaq("Does it work with my existing strings.xml or Localizable.strings?",
+                            "Yes. You point Syncling at your existing source file and the SDK resolves strings at runtime — no changes to your string keys, no migration."),
+                        DocFaq("What languages are supported?",
+                            "Spanish (ES), French (FR), German (DE), Japanese (JA), Korean (KO), Chinese Simplified (ZH), Hindi (HI), Brazilian Portuguese (PT), Italian (IT), and Arabic (AR). The Free plan includes 3; Solo and Team unlock all."),
+                        DocFaq("How accurate are the AI translations?",
+                            "Translations are generated by Claude (Anthropic) with your glossary applied for brand consistency. A post-translation pass checks for placeholder integrity and cultural sensitivity. You can route any translation through the human review portal before it reaches the CDN."),
+                        DocFaq("What happens if a translation breaks a placeholder like %1\$s?",
+                            "The placeholder guard validates all format specifiers after translation. If a specifier is missing or malformed, the string is blocked and flagged for review — it never reaches the CDN or your users."),
+                        DocFaq("How does billing work?",
+                            "You are billed per translated string (not per API call or character). The Free plan includes 500 strings/month forever. Paid plans include higher limits and start with a 7-day free trial — no charge until the trial ends."),
+                        DocFaq("Can I cancel any time?",
+                            "Yes. Cancel from the Billing page in the dashboard. Your plan stays active until the end of the current billing period. No cancellation fees."),
+                        DocFaq("Is there a refund policy?",
+                            "If you're not satisfied within 7 days of your first paid charge, contact support and we'll issue a full refund — no questions asked."),
+                        DocFaq("How do I report a translation issue?",
+                            "Open the Human Review Portal, find the string, and click Flag. You can add a note describing the issue. Flagged strings are removed from the live bundle until corrected."),
+                        DocFaq("Can multiple team members use one account?",
+                            "Team plan accounts support multiple members with role-based access. Invite members from Project → Members with Admin, Translator, or Reviewer roles. Each member gets their own login."),
+                        DocFaq("How is the CLI different from the dashboard?",
+                            "The CLI gives you the same core operations (push, pull, status, token management) in a form that integrates with terminal workflows, shell scripts, and CI/CD pipelines. The dashboard offers the full feature set including analytics, billing, human review, and CDN management.")
+                    ).forEach { faq ->
+                        div("docs-faq-item") {
+                            h4("docs-faq-q") { +faq.q }
+                            p("docs-faq-a") { +faq.a }
+                        }
+                    }
+                }
+
+                // ── Support ─────────────────────────────────────────────────────────────
+                section("docs-section") {
+                    id = "support"
+                    h2 { +"Support" }
+                    p { +"We're here to help. Reach out through any of these channels:" }
+                    div("docs-support-grid") {
+                        div("docs-support-card") {
+                            div("docs-support-icon") {
+                                unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>""" }
+                            }
+                            h4 { +"In-app chat" }
+                            p { +"Click the "; strong { +"?" }; +" button in the bottom-right corner of any page in the dashboard to open a support ticket. We typically respond within a few hours." }
+                        }
+                        div("docs-support-card") {
+                            div("docs-support-icon") {
+                                unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>""" }
+                            }
+                            h4 { +"Email" }
+                            p { +"Send us a message at "; a("mailto:support@androidplay.in") { +"support@androidplay.in" }; +". Include your project ID and a description of the issue." }
+                        }
+                    }
+                }
+
+            }
+        }
+
+        footer {
+            div("footer-inner") {
+                div("brand") {
+                    a("/syncling") {
+                        style = "display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit"
+                        unsafe { +LOGO_SVG }; span { +"Syncling" }
+                    }
+                }
+                nav("footer-nav") {
+                    a("/syncling") { +"Home" }
+                    a("/syncling#features") { +"Features" }
+                    a("/syncling#pricing") { +"Pricing" }
+                    a("/syncling/docs") { +"Docs" }
+                }
+                p("footer-copy") { +"© 2026 Syncling · Automated app localization for Android & iOS developers." }
+            }
+        }
+
+        script { unsafe { +"""
+(function(){
+  var links = document.querySelectorAll('a.docs-nav-link');
+  var sections = Array.from(document.querySelectorAll('.docs-section[id]'));
+  function activate(){
+    var scrollY = window.scrollY + 80;
+    var active = sections.reduce(function(a,s){ return s.offsetTop <= scrollY ? s : a; }, sections[0]);
+    if(!active) return;
+    links.forEach(function(l){ l.classList.toggle('active', l.getAttribute('href') === '#'+active.id); });
+  }
+  window.addEventListener('scroll', activate, {passive:true});
+  activate();
+})();
+""" } }
+    }
+}
+
+private const val DOCS_CSS = """
+nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1280px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.nav-links{display:flex;align-items:center;gap:24px}
+.nav-links a:not(.btn){color:var(--text-muted);font-size:14px;transition:color .2s ease}
+.nav-links a:not(.btn):hover{color:var(--text)}
+.nav-cta{padding:8px 16px!important;font-size:13px!important}
+.docs-layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 57px);max-width:1280px;margin:0 auto}
+.docs-sidebar{border-right:1px solid var(--border);background:var(--surface2)}
+.docs-sidebar-inner{position:sticky;top:57px;max-height:calc(100vh - 57px);overflow-y:auto;padding:28px 0 48px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.docs-sidebar-label{font-size:10px;font-weight:800;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;padding:20px 20px 6px;margin-top:8px}
+.docs-sidebar-label:first-child{padding-top:0;margin-top:0}
+a.docs-nav-link{display:block;padding:7px 20px;font-size:13px;color:var(--text-muted);border-left:2px solid transparent;transition:color .15s,border-color .15s,background .15s}
+a.docs-nav-link:hover{color:var(--text);background:rgba(139,126,255,.04);border-left-color:rgba(139,126,255,.3)}
+a.docs-nav-link.active{color:var(--accent);border-left-color:var(--accent);background:rgba(139,126,255,.06)}
+.docs-main{padding:48px 56px;max-width:860px}
+.docs-section{margin-bottom:72px;padding-bottom:72px;border-bottom:1px solid var(--border)}
+.docs-section:last-child{border-bottom:none}
+.docs-section-header{margin-bottom:32px}
+.docs-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(139,126,255,.2);border-radius:20px;padding:3px 10px;margin-bottom:12px}
+.docs-main h1{font-size:clamp(24px,3vw,36px);font-weight:800;letter-spacing:-.5px;margin-bottom:8px;line-height:1.2}
+.docs-main h2{font-size:clamp(20px,2.5vw,28px);font-weight:700;letter-spacing:-.3px;margin-bottom:8px;margin-top:0;padding-top:0}
+.docs-main h3{font-size:17px;font-weight:700;margin-bottom:8px;margin-top:0;color:var(--text)}
+.docs-main h4{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px;margin:28px 0 10px;text-transform:uppercase;letter-spacing:.8px}
+.docs-lead{font-size:16px;color:var(--text-muted);line-height:1.7;margin-top:8px}
+.docs-main p{font-size:14px;color:var(--text-muted);line-height:1.75;margin-bottom:14px}
+.docs-main a{color:var(--accent);text-decoration:none}.docs-main a:hover{text-decoration:underline}
+.docs-main strong{color:var(--text);font-weight:600}
+.docs-main code{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:12.5px;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;color:var(--accent)}
+.docs-list{padding-left:20px;display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
+.docs-list li{font-size:14px;color:var(--text-muted);line-height:1.65}
+.steps-list{display:flex;flex-direction:column;gap:16px;margin-bottom:28px}
+.step-card{display:flex;gap:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;align-items:flex-start}
+.step-number{width:32px;height:32px;border-radius:50%;background:var(--accent);color:#000;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.step-body h3{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px}
+.step-body p{font-size:13px;color:var(--text-muted);line-height:1.65;margin:0}
+.docs-callout{border-radius:8px;padding:14px 18px;font-size:13px;line-height:1.65;margin:20px 0;border:1px solid}
+.docs-callout-tip{background:rgba(61,220,132,.06);border-color:rgba(61,220,132,.2);color:#b0ddc0}
+.docs-callout-info{background:rgba(139,126,255,.06);border-color:rgba(139,126,255,.2);color:var(--text-muted)}
+.docs-callout-warning{background:rgba(254,188,46,.06);border-color:rgba(254,188,46,.2);color:#d4b97a}
+.docs-callout strong{color:inherit}
+.docs-code-block{margin:12px 0 20px;border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.docs-code{background:#0d0d0d;color:var(--text-dim);font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:12.5px;line-height:1.75;padding:18px 20px;margin:0;white-space:pre;overflow-x:auto;display:block}
+.docs-code-example{border-top:1px solid #1a1a1a}
+.cmd-doc-block{margin-bottom:36px;padding-bottom:36px;border-bottom:1px solid var(--border)}
+.cmd-doc-block:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.cmd-doc-name{font-size:16px;font-weight:700;color:var(--text);font-family:ui-monospace,'SF Mono',Menlo,monospace;margin-bottom:12px;display:block}
+.docs-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 20px}
+.docs-table th{text-align:left;padding:10px 14px;background:var(--surface2);color:var(--text);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.docs-table td{padding:10px 14px;color:var(--text-muted);border-bottom:1px solid var(--border);vertical-align:top;line-height:1.55}
+.docs-table tr:last-child td{border-bottom:none}
+.docs-pricing-table td:nth-child(n+2){text-align:center}
+.docs-pricing-table th:nth-child(n+2){text-align:center}
+.docs-pricing-cta{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}
+.docs-faq-item{margin-bottom:28px;padding-bottom:28px;border-bottom:1px solid var(--border)}
+.docs-faq-item:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.docs-faq-q{font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px;line-height:1.4}
+.docs-faq-a{font-size:13px;color:var(--text-muted);line-height:1.75;margin:0}
+.docs-support-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-top:16px}
+.docs-support-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:10px}
+.docs-support-icon{color:var(--accent);line-height:0}
+.docs-support-card h4{font-size:14px;font-weight:700;color:var(--text);margin:0;letter-spacing:0;text-transform:none}
+.docs-support-card p{font-size:13px;color:var(--text-muted);line-height:1.65;margin:0}
+footer{padding:28px 24px;border-top:1px solid var(--border)}
+.footer-inner{max-width:1280px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
+.footer-nav{display:flex;gap:20px;flex-wrap:wrap}
+.footer-nav a{color:var(--text-muted);font-size:13px;transition:color .15s}.footer-nav a:hover{color:var(--accent)}
+.footer-copy{font-size:12px;color:var(--text-muted)}
+@media(max-width:900px){.docs-layout{grid-template-columns:1fr}.docs-sidebar{display:none}.docs-main{padding:32px 24px}}
+@media(max-width:640px){.docs-main{padding:24px 16px}.docs-support-grid{grid-template-columns:1fr}}
+"""
 
 private const val LANDING_CSS = """
 @keyframes heroDrift{0%,100%{transform:translate(-50%,0) scale(1)}50%{transform:translate(-50%,30px) scale(1.08)}}
@@ -1326,6 +2141,21 @@ footer{padding:28px 24px;border-top:1px solid var(--border)}
 .faq-q{font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px;line-height:1.45}
 .faq-a{font-size:13px;color:var(--text-muted);line-height:1.7}
 @media(max-width:768px){.faq-grid{grid-template-columns:1fr}}
+.cli-section{background:var(--surface2);border-top:1px solid var(--border);padding:88px 24px}
+.cli-layout{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
+.cli-term-wrap{position:sticky;top:80px}
+.cli-term-body{gap:0;padding:20px 24px 24px}
+.cli-t-block{margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #151515}
+.cli-t-block:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
+.cli-t-out{padding-left:16px;font-size:12.5px;color:var(--text-dim);line-height:1.8;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+.cli-cmds-list{display:flex;flex-direction:column;gap:0}
+.cli-cmd-row{padding:14px 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+.cli-cmd-row:first-child{padding-top:0}
+.cli-cmd-name{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:13px;color:var(--accent);font-weight:600;background:var(--accent-dim);border:1px solid rgba(139,126,255,.2);border-radius:5px;padding:3px 8px;display:inline-block;width:fit-content}
+.cli-cmd-desc{font-size:13px;color:var(--text-muted);line-height:1.55}
+.cli-cta-row{display:flex;gap:12px;margin-top:28px;flex-wrap:wrap}
+@media(max-width:900px){.cli-layout{grid-template-columns:1fr}.cli-term-wrap{position:static}}
+@media(max-width:640px){.cli-section{padding:52px 16px}}
 """
 
 private fun HTML.dashboardApp() {

@@ -31,6 +31,7 @@ fun synclingModule(encryptionKey: String) = module {
     single<ProjectMembershipRepository> { MongoProjectMembershipRepository(get()) }
     single<PipelineRunRepository> { MongoPipelineRunRepository(get()) }
     single<com.syncling.repository.SupportTicketRepository> { com.syncling.repository.mongo.MongoSupportTicketRepository(get()) }
+    single<com.syncling.repository.ApiTokenRepository> { com.syncling.repository.mongo.MongoApiTokenRepository(get()) }
     single<MemberUsageRepository> { MongoMemberUsageRepository(get()) }
     single { com.syncling.services.MemberUsageService(get()) }
     single {
@@ -128,5 +129,8 @@ fun synclingIndexes(): List<IndexSpec> {
         IndexSpec("member_usage_logs", Document(mapOf("ownerId" to 1, "yearMonth" to 1))),
         IndexSpec("member_usage_logs", Document(mapOf("projectId" to 1, "yearMonth" to 1))),
         IndexSpec("support_tickets", Document(mapOf("userId" to 1, "createdAt" to -1))),
+        // API tokens: tokenHash is the primary lookup key (must be unique); userId for list queries
+        IndexSpec("api_tokens", Document("tokenHash", 1), unique),
+        IndexSpec("api_tokens", Document("userId", 1)),
     )
 }

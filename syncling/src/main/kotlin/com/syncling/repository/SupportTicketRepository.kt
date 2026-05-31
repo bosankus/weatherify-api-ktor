@@ -18,4 +18,10 @@ interface SupportTicketRepository {
 
     /** Admin: update a ticket's status. Returns false if ticket not found. */
     suspend fun updateStatus(id: String, status: String): Boolean
+
+    /** Admin: save an internal note on a ticket. Returns false if ticket not found. */
+    suspend fun updateNote(id: String, note: String): Boolean
+
+    /** Admin: send a visible reply to the user. Returns false if ticket not found. */
+    suspend fun updateReply(id: String, reply: String): Boolean
 }

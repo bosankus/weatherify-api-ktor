@@ -39,8 +39,12 @@ import com.syncling.services.TranslationService
 import com.syncling.services.UserActivityService
 import com.syncling.routes.configureMemberRoutes
 import com.syncling.routes.configureCdnSigningKeyRoute
+import com.syncling.routes.configureTokenApiRoutes
+import com.syncling.routes.configureTokenPortalRoute
+import com.syncling.repository.ApiTokenRepository
 import com.syncling.repository.PipelineRunRepository
 import com.syncling.repository.SupportTicketRepository
+import com.syncling.routes.ApiTokenRepoAttr
 import com.androidplay.core.queue.JobQueueRepository
 import io.ktor.util.AttributeKey
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
@@ -93,6 +97,7 @@ class SynclingDeps(
     val pipelineRunRepository: PipelineRunRepository? = null,
     val supportTicketRepository: SupportTicketRepository? = null,
     val supportAdminEmail: String = "support@androidplay.in",
+    val apiTokenRepository: ApiTokenRepository? = null,
 )
 
 /**
@@ -103,6 +108,7 @@ class SynclingDeps(
  */
 fun Application.installSynclingRoutes(d: SynclingDeps) {
     d.supportTicketRepository?.let { attributes.put(SupportTicketRepoKey, it) }
+    d.apiTokenRepository?.let { attributes.put(ApiTokenRepoAttr, it) }
     routing {
         // Liveness probe — always 200 if the JVM is running.
         get("/health") { call.respond(HealthStatus("ok")) }
@@ -126,15 +132,16 @@ fun Application.installSynclingRoutes(d: SynclingDeps) {
         get("/robots.txt") {
             call.respondText("""
 User-agent: *
-Allow: /transloom
-Allow: /transloom/auth/github
-Disallow: /transloom/api/
-Disallow: /transloom/app
-Disallow: /transloom/billing
-Disallow: /transloom/projects
-Disallow: /transloom/review-portal
-Disallow: /transloom/members
-Disallow: /transloom/invite/
+Allow: /syncling
+Allow: /syncling/auth/github
+Allow: /syncling/docs
+Disallow: /syncling/api/
+Disallow: /syncling/app
+Disallow: /syncling/billing
+Disallow: /syncling/projects
+Disallow: /syncling/review-portal
+Disallow: /syncling/members
+Disallow: /syncling/invite/
 Disallow: /health
 Disallow: /ready
 Disallow: /admin
@@ -147,29 +154,39 @@ Sitemap: https://data.androidplay.in/sitemap.xml
             call.respondText("""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://data.androidplay.in/transloom</loc>
+    <loc>https://data.androidplay.in/syncling</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/transloom#features</loc>
+    <loc>https://data.androidplay.in/syncling#features</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/transloom#pricing</loc>
+    <loc>https://data.androidplay.in/syncling#pricing</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/transloom#faq</loc>
+    <loc>https://data.androidplay.in/syncling#faq</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://data.androidplay.in/transloom#how</loc>
+    <loc>https://data.androidplay.in/syncling#how</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://data.androidplay.in/syncling#cli</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://data.androidplay.in/syncling/docs</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
   </url>
 </urlset>""", contentType = io.ktor.http.ContentType.Application.Xml)
         }
@@ -192,7 +209,9 @@ Sitemap: https://data.androidplay.in/sitemap.xml
         rateLimit(RateLimitName("bundle_fetch")) {
             configureCdnBundleRoutes(d.projectRepository, d.cdnPublishRepository, d.cdnPublishService, d.membershipRepository)
         }
-        authenticate("auth-jwt") {
+        d.apiTokenRepository?.let { configureTokenPortalRoute() }
+        authenticate("auth-jwt", "api-token") {
+            d.apiTokenRepository?.let { configureTokenApiRoutes(it) }
             configureApiRoutes(
                 d.billingService, d.billingRepository, d.githubService, d.projectRepository,
                 d.userRepository, d.translationRepository, d.pipelineEventBus, d.jobQueue,

@@ -11,7 +11,7 @@
         return;
     }
 
-    const API = '/transloom/api/billing';
+    const API = '/syncling/api/billing';
     const PLAN_PICKER_ID = 'bl-plan-picker';
 
     // ── Plan catalog (mirror of BillingPlan.kt — kept here so the upgrade
@@ -370,7 +370,7 @@
                 `<span class="bl-invoice-ref" data-label="Reference">${esc(inv.id)}</span>` +
                 `<span class="bl-invoice-amount" data-label="Amount">${esc(inv.amount)}</span>` +
                 `<span class="bl-invoice-status ${esc(statusKey)}" data-label="Status">${esc(inv.status)}</span>` +
-                `<a href="/transloom/api/billing/invoices/${encodeURIComponent(inv.id)}/receipt" target="_blank" rel="noopener">View</a>` +
+                `<a href="/syncling/api/billing/invoices/${encodeURIComponent(inv.id)}/receipt" target="_blank" rel="noopener">View</a>` +
                 `</div>`;
         }).join('');
     }

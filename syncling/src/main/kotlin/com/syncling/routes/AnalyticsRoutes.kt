@@ -12,7 +12,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 
 /**
- * Analytics endpoints, all under /transloom/api/analytics.
+ * Analytics endpoints, all under /syncling/api/analytics.
  *
  * Gating:
  *  - overview / projects / locales / runs / quality → SOLO+ (paid plans)
@@ -25,7 +25,7 @@ fun Route.configureAnalyticsRoutes(
     analyticsService: AnalyticsService,
     billingRepository: BillingRepository
 ) {
-    route("/transloom/api/analytics") {
+    route("/syncling/api/analytics") {
 
         get("/overview") {
             val userId = call.userId()

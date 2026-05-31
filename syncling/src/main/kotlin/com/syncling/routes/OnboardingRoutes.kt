@@ -39,7 +39,7 @@ fun Route.configureOnboardingRoutes(
     projectRepository: ProjectRepository,
     translationRepository: TranslationRepository
 ) {
-    route("/transloom/api/onboarding") {
+    route("/syncling/api/onboarding") {
 
         get("/state") {
             val userId = call.userId()

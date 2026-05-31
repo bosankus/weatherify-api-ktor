@@ -60,7 +60,7 @@ fun Route.configureCdnBundleRoutes(
     cdnPublishService: CdnPublishService,
     memberships: ProjectMembershipRepository
 ) {
-    route("/transloom/api/projects/{id}/bundle") {
+    route("/syncling/api/projects/{id}/bundle") {
         get {
             val projectId = call.parameters["id"]
                 ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
@@ -133,7 +133,7 @@ fun Route.configureCdnBundleRoutes(
     }
 
     // ── Versions, promote, rollback (ADMIN-gated) ─────────────────────────────
-    route("/transloom/api/projects/{id}/versions") {
+    route("/syncling/api/projects/{id}/versions") {
         get {
             val userId = call.userId()
                 ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
@@ -187,7 +187,7 @@ fun Route.configureCdnBundleRoutes(
         }
     }
 
-    route("/transloom/api/projects/{id}/rollback") {
+    route("/syncling/api/projects/{id}/rollback") {
         post {
             val userId = call.userId()
                 ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
@@ -217,7 +217,7 @@ fun Route.configureCdnPublishRoute(
     cdnPublishService: CdnPublishService,
     memberships: ProjectMembershipRepository
 ) {
-    route("/transloom/api/projects/{id}/publish") {
+    route("/syncling/api/projects/{id}/publish") {
         post {
             val userId = call.userId()
                 ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
@@ -260,7 +260,7 @@ fun Route.configureCdnSigningKeyRoute(
     cdnPublishService: CdnPublishService,
     memberships: ProjectMembershipRepository
 ) {
-    get("/transloom/api/projects/{id}/bundle-signing-key") {
+    get("/syncling/api/projects/{id}/bundle-signing-key") {
         val userId = call.userId()
             ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
         val projectId = call.parameters["id"]

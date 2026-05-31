@@ -69,7 +69,7 @@ internal fun HTML.billingAnalyticsApp() {
                 strong { +"Analytics is part of Solo and Team plans." }
                 +" Upgrade to see cost-per-string trends, per-project breakdowns, and team activity."
             }
-            a("/transloom/billing") { classes = setOf("bla-plan-gate-cta"); +"Compare plans →" }
+            a("/syncling/billing") { classes = setOf("bla-plan-gate-cta"); +"Compare plans →" }
         }
 
         // ── Overview ─────────────────────────────────────────────────────────────

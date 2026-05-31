@@ -29,6 +29,85 @@ private val httpClient by lazy {
 private val gcpProjectId: String? by lazy { resolveProjectId() }
 private val gcpAccessToken: String? by lazy { gcpProjectId?.let { fetchAccessToken() } }
 
+// ── Master secret ─────────────────────────────────────────────────────────────
+//
+// All application secrets are stored as a single flat JSON object in one GCP
+// Secret Manager secret (one active version → minimum billing).
+//
+// Secret name: "app-secrets"  (override via APP_SECRET_NAME env var)
+//
+// In Cloud Run the secret is mounted as the APP_SECRETS env var:
+//   --update-secrets=APP_SECRETS=app-secrets:latest
+// That is the fast path (no HTTP call at runtime).  If APP_SECRETS is not set
+// the code falls back to fetching the secret via the Secret Manager HTTP API.
+//
+// Required keys — every string ever passed to getSecretValue() must be present:
+//
+//   "jwt-secret"                     shared JWT signing key
+//   "mongo-uri"                      MongoDB URI (Syncling module)
+//   "db-connection-string"           MongoDB URI (Weatherify module)
+//   "token-encryption-key"           GitHub token AES encryption key
+//   "redis-url"                      Upstash Redis URL
+//   "allowed-origin"                 CORS allowed origin
+//   "frontend-url"                   Post-auth redirect URL
+//   "gemini-api-key"                 Google Gemini API key
+//   "weather-data-secret"            OpenWeatherMap API key
+//   "sendgrid-api-key"               SendGrid API key
+//   "smtp-host"                      SMTP server hostname
+//   "smtp-port"                      SMTP server port (string, e.g. "587")
+//   "smtp-user"                      SMTP username / from address
+//   "smtp-password"                  SMTP password / app password
+//   "razorpay-key-id"                Razorpay publishable key
+//   "razorpay-secret"                Razorpay secret key
+//   "razorpay-webhook-secret"        Razorpay webhook HMAC secret
+//   "razorpay-plan-id-solo"          Razorpay Solo subscription plan ID
+//   "razorpay-plan-id-team"          Razorpay Team subscription plan ID
+//   "github-client-id"               GitHub OAuth app client ID
+//   "github-client-secret"           GitHub OAuth app client secret
+//   "github-webhook-secret"          GitHub webhook HMAC secret
+//   "cloudflare-account-id"          Cloudflare account ID
+//   "cloudflare-r2-bucket-name"      R2 bucket name
+//   "cloudflare-r2-access-key-id"    R2 access key ID
+//   "cloudflare-r2-secret-access-key" R2 secret access key
+//   "bundle-signing-key"             CDN bundle HMAC signing key
+//   "firebase-service-account-key"   Firebase service-account JSON (stringified)
+//
+// Individual env vars (e.g. JWT_SECRET) still override any key — useful for
+// local dev and CI where the JSON secret is not available.
+//
+private val masterSecretName: String
+    get() = System.getenv("APP_SECRET_NAME")?.takeIf { it.isNotBlank() } ?: "app-secrets"
+
+// Parsed once per process.  Null means neither APP_SECRETS env var nor the
+// Secret Manager API had a valid value — all lookups will fall through to
+// localFallback().
+private val masterSecretCache: Map<String, String>? by lazy { loadMasterSecret() }
+
+private fun loadMasterSecret(): Map<String, String>? {
+    // Fast path: Cloud Run mounts the JSON secret as APP_SECRETS env var.
+    val fromEnv = System.getenv("APP_SECRETS")
+    if (!fromEnv.isNullOrBlank()) {
+        return parseSecretJson(fromEnv, "APP_SECRETS env var")
+    }
+    // Fallback: fetch directly from the Secret Manager API.
+    if (gcpProjectId == null) return null
+    val raw = fetchRawSecret(masterSecretName) ?: run {
+        log.warn("Master secret '{}' not found in Secret Manager", masterSecretName)
+        return null
+    }
+    return parseSecretJson(raw, masterSecretName)
+}
+
+private fun parseSecretJson(raw: String, source: String): Map<String, String>? =
+    try {
+        Json.parseToJsonElement(raw).jsonObject
+            .entries.associate { (k, v) -> k to v.jsonPrimitive.content }
+            .also { log.info("Secrets loaded from {} ({} keys)", source, it.size) }
+    } catch (e: Exception) {
+        log.error("Secret source '{}' is not valid JSON — cannot load secrets: {}", source, e.message)
+        null
+    }
+
 private fun resolveProjectId(): String? {
     val fromEnv = System.getenv("GCP_PROJECT_ID") ?: System.getenv("GOOGLE_CLOUD_PROJECT")
     if (!fromEnv.isNullOrEmpty()) return fromEnv
@@ -54,7 +133,7 @@ private fun fetchAccessToken(): String? {
     }.also { if (it == null) log.warn("Could not fetch GCP access token from metadata server") }
 }
 
-private fun fetchFromSecretManager(secretName: String): String? {
+private fun fetchRawSecret(secretName: String): String? {
     val projectId = gcpProjectId ?: return null
     val token = gcpAccessToken ?: return null
     return runBlocking {
@@ -71,6 +150,7 @@ private fun fetchFromSecretManager(secretName: String): String? {
 }
 
 fun getSecretValue(secretName: String): String {
+    // 1. Individual env var wins — allows local dev and CI to override any key.
     val envKey = toEnvKey(secretName)
     val envValue = System.getenv(envKey)
     if (!envValue.isNullOrBlank()) {
@@ -78,18 +158,14 @@ fun getSecretValue(secretName: String): String {
         return envValue
     }
 
-    if (gcpProjectId != null) {
-        try {
-            val value = fetchFromSecretManager(secretName)
-            if (!value.isNullOrBlank()) {
-                log.info("Secret '{}' resolved from Secret Manager", secretName)
-                return value
-            }
-        } catch (e: Exception) {
-            log.warn("Secret Manager fetch failed for '{}': {}", secretName, e.message)
-        }
+    // 2. Master JSON secret — single Secret Manager fetch shared by all keys.
+    val masterValue = masterSecretCache?.get(secretName)
+    if (!masterValue.isNullOrBlank()) {
+        log.debug("Secret '{}' resolved from master secret '{}'", secretName, masterSecretName)
+        return masterValue
     }
 
+    // 3. Local fallback — dev defaults, never used in production.
     return localFallback(secretName).also {
         log.warn("Secret '{}' using local fallback — not suitable for production", secretName)
     }
@@ -102,28 +178,40 @@ private fun toEnvKey(secretName: String): String = when (secretName) {
 }
 
 private fun localFallback(secretName: String): String = when (secretName) {
-    // Shared
-    "jwt-secret"               -> "dev_jwt_secret_key_for_local_development_only"
-    "redis-url"                -> ""
-    "gemini-api-key"           -> ""
-    // Weatherify / main app
-    "db-connection-string"     -> "mongodb://localhost:27017"
-    "weather-data-secret"      -> "dummy_weather_api_key"
-    "razorpay-secret"          -> "dummy_razorpay_secret"
-    "razorpay-key-id"          -> "dummy_razorpay_key_id"
-    "razorpay-webhook-secret"  -> "dummy_razorpay_webhook_secret"
-    "sendgrid-api-key"         -> ""
-    // Syncling
-    "mongo-uri"                -> "mongodb://localhost:27017"
-    "token-encryption-key"     -> "dev_token_encryption_key_32chars!"
-    "allowed-origin"           -> "http://localhost:5173"
-    "frontend-url"             -> "http://localhost:5173/transloom/app"
-    "github-webhook-secret"    -> ""
-    "github-client-id"         -> "dummy_client_id"
-    "github-client-secret"     -> "dummy_client_secret"
-    "webhook-url"              -> "https://transloom.dev/transloom/webhook/github"
-    "razorpay-plan-id-solo"       -> ""
-    "razorpay-plan-id-team"       -> ""
-    "app-url"                  -> "http://localhost:8081"
-    else                       -> ""
+    // Core
+    "jwt-secret"                      -> "dev_jwt_secret_key_for_local_development_only"
+    "mongo-uri"                       -> "mongodb://localhost:27017"
+    "db-connection-string"            -> "mongodb://localhost:27017"
+    "token-encryption-key"            -> "dev_token_encryption_key_32chars!"
+    "redis-url"                       -> ""
+    "allowed-origin"                  -> "http://localhost:5173"
+    "frontend-url"                    -> "http://localhost:5173/syncling/app"
+    // Weather / AI
+    "weather-data-secret"             -> "dummy_weather_api_key"
+    "gemini-api-key"                  -> ""
+    "sendgrid-api-key"                -> ""
+    // SMTP
+    "smtp-host"                       -> "smtp.gmail.com"
+    "smtp-port"                       -> "587"
+    "smtp-user"                       -> ""
+    "smtp-password"                   -> ""
+    // Razorpay
+    "razorpay-key-id"                 -> "dummy_razorpay_key_id"
+    "razorpay-secret"                 -> "dummy_razorpay_secret"
+    "razorpay-webhook-secret"         -> "dummy_razorpay_webhook_secret"
+    "razorpay-plan-id-solo"           -> ""
+    "razorpay-plan-id-team"           -> ""
+    // GitHub
+    "github-client-id"                -> "dummy_client_id"
+    "github-client-secret"            -> "dummy_client_secret"
+    "github-webhook-secret"           -> ""
+    // Cloudflare R2 + CDN
+    "cloudflare-account-id"           -> ""
+    "cloudflare-r2-bucket-name"       -> ""
+    "cloudflare-r2-access-key-id"     -> ""
+    "cloudflare-r2-secret-access-key" -> ""
+    "bundle-signing-key"              -> ""
+    // Firebase (prod-only; value is a stringified service-account JSON)
+    "firebase-service-account-key"    -> ""
+    else                              -> ""
 }

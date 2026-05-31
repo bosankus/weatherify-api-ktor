@@ -1584,7 +1584,7 @@ fun Route.adminAuthRoute() {
     }
 
     // Support ticket admin endpoints
-    route("/support") {
+    route("/admin/support") {
         // GET /admin/support/tickets?status=open|acknowledged|resolved
         get("/tickets") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
@@ -1636,6 +1636,76 @@ fun Route.adminAuthRoute() {
             } catch (e: Exception) {
                 logger.error("Failed to update ticket status: {}", e.message)
                 call.respondError("Failed to update ticket: ${e.message}", Unit, HttpStatusCode.InternalServerError)
+            }
+        }
+
+        // PATCH /admin/support/tickets/{id}/note
+        patch("/tickets/{id}/note") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@patch
+            val ticketId = call.parameters["id"]?.trim()
+            if (ticketId.isNullOrBlank()) {
+                call.respondError("Ticket ID is required", Unit, HttpStatusCode.BadRequest)
+                return@patch
+            }
+            @kotlinx.serialization.Serializable
+            data class NoteBody(val note: String)
+            val body = runCatching { call.receive<NoteBody>() }.getOrNull()
+            val note = body?.note?.trim() ?: ""
+            if (note.length > 2000) {
+                call.respondError("Note must be 2000 characters or fewer", Unit, HttpStatusCode.BadRequest)
+                return@patch
+            }
+            val repo = application.attributes.getOrNull(com.syncling.SupportTicketRepoKey)
+            if (repo == null) {
+                call.respondError("Support ticket repository not available", Unit, HttpStatusCode.ServiceUnavailable)
+                return@patch
+            }
+            try {
+                val updated = repo.updateNote(ticketId, note)
+                if (updated) {
+                    logger.info("Admin {} saved note on ticket {}", admin.email, ticketId.take(8))
+                    call.respondSuccess("Note saved", mapOf("id" to ticketId))
+                } else {
+                    call.respondError("Ticket not found", Unit, HttpStatusCode.NotFound)
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to save note: {}", e.message)
+                call.respondError("Failed to save note: ${e.message}", Unit, HttpStatusCode.InternalServerError)
+            }
+        }
+
+        // PATCH /admin/support/tickets/{id}/reply  — visible to user
+        patch("/tickets/{id}/reply") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@patch
+            val ticketId = call.parameters["id"]?.trim()
+            if (ticketId.isNullOrBlank()) {
+                call.respondError("Ticket ID is required", Unit, HttpStatusCode.BadRequest)
+                return@patch
+            }
+            @kotlinx.serialization.Serializable
+            data class ReplyBody(val reply: String)
+            val body = runCatching { call.receive<ReplyBody>() }.getOrNull()
+            val reply = body?.reply?.trim() ?: ""
+            if (reply.length > 3000) {
+                call.respondError("Reply must be 3000 characters or fewer", Unit, HttpStatusCode.BadRequest)
+                return@patch
+            }
+            val repo = application.attributes.getOrNull(com.syncling.SupportTicketRepoKey)
+            if (repo == null) {
+                call.respondError("Support ticket repository not available", Unit, HttpStatusCode.ServiceUnavailable)
+                return@patch
+            }
+            try {
+                val updated = repo.updateReply(ticketId, reply)
+                if (updated) {
+                    logger.info("Admin {} sent reply to ticket {}", admin.email, ticketId.take(8))
+                    call.respondSuccess("Reply sent", mapOf("id" to ticketId))
+                } else {
+                    call.respondError("Ticket not found", Unit, HttpStatusCode.NotFound)
+                }
+            } catch (e: Exception) {
+                logger.error("Failed to send reply: {}", e.message)
+                call.respondError("Failed to send reply: ${e.message}", Unit, HttpStatusCode.InternalServerError)
             }
         }
     }
@@ -3196,20 +3266,19 @@ fun Route.adminAuthRoute() {
 </div>
 
 <div style="overflow-x:auto;">
-<table class="payments-table" id="support-tickets-table" style="min-width:700px;">
+<table class="payments-table" id="support-tickets-table" style="min-width:640px;">
   <thead>
     <tr>
-      <th style="width:100px">ID</th>
-      <th>User</th>
-      <th style="width:110px">Category</th>
+      <th style="width:96px">ID</th>
+      <th style="min-width:140px">User</th>
+      <th style="width:106px">Category</th>
       <th>Subject</th>
-      <th style="width:120px">Status</th>
-      <th style="width:110px">Date</th>
-      <th style="width:130px;text-align:center">Action</th>
+      <th style="width:116px">Status</th>
+      <th style="width:90px">Age</th>
     </tr>
   </thead>
   <tbody id="support-tickets-body">
-    <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-secondary);">Loading…</td></tr>
+    <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-secondary);">Loading…</td></tr>
   </tbody>
 </table>
 </div>

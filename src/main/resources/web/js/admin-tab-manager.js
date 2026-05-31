@@ -499,6 +499,17 @@
         return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
+    function ticketAge(ms) {
+        const diff = Date.now() - ms;
+        const h = Math.floor(diff / 3600000);
+        if (h < 1) return { label: 'just now', color: '#10b981' };
+        if (h < 24) return { label: h + 'h ago', color: '#10b981' };
+        const d = Math.floor(h / 24);
+        if (d < 2) return { label: d + 'd ago', color: '#f59e0b' };
+        if (d < 7) return { label: d + 'd ago', color: '#f97316' };
+        return { label: d + 'd ago', color: '#ef4444' };
+    }
+
     const CAT_COLORS = {
         bug: 'background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)',
         question: 'background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)',
@@ -511,32 +522,35 @@
         resolved: 'background:rgba(107,114,128,.15);color:#6b7280;border:1px solid rgba(107,114,128,.3)',
     };
 
+    // Sort: open first, then acknowledged, then resolved; within each group newest first
+    function sortTickets(tickets) {
+        const order = { open: 0, acknowledged: 1, resolved: 2 };
+        return [...tickets].sort((a, b) => {
+            const so = (order[a.status] ?? 3) - (order[b.status] ?? 3);
+            return so !== 0 ? so : b.createdAt - a.createdAt;
+        });
+    }
+
     function renderSupportTable(tickets) {
         const tbody = document.getElementById('support-tickets-body');
         if (!tbody) return;
-        if (!tickets || !tickets.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-secondary);">No tickets found.</td></tr>';
+        const sorted = sortTickets(tickets || []);
+        if (!sorted.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2.5rem;color:var(--text-secondary);">No tickets found.</td></tr>';
             return;
         }
-        tbody.innerHTML = tickets.map(t => {
+        tbody.innerHTML = sorted.map(t => {
             const catStyle = CAT_COLORS[t.category] || '';
             const stStyle = ST_COLORS[t.status] || '';
-            return `<tr>
+            const age = ticketAge(t.createdAt);
+            const hasNote = t.adminNote && t.adminNote.trim().length > 0;
+            return `<tr style="cursor:pointer;" onclick="window.openSupportDetail('${escHtml(t.id)}')">
                 <td><code style="font-size:0.78rem">${escHtml(t.id.substring(0, 8))}</code></td>
-                <td style="font-size:0.85rem">${escHtml(t.userEmail || t.userId.substring(0, 12))}</td>
+                <td style="font-size:0.82rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(t.userEmail || t.userId)}">${escHtml(t.userEmail || t.userId.substring(0, 14))}</td>
                 <td><span class="status-badge" style="${catStyle}">${escHtml(t.category)}</span></td>
-                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" onclick="window.openSupportDetail('${escHtml(t.id)}')" title="${escHtml(t.subject)}">${escHtml(t.subject)}</td>
-                <td>
-                  <select class="form-control" style="font-size:0.8rem;padding:4px 6px;" onchange="window.updateTicketStatus('${escHtml(t.id)}', this.value)">
-                    <option value="open"${t.status==='open'?' selected':''}>Open</option>
-                    <option value="acknowledged"${t.status==='acknowledged'?' selected':''}>Acknowledged</option>
-                    <option value="resolved"${t.status==='resolved'?' selected':''}>Resolved</option>
-                  </select>
-                </td>
-                <td style="font-size:0.8rem;color:var(--text-secondary)">${fmtDate(t.createdAt)}</td>
-                <td style="text-align:center">
-                  <button class="btn btn-secondary" style="font-size:0.75rem;padding:4px 10px;" onclick="window.openSupportDetail('${escHtml(t.id)}')">View</button>
-                </td>
+                <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(t.subject)}">${escHtml(t.subject)}${hasNote ? ' <span title="Has admin note" style="font-size:10px;opacity:.65;">📝</span>' : ''}</td>
+                <td><span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span></td>
+                <td style="font-size:0.8rem;color:${age.color};font-weight:500;">${age.label}</td>
             </tr>`;
         }).join('');
     }
@@ -571,13 +585,18 @@
         } catch (e) {
             console.error('[Support] Failed to load tickets:', e);
             const tbody = document.getElementById('support-tickets-body');
-            if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#ef4444;">Failed to load tickets: ' + escHtml(e.message) + '</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#ef4444;">Failed to load tickets: ' + escHtml(e.message) + '</td></tr>';
         } finally {
             if (loader) loader.style.display = 'none';
         }
     };
 
     window.updateTicketStatus = async function (id, newStatus) {
+        const t = _supportTickets.find(x => x.id === id);
+        const prev = t ? t.status : null;
+        if (t) t.status = newStatus; // optimistic
+        renderSupportTable(_supportTickets);
+        updateOpenBadge(_supportTickets);
         try {
             const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/status', {
                 method: 'PATCH',
@@ -585,15 +604,64 @@
                 body: JSON.stringify({ status: newStatus }),
             });
             if (!res.ok) throw new Error('HTTP ' + res.status);
-            const t = _supportTickets.find(x => x.id === id);
-            if (t) t.status = newStatus;
-            updateOpenBadge(_supportTickets);
-            // Refresh detail panel if open
-            if (document.getElementById('support-detail-panel')?.style.display !== 'none') {
+            // Refresh detail panel if open for this ticket
+            const panel = document.getElementById('support-detail-panel');
+            if (panel && panel.style.display !== 'none' && panel.dataset.ticketId === id) {
                 window.openSupportDetail(id);
             }
         } catch (e) {
-            alert('Failed to update status: ' + e.message);
+            // Roll back optimistic update
+            if (t && prev) t.status = prev;
+            renderSupportTable(_supportTickets);
+            updateOpenBadge(_supportTickets);
+            if (typeof showBanner === 'function') showBanner('error', 'Failed to update status: ' + e.message);
+            else console.error('Failed to update status:', e.message);
+        }
+    };
+
+    window.saveTicketNote = async function (id) {
+        const textarea = document.getElementById('support-note-' + id);
+        if (!textarea) return;
+        const note = textarea.value.trim();
+        const btn = document.getElementById('support-note-save-' + id);
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+        try {
+            const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/note', {
+                method: 'PATCH',
+                headers: adminHeaders(),
+                body: JSON.stringify({ note }),
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const t = _supportTickets.find(x => x.id === id);
+            if (t) t.adminNote = note || null;
+            renderSupportTable(_supportTickets);
+            if (btn) { btn.disabled = false; btn.textContent = 'Saved ✓'; setTimeout(() => { if (btn) btn.textContent = 'Save note'; }, 1800); }
+        } catch (e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Save note'; }
+            if (typeof showBanner === 'function') showBanner('error', 'Failed to save note: ' + e.message);
+        }
+    };
+
+    window.saveTicketReply = async function (id) {
+        const textarea = document.getElementById('support-reply-' + id);
+        if (!textarea) return;
+        const reply = textarea.value.trim();
+        const btn = document.getElementById('support-reply-save-' + id);
+        if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+        try {
+            const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/reply', {
+                method: 'PATCH',
+                headers: adminHeaders(),
+                body: JSON.stringify({ reply }),
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const t = _supportTickets.find(x => x.id === id);
+            if (t) t.adminReply = reply || null;
+            renderSupportTable(_supportTickets);
+            if (btn) { btn.disabled = false; btn.textContent = 'Sent ✓'; setTimeout(() => { if (btn) btn.textContent = 'Send reply'; }, 1800); }
+        } catch (e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Send reply'; }
+            if (typeof showBanner === 'function') showBanner('error', 'Failed to send reply: ' + e.message);
         }
     };
 
@@ -602,39 +670,67 @@
         if (!t) return;
         const stStyle = ST_COLORS[t.status] || '';
         const catStyle = CAT_COLORS[t.category] || '';
+        const age = ticketAge(t.createdAt);
         const panel = document.getElementById('support-detail-panel');
         const backdrop = document.getElementById('support-detail-backdrop');
         const title = document.getElementById('support-detail-title');
         const body = document.getElementById('support-detail-body');
         if (!panel || !body) return;
-        if (title) title.textContent = 'Ticket ' + t.id.substring(0, 8);
+        panel.dataset.ticketId = id;
+        if (title) title.textContent = 'Ticket #' + t.id.substring(0, 8);
+        const noteId = 'support-note-' + escHtml(t.id);
+        const noteSaveId = 'support-note-save-' + escHtml(t.id);
         body.innerHTML = `
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:1.5rem;">
               <span class="status-badge" style="${catStyle}">${escHtml(t.category)}</span>
               <span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span>
+              <span style="font-size:0.78rem;color:${age.color};font-weight:500;margin-left:auto;">${age.label}</span>
             </div>
-            <div style="margin-bottom:1rem;">
-              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Subject</div>
-              <div style="font-size:1rem;font-weight:600;color:var(--text-color);">${escHtml(t.subject)}</div>
+
+            <div style="margin-bottom:1.1rem;">
+              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:5px;">Subject</div>
+              <div style="font-size:0.975rem;font-weight:600;color:var(--text-color);line-height:1.4;">${escHtml(t.subject)}</div>
             </div>
-            <div style="margin-bottom:1rem;">
-              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">From</div>
-              <div style="font-size:0.875rem;color:var(--text-color);">${escHtml(t.userEmail || t.userId)}</div>
+
+            <div style="margin-bottom:1.1rem;">
+              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:5px;">From</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:0.875rem;color:var(--text-color);">${escHtml(t.userEmail || t.userId)}</span>
+                ${t.userEmail ? `<button onclick="navigator.clipboard.writeText('${escHtml(t.userEmail)}')" title="Copy email" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-secondary);padding:2px 5px;border-radius:4px;" onmouseenter="this.style.background='var(--endpoint-bg)'" onmouseleave="this.style.background='none'">⎘</button>` : ''}
+              </div>
             </div>
-            <div style="margin-bottom:1.25rem;">
-              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Message</div>
-              <div style="font-size:0.875rem;color:var(--text-color);background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;padding:12px 14px;white-space:pre-wrap;line-height:1.6;">${escHtml(t.message)}</div>
-            </div>
+
             <div style="margin-bottom:1.5rem;">
-              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px;">Submitted</div>
-              <div style="font-size:0.875rem;color:var(--text-color);">${fmtDate(t.createdAt)}</div>
+              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:5px;">Message</div>
+              <div style="font-size:0.875rem;color:var(--text-color);background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;padding:14px 16px;white-space:pre-wrap;line-height:1.65;max-height:220px;overflow-y:auto;">${escHtml(t.message)}</div>
             </div>
-            <div>
-              <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px;">Update Status</div>
+
+            <div style="margin-bottom:1.5rem;">
+              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:8px;">Update Status</div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                ${['open','acknowledged','resolved'].map(s =>
-                  `<button onclick="window.updateTicketStatus('${escHtml(t.id)}','${s}');document.getElementById('support-detail-panel').querySelectorAll('button').forEach(b=>b.style.outline='none');this.style.outline='2px solid #6366f1';window.openSupportDetail('${escHtml(t.id)}')" class="btn ${t.status===s?'btn-primary':'btn-secondary'}" style="font-size:0.8rem;">${s.charAt(0).toUpperCase()+s.slice(1)}</button>`
-                ).join('')}
+                ${['open','acknowledged','resolved'].map(s => {
+                  const active = t.status === s;
+                  return `<button onclick="window.updateTicketStatus('${escHtml(t.id)}','${s}')" style="font-size:0.8rem;padding:6px 14px;border-radius:20px;border:1px solid ${active?'transparent':'var(--card-border)'};background:${active?'#6366f1':'transparent'};color:${active?'#fff':'var(--text-color)'};cursor:pointer;font-weight:${active?'600':'400'};transition:all .15s;" onmouseenter="if(this.style.background!='rgb(99, 102, 241)')this.style.background='var(--endpoint-bg)'" onmouseleave="if(this.style.background!='rgb(99, 102, 241)')this.style.background='transparent'">${s.charAt(0).toUpperCase()+s.slice(1)}</button>`;
+                }).join('')}
+              </div>
+            </div>
+
+            <div style="margin-bottom:1.5rem;">
+              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:8px;">Reply to User <span style="font-weight:400;font-size:0.7rem;text-transform:none;letter-spacing:0;">(visible to user in chat)</span></div>
+              ${t.adminReply ? `<div style="font-size:0.82rem;color:var(--text-color);background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);border-radius:8px;padding:10px 12px;margin-bottom:10px;white-space:pre-wrap;line-height:1.55;">${escHtml(t.adminReply)}</div>` : '<div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:8px;font-style:italic;">No reply sent yet.</div>'}
+              <textarea id="${'support-reply-' + escHtml(t.id)}" style="width:100%;box-sizing:border-box;background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;color:var(--text-color);font-size:0.85rem;padding:10px 12px;font-family:inherit;resize:vertical;min-height:90px;line-height:1.5;outline:none;transition:border-color .12s;" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='var(--endpoint-border)'" maxlength="3000" placeholder="Write a reply to the user…">${escHtml(t.adminReply || '')}</textarea>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+                <span style="font-size:0.72rem;color:var(--text-secondary);">Max 3000 characters · User will see this in their chat</span>
+                <button id="${'support-reply-save-' + escHtml(t.id)}" onclick="window.saveTicketReply('${escHtml(t.id)}')" class="btn btn-primary" style="font-size:0.78rem;padding:5px 16px;">Send reply</button>
+              </div>
+            </div>
+
+            <div style="margin-bottom:0.5rem;">
+              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:8px;">Internal Note <span style="font-weight:400;font-size:0.7rem;text-transform:none;letter-spacing:0;">(not visible to user)</span></div>
+              <textarea id="${noteId}" style="width:100%;box-sizing:border-box;background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;color:var(--text-color);font-size:0.85rem;padding:10px 12px;font-family:inherit;resize:vertical;min-height:80px;line-height:1.5;outline:none;transition:border-color .12s;" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='var(--endpoint-border)'" maxlength="2000" placeholder="Add an internal note…">${escHtml(t.adminNote || '')}</textarea>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+                <span style="font-size:0.72rem;color:var(--text-secondary);">Max 2000 characters</span>
+                <button id="${noteSaveId}" onclick="window.saveTicketNote('${escHtml(t.id)}')" class="btn btn-primary" style="font-size:0.78rem;padding:5px 14px;">Save note</button>
               </div>
             </div>`;
         panel.style.display = 'flex';
@@ -648,6 +744,14 @@
         if (panel) { panel.classList.remove('open'); setTimeout(() => { panel.style.display = 'none'; }, 250); }
         if (backdrop) { backdrop.classList.remove('open'); backdrop.style.display = 'none'; }
     };
+
+    // Escape key closes the detail panel
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            const panel = document.getElementById('support-detail-panel');
+            if (panel && panel.style.display !== 'none') window.closeSupportDetail();
+        }
+    });
 
     // Wire status filter dropdown + refresh button once DOM is ready
     function wireSupportControls() {

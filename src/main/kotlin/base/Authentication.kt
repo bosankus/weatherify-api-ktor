@@ -10,6 +10,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.auth.HttpAuthHeader
+import com.syncling.routes.apiToken
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
@@ -91,5 +92,10 @@ fun Application.configureAuthentication() {
                 call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Token is not valid or has expired"))
             }
         }
+
+        // Accepts `Authorization: Bearer sli_<token>` for CLI / programmatic access.
+        // The ApiTokenRepository is resolved lazily from application attributes so this provider
+        // can be registered before the Syncling DI wiring runs (see SynclingConfig).
+        apiToken("api-token")
     }
 }

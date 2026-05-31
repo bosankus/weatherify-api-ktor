@@ -58,6 +58,18 @@ class MongoSupportTicketRepository(db: MongoDatabase) : SupportTicketRepository 
         return result.matchedCount > 0
     }
 
+    override suspend fun updateNote(id: String, note: String): Boolean {
+        val update = if (note.isBlank()) Updates.unset("adminNote") else Updates.set("adminNote", note)
+        val result = col.updateOne(eq("_id", id), update)
+        return result.matchedCount > 0
+    }
+
+    override suspend fun updateReply(id: String, reply: String): Boolean {
+        val update = if (reply.isBlank()) Updates.unset("adminReply") else Updates.set("adminReply", reply)
+        val result = col.updateOne(eq("_id", id), update)
+        return result.matchedCount > 0
+    }
+
     private fun Document.toTicket() = SupportTicket(
         id = getString("_id"),
         userId = getString("userId") ?: "",
@@ -67,5 +79,7 @@ class MongoSupportTicketRepository(db: MongoDatabase) : SupportTicketRepository 
         message = getString("message") ?: "",
         status = getString("status") ?: "open",
         createdAt = getLong("createdAt") ?: 0L,
+        adminNote = getString("adminNote"),
+        adminReply = getString("adminReply"),
     )
 }

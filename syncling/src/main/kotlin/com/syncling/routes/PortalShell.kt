@@ -166,6 +166,11 @@ internal val SHELL_RUNTIME_JS = """
 (function(){
   var token=localStorage.getItem('syncling_token');
   if(!token){
+    // One-time migration: carry the session over from the pre-rebrand key.
+    var legacy=localStorage.getItem('transloom_token');
+    if(legacy){token=legacy;localStorage.setItem('syncling_token',token);localStorage.removeItem('transloom_token');}
+  }
+  if(!token){
     var m=document.cookie.match(/(?:^|;\s*)tl_token_bootstrap=([^;]*)/);
     if(m&&m[1]){token=decodeURIComponent(m[1]);localStorage.setItem('syncling_token',token);}
   }
@@ -175,8 +180,8 @@ internal val SHELL_RUNTIME_JS = """
   // already on the invite page (avoids a redirect loop) or have no session.
   if(token){
     var pending=localStorage.getItem('pending_invite_token');
-    if(pending && !/^\/transloom\/invite\//.test(location.pathname)){
-      window.location.replace('/transloom/invite/'+encodeURIComponent(pending));
+    if(pending && !/^\/syncling\/invite\//.test(location.pathname)){
+      window.location.replace('/syncling/invite/'+encodeURIComponent(pending));
       return;
     }
   }
@@ -199,7 +204,7 @@ internal val SHELL_RUNTIME_JS = """
   };
   window.logout=function(){
     localStorage.removeItem('syncling_token');
-    window.location.href='/transloom/auth/logout';
+    window.location.href='/syncling/auth/logout';
   };
   function fillUserChip(){
     if(!token)return;
@@ -267,8 +272,8 @@ internal const val BILLING_CACHE_JS = """
   if(window.tlSubscription)return;
   function H(){var t=localStorage.getItem('syncling_token');return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
   var _s=null,_u=null;
-  window.tlSubscription=function(f){if(f||!_s){_s=fetch('/transloom/api/billing/subscription',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _s;};
-  window.tlUsage=function(f){if(f||!_u){_u=fetch('/transloom/api/billing/usage',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _u;};
+  window.tlSubscription=function(f){if(f||!_s){_s=fetch('/syncling/api/billing/subscription',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _s;};
+  window.tlUsage=function(f){if(f||!_u){_u=fetch('/syncling/api/billing/usage',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _u;};
 })();
 """
 
@@ -311,7 +316,7 @@ internal val SIDEBAR_QUOTA_JS = """
       } else {
         html+='<div class="sb-quota-sub">Translate something to see your rate</div>';
       }
-      html+='<a href="/transloom/billing" class="sb-quota-cta">Compare plans →</a>';
+      html+='<a href="/syncling/billing" class="sb-quota-cta">Compare plans →</a>';
     } else {
       var current=price/Math.max(1,strings);
       var lm=findLast(history,lastMonthKey());
@@ -335,7 +340,7 @@ internal val SIDEBAR_QUOTA_JS = """
       html+='<div class="sb-quota-eyebrow">Cost / string</div>';
       html+='<div class="sb-quota-num">₹'+fmt(current)+deltaHtml+'</div>';
       html+=subHtml;
-      html+='<a href="/transloom/billing/analytics" class="sb-quota-cta">See analytics →</a>';
+      html+='<a href="/syncling/billing/analytics" class="sb-quota-cta">See analytics →</a>';
     }
     host.className='sb-quota visible';
     host.innerHTML=html;
@@ -387,129 +392,443 @@ internal const val CONVERSION_CSS = """
 """
 
 internal const val SUPPORT_CHAT_CSS = """
-.sc-fab{position:fixed;bottom:24px;right:24px;z-index:8900;width:48px;height:48px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(139,126,255,.4),0 2px 8px rgba(0,0,0,.3);transition:filter .15s,transform .15s;color:#000}
-.sc-fab:hover{filter:brightness(1.1);transform:scale(1.06)}
+/* FAB */
+.sc-fab{position:fixed;bottom:24px;right:24px;z-index:8900;width:52px;height:52px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(139,126,255,.5),0 2px 8px rgba(0,0,0,.3);transition:filter .15s,transform .15s;color:#fff}
+.sc-fab:hover{filter:brightness(1.1);transform:scale(1.07)}
 .sc-fab svg{flex-shrink:0}
-.sc-panel{position:fixed;bottom:84px;right:24px;z-index:8901;width:360px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 12px 40px -8px rgba(0,0,0,.5);display:flex;flex-direction:column;max-height:540px;transform:translateY(16px) scale(.97);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}
+.sc-fab-dot{position:absolute;top:3px;right:3px;width:12px;height:12px;border-radius:50%;background:#a78bfa;border:2px solid var(--surface);display:none;animation:sc-pulse 2s infinite}
+.sc-fab-dot.show{display:block}
+@keyframes sc-pulse{0%,100%{box-shadow:0 0 0 0 rgba(167,139,250,.6)}50%{box-shadow:0 0 0 6px rgba(167,139,250,0)}}
+/* Panel */
+.sc-panel{position:fixed;bottom:88px;right:24px;z-index:8901;width:400px;max-width:calc(100vw - 24px);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 60px -10px rgba(0,0,0,.6),0 4px 20px -4px rgba(0,0,0,.3);display:flex;flex-direction:column;height:560px;max-height:calc(100vh - 120px);opacity:0;transform:translateY(24px) scale(.95);pointer-events:none;transition:opacity .22s cubic-bezier(.4,0,.2,1),transform .22s cubic-bezier(.4,0,.2,1);overflow:hidden}
 .sc-panel.open{opacity:1;transform:none;pointer-events:auto}
-.sc-panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
-.sc-panel-title{font-size:14px;font-weight:700;color:var(--text)}
-.sc-panel-close{background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px;border-radius:4px}
-.sc-panel-close:hover{color:var(--text);background:var(--surface2)}
-.sc-tabs{display:flex;gap:2px;padding:10px 12px 0;border-bottom:1px solid var(--border);flex-shrink:0}
-.sc-tab{font-size:12px;font-weight:600;color:var(--text-muted);padding:6px 10px;border-radius:var(--radius-sm) var(--radius-sm) 0 0;border:1px solid transparent;border-bottom:none;cursor:pointer;background:transparent;transition:color .12s,background .12s;margin-bottom:-1px}
-.sc-tab.active{color:var(--accent);background:var(--surface);border-color:var(--border);border-bottom-color:var(--surface)}
-.sc-tab:hover:not(.active){color:var(--text);background:var(--surface2)}
-.sc-body{flex:1;overflow-y:auto;padding:14px 16px}
-.sc-field{margin-bottom:12px}
-.sc-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
-.sc-input,.sc-select,.sc-textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 10px;box-sizing:border-box;font-family:inherit;transition:border-color .12s}
-.sc-input:focus,.sc-select:focus,.sc-textarea:focus{outline:none;border-color:var(--accent)}
-.sc-textarea{resize:vertical;min-height:90px;max-height:180px;line-height:1.5}
-.sc-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2371717a'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
-.sc-submit{width:100%;padding:10px;background:var(--accent);border:none;border-radius:var(--radius-sm);color:#000;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s;margin-top:4px}
-.sc-submit:hover:not(:disabled){filter:brightness(1.08)}
-.sc-submit:disabled{opacity:.5;cursor:default}
-.sc-success{text-align:center;padding:20px 8px}
-.sc-success-icon{font-size:32px;margin-bottom:10px}
-.sc-success-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px}
-.sc-success-sub{font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:14px}
-.sc-ticket-id{font-family:monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);padding:4px 8px;border-radius:4px;color:var(--accent)}
-.sc-new-btn{font-size:12px;font-weight:600;color:var(--accent);background:transparent;border:1px solid rgba(139,126,255,.3);border-radius:5px;padding:7px 14px;cursor:pointer;transition:background .12s}
-.sc-new-btn:hover{background:var(--accent-dim)}
-.sc-ticket-list{display:flex;flex-direction:column;gap:8px}
-.sc-ticket-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px}
-.sc-ticket-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
-.sc-ticket-subject{font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sc-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border-radius:10px;padding:1px 7px;flex-shrink:0}
-.sc-badge.cat-bug{background:#3f1010;color:#f87171}
-.sc-badge.cat-question{background:var(--accent-dim);color:var(--accent)}
-.sc-badge.cat-feature{background:#1e1a3f;color:#a78bfa}
-.sc-badge.cat-billing{background:#1f2a10;color:#a3e635}
-.sc-badge.st-open{background:#2a1a00;color:#fb923c}
-.sc-badge.st-acknowledged{background:var(--accent-dim);color:var(--accent)}
-.sc-badge.st-resolved{background:#111;color:var(--text-muted)}
-.sc-ticket-meta{font-size:11px;color:var(--text-dim)}
-.sc-empty{text-align:center;padding:32px 16px;color:var(--text-muted);font-size:13px}
-.sc-loading{text-align:center;padding:24px;color:var(--text-muted);font-size:13px}
+/* Header */
+.sc-header{flex-shrink:0;background:linear-gradient(135deg,#5535dd 0%,#7c3aed 60%,#a855f7 100%);padding:16px 16px 14px;display:flex;align-items:center;gap:10px}
+.sc-header-back{background:rgba(255,255,255,.15);border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center;color:#fff;flex-shrink:0;transition:background .12s;font-size:16px;line-height:1}
+.sc-header-back.visible{display:flex}
+.sc-header-back:hover{background:rgba(255,255,255,.25)}
+.sc-header-brand{flex:1;min-width:0}
+.sc-header-name{font-size:14px;font-weight:700;color:#fff;line-height:1.2}
+.sc-header-status{font-size:11px;color:rgba(255,255,255,.8);display:flex;align-items:center;gap:5px;margin-top:2px}
+.sc-header-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0}
+.sc-header-close{background:rgba(255,255,255,.15);border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;transition:background .12s;font-size:15px;line-height:1}
+.sc-header-close:hover{background:rgba(255,255,255,.25)}
+/* Body */
+.sc-body{flex:1;overflow:hidden;position:relative}
+.sc-body-inner{position:absolute;inset:0;overflow-y:auto;transition:opacity .16s ease,transform .18s cubic-bezier(.4,0,.2,1);padding:16px}
+/* Hero (home view) */
+.sc-hero{background:linear-gradient(135deg,#5535dd 0%,#7c3aed 60%,#a855f7 100%);margin:-16px -16px 16px;padding:18px 18px 20px;text-align:center}
+.sc-hero-avatar{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.2);margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:22px}
+.sc-hero-title{font-size:14px;font-weight:700;color:#fff;margin-bottom:4px}
+.sc-hero-sub{font-size:12px;color:rgba(255,255,255,.8)}
+.sc-sla{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:600;color:rgba(255,255,255,.9);margin-top:10px}
+/* Conversations list */
+.sc-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px}
+.sc-conv-list{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.sc-conv-item{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer;transition:border-color .14s,background .14s}
+.sc-conv-item:hover{border-color:rgba(139,126,255,.5);background:rgba(139,126,255,.06)}
+.sc-conv-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;animation:sc-pulse 2s infinite;display:none}
+.sc-conv-dot.active{display:block}
+.sc-conv-body{flex:1;min-width:0}
+.sc-conv-subject{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
+.sc-conv-preview{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:5px}
+.sc-conv-footer{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sc-conv-arrow{color:var(--text-dim);font-size:16px;flex-shrink:0}
+.sc-new-conv{width:100%;padding:11px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:filter .14s;margin-top:2px}
+.sc-new-conv:hover{filter:brightness(1.1)}
+/* Thread view */
+.sc-thread-header{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+.sc-thread-subject{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;line-height:1.3}
+.sc-thread-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sc-messages{display:flex;flex-direction:column;gap:14px}
+/* Chat bubbles */
+.sc-msg{display:flex;flex-direction:column;max-width:88%}
+.sc-msg-user{align-self:flex-end;align-items:flex-end}
+.sc-msg-admin{align-self:flex-start;align-items:flex-start;flex-direction:row;gap:8px;max-width:92%}
+.sc-msg-admin-inner{display:flex;flex-direction:column;align-items:flex-start;flex:1;min-width:0}
+.sc-bubble{padding:11px 14px;border-radius:16px;font-size:13px;line-height:1.55;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.sc-bubble-user{background:linear-gradient(135deg,#5535dd,#7c3aed);color:#fff;border-bottom-right-radius:4px}
+.sc-bubble-admin{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px}
+.sc-msg-meta{font-size:10px;color:var(--text-dim);margin-top:4px;padding:0 2px}
+.sc-msg-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#5535dd,#a855f7);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:4px}
+/* Waiting/typing indicator */
+.sc-waiting{align-self:flex-start;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;border-bottom-left-radius:4px}
+.sc-waiting-text{font-size:12px;color:var(--text-muted)}
+.sc-dots{display:flex;gap:4px;align-items:center}
+.sc-dot{width:6px;height:6px;border-radius:50%;background:var(--text-dim);animation:sc-bounce .9s infinite}
+.sc-dot:nth-child(2){animation-delay:.15s}
+.sc-dot:nth-child(3){animation-delay:.3s}
+@keyframes sc-bounce{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-5px);opacity:1}}
+/* Status badges */
+.sc-status{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border-radius:10px;padding:2px 8px;flex-shrink:0}
+.sc-status.st-open{background:rgba(251,146,60,.15);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
+.sc-status.st-acknowledged{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(139,126,255,.3)}
+.sc-status.st-resolved{background:rgba(107,114,128,.1);color:var(--text-muted);border:1px solid rgba(107,114,128,.2)}
+.sc-status.cat-bug{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.25)}
+.sc-status.cat-question{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(139,126,255,.25)}
+.sc-status.cat-feature{background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid rgba(167,139,250,.25)}
+.sc-status.cat-billing{background:rgba(163,230,53,.1);color:#a3e635;border:1px solid rgba(163,230,53,.2)}
+/* Compose form */
+.sc-compose-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px}
+.sc-field{margin-bottom:14px}
+.sc-label{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.sc-counter{font-size:11px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0}
+.sc-counter.warn{color:#f59e0b}
+.sc-input,.sc-select,.sc-textarea{width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;box-sizing:border-box;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+.sc-input:focus,.sc-select:focus,.sc-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,126,255,.15)}
+.sc-input.sc-err,.sc-textarea.sc-err{border-color:#ef4444}
+.sc-input.sc-err:focus,.sc-textarea.sc-err:focus{box-shadow:0 0 0 3px rgba(239,68,68,.15)}
+.sc-ferr{font-size:11px;color:#ef4444;margin-top:4px;min-height:16px}
+.sc-textarea{resize:vertical;min-height:100px;max-height:180px;line-height:1.55}
+.sc-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2371717a'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;padding-right:30px}
+.sc-send{width:100%;padding:11px;background:linear-gradient(135deg,#5535dd,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:filter .14s,opacity .14s;margin-top:4px}
+.sc-send:hover:not(:disabled){filter:brightness(1.1)}
+.sc-send:disabled{opacity:.5;cursor:default}
+.sc-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sc-spin .7s linear infinite}
+@keyframes sc-spin{to{transform:rotate(360deg)}}
+/* Sent confirmation */
+.sc-sent{text-align:center;padding:28px 16px}
+.sc-sent-icon{font-size:42px;margin-bottom:12px;animation:sc-pop .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes sc-pop{from{transform:scale(0)}to{transform:scale(1)}}
+.sc-sent-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
+.sc-sent-sub{font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:18px}
+.sc-sent-ref{font-family:monospace;font-size:11px;background:var(--surface2);border:1px solid var(--border);padding:5px 12px;border-radius:6px;color:var(--accent);display:inline-block;margin-bottom:18px}
+.sc-sent-btns{display:flex;gap:8px;justify-content:center}
+.sc-btn-ghost{font-size:12px;font-weight:600;padding:8px 16px;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text-muted);transition:background .12s}
+.sc-btn-ghost:hover{background:var(--surface2)}
+.sc-btn-accent{font-size:12px;font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;border:none;background:linear-gradient(135deg,#5535dd,#7c3aed);color:#fff;transition:filter .12s}
+.sc-btn-accent:hover{filter:brightness(1.1)}
+/* Empty / Loading */
+.sc-empty{text-align:center;padding:40px 16px;color:var(--text-muted);font-size:13px;line-height:1.7}
+.sc-empty-icon{font-size:34px;margin-bottom:10px;opacity:.6}
+.sc-loading{text-align:center;padding:32px;color:var(--text-muted);font-size:13px}
 """
 
 internal val SUPPORT_CHAT_JS = """(function(){
-  var BASE='/transloom/api/support';
-  var open=false,tab='new',submitting=false,success=null,tickets=null,loaded=false;
+  var BASE='/syncling/api/support';
+  var _open=false,_view='home',_convId=null,_convs=null,_loaded=false,_submitting=false,_lastSent=null;
+  var CAT_LABELS={'bug':'Bug report','question':'Question','feature':'Feature request','billing':'Billing'};
+  var CAT_EMOJIS={'bug':'🐛','question':'💬','feature':'✨','billing':'💳'};
+
   function H(){return window.authHeaders?window.authHeaders():{'Content-Type':'application/json'};}
   function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
-  function fmtDate(ms){var d=new Date(ms);return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});}
-  function render(){
-    var fab=document.getElementById('sc-fab');
-    var panel=document.getElementById('sc-panel');
-    if(!fab||!panel)return;
-    panel.classList.toggle('open',open);
-    var body=panel.querySelector('.sc-body');
-    if(!body)return;
-    if(tab==='new'){
-      if(success){
-        body.innerHTML='<div class="sc-success"><div class="sc-success-icon">✅</div><div class="sc-success-title">Request submitted!</div><div class="sc-success-sub">We\'ll get back to you at your account email. Your ticket ID:</div><div class="sc-ticket-id">'+esc(success.id.substring(0,8))+'</div><div style="margin-top:14px"><button class="sc-new-btn" onclick="window._scNewTicket()">+ New ticket</button></div></div>';
-      } else {
-        body.innerHTML='<div><div class="sc-field"><label class="sc-label">Category</label><select class="sc-select" id="sc-cat"><option value="bug">Bug report</option><option value="question">Question</option><option value="feature">Feature request</option><option value="billing">Billing</option></select></div><div class="sc-field"><label class="sc-label">Subject</label><input class="sc-input" id="sc-subj" type="text" placeholder="Brief description" maxlength="200"></div><div class="sc-field"><label class="sc-label">Message</label><textarea class="sc-textarea" id="sc-msg" placeholder="Describe your issue or question…" maxlength="5000"></textarea></div><button class="sc-submit" id="sc-submit-btn" onclick="window._scSubmit()">'+(submitting?'Sending…':'Send message')+'</button></div>';
-        if(submitting)document.getElementById('sc-submit-btn').disabled=true;
-      }
+  function ago(ms){
+    var diff=Date.now()-ms,m=Math.floor(diff/60000),h=Math.floor(m/60),dy=Math.floor(h/24);
+    if(m<1)return 'just now';
+    if(m<60)return m+'m ago';
+    if(h<24)return h+'h ago';
+    if(dy<7)return dy+'d ago';
+    return new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  }
+  function statusLabel(st){
+    if(st==='open')return 'Waiting for reply';
+    if(st==='acknowledged')return 'In progress';
+    if(st==='resolved')return 'Resolved';
+    return st;
+  }
+  function hasUnread(){
+    if(!_convs)return false;
+    return _convs.some(function(t){return t.adminReply&&t.status!=='resolved';});
+  }
+
+  function viewHome(){
+    var h='<div class="sc-hero">'+
+      '<div class="sc-hero-avatar">💬</div>'+
+      '<div class="sc-hero-title">Syncling Support</div>'+
+      '<div class="sc-hero-sub">We\'re here to help you out</div>'+
+      '<div class="sc-sla">⏱ We reply within 24 hours</div>'+
+    '</div>';
+
+    if(!_loaded){
+      h+='<div class="sc-loading">Loading conversations…</div>';
+    } else if(_convs&&_convs.length){
+      h+='<div class="sc-section-label">Your conversations</div><div class="sc-conv-list">';
+      _convs.forEach(function(t){
+        var preview=t.adminReply?('Support: '+t.adminReply):t.message;
+        var hasNew=t.adminReply&&t.status!=='open';
+        h+='<div class="sc-conv-item" onclick="window._scThread(\''+esc(t.id)+'\')">'+
+          '<div class="sc-conv-dot'+(hasNew?' active':'')+'"></div>'+
+          '<div class="sc-conv-body">'+
+            '<div class="sc-conv-subject">'+esc(t.subject)+'</div>'+
+            '<div class="sc-conv-preview">'+esc(preview.substring(0,80))+(preview.length>80?'…':'')+'</div>'+
+            '<div class="sc-conv-footer">'+
+              '<span class="sc-status st-'+esc(t.status)+'">'+statusLabel(t.status)+'</span>'+
+              '<span style="font-size:10px;color:var(--text-dim);margin-left:4px;">'+ago(t.createdAt)+'</span>'+
+            '</div>'+
+          '</div>'+
+          '<div class="sc-conv-arrow">›</div>'+
+        '</div>';
+      });
+      h+='</div>';
     } else {
-      if(!loaded){
-        body.innerHTML='<div class="sc-loading">Loading…</div>';
-        fetch(BASE,{headers:H()}).then(function(r){return r.ok?r.json():null}).then(function(d){
-          loaded=true;tickets=d&&d.tickets?d.tickets:[];render();
-        }).catch(function(){loaded=true;tickets=[];render();});
-      } else if(!tickets||!tickets.length){
-        body.innerHTML='<div class="sc-empty">No tickets yet. Submit one in the New Ticket tab.</div>';
+      h+='<div class="sc-empty"><div class="sc-empty-icon">💬</div>No conversations yet.<br>Start one below and we\'ll get back to you within 24 hours.</div>';
+    }
+    h+='<button class="sc-new-conv" onclick="window._scCompose()">'+
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'+
+      'New conversation</button>';
+    return h;
+  }
+
+  function viewThread(){
+    var t=null;
+    if(_convs)for(var i=0;i<_convs.length;i++){if(_convs[i].id===_convId){t=_convs[i];break;}}
+    if(!t)return '<div class="sc-empty">Conversation not found.</div>';
+
+    var h='<div class="sc-thread-header">'+
+      '<div class="sc-thread-subject">'+esc(t.subject)+'</div>'+
+      '<div class="sc-thread-meta">'+
+        '<span class="sc-status cat-'+esc(t.category)+'" title="'+esc(CAT_LABELS[t.category]||t.category)+'">'+esc(CAT_EMOJIS[t.category]||'')+' '+esc(CAT_LABELS[t.category]||t.category)+'</span>'+
+        '<span class="sc-status st-'+esc(t.status)+'">'+statusLabel(t.status)+'</span>'+
+        '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">'+ago(t.createdAt)+'</span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="sc-messages">'+
+      '<div class="sc-msg sc-msg-user">'+
+        '<div class="sc-bubble sc-bubble-user">'+esc(t.message)+'</div>'+
+        '<div class="sc-msg-meta">You &middot; '+ago(t.createdAt)+'</div>'+
+      '</div>';
+
+    if(t.adminReply){
+      h+='<div class="sc-msg sc-msg-admin">'+
+        '<div class="sc-msg-avatar">S</div>'+
+        '<div class="sc-msg-admin-inner">'+
+          '<div class="sc-bubble sc-bubble-admin">'+esc(t.adminReply)+'</div>'+
+          '<div class="sc-msg-meta">Syncling Support</div>'+
+        '</div>'+
+      '</div>';
+    } else if(t.status!=='resolved'){
+      h+='<div class="sc-waiting">'+
+        '<div class="sc-dots"><div class="sc-dot"></div><div class="sc-dot"></div><div class="sc-dot"></div></div>'+
+        '<span class="sc-waiting-text">Support will reply shortly</span>'+
+      '</div>';
+    }
+
+    h+='</div>';
+    if(t.status==='resolved'){
+      h+='<div style="text-align:center;padding:16px 0 4px;font-size:12px;color:var(--text-muted);">This conversation has been resolved. <button onclick="window._scCompose()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;">Open a new one</button></div>';
+    }
+    return h;
+  }
+
+  function viewCompose(){
+    return '<div class="sc-compose-title">New conversation</div>'+
+      '<div class="sc-field">'+
+        '<label class="sc-label">Category</label>'+
+        '<select class="sc-select" id="sc-cat">'+
+          Object.keys(CAT_LABELS).map(function(k){return '<option value="'+k+'">'+CAT_EMOJIS[k]+' '+CAT_LABELS[k]+'</option>';}).join('')+
+        '</select>'+
+      '</div>'+
+      '<div class="sc-field">'+
+        '<label class="sc-label"><span>Subject</span><span class="sc-counter" id="sc-subj-ctr">0/200</span></label>'+
+        '<input class="sc-input" id="sc-subj" type="text" placeholder="Brief description" maxlength="200" autocomplete="off">'+
+        '<div class="sc-ferr" id="sc-subj-err"></div>'+
+      '</div>'+
+      '<div class="sc-field">'+
+        '<label class="sc-label"><span>Message</span><span class="sc-counter" id="sc-msg-ctr">0/5000</span></label>'+
+        '<textarea class="sc-textarea" id="sc-msg" placeholder="Describe your issue in detail…" maxlength="5000"></textarea>'+
+        '<div class="sc-ferr" id="sc-msg-err"></div>'+
+      '</div>'+
+      '<button class="sc-send" id="sc-send" onclick="window._scSubmit()" '+(_submitting?'disabled':'')+'>'+
+        (_submitting?('<span class="sc-spinner"></span><span>Sending…</span>'):'<span>Send message</span>')+
+      '</button>';
+  }
+
+  function viewSent(){
+    var t=_lastSent;
+    if(!t)return '';
+    return '<div class="sc-sent">'+
+      '<div class="sc-sent-icon">✅</div>'+
+      '<div class="sc-sent-title">Message sent!</div>'+
+      '<div class="sc-sent-sub">We\'ll reply to your account email within 24 hours.</div>'+
+      '<div class="sc-sent-ref">#'+esc(t.id.substring(0,8))+'</div>'+
+      '<div class="sc-sent-btns">'+
+        '<button class="sc-btn-ghost" onclick="window._scCompose()">+ New</button>'+
+        '<button class="sc-btn-accent" onclick="window._scHome()">View all</button>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function renderHeader(){
+    var panel=document.getElementById('sc-panel');
+    if(!panel)return;
+    var back=panel.querySelector('.sc-header-back');
+    var nameEl=panel.querySelector('.sc-header-name');
+    var statusEl=panel.querySelector('.sc-header-status');
+    var atHome=(_view==='home');
+    if(back)back.classList.toggle('visible',!atHome);
+    if(nameEl){
+      if(_view==='thread'&&_convs){
+        var t=null;
+        for(var i=0;i<_convs.length;i++){if(_convs[i].id===_convId){t=_convs[i];break;}}
+        nameEl.textContent=t?t.subject:'Conversation';
+      } else if(_view==='compose'){
+        nameEl.textContent='New conversation';
       } else {
-        var html='<div class="sc-ticket-list">';
-        tickets.forEach(function(t){
-          var catCls='cat-'+t.category,stCls='st-'+t.status;
-          html+='<div class="sc-ticket-item"><div class="sc-ticket-row"><span class="sc-ticket-subject">'+esc(t.subject)+'</span><span class="sc-badge '+catCls+'">'+esc(t.category)+'</span></div><div class="sc-ticket-row"><span class="sc-badge '+stCls+'">'+esc(t.status)+'</span><span class="sc-ticket-meta" style="margin-left:4px">'+fmtDate(t.createdAt)+'</span></div></div>';
-        });
-        html+='</div>';
-        body.innerHTML=html;
+        nameEl.textContent='Syncling Support';
+      }
+    }
+    if(statusEl){
+      if(_view==='home'){
+        statusEl.innerHTML='<div class="sc-header-dot"></div>Usually reply within 24h';
+      } else {
+        statusEl.innerHTML='';
       }
     }
   }
-  window._scNewTicket=function(){success=null;render();};
+
+  function renderBody(){
+    var panel=document.getElementById('sc-panel');
+    if(!panel)return;
+    var inner=panel.querySelector('.sc-body-inner');
+    if(!inner)return;
+    var html='';
+    if(_view==='home')html=viewHome();
+    else if(_view==='thread')html=viewThread();
+    else if(_view==='compose')html=viewCompose();
+    else if(_view==='sent')html=viewSent();
+    inner.innerHTML=html;
+    wireListeners();
+    updateFabDot();
+  }
+
+  function wireListeners(){
+    var subj=document.getElementById('sc-subj');
+    var msg=document.getElementById('sc-msg');
+    if(subj){
+      subj.addEventListener('input',function(){
+        var ctr=document.getElementById('sc-subj-ctr');
+        if(ctr){ctr.textContent=this.value.length+'/200';ctr.classList.toggle('warn',this.value.length>170);}
+      });
+      subj.addEventListener('blur',function(){
+        var e=document.getElementById('sc-subj-err');
+        if(e)e.textContent=this.value.trim()?'':'Subject is required';
+        this.classList.toggle('sc-err',!this.value.trim());
+      });
+    }
+    if(msg){
+      msg.addEventListener('input',function(){
+        var ctr=document.getElementById('sc-msg-ctr');
+        if(ctr){ctr.textContent=this.value.length+'/5000';ctr.classList.toggle('warn',this.value.length>4250);}
+      });
+      msg.addEventListener('blur',function(){
+        var e=document.getElementById('sc-msg-err');
+        if(e)e.textContent=this.value.trim()?'':'Message is required';
+        this.classList.toggle('sc-err',!this.value.trim());
+      });
+    }
+  }
+
+  function updateFabDot(){
+    var dot=document.getElementById('sc-fab-dot');
+    if(dot)dot.classList.toggle('show',hasUnread());
+  }
+
+  function navigate(newView,newConvId,direction){
+    var panel=document.getElementById('sc-panel');
+    if(!panel)return;
+    var inner=panel.querySelector('.sc-body-inner');
+    if(!inner){_view=newView;_convId=newConvId;renderBody();return;}
+    var dx=(direction||1)*28;
+    inner.style.transition='none';
+    inner.style.opacity='0';
+    inner.style.transform='translateX('+dx+'px)';
+    _view=newView;_convId=newConvId;
+    setTimeout(function(){
+      renderBody();
+      renderHeader();
+      inner.style.transform='translateX('+(-dx)+'px)';
+      requestAnimationFrame(function(){
+        inner.style.transition='opacity .16s ease,transform .18s cubic-bezier(.4,0,.2,1)';
+        inner.style.opacity='1';
+        inner.style.transform='none';
+      });
+    },20);
+  }
+
+  window._scHome=function(){
+    if(_view!=='home')navigate('home',null,-1);
+    _loaded=false;loadConvs();
+  };
+  window._scThread=function(id){navigate('thread',id,1);};
+  window._scCompose=function(){navigate('compose',null,1);};
+  window._scToggle=function(){
+    _open=!_open;
+    var panel=document.getElementById('sc-panel');
+    if(panel)panel.classList.toggle('open',_open);
+    if(_open&&!_loaded)loadConvs();
+  };
+  window._scClose=function(){_open=false;var panel=document.getElementById('sc-panel');if(panel)panel.classList.remove('open');};
+  window._scBack=function(){
+    if(_view==='thread'||_view==='compose'||_view==='sent')navigate('home',null,-1);
+  };
   window._scSubmit=function(){
     var cat=document.getElementById('sc-cat');
     var subj=document.getElementById('sc-subj');
     var msg=document.getElementById('sc-msg');
-    if(!cat||!subj||!msg)return;
-    var sv=subj.value.trim(),mv=msg.value.trim();
-    if(!sv){subj.focus();if(window.toast)toast('Subject is required','error');return;}
-    if(!mv){msg.focus();if(window.toast)toast('Message is required','error');return;}
-    submitting=true;render();
-    fetch(BASE,{method:'POST',headers:H(),body:JSON.stringify({category:cat.value,subject:sv,message:mv})})
+    if(!subj||!msg)return;
+    var sv=subj.value.trim(),mv=msg.value.trim(),valid=true;
+    var se=document.getElementById('sc-subj-err'),me=document.getElementById('sc-msg-err');
+    if(!sv){if(se)se.textContent='Subject is required';subj.classList.add('sc-err');valid=false;}
+    if(!mv){if(me)me.textContent='Message is required';msg.classList.add('sc-err');valid=false;}
+    if(!valid)return;
+    _submitting=true;renderBody();
+    fetch(BASE,{method:'POST',headers:H(),body:JSON.stringify({category:cat?cat.value:'question',subject:sv,message:mv})})
       .then(function(r){return r.ok?r.json():r.json().then(function(e){throw new Error(e.error||'Failed');});})
-      .then(function(d){submitting=false;success=d;loaded=false;tickets=null;render();})
-      .catch(function(e){submitting=false;render();if(window.toast)toast(e.message||'Failed to submit','error');});
+      .then(function(d){
+        _submitting=false;
+        _lastSent=d;
+        _loaded=false;_convs=null;
+        navigate('sent',null,1);
+      })
+      .catch(function(e){
+        _submitting=false;renderBody();
+        if(window.toast)toast(e.message||'Failed to send. Please try again.','error');
+      });
   };
-  window._scToggle=function(){open=!open;if(open&&tab==='tickets'&&!loaded){loaded=false;}render();};
-  window._scTab=function(t){tab=t;if(t==='tickets'&&!loaded){loaded=false;}render();};
-  window._scClose=function(){open=false;render();};
+
+  function loadConvs(){
+    _loaded=false;
+    renderBody();
+    fetch(BASE,{headers:H()})
+      .then(function(r){return r.ok?r.json():Promise.reject('HTTP '+r.status);})
+      .then(function(d){_loaded=true;_convs=d&&d.tickets?d.tickets:[];renderBody();updateFabDot();})
+      .catch(function(){_loaded=true;_convs=[];renderBody();});
+  }
+
   function mount(){
     if(document.getElementById('sc-fab'))return;
     var fab=document.createElement('button');
-    fab.id='sc-fab';fab.className='sc-fab';fab.setAttribute('aria-label','Support');fab.setAttribute('title','Help & support');
-    fab.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    fab.id='sc-fab';
+    fab.className='sc-fab';
+    fab.setAttribute('aria-label','Help & Support');
+    fab.setAttribute('title','Help & support');
+    fab.innerHTML=
+      '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg>'+
+      '<div class="sc-fab-dot" id="sc-fab-dot"></div>';
     fab.onclick=window._scToggle;
     document.body.appendChild(fab);
+
     var panel=document.createElement('div');
-    panel.id='sc-panel';panel.className='sc-panel';panel.setAttribute('role','dialog');panel.setAttribute('aria-label','Support');
-    panel.innerHTML='<div class="sc-panel-head"><span class="sc-panel-title">Help &amp; Support</span><button class="sc-panel-close" onclick="window._scClose()" aria-label="Close">✕</button></div><div class="sc-tabs"><button class="sc-tab active" id="sc-tab-new" onclick="window._scTab(\'new\')">New Ticket</button><button class="sc-tab" id="sc-tab-tickets" onclick="window._scTab(\'tickets\')">My Tickets</button></div><div class="sc-body"></div>';
+    panel.id='sc-panel';
+    panel.className='sc-panel';
+    panel.setAttribute('role','dialog');
+    panel.setAttribute('aria-modal','true');
+    panel.setAttribute('aria-label','Help and Support');
+    panel.innerHTML=
+      '<div class="sc-header">'+
+        '<button class="sc-header-back" onclick="window._scBack()" aria-label="Go back">&#8592;</button>'+
+        '<div class="sc-header-brand">'+
+          '<div class="sc-header-name">Syncling Support</div>'+
+          '<div class="sc-header-status"><div class="sc-header-dot"></div>Usually reply within 24h</div>'+
+        '</div>'+
+        '<button class="sc-header-close" onclick="window._scClose()" aria-label="Close">&#x2715;</button>'+
+      '</div>'+
+      '<div class="sc-body"><div class="sc-body-inner"></div></div>';
     document.body.appendChild(panel);
-    var tabs=panel.querySelectorAll('.sc-tab');
-    var origRender=render;
-    render=function(){
-      tabs.forEach(function(t){t.classList.toggle('active',t.id==='sc-tab-'+tab);});
-      origRender();
-    };
-    render();
+    renderBody();
   }
+
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&_open)window._scClose();});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);
   else mount();
 })();"""
