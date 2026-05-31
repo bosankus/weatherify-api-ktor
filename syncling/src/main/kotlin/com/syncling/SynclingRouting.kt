@@ -110,6 +110,15 @@ fun Application.installSynclingRoutes(d: SynclingDeps) {
     d.supportTicketRepository?.let { attributes.put(SupportTicketRepoKey, it) }
     d.apiTokenRepository?.let { attributes.put(ApiTokenRepoAttr, it) }
     routing {
+        get("/") {
+            val host = call.request.host()
+            if (host == "syncling.space" || host == "www.syncling.space") {
+                call.respondRedirect("/syncling", permanent = false)
+            } else {
+                call.respondRedirect("/syncling/app", permanent = false)
+            }
+        }
+
         // Liveness probe — always 200 if the JVM is running.
         get("/health") { call.respond(HealthStatus("ok")) }
 
