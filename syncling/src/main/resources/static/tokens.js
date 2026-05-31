@@ -10,7 +10,7 @@ const modalMount = document.getElementById('tk-modal-mount');
 
 async function loadTokens() {
   try {
-    const res = await fetch('/syncling/api/me/tokens', { headers: window.authHeaders || {} });
+    const res = await fetch('/syncling/api/me/tokens', { headers: window.authHeaders ? window.authHeaders() : {} });
     const data = await res.json();
     render(data.tokens || []);
   } catch {
@@ -113,7 +113,7 @@ async function revokeToken(id) {
   try {
     const res = await fetch(`/syncling/api/me/tokens/${id}`, {
       method: 'DELETE',
-      headers: window.authHeaders || {}
+      headers: window.authHeaders ? window.authHeaders() : {}
     });
     if (!res.ok) throw new Error();
     window.toast?.('Token revoked', 'success');
@@ -215,7 +215,7 @@ async function createToken() {
   try {
     const res = await fetch('/syncling/api/me/tokens', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(window.authHeaders || {}) },
+      headers: { 'Content-Type': 'application/json', ...(window.authHeaders ? window.authHeaders() : {}) },
       body: JSON.stringify({ name, type })
     });
     const data = await res.json();
