@@ -53,7 +53,9 @@ import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
+import io.ktor.server.request.host
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -115,7 +117,7 @@ fun Application.installSynclingRoutes(d: SynclingDeps) {
             if (host == "syncling.space" || host == "www.syncling.space") {
                 call.respondRedirect("/syncling", permanent = false)
             } else {
-                call.respondRedirect("/syncling/app", permanent = false)
+                call.respondRedirect("/admin", permanent = false)
             }
         }
 
