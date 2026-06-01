@@ -210,7 +210,7 @@ private const val LOGO_SVG = """
       <stop offset="100%" stop-color="#22d3ee"/>
     </linearGradient>
   </defs>
-  <rect width="32" height="32" rx="8" fill="#080c18"/>
+  <rect width="32" height="32" rx="8" fill="#1a2b3c"/>
   <g class="sync-arrows" stroke="url(#slGrad)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
     <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
@@ -306,6 +306,15 @@ internal const val SHARED_CSS = """
   --accent:#8B7EFF;--accent-dim:rgba(139,126,255,.12);--accent-dim2:rgba(139,126,255,.06);
   --text:#f0f0f0;--text-muted:#666;--text-dim:#999;
   --red:#ff4d4f;--yellow:#faad14;--radius:10px;--radius-sm:6px;
+  --icon-bg:#1a2b3c;
+  --lp-nav-bg:rgba(8,8,8,.88);--lp-nav-mobile:rgba(8,8,8,.97);
+  --lp-text-soft:#555;--lp-text-muted2:#444;--lp-text-faint:#333;--lp-text-faintest:#252525;--lp-label-color:#3a3a3a;
+  --lp-term-bg:#060606;--lp-term-header:#0a0a0a;--lp-term-title:#232323;--lp-term-text:#3a3a3a;--lp-term-border:#161616;--lp-term-cmd:#e2e8f0;--lp-term-dim:#222;--lp-term-final:#121212;
+  --lp-code-bg:#040404;--lp-code-border:#181818;--lp-code-text:#3a3a3a;--lp-code-comment:#1e1e1e;
+  --lp-chip-text:#444;--lp-chip-bg:rgba(255,255,255,.025);--lp-chip-border:rgba(255,255,255,.07);
+  --lp-stats-bg:rgba(255,255,255,.015);--lp-stats-border:rgba(139,126,255,.12);
+  --lp-card-border:rgba(255,255,255,.05);--lp-pricing-border:rgba(255,255,255,.06);
+  --lp-cli-block:#0e0e0e;--lp-cli-out:#2a2a2a;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -318,12 +327,12 @@ button,.btn{cursor:pointer;border:none;font-family:inherit;font-size:14px;font-w
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}.card:hover{border-color:rgba(139,126,255,.35);box-shadow:0 0 0 1px rgba(139,126,255,.08),0 8px 32px -8px rgba(139,126,255,.15)}
 .brand{display:inline-flex;align-items:center;gap:10px;font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.2px}.brand-text{font-family:'Jost',sans-serif;font-weight:700;letter-spacing:-.4px}
-.brand-mark{flex-shrink:0;display:block;filter:drop-shadow(0 2px 8px rgba(34,211,238,.2));transform-origin:center;animation:brandSpin 8s linear infinite;transition:transform .35s cubic-bezier(.2,.8,.2,1),filter .35s ease}
+.brand-mark{flex-shrink:0;display:block;filter:drop-shadow(0 2px 8px rgba(34,211,238,.2));transition:filter .35s ease}
+.brand-mark rect{fill:var(--icon-bg)}
 .brand-mark .sync-arrows{animation:syncPulse 3s ease-in-out infinite}
-.brand:hover .brand-mark,a:hover>.brand-mark{animation:brandSpin 1.5s linear infinite;filter:drop-shadow(0 6px 18px rgba(34,211,238,.45))}
-@keyframes brandSpin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.brand:hover .brand-mark,a:hover>.brand-mark{filter:drop-shadow(0 6px 18px rgba(34,211,238,.45))}
 @keyframes syncPulse{0%,100%{opacity:.82}50%{opacity:1}}
-@media(prefers-reduced-motion:reduce){.brand-mark,.brand-mark .sync-arrows{animation:none}}
+@media(prefers-reduced-motion:reduce){.brand-mark .sync-arrows{animation:none}}
 .fade-up{opacity:0;transform:translateY(18px);transition:opacity .65s cubic-bezier(.2,.7,.2,1),transform .65s cubic-bezier(.2,.7,.2,1)}
 .fade-up.in-view{opacity:1;transform:translateY(0)}
 .fade-up.d1{transition-delay:.08s}.fade-up.d2{transition-delay:.16s}.fade-up.d3{transition-delay:.24s}.fade-up.d4{transition-delay:.32s}
@@ -375,6 +384,8 @@ label{display:block;font-size:13px;color:var(--text-dim);margin-bottom:5px}
 .notif-time{font-size:11px;color:var(--text-muted)}
 .notif-action-link{font-size:11px;color:var(--accent);font-weight:600;white-space:nowrap}
 @media(max-width:768px){.notif-panel{width:100%;border-left:none;border-top:1px solid var(--border)}}
+html[data-theme="light"]{--bg:#f5f7fa;--surface:#ffffff;--surface2:#f0f4f8;--border:#e2e8f0;--text:#0f172a;--text-muted:#64748b;--text-dim:#94a3b8;--icon-bg:#1a2b3c;--lp-nav-bg:rgba(245,247,250,.92);--lp-nav-mobile:rgba(245,247,250,.98);--lp-text-soft:#64748b;--lp-text-muted2:#64748b;--lp-text-faint:#94a3b8;--lp-text-faintest:#94a3b8;--lp-label-color:#64748b;--lp-term-bg:#1e2a3a;--lp-term-header:#162030;--lp-term-title:#334155;--lp-term-text:#cbd5e1;--lp-term-border:#2d3f52;--lp-term-cmd:#f1f5f9;--lp-term-dim:#64748b;--lp-term-final:#2d3f52;--lp-code-bg:#1e2a3a;--lp-code-border:#2d3f52;--lp-code-text:#94a3b8;--lp-code-comment:#475569;--lp-chip-text:#64748b;--lp-chip-bg:rgba(15,23,42,.04);--lp-chip-border:rgba(15,23,42,.1);--lp-stats-bg:rgba(15,23,42,.03);--lp-stats-border:rgba(139,126,255,.2);--lp-card-border:rgba(15,23,42,.08);--lp-pricing-border:rgba(15,23,42,.1);--lp-cli-block:#e2e8f0;--lp-cli-out:#64748b}
+@media(prefers-color-scheme:light){html:not([data-theme="dark"]){--bg:#f5f7fa;--surface:#ffffff;--surface2:#f0f4f8;--border:#e2e8f0;--text:#0f172a;--text-muted:#64748b;--text-dim:#94a3b8;--icon-bg:#1a2b3c;--lp-nav-bg:rgba(245,247,250,.92);--lp-nav-mobile:rgba(245,247,250,.98);--lp-text-soft:#64748b;--lp-text-muted2:#64748b;--lp-text-faint:#94a3b8;--lp-text-faintest:#94a3b8;--lp-label-color:#64748b;--lp-term-bg:#1e2a3a;--lp-term-header:#162030;--lp-term-title:#334155;--lp-term-text:#cbd5e1;--lp-term-border:#2d3f52;--lp-term-cmd:#f1f5f9;--lp-term-dim:#64748b;--lp-term-final:#2d3f52;--lp-code-bg:#1e2a3a;--lp-code-border:#2d3f52;--lp-code-text:#94a3b8;--lp-code-comment:#475569;--lp-chip-text:#64748b;--lp-chip-bg:rgba(15,23,42,.04);--lp-chip-border:rgba(15,23,42,.1);--lp-stats-bg:rgba(15,23,42,.03);--lp-stats-border:rgba(139,126,255,.2);--lp-card-border:rgba(15,23,42,.08);--lp-pricing-border:rgba(15,23,42,.1);--lp-cli-block:#e2e8f0;--lp-cli-out:#64748b}}
 """
 
 private fun FlowContent.stepCard(num: String, title: String, desc: String, extra: String = "") {
@@ -715,6 +726,24 @@ private const val CDN_ARCH_SVG = """
 
 private const val LANDING_JS = """
 (function(){
+  var themeBtn=document.getElementById('theme-toggle');
+  function getTheme(){
+    var saved=localStorage.getItem('syncling-theme');
+    if(saved)return saved;
+    return window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';
+  }
+  function applyTheme(t){
+    document.documentElement.setAttribute('data-theme',t);
+    localStorage.setItem('syncling-theme',t);
+  }
+  applyTheme(getTheme());
+  if(themeBtn){
+    themeBtn.addEventListener('click',function(){
+      var cur=document.documentElement.getAttribute('data-theme')||'dark';
+      applyTheme(cur==='dark'?'light':'dark');
+    });
+  }
+
   var params=new URLSearchParams(window.location.search);
   if(params.get('billing_error')==='link_failed'){
     var sub=params.get('sub')||'';
@@ -826,7 +855,8 @@ internal fun HTML.landingPage() {
         favicon()
         link(rel = "preconnect", href = "https://fonts.googleapis.com")
         link(rel = "preconnect", href = "https://fonts.gstatic.com") { attributes["crossorigin"] = "" }
-        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600&family=Jost:wght@700&display=swap")
+        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap")
+        script { unsafe { +"(function(){var t=localStorage.getItem('syncling-theme');if(t)document.documentElement.setAttribute('data-theme',t);})()" } }
         style { unsafe { +"$SHARED_CSS$LANDING_CSS" } }
         script {
             attributes["type"] = "application/ld+json"
@@ -837,18 +867,25 @@ internal fun HTML.landingPage() {
         nav {
             div("nav-inner") {
                 div("brand") { unsafe { +LOGO_SVG }; span { +"Syncling" } }
-                button {
-                    id = "nav-toggle"
-                    classes = setOf("nav-hamburger")
-                    attributes["aria-label"] = "Open menu"
-                    attributes["aria-expanded"] = "false"
-                    unsafe { +"""<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>""" }
+                div("nav-right") {
+                    button {
+                        id = "theme-toggle"
+                        classes = setOf("nav-theme-toggle")
+                        attributes["aria-label"] = "Toggle theme"
+                        unsafe { +"""<svg class="theme-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg><svg class="theme-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>""" }
+                    }
+                    button {
+                        id = "nav-toggle"
+                        classes = setOf("nav-hamburger")
+                        attributes["aria-label"] = "Open menu"
+                        attributes["aria-expanded"] = "false"
+                        unsafe { +"""<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>""" }
+                    }
                 }
                 div("nav-links") {
                     id = "nav-menu"
                     a("#how") { +"How it works" }
                     a("#features") { +"Features" }
-                    a("#cli") { +"CLI" }
                     a("#pricing") { +"Pricing" }
                     a("#faq") { +"FAQ" }
                     a("/docs") { +"Docs" }
@@ -863,12 +900,12 @@ internal fun HTML.landingPage() {
             div("hero-glow") {}
             div("hero-glow2") {}
             div("hero-inner") {
-                span("badge fade-up") { +"AI-Powered App Localization · Android & iOS SDKs · Free to start" }
+                span("badge fade-up") { +"Android & iOS · 10+ Languages · Free to start" }
                 h1("hero-title fade-up d1") {
-                    +"Push a commit."; br {}; +"Go global in "; span("accent") { +"45 seconds." }
+                    +"Your app,"; br {}; +"everywhere. "; span("accent") { +"Automatically." }
                 }
                 p("hero-sub fade-up d2") {
-                    +"Syncling automates mobile app localization for Android and iOS — detects what changed, translates into every target language with AI, and publishes to a global CDN. No manual steps, no app release required."
+                    +"Push a commit — Syncling detects what changed, translates into every language with AI, and publishes to a global CDN in 45 seconds. No manual steps. No app release required."
                 }
                 div("hero-actions fade-up d3") {
                     a("/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started free" }
@@ -895,8 +932,9 @@ internal fun HTML.landingPage() {
         section("pipeline-section") {
             id = "how"
             div("section-inner") {
-                p("section-label fade-up") { +"HOW APP LOCALIZATION WORKS" }
-                h2("fade-up d1") { +"From commit to globally localized. Nothing else to set up." }
+                p("section-label fade-up") { +"HOW IT WORKS" }
+                h2("fade-up d1") { +"Commit. Translate. Ship." }
+                p("pipeline-lead fade-up d1") { +"Every git push triggers a fully automated pipeline. No dashboards to babysit, no export/import, no manual review unless you want it." }
                 div("pipeline-demo fade-up d2") {
                     div("term-window") {
                         div("term-header") {
@@ -962,172 +1000,38 @@ internal fun HTML.landingPage() {
             }
         }
 
-        section("cli-section") {
-            id = "cli"
-            div("section-inner") {
-                p("section-label fade-up") { +"DEVELOPER CLI" }
-                h2("fade-up d1") { +"Manage your translations from the terminal." }
-                p("arch-sub fade-up d2") {
-                    +"Install the Syncling CLI and get full control over your localization pipeline — trigger syncs, download translated files, manage API tokens, and monitor pipeline runs without leaving your terminal."
-                }
-                div("cli-layout fade-up d3") {
-                    div("cli-term-wrap") {
-                        div("term-window") {
-                            div("term-header") {
-                                div("term-dots") {
-                                    span("term-dot term-red") {}
-                                    span("term-dot term-yellow") {}
-                                    span("term-dot term-green") {}
-                                }
-                                span("term-title") { +"syncling — terminal" }
-                            }
-                            div("term-body cli-term-body") {
-                                div("cli-t-block") {
-                                    div("term-prompt") {
-                                        span("term-ps1") { +"$ " }
-                                        span("term-cmd") { +"npm install -g syncling" }
-                                    }
-                                    div("cli-t-out") { span("term-ok") { +"added 1 package · syncling@0.1.0 installed" } }
-                                }
-                                div("cli-t-block") {
-                                    div("term-prompt") {
-                                        span("term-ps1") { +"$ " }
-                                        span("term-cmd") { +"syncling login" }
-                                    }
-                                    div("cli-t-out") {
-                                        +"Create an API token at: "
-                                        span("term-accent") { +"syncling.space/tokens" }
-                                    }
-                                    div("cli-t-out") {
-                                        +"Paste your token (sli_…): "
-                                        span("term-dim") { +"sli_••••••••••••••••" }
-                                    }
-                                    div("cli-t-out") {
-                                        span("term-ok") { +"Logged in." }
-                                        +" Plan: Solo · 3 project(s)"
-                                    }
-                                }
-                                div("cli-t-block") {
-                                    div("term-prompt") {
-                                        span("term-ps1") { +"$ " }
-                                        span("term-cmd") { +"syncling push proj_abc123" }
-                                    }
-                                    div("cli-t-out") {
-                                        span("term-ok") { +"Sync queued" }
-                                        +" for acme/my-app @ main "
-                                        span("term-dim") { +"(7f3a91b)" }
-                                    }
-                                }
-                                div("cli-t-block") {
-                                    div("term-prompt") {
-                                        span("term-ps1") { +"$ " }
-                                        span("term-cmd") { +"syncling status" }
-                                    }
-                                    div("cli-t-out") {
-                                        span("term-ok") { +"✓" }
-                                        +" my-app          acme/my-app@main  "
-                                        span("term-ok") { +"completed" }
-                                        span("term-dim") { +"  (43s · 15 strings)" }
-                                    }
-                                }
-                                div("cli-t-block") {
-                                    div("term-prompt") {
-                                        span("term-ps1") { +"$ " }
-                                        span("term-cmd") { +"syncling pull proj_abc123 -l es -l fr -o ./translations" }
-                                    }
-                                    div("cli-t-out") {
-                                        span("term-ok") { +"  ✓  es  →  ./translations/strings_es.xml" }
-                                    }
-                                    div("cli-t-out") {
-                                        span("term-ok") { +"  ✓  fr  →  ./translations/strings_fr.xml" }
-                                    }
-                                    div("cli-t-out") { +"Pulled 2 file(s)." }
-                                }
-                            }
-                        }
-                    }
-                    div("cli-cmds-list") {
-                        data class CliCmd(val cmd: String, val desc: String)
-                        listOf(
-                            CliCmd("syncling login", "Authenticate with an API token (sli_…) generated from the dashboard."),
-                            CliCmd("syncling projects", "List all connected repositories with their IDs and configured languages."),
-                            CliCmd("syncling push <id>", "Trigger a manual translation sync — useful for CI/CD pipelines or ad-hoc runs."),
-                            CliCmd("syncling pull <id>", "Download translated files for a project. Filter by --lang, set --out directory."),
-                            CliCmd("syncling status", "Show recent pipeline runs with status, duration, and string count."),
-                            CliCmd("syncling tokens list", "View all API tokens associated with your account."),
-                            CliCmd("syncling tokens create <name>", "Generate a new API token for CI pipelines or team members."),
-                            CliCmd("syncling tokens revoke <id>", "Immediately revoke an API token to block access.")
-                        ).forEach { c ->
-                            div("cli-cmd-row") {
-                                code("cli-cmd-name") { +c.cmd }
-                                span("cli-cmd-desc") { +c.desc }
-                            }
-                        }
-                        div("cli-cta-row") {
-                            a("/docs#cli") { classes = setOf("btn", "btn-ghost"); +"Full CLI reference →" }
-                            a("/docs") { classes = setOf("btn", "btn-primary"); +"Read the docs" }
-                        }
-                    }
-                }
-            }
-        }
-
         section("sdk-section") {
             id = "sdk"
             div("section-inner") {
-                p("section-label fade-up") { +"ANDROID & iOS LOCALIZATION SDKs" }
-                h2("fade-up d1") { +"Your app. Localized automatically."; br {}; +"Zero networking code." }
-                p("arch-sub fade-up d2") { +"Drop in the Syncling SDK for Android or iOS and get live, OTA-updated localized strings served from the nearest Cloudflare edge node. No REST calls to write. No caching logic to manage." }
-                div("sdk-grid") {
-                    div("sdk-card fade-up d2") {
-                        div("sdk-card-top") {
+                p("section-label fade-up") { +"NATIVE SDKs" }
+                h2("fade-up d1") { +"Drop in. Get live translations." }
+                p("sdk-intro fade-up d1") { +"Native SDKs for Android and iOS fetch localized strings from the nearest Cloudflare edge node — offline-first, zero networking code, no caching logic to manage." }
+                div("sdk-teaser-grid fade-up d2") {
+                    div("sdk-teaser-card sdk-android-card") {
+                        div("sdk-teaser-top") {
                             div("sdk-icon sdk-android") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""" }
+                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""" }
                             }
                             div {
                                 p("sdk-name") { +"Android SDK" }
-                                span("sdk-status sdk-status-prod") { +"In production" }
+                                span("sdk-status") { +"In production" }
                             }
                         }
-                        p("sdk-desc") { +"One-line init. Automatic string resolution. Works with your existing strings.xml. Offline-first with smart cache invalidation." }
-                        div("sdk-code-block") {
-                            unsafe { +"""<pre class="sdk-code"><span class="sdk-comment">// build.gradle.kts</span>
-implementation(<span class="sdk-str">"com.syncling:android-sdk:1.0.0"</span>)
-
-<span class="sdk-comment">// Application.kt</span>
-Syncling.init(this, apiKey = <span class="sdk-str">"YOUR_API_KEY"</span>)
-
-<span class="sdk-comment">// Usage</span>
-val title = Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>)</pre>""" }
-                        }
+                        p("sdk-teaser-desc") { +"Kotlin & Java compatible. Works with your existing strings.xml. One-line init, smart cache invalidation, fully offline-first." }
+                        a("/docs#android-sdk") { classes = setOf("sdk-teaser-link"); +"View Android docs →" }
                     }
-                    div("sdk-card sdk-ios fade-up d3") {
-                        div("sdk-card-top") {
+                    div("sdk-teaser-card sdk-ios-card") {
+                        div("sdk-teaser-top") {
                             div("sdk-icon sdk-ios-icon") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>""" }
+                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>""" }
                             }
                             div {
                                 p("sdk-name") { +"iOS SDK" }
-                                span("sdk-status sdk-status-prod") { +"In production" }
+                                span("sdk-status") { +"In production" }
                             }
                         }
-                        p("sdk-desc") { +"Swift-native. SwiftUI and UIKit compatible. Fetches from Cloudflare edge on first launch, caches intelligently. Zero dependencies." }
-                        div("sdk-code-block") {
-                            unsafe { +"""<pre class="sdk-code"><span class="sdk-comment">// Package.swift</span>
-.package(url: <span class="sdk-str">"https://github.com/syncling/ios-sdk"</span>, from: <span class="sdk-str">"1.0.0"</span>)
-
-<span class="sdk-comment">// AppDelegate.swift</span>
-Syncling.configure(apiKey: <span class="sdk-str">"YOUR_API_KEY"</span>)
-
-<span class="sdk-comment">// SwiftUI</span>
-Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</pre>""" }
-                        }
-                    }
-                }
-                div("sdk-bottom") {
-                    div("sdk-compat") {
-                        unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>""" }
-                        +"Both SDKs are live in internal production"
+                        p("sdk-teaser-desc") { +"Swift-native. SwiftUI and UIKit compatible. Zero dependencies, intelligent caching, serves strings from the nearest CDN node." }
+                        a("/docs#ios-sdk") { classes = setOf("sdk-teaser-link"); +"View iOS docs →" }
                     }
                 }
             }
@@ -1137,91 +1041,39 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
             id = "features"
             div("section-inner") {
                 p("section-label fade-up") { +"FEATURES" }
-                h2("fade-up d1") { +"Everything your team needs to ship globally." }
-                div("bento-grid") {
-                    div("bento-card bento-large fade-up") {
-                        div("bento-card-icon accent-icon") {
-                            unsafe { +"""<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Global CDN delivery" }
-                        p("bento-card-desc") { +"Translations compiled into signed bundles and published to Cloudflare R2 — replicated to 250+ PoPs. Your users get strings from the nearest node in under 20ms, always." }
-                        div("bento-metrics") {
-                            div("bento-metric") { span("bento-metric-val") { +"<20ms" }; span("bento-metric-label") { +"P99 response" } }
-                            div("bento-metric") { span("bento-metric-val") { +"250+" }; span("bento-metric-label") { +"Global PoPs" } }
-                        }
-                    }
-                    div("bento-card bento-medium fade-up d1") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><polyline points="21 3 21 8 16 8"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Instant OTA updates" }
-                        p("bento-card-desc") { +"Fix a typo in any language without a new app store release. Every CDN publish is versioned — promote or roll back in one click from the dashboard." }
-                    }
-                    div("bento-card bento-medium fade-up d2") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Smart semantic detection" }
-                        p("bento-card-desc") { +"AI classifier skips retranslation for surface rewrites. Only real semantic changes consume API quota — saving cost on every commit." }
-                    }
-                    div("bento-card bento-small fade-up") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Placeholder guard" }
-                        p("bento-card-desc") { +"Auto-detects %1\$s, %d, %@ — malformed translations are blocked before they reach CDN." }
-                    }
-                    div("bento-card bento-small fade-up d1") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Glossary enforcement" }
-                        p("bento-card-desc") { +"Brand terms defined once per language, applied consistently across every string and every publish." }
-                    }
-                    div("bento-card bento-small fade-up d2") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Cultural sensitivity" }
-                        p("bento-card-desc") { +"Post-translation AI check flags formality mismatches and regional idiom issues before strings go live." }
-                    }
-                    div("bento-card bento-small fade-up d3") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Human review portal" }
-                        p("bento-card-desc") { +"Flag anomalous translations for team review before they publish to CDN and go live globally." }
-                    }
-                    div("bento-card bento-medium fade-up") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Team collaboration" }
-                        p("bento-card-desc") { +"Invite translators and reviewers with role-based access. Per-project quotas, per-member usage tracking, and expiring invite links." }
-                    }
-                    div("bento-card bento-medium fade-up d1") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Outbound webhooks" }
-                        p("bento-card-desc") { +"Get notified when a CDN publish completes. Connect Syncling to your CI/CD pipeline, Slack, or any downstream service." }
-                    }
-                    div("bento-card bento-medium fade-up d2") {
-                        div("bento-card-icon") {
-                            unsafe { +"""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Translation memory" }
-                        p("bento-card-desc") { +"Identical strings reuse cached translations — faster throughput, lower API cost, instant CDN updates without re-calling the model." }
-                    }
-                    div("bento-card bento-large bento-analytics fade-up d3") {
-                        div("bento-card-icon accent-icon") {
-                            unsafe { +"""<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>""" }
-                        }
-                        h3("bento-card-title") { +"Billing analytics" }
-                        p("bento-card-desc") { +"Track cost-per-string over time, see month-over-month deltas, project your end-of-month spend, and understand quota usage per project and per language." }
-                        div("bento-metrics") {
-                            div("bento-metric") { span("bento-metric-val") { +"₹/string" }; span("bento-metric-label") { +"Cost tracking" } }
-                            div("bento-metric") { span("bento-metric-val") { +"MoM" }; span("bento-metric-label") { +"Trend delta" } }
+                h2("fade-up d1") { +"Everything you need to ship globally." }
+                div("features-grid") {
+                    data class Feature(val icon: String, val title: String, val desc: String, val metrics: List<Pair<String,String>> = emptyList(), val accent: Boolean = false)
+                    listOf(
+                        Feature("""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""",
+                            "Global CDN delivery", "Translations published to Cloudflare R2 and served from 250+ PoPs worldwide. Strings reach users in under 20ms from the nearest edge node.", listOf("<20ms" to "P99 response", "250+" to "Global PoPs"), true),
+                        Feature("""<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><polyline points="21 3 21 8 16 8"/></svg>""",
+                            "Instant OTA updates", "Fix a typo or add a language without a new app release. Every CDN bundle is versioned — promote or roll back in one click from your dashboard."),
+                        Feature("""<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg>""",
+                            "Semantic detection", "AI classifier skips retranslation for strings with no real meaning change. You only pay API quota for what actually matters."),
+                        Feature("""<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>""",
+                            "Placeholder guard", "Every format specifier — %1\$s, %d, %@ — validated after translation. Malformed strings are blocked before they reach CDN or your users."),
+                        Feature("""<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>""",
+                            "Glossary enforcement", "Brand terms defined once per language, applied to every string on every publish. Consistent tone, zero manual oversight."),
+                        Feature("""<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>""",
+                            "Translation memory", "Identical strings reuse cached results instantly — faster pipeline runs, lower API cost, same quality guarantee on every commit.")
+                    ).forEachIndexed { i, f ->
+                        div("feature-card fade-up${if (i > 0) " d${minOf(i, 4)}" else ""}") {
+                            div("feature-card-icon${if (f.accent) " accent-icon" else ""}") {
+                                unsafe { +f.icon }
+                            }
+                            h3("feature-title") { +f.title }
+                            p("feature-desc") { +f.desc }
+                            if (f.metrics.isNotEmpty()) {
+                                div("feature-metrics") {
+                                    f.metrics.forEach { (v, l) ->
+                                        div {
+                                            span("feature-metric-val") { +v }
+                                            p("feature-metric-label") { +l }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1351,7 +1203,6 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
                 nav("footer-nav") {
                     a("#how") { +"How it works" }
                     a("#features") { +"Features" }
-                    a("#cli") { +"CLI" }
                     a("#pricing") { +"Pricing" }
                     a("#faq") { +"FAQ" }
                     a("/docs") { +"Docs" }
@@ -2101,8 +1952,9 @@ footer{padding:26px 32px;border-top:1px solid var(--border)}
 
 private const val LANDING_CSS = """
 /* fonts */
-body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-code,pre,.term-body,.sdk-code,.cli-t-out,.cli-cmd-name,.term-cmd,.term-ps1,.term-title{font-family:'JetBrains Mono','SF Mono',Menlo,Consolas,monospace}
+body{font-family:'Jost',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+h1,h2,h3,h4,h5,.hero-title,.section-label,.pstep-title,.feature-title,.sdk-name,.pricing-name,.faq-q,.nav-links a:not(.btn){font-family:'Jost',sans-serif}
+code,pre,.term-body,.term-cmd,.term-ps1,.term-title{font-family:'JetBrains Mono','SF Mono',Menlo,Consolas,monospace}
 /* keyframes */
 @keyframes heroDrift{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) translateY(28px) scale(1.07)}}
 @keyframes termIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -2110,66 +1962,73 @@ code,pre,.term-body,.sdk-code,.cli-t-out,.cli-cmd-name,.term-cmd,.term-ps1,.term
 @keyframes gridReveal{from{opacity:0}to{opacity:1}}
 @keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 rgba(139,126,255,.4)}50%{box-shadow:0 0 0 5px rgba(139,126,255,0)}}
 /* nav */
-nav{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
-.nav-inner{max-width:1200px;margin:0 auto;padding:13px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-.nav-links{display:flex;align-items:center;gap:28px}
-.nav-links a:not(.btn){color:#555;font-size:13.5px;font-weight:500;letter-spacing:.1px;transition:color .18s ease}
+nav{position:sticky;top:0;z-index:100;background:var(--lp-nav-bg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1160px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.nav-right{display:flex;align-items:center;gap:8px}
+.nav-links{display:flex;align-items:center;gap:26px}
+.nav-links a:not(.btn){color:var(--lp-text-soft);font-size:13.5px;font-weight:500;letter-spacing:.1px;transition:color .18s ease}
 .nav-links a:not(.btn):hover{color:var(--text)}
 .nav-cta{padding:8px 18px!important;font-size:13px!important;font-weight:600!important}
 .nav-hamburger{display:none;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:36px;height:36px;padding:0;flex-shrink:0;transition:border-color .2s,color .2s;cursor:pointer}
 .nav-hamburger:hover{border-color:var(--accent);color:var(--accent)}
-.hero{position:relative;overflow:hidden;padding:116px 24px 88px;text-align:center}
-.hero-grid{position:absolute;inset:0;background-image:radial-gradient(circle,rgba(139,126,255,.08) 1px,transparent 1px);background-size:32px 32px;-webkit-mask-image:radial-gradient(ellipse 90% 65% at 50% 0%,#000 30%,transparent 100%);mask-image:radial-gradient(ellipse 90% 65% at 50% 0%,#000 30%,transparent 100%);pointer-events:none;animation:gridReveal 1.6s ease forwards}
-.hero-glow{position:absolute;top:-260px;left:50%;transform:translateX(-50%);width:860px;height:860px;background:radial-gradient(circle,rgba(139,126,255,.09) 0%,transparent 66%);pointer-events:none;animation:heroDrift 14s ease-in-out infinite}
+.nav-theme-toggle{display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:36px;height:36px;padding:0;flex-shrink:0;transition:border-color .2s,color .2s,background .2s;cursor:pointer}
+.nav-theme-toggle:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim2)}
+.theme-sun{display:none}.theme-moon{display:block}
+html[data-theme="light"] .theme-sun{display:block}html[data-theme="light"] .theme-moon{display:none}
+@media(prefers-color-scheme:light){html:not([data-theme="dark"]) .theme-sun{display:block}html:not([data-theme="dark"]) .theme-moon{display:none}}
+.hero{position:relative;overflow:hidden;padding:130px 24px 104px;text-align:center}
+.hero-grid{position:absolute;inset:0;background-image:radial-gradient(circle,rgba(139,126,255,.07) 1px,transparent 1px);background-size:36px 36px;-webkit-mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 20%,transparent 100%);mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 20%,transparent 100%);pointer-events:none;animation:gridReveal 1.6s ease forwards}
+.hero-glow{position:absolute;top:-300px;left:50%;transform:translateX(-50%);width:900px;height:900px;background:radial-gradient(circle,rgba(139,126,255,.08) 0%,transparent 62%);pointer-events:none;animation:heroDrift 14s ease-in-out infinite}
 .hero-glow2{position:absolute;top:60px;right:-280px;width:600px;height:600px;background:radial-gradient(circle,rgba(34,211,238,.04) 0%,transparent 68%);pointer-events:none}
-.hero-inner{max-width:840px;margin:0 auto;position:relative}
-.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(139,126,255,.07);border:1px solid rgba(139,126,255,.18);border-radius:100px;padding:5px 16px 5px 6px;font-size:12px;font-weight:600;color:#666;letter-spacing:.4px;margin-bottom:30px}
+.hero-inner{max-width:860px;margin:0 auto;position:relative}
+.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(139,126,255,.07);border:1px solid rgba(139,126,255,.18);border-radius:100px;padding:5px 16px 5px 6px;font-size:12px;font-weight:600;color:var(--lp-text-soft);letter-spacing:.4px;margin-bottom:30px}
 .badge::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);flex-shrink:0;animation:badgePulse 2.4s ease-in-out infinite}
-.hero-title{font-size:clamp(38px,6.5vw,70px);font-weight:800;line-height:1.04;letter-spacing:-2.5px;margin:0 0 22px;color:var(--text)}
+.hero-title{font-size:clamp(44px,7.5vw,88px);font-weight:800;line-height:1.0;letter-spacing:-4px;margin:0 0 26px;color:var(--text)}
 .accent{background:linear-gradient(115deg,#c4b5fd 0%,#8B7EFF 45%,#22d3ee 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
-.hero-sub{color:#555;font-size:clamp(15px,2vw,17.5px);line-height:1.78;margin-bottom:38px;max-width:580px;margin-left:auto;margin-right:auto;font-weight:400}
-.hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
-.hero-btn{padding:14px 30px;font-size:15px;font-weight:700;letter-spacing:-.1px}
+.hero-sub{color:var(--lp-text-soft);font-size:clamp(15px,2vw,17.5px);line-height:1.78;margin-bottom:38px;max-width:580px;margin-left:auto;margin-right:auto;font-weight:400}
+.hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:52px}
+.hero-btn{padding:15px 34px;font-size:15px;font-weight:700;letter-spacing:-.1px}
 .btn-primary{background:var(--accent);color:#0d0720;border-color:var(--accent);box-shadow:0 0 32px -8px rgba(139,126,255,.35)}
 .btn-primary:hover{background:#7d6ff5;color:#0d0720;border-color:#7d6ff5;box-shadow:0 0 40px -6px rgba(139,126,255,.55);transform:translateY(-1px)}
-.hero-stats{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin:0 auto 48px;background:rgba(255,255,255,.015);border:1px solid rgba(139,126,255,.12);border-radius:14px;padding:20px 36px;max-width:660px;backdrop-filter:blur(8px)}
+.hero-stats{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin:0 auto 48px;background:var(--lp-stats-bg);border:1px solid var(--lp-stats-border);border-radius:14px;padding:20px 36px;max-width:660px;backdrop-filter:blur(8px)}
 .hero-stat{display:flex;flex-direction:column;align-items:center;padding:0 26px}
 .hero-stat-val{font-size:25px;font-weight:800;color:var(--accent);line-height:1.1;letter-spacing:-1px;font-variant-numeric:tabular-nums}
-.hero-stat-label{font-size:10.5px;font-weight:700;color:#3a3a3a;margin-top:5px;letter-spacing:.8px;text-transform:uppercase}
+.hero-stat-label{font-size:10.5px;font-weight:700;color:var(--lp-label-color);margin-top:5px;letter-spacing:.8px;text-transform:uppercase}
 .hero-stat-div{width:1px;height:38px;background:rgba(139,126,255,.1);flex-shrink:0}
 .hero-lang-marquee{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 14%,#000 86%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0%,#000 14%,#000 86%,transparent 100%)}
 .hero-lang-strip{display:flex;flex-wrap:nowrap;gap:10px;width:max-content;animation:marquee 30s linear infinite}
 .hero-lang-strip:hover{animation-play-state:paused}
-.lang-chip{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:100px;padding:6px 16px;font-size:13px;color:#444;white-space:nowrap;font-weight:500;transition:border-color .2s,color .2s,background .2s;cursor:default}
+.lang-chip{background:var(--lp-chip-bg);border:1px solid var(--lp-chip-border);border-radius:100px;padding:6px 16px;font-size:13px;color:var(--lp-chip-text);white-space:nowrap;font-weight:500;transition:border-color .2s,color .2s,background .2s;cursor:default}
 .lang-chip:hover{border-color:rgba(139,126,255,.3);color:var(--accent);background:rgba(139,126,255,.05)}
-section{padding:96px 24px}
-.section-inner{max-width:1200px;margin:0 auto}
-.section-label{font-size:11px;font-weight:700;letter-spacing:2.5px;color:var(--accent);margin-bottom:16px;display:flex;align-items:center;gap:10px;text-transform:uppercase}
+section{padding:112px 24px}
+.section-inner{max-width:1160px;margin:0 auto}
+.section-label{font-size:11px;font-weight:700;letter-spacing:2.5px;color:var(--accent);margin-bottom:18px;display:flex;align-items:center;gap:10px;text-transform:uppercase}
 .section-label::before{content:'';width:22px;height:1px;background:currentColor;opacity:.6;flex-shrink:0}
-h2{font-size:clamp(26px,4.2vw,46px);font-weight:800;letter-spacing:-1.5px;margin-bottom:52px;line-height:1.08}
-.pipeline-section{padding:100px 24px 116px;background:var(--bg);border-top:1px solid var(--border);position:relative;overflow:hidden}
-.pipeline-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 55% 35% at 50% 0%,rgba(139,126,255,.035),transparent);pointer-events:none}
-.term-window{max-width:800px;margin:0 auto 68px;background:#060606;border:1px solid #1c1c1c;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px rgba(139,126,255,.04),0 48px 96px -32px rgba(0,0,0,.95),0 0 100px -50px rgba(139,126,255,.07)}
-.term-header{display:flex;align-items:center;gap:12px;padding:13px 18px;background:#0a0a0a;border-bottom:1px solid #161616}
+h2{font-size:clamp(28px,4.5vw,52px);font-weight:800;letter-spacing:-2px;margin-bottom:60px;line-height:1.05}
+.pipeline-section{padding:112px 24px 128px;background:var(--bg);border-top:1px solid var(--border);position:relative;overflow:hidden}
+.pipeline-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 55% 35% at 50% 0%,rgba(139,126,255,.04),transparent);pointer-events:none}
+.pipeline-lead{color:var(--lp-text-soft);font-size:17px;line-height:1.72;max-width:540px;margin-top:-44px;margin-bottom:64px;font-weight:400}
+.term-window{max-width:800px;margin:0 auto 68px;background:var(--lp-term-bg);border:1px solid var(--lp-term-border);border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px rgba(139,126,255,.04),0 48px 96px -32px rgba(0,0,0,.95),0 0 100px -50px rgba(139,126,255,.07)}
+.term-header{display:flex;align-items:center;gap:12px;padding:13px 18px;background:var(--lp-term-header);border-bottom:1px solid var(--lp-term-border)}
 .term-dots{display:flex;gap:7px}
 .term-dot{width:12px;height:12px;border-radius:50%}
 .term-red{background:#ff5f57}
 .term-yellow{background:#febc2e}
 .term-green{background:#28c840}
-.term-title{flex:1;text-align:center;font-size:11px;color:#232323;letter-spacing:1px}
-.term-body{padding:22px 28px 28px;font-size:13px;line-height:1.95;display:flex;flex-direction:column;gap:0;color:#3a3a3a}
+.term-title{flex:1;text-align:center;font-size:11px;color:var(--lp-term-title);letter-spacing:1px}
+.term-body{padding:22px 28px 28px;font-size:13px;line-height:1.95;display:flex;flex-direction:column;gap:0;color:var(--lp-term-text)}
 .term-prompt{display:flex;gap:0;margin-bottom:12px}
 .term-ps1{color:#2563eb;font-weight:500}
-.term-cmd{color:#e2e8f0}
+.term-cmd{color:var(--lp-term-cmd)}
 .term-line{opacity:0;display:flex;gap:9px;align-items:baseline}
 .term-check{color:#22d3ee;font-weight:700;flex-shrink:0;width:16px}
 .term-arrow{color:var(--accent);flex-shrink:0;width:16px}
-.term-text{color:#4a5568}
-.term-result{color:#e2e8f0;font-weight:500}
+.term-text{color:var(--lp-term-text)}
+.term-result{color:var(--lp-term-cmd);font-weight:500}
 .term-accent{color:var(--accent);font-weight:600}
 .term-ok{color:#4ade80;font-weight:600}
-.term-dim{color:#222}
-.term-final{margin-top:14px;padding-top:14px;border-top:1px solid #121212}
+.term-dim{color:var(--lp-term-dim)}
+.term-final{margin-top:14px;padding-top:14px;border-top:1px solid var(--lp-term-final)}
 .pipeline-demo.in-view .term-line{animation:termIn .35s cubic-bezier(.2,.7,.2,1) forwards}
 .pipeline-demo.in-view .l1{animation-delay:.6s}
 .pipeline-demo.in-view .l2{animation-delay:1.4s}
@@ -2178,118 +2037,108 @@ h2{font-size:clamp(26px,4.2vw,46px);font-weight:800;letter-spacing:-1.5px;margin
 .pipeline-demo.in-view .l5{animation-delay:3.6s}
 .pipeline-demo.in-view .l6{animation-delay:4.8s}
 .pipeline-demo.in-view .l7{animation-delay:5.6s}
-.arch-sub{color:#444;font-size:16px;margin-top:-36px;margin-bottom:56px;max-width:600px;line-height:1.72;font-weight:400}
 .pipeline-steps{display:grid;grid-template-columns:repeat(5,1fr);position:relative;padding-top:8px}
-.pipeline-steps::before{content:'';position:absolute;top:28px;left:calc(10% + 20px);right:calc(10% + 20px);height:1px;background:linear-gradient(90deg,transparent,rgba(139,126,255,.25) 15%,rgba(139,126,255,.25) 85%,transparent);pointer-events:none}
-.pstep{padding:0 12px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}
-.pstep-num{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:#0c0c0c;border:1px solid rgba(139,126,255,.2);font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.5px;margin:0 auto 18px;position:relative;z-index:1;transition:border-color .25s,background .25s,box-shadow .25s;flex-shrink:0;font-family:'JetBrains Mono',monospace}
-.pstep:hover .pstep-num{border-color:rgba(139,126,255,.6);background:rgba(139,126,255,.06);box-shadow:0 0 24px -6px rgba(139,126,255,.35)}
-.pstep-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px;letter-spacing:-.1px}
-.pstep-desc{font-size:12px;color:#444;line-height:1.62}
-.features-section{background:var(--surface2);border-top:1px solid var(--border);padding:100px 24px}
-.bento-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.bento-card{background:var(--surface);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:26px;display:flex;flex-direction:column;gap:14px;transition:border-color .28s,transform .28s,box-shadow .28s;position:relative;overflow:hidden}
-.bento-card:hover{border-color:rgba(139,126,255,.22);transform:translateY(-3px);box-shadow:0 24px 56px -28px rgba(0,0,0,.8),0 0 0 1px rgba(139,126,255,.05)}
-.bento-large{grid-column:span 2}
-.bento-analytics{background:linear-gradient(150deg,var(--surface) 55%,rgba(139,126,255,.025) 100%)}
-.bento-card-icon{color:var(--text-muted);line-height:0;flex-shrink:0;width:46px;height:46px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;transition:background .2s,border-color .2s}
-.bento-card:hover .bento-card-icon{background:rgba(139,126,255,.05);border-color:rgba(139,126,255,.12)}
-.bento-card-icon.accent-icon{color:var(--accent);background:rgba(139,126,255,.06);border-color:rgba(139,126,255,.14)}
-.bento-card-title{font-size:14.5px;font-weight:700;color:var(--text);letter-spacing:-.2px;line-height:1.3}
-.bento-card-desc{font-size:13px;color:#444;line-height:1.72;flex:1}
-.bento-metrics{display:flex;gap:28px;margin-top:auto;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)}
-.bento-metric{display:flex;flex-direction:column;gap:4px}
-.bento-metric-val{font-size:22px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-1px}
-.bento-metric-label{font-size:11px;color:#3a3a3a;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
-.sdk-section{padding:100px 24px;background:var(--bg);border-top:1px solid var(--border);position:relative}
+.pipeline-steps::before{content:'';position:absolute;top:34px;left:calc(10% + 28px);right:calc(10% + 28px);height:1px;background:linear-gradient(90deg,transparent,rgba(139,126,255,.3) 15%,rgba(139,126,255,.3) 85%,transparent);pointer-events:none}
+.pstep{padding:0 14px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}
+.pstep-num{display:flex;align-items:center;justify-content:center;width:60px;height:60px;border-radius:50%;background:var(--surface);border:1px solid rgba(139,126,255,.18);font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.5px;margin:0 auto 22px;position:relative;z-index:1;transition:border-color .25s,background .25s,box-shadow .25s;flex-shrink:0;font-family:'JetBrains Mono',monospace}
+.pstep:hover .pstep-num{border-color:rgba(139,126,255,.55);background:rgba(139,126,255,.06);box-shadow:0 0 28px -8px rgba(139,126,255,.4)}
+.pstep-title{font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:10px;letter-spacing:-.1px}
+.pstep-desc{font-size:12.5px;color:var(--lp-text-muted2);line-height:1.65}
+/* features — clean uniform grid */
+.features-section{background:var(--surface2);border-top:1px solid var(--border);padding:112px 24px}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.feature-card{background:var(--surface);border:1px solid var(--lp-card-border);border-radius:18px;padding:30px;display:flex;flex-direction:column;gap:0;transition:border-color .28s,transform .28s,box-shadow .28s;position:relative;overflow:hidden}
+.feature-card:hover{border-color:rgba(139,126,255,.22);transform:translateY(-3px);box-shadow:0 24px 56px -28px rgba(0,0,0,.8),0 0 0 1px rgba(139,126,255,.05)}
+.feature-card-icon{color:var(--text-muted);line-height:0;flex-shrink:0;width:48px;height:48px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;margin-bottom:22px;transition:background .2s,border-color .2s}
+.feature-card:hover .feature-card-icon{background:rgba(139,126,255,.05);border-color:rgba(139,126,255,.12)}
+.feature-card-icon.accent-icon{color:var(--accent);background:rgba(139,126,255,.06);border-color:rgba(139,126,255,.14)}
+.feature-title{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.2px;line-height:1.3;margin-bottom:10px}
+.feature-desc{font-size:13.5px;color:var(--lp-text-muted2);line-height:1.72;flex:1}
+.feature-metrics{display:flex;gap:28px;margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,.05)}
+.feature-metric-val{font-size:24px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-1px}
+.feature-metric-label{font-size:11px;color:var(--lp-label-color);font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-top:5px}
+/* sdk teaser section */
+.sdk-section{padding:112px 24px;background:var(--bg);border-top:1px solid var(--border);position:relative}
 .sdk-section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(139,126,255,.18) 35%,rgba(34,211,238,.12) 65%,transparent)}
-.sdk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px;margin-top:56px}
-.sdk-card{background:var(--surface);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:32px;display:flex;flex-direction:column;gap:24px;transition:border-color .3s,transform .3s,box-shadow .3s;position:relative;overflow:hidden}
-.sdk-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;opacity:0;transition:opacity .3s}
-.sdk-card:hover{transform:translateY(-3px)}
-.sdk-card:not(.sdk-ios)::after{background:linear-gradient(90deg,transparent,rgba(61,220,132,.6),transparent)}
-.sdk-card:not(.sdk-ios):hover{border-color:rgba(61,220,132,.25);box-shadow:0 24px 64px -28px rgba(0,0,0,.9)}
-.sdk-card:not(.sdk-ios):hover::after{opacity:1}
-.sdk-ios::after{background:linear-gradient(90deg,transparent,rgba(96,165,250,.6),transparent)!important}
-.sdk-ios:hover{border-color:rgba(96,165,250,.25)!important;box-shadow:0 24px 64px -28px rgba(0,0,0,.9)!important}
-.sdk-ios:hover::after{opacity:1!important}
-.sdk-card-top{display:flex;align-items:center;gap:16px}
+.sdk-intro{color:var(--lp-text-soft);font-size:17px;line-height:1.72;max-width:540px;margin-top:-44px;margin-bottom:60px;font-weight:400}
+.sdk-teaser-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;max-width:820px}
+.sdk-teaser-card{background:var(--surface);border:1px solid var(--lp-card-border);border-radius:18px;padding:36px;display:flex;flex-direction:column;gap:22px;transition:border-color .28s,transform .28s;position:relative;overflow:hidden}
+.sdk-teaser-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;opacity:0;transition:opacity .3s}
+.sdk-android-card::after{background:linear-gradient(90deg,transparent,rgba(61,220,132,.7),transparent)}
+.sdk-ios-card::after{background:linear-gradient(90deg,transparent,rgba(96,165,250,.7),transparent)}
+.sdk-teaser-card:hover{transform:translateY(-3px)}
+.sdk-android-card:hover{border-color:rgba(61,220,132,.28)}
+.sdk-android-card:hover::after,.sdk-ios-card:hover::after{opacity:1}
+.sdk-ios-card:hover{border-color:rgba(96,165,250,.28)}
+.sdk-teaser-top{display:flex;align-items:center;gap:16px}
 .sdk-icon{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sdk-android{background:rgba(61,220,132,.08);color:#3DDC84;border:1px solid rgba(61,220,132,.18)}
 .sdk-ios-icon{background:rgba(96,165,250,.08);color:#60a5fa;border:1px solid rgba(96,165,250,.18)}
-.sdk-name{font-size:19px;font-weight:800;color:var(--text);margin-bottom:5px;letter-spacing:-.4px}
-.sdk-status{display:inline-block;padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase}
-.sdk-status-prod{background:rgba(74,222,128,.07);color:#4ade80;border:1px solid rgba(74,222,128,.18)}
-.sdk-desc{font-size:14px;color:#444;line-height:1.72;font-weight:400}
-.sdk-code-block{background:#040404;border:1px solid #181818;border-radius:10px;overflow:hidden}
-.sdk-code{padding:20px 22px;font-size:11.5px;line-height:1.85;color:#3a3a3a;white-space:pre;overflow-x:auto;margin:0}
-.sdk-comment{color:#1e1e1e}
-.sdk-str{color:#86efac}
-.sdk-bottom{margin-top:40px;display:flex;justify-content:center}
-.sdk-compat{display:inline-flex;align-items:center;gap:10px;font-size:13px;color:#3a3a3a;background:rgba(74,222,128,.03);border:1px solid rgba(74,222,128,.1);border-radius:8px;padding:12px 22px;font-weight:500}
-.sdk-compat svg{color:#4ade80;flex-shrink:0}
-.pricing-section{background:var(--bg);border-top:1px solid var(--border);position:relative;overflow:hidden}
+.sdk-name{font-size:20px;font-weight:800;color:var(--text);margin-bottom:6px;letter-spacing:-.4px}
+.sdk-status{display:inline-block;padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;background:rgba(74,222,128,.07);color:#4ade80;border:1px solid rgba(74,222,128,.18)}
+.sdk-teaser-desc{font-size:14px;color:var(--lp-text-muted2);line-height:1.72;flex:1}
+.sdk-teaser-link{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--accent);transition:gap .18s,opacity .18s}
+.sdk-teaser-link:hover{gap:10px}
+.pricing-section{background:var(--surface2);border-top:1px solid var(--border);position:relative;overflow:hidden;padding:112px 24px}
 .pricing-section::before{content:'';position:absolute;bottom:-160px;left:50%;transform:translateX(-50%);width:700px;height:350px;background:radial-gradient(circle,rgba(139,126,255,.04),transparent 70%);pointer-events:none}
 .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:20px;padding-top:4px}
-.pricing-card{background:var(--surface);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:32px;display:flex;flex-direction:column;position:relative;transition:border-color .25s,transform .25s,box-shadow .25s}
+.pricing-card{background:var(--surface);border:1px solid var(--lp-pricing-border);border-radius:18px;padding:32px;display:flex;flex-direction:column;position:relative;transition:border-color .25s,transform .25s,box-shadow .25s}
 .pricing-card:hover{transform:translateY(-4px);box-shadow:0 28px 56px -24px rgba(0,0,0,.9)}
 .pricing-card.recommended{border-color:rgba(139,126,255,.35);background:linear-gradient(155deg,#0f0f0f 50%,rgba(139,126,255,.025) 100%);box-shadow:0 0 0 1px rgba(139,126,255,.12),0 0 80px -32px rgba(139,126,255,.14)}
 .pricing-card.recommended:hover{border-color:rgba(139,126,255,.5);box-shadow:0 0 0 1px rgba(139,126,255,.25),0 32px 64px -20px rgba(139,126,255,.22)}
 .rec-badge{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--accent);color:#0d0720;font-size:10px;font-weight:800;letter-spacing:1.2px;padding:4px 18px;border-radius:100px;white-space:nowrap;text-transform:uppercase}
 .trial-badge{display:inline-block;background:rgba(34,211,238,.06);color:#22d3ee;border:1px solid rgba(34,211,238,.18);border-radius:100px;padding:3px 12px;font-size:11px;font-weight:700;margin-bottom:14px;letter-spacing:.4px}
-.pricing-name{font-size:11px;font-weight:700;letter-spacing:2px;color:#333;text-transform:uppercase;margin-bottom:10px}
+.pricing-name{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--lp-text-faint);text-transform:uppercase;margin-bottom:10px}
 .pricing-price{font-size:50px;font-weight:800;letter-spacing:-3px;line-height:1;color:var(--text);margin-bottom:4px;font-variant-numeric:tabular-nums}
-.price-mo{font-size:16px;font-weight:400;letter-spacing:0;color:#333}
-.pricing-period{font-size:12px;color:#333;margin-bottom:26px;min-height:16px;font-weight:500}
+.price-mo{font-size:16px;font-weight:400;letter-spacing:0;color:var(--lp-text-faint)}
+.pricing-period{font-size:12px;color:var(--lp-text-faint);margin-bottom:26px;min-height:16px;font-weight:500}
 .pricing-features{list-style:none;display:flex;flex-direction:column;gap:10px;flex:1;margin-bottom:28px}
-.pricing-features li{font-size:13px;color:#555;display:flex;align-items:center;gap:10px;font-weight:500}
+.pricing-features li{font-size:13px;color:var(--lp-text-soft);display:flex;align-items:center;gap:10px;font-weight:500}
 .pricing-features li::before{content:'';width:15px;height:15px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238B7EFF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");background-size:contain;background-repeat:no-repeat;background-position:center;flex-shrink:0;opacity:.7}
-.pricing-card.recommended .pricing-features li{color:#888}
+.pricing-card.recommended .pricing-features li{color:var(--lp-text-soft)}
 .pricing-cta{display:block;text-align:center;padding:13px 22px;border-radius:10px;font-size:14px;font-weight:700;transition:all .18s;cursor:pointer;text-decoration:none;letter-spacing:-.1px}
 .pricing-cta.accent{background:var(--accent);color:#0d0720;box-shadow:0 4px 20px -6px rgba(139,126,255,.4)}
 .pricing-cta.accent:hover{background:#7d6ff5;transform:translateY(-1px);box-shadow:0 8px 28px -6px rgba(139,126,255,.55)}
-.pricing-cta.outline{background:transparent;color:#555;border:1px solid rgba(255,255,255,.08)}
+.pricing-cta.outline{background:transparent;color:var(--lp-text-soft);border:1px solid var(--lp-card-border)}
 .pricing-cta.outline:hover{border-color:rgba(139,126,255,.35);color:var(--accent);transform:translateY(-1px)}
-.pricing-note{text-align:center;margin-top:32px;font-size:12px;color:#333;font-weight:500}
-.cta-section{background:var(--bg);border-top:1px solid rgba(139,126,255,.1);border-bottom:1px solid rgba(139,126,255,.1);text-align:center;position:relative;overflow:hidden}
+.pricing-note{text-align:center;margin-top:32px;font-size:12px;color:var(--lp-text-faint);font-weight:500}
+.cta-section{background:var(--bg);border-top:1px solid rgba(139,126,255,.1);border-bottom:1px solid rgba(139,126,255,.1);text-align:center;position:relative;overflow:hidden;padding:112px 24px}
 .cta-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 90% at 50% 50%,rgba(139,126,255,.06),transparent 70%);pointer-events:none}
 .cta-section::after{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,rgba(139,126,255,.035) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,#000,transparent);mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,#000,transparent);pointer-events:none}
-.cta-inner{max-width:560px;margin:0 auto;position:relative;z-index:1}
-.cta-section h2{margin-bottom:14px;font-size:clamp(28px,4.5vw,48px);letter-spacing:-2px}
-.cta-section p{color:#444;margin-bottom:38px;font-size:15.5px;font-weight:400;line-height:1.6}
-.cta-btn{padding:16px 34px;font-size:16px;font-weight:700;letter-spacing:-.2px}
-footer{padding:32px 28px;border-top:1px solid var(--border)}
-.footer-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
+.cta-inner{max-width:540px;margin:0 auto;position:relative;z-index:1}
+.cta-section h2{margin-bottom:16px;font-size:clamp(30px,4.8vw,54px);letter-spacing:-2.5px}
+.cta-section p{color:var(--lp-text-muted2);margin-bottom:40px;font-size:16px;font-weight:400;line-height:1.6}
+.cta-btn{padding:16px 36px;font-size:16px;font-weight:700;letter-spacing:-.2px}
+footer{padding:36px 28px;border-top:1px solid var(--border)}
+.footer-inner{max-width:1160px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
 .footer-nav{display:flex;gap:24px;flex-wrap:wrap}
-.footer-nav a{color:#333;font-size:13px;font-weight:500;transition:color .15s}.footer-nav a:hover{color:var(--accent)}
-.footer-copy{font-size:12px;color:#252525;font-weight:500}
+.footer-nav a{color:var(--lp-text-faint);font-size:13px;font-weight:500;transition:color .15s}.footer-nav a:hover{color:var(--accent)}
+.footer-copy{font-size:12px;color:var(--lp-text-faintest);font-weight:500}
 .text-muted{color:var(--text-muted)}
 @media(max-width:640px){.footer-inner{flex-direction:column;text-align:center}.footer-nav{justify-content:center}}
 @media(max-width:1024px){
-  .bento-grid{grid-template-columns:repeat(2,1fr)}
-  .bento-large{grid-column:span 2}
-  .sdk-grid{grid-template-columns:repeat(2,1fr)}
+  .features-grid{grid-template-columns:repeat(2,1fr)}
   .pipeline-steps{grid-template-columns:repeat(3,1fr)}
-  .pipeline-steps::before{left:calc(16.66% + 24px);right:calc(16.66% + 24px)}
+  .pipeline-steps::before{left:calc(16.66% + 28px);right:calc(16.66% + 28px)}
 }
 @media(max-width:768px){
   .nav-hamburger{display:flex}
-  .nav-links{position:absolute;top:calc(100% + 1px);left:0;right:0;flex-direction:column;align-items:stretch;background:rgba(8,8,8,.97);border-bottom:1px solid var(--border);padding:8px 0 16px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:none;gap:0;z-index:200}
+  .nav-links{position:absolute;top:calc(100% + 1px);left:0;right:0;flex-direction:column;align-items:stretch;background:var(--lp-nav-mobile);border-bottom:1px solid var(--border);padding:8px 0 16px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:none;gap:0;z-index:200}
   .nav-links.open{display:flex}
   .nav-links a:not(.btn){padding:13px 24px;font-size:15px;width:100%;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,.04)}
   .nav-links .nav-cta{margin:8px 16px 0;width:calc(100% - 32px)!important;text-align:center;display:block;padding:12px 16px!important;font-size:14px!important;box-sizing:border-box}
   .nav-inner{position:relative;flex-wrap:nowrap}
-  .hero{padding:92px 20px 68px}
-  section{padding:72px 20px}
-  h2{margin-bottom:36px}
-  .pipeline-section{padding:72px 20px 88px}
-  .features-section,.sdk-section,.cli-section{padding:72px 20px}
-  .bento-large{grid-column:span 2}
+  .hero{padding:100px 20px 72px}
+  section{padding:80px 20px}
+  h2{margin-bottom:42px}
+  .pipeline-section{padding:80px 20px 96px}
+  .sdk-teaser-grid{grid-template-columns:1fr;max-width:100%}
   .pipeline-steps{grid-template-columns:repeat(2,1fr)}
   .pipeline-steps::before{display:none}
+  .faq-grid{grid-template-columns:1fr}
 }
 @media(max-width:640px){
-  .hero{padding:80px 16px 56px}
+  .hero{padding:84px 16px 60px}
   .hero-inner{padding:0}
   .hero-stats{flex-wrap:wrap;padding:14px 14px;gap:2px}
   .hero-stat{padding:8px 16px;min-width:calc(50% - 28px)}
@@ -2297,44 +2146,27 @@ footer{padding:32px 28px;border-top:1px solid var(--border)}
   .hero-stat-val{font-size:22px}
   .hero-actions{flex-direction:column;align-items:stretch;padding:0 8px}
   .hero-actions .btn{text-align:center;width:100%}
-  .bento-grid{grid-template-columns:1fr}
-  .bento-large{grid-column:span 1}
-  .sdk-grid{grid-template-columns:1fr}
+  .features-grid{grid-template-columns:1fr}
   .pipeline-steps{grid-template-columns:1fr}
   .term-body{padding:16px 18px 18px;font-size:12px}
-  .sdk-code{font-size:11px}
-  section{padding:60px 16px}
-  .pipeline-section,.sdk-section{padding:60px 16px 72px}
-  .cli-section{padding:60px 16px}
+  section{padding:64px 16px}
+  .pipeline-section,.sdk-section{padding:64px 16px 80px}
+  .pricing-section,.faq-section,.cta-section{padding:64px 16px}
 }
 @media(max-width:400px){
-  .hero-title{font-size:32px;letter-spacing:-1.5px}
+  .hero-title{font-size:36px;letter-spacing:-2px}
   .hero-sub{font-size:14px}
-  .hero-btn{font-size:14px;padding:12px 20px}
-  .pricing-price{font-size:40px}
+  .hero-btn{font-size:14px;padding:12px 24px}
+  .pricing-price{font-size:42px}
   .nav-inner{padding:12px 16px}
 }
-.faq-section{background:var(--surface2);border-top:1px solid var(--border);padding:100px 24px}
+.faq-section{background:var(--bg);border-top:1px solid var(--border);padding:112px 24px}
 .faq-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.faq-item{background:var(--surface);border:1px solid rgba(255,255,255,.05);border-radius:14px;padding:26px;transition:border-color .2s,box-shadow .2s}
+.faq-item{background:var(--surface);border:1px solid var(--lp-card-border);border-radius:16px;padding:30px;transition:border-color .2s,box-shadow .2s}
 .faq-item:hover{border-color:rgba(139,126,255,.18);box-shadow:0 12px 40px -20px rgba(0,0,0,.6)}
 .faq-q{font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;line-height:1.45;letter-spacing:-.15px}
-.faq-a{font-size:13px;color:#444;line-height:1.78;font-weight:400}
+.faq-a{font-size:13px;color:var(--lp-text-muted2);line-height:1.78;font-weight:400}
 @media(max-width:768px){.faq-grid{grid-template-columns:1fr}}
-.cli-section{background:var(--surface2);border-top:1px solid var(--border);padding:100px 24px}
-.cli-layout{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:start}
-.cli-term-wrap{position:sticky;top:84px}
-.cli-term-body{gap:0;padding:22px 26px 26px}
-.cli-t-block{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #0e0e0e}
-.cli-t-block:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
-.cli-t-out{padding-left:16px;font-size:12px;color:#2a2a2a;line-height:1.9}
-.cli-cmds-list{display:flex;flex-direction:column;gap:0}
-.cli-cmd-row{padding:16px 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:7px}
-.cli-cmd-row:first-child{padding-top:0}
-.cli-cmd-name{font-size:12.5px;color:var(--accent);font-weight:600;background:rgba(139,126,255,.06);border:1px solid rgba(139,126,255,.14);border-radius:6px;padding:4px 10px;display:inline-block;width:fit-content;letter-spacing:-.1px}
-.cli-cmd-desc{font-size:13px;color:#444;line-height:1.62;font-weight:400}
-.cli-cta-row{display:flex;gap:12px;margin-top:32px;flex-wrap:wrap}
-@media(max-width:900px){.cli-layout{grid-template-columns:1fr}.cli-term-wrap{position:static}}
 """
 
 private fun HTML.dashboardApp() {

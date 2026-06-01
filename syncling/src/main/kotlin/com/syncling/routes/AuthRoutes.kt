@@ -68,7 +68,7 @@ fun Route.configureAuthRoutes(
             val state = UUID.randomUUID().toString()
             call.response.cookies.append(Cookie(
                 name = "oauth_state", value = state,
-                path = "/auth", maxAge = 600,
+                path = "/", maxAge = 600,
                 httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
             ))
             val url = "https://github.com/login/oauth/authorize" +
@@ -82,12 +82,18 @@ fun Route.configureAuthRoutes(
         get("/github/callback") {
             val state = call.request.queryParameters["state"]
             val cookieState = call.request.cookies["oauth_state"]
+            if (cookieState == null) {
+                // Cookie missing — session likely expired or user opened a stale link.
+                log.warn("OAuth state cookie missing — redirecting to login (state={})", state)
+                call.respondRedirect("/auth/github")
+                return@get
+            }
             if (state == null || state != cookieState) {
                 log.warn("OAuth state mismatch — possible CSRF (state={}, cookie={})", state, cookieState)
                 call.respondText("Invalid OAuth state — authorization rejected", status = HttpStatusCode.Forbidden)
                 return@get
             }
-            call.response.cookies.append(Cookie("oauth_state", "", path = "/auth",
+            call.response.cookies.append(Cookie("oauth_state", "", path = "/",
                 expires = GMTDate.START, maxAge = 0))
 
             // Pull the plan the user picked on the pricing page (if any) so we can route them
