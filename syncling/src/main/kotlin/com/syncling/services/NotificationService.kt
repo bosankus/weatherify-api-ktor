@@ -107,6 +107,86 @@ class NotificationService(private val config: SmtpConfig?) {
         )
     }
 
+    suspend fun sendTrialStarted(user: User, plan: BillingPlan, trialEndsOn: String) {
+        val email = user.email ?: return
+        send(
+            to = email,
+            subject = "Your ${plan.displayName} trial has started — no charge until $trialEndsOn",
+            html = buildHtml(
+                title = "Your free trial is live",
+                bodyHtml = """
+                    <p style="$TEXT">Hi <b>${user.githubUsername}</b>,</p>
+                    <p style="$TEXT">Your <b>${plan.displayName}</b> trial is now active. You won't be charged until <b>$trialEndsOn</b>. Cancel any time before then from your dashboard.</p>
+                    <table style="$STAT_TABLE">
+                      <tr><td style="$STAT_LABEL">Plan</td><td style="$STAT_VALUE">${esc(plan.displayName)}</td></tr>
+                      <tr><td style="$STAT_LABEL">First charge</td><td style="$STAT_VALUE">$trialEndsOn</td></tr>
+                      <tr><td style="$STAT_LABEL">After trial</td><td style="$STAT_VALUE">${plan.monthlyPricePaise?.let { "₹${it / 100}/month" } ?: "—"}</td></tr>
+                    </table>
+                    ${ctaButton("Go to dashboard", "https://syncling.space/app")}
+                    <p style="$HINT">You can cancel any time from your billing dashboard — no questions asked.</p>
+                """.trimIndent()
+            )
+        )
+    }
+
+    suspend fun sendPaymentFailed(user: User, plan: BillingPlan) {
+        val email = user.email ?: return
+        send(
+            to = email,
+            subject = "Action required: payment failed for your ${plan.displayName} plan",
+            html = buildHtml(
+                title = "Payment failed",
+                bodyHtml = """
+                    <p style="$TEXT">Hi <b>${user.githubUsername}</b>,</p>
+                    <p style="$TEXT">We were unable to charge your card for the <b>${plan.displayName}</b> plan. Translations are paused until your payment is resolved.</p>
+                    <p style="background:#fef2f2;border-left:3px solid #ef4444;padding:12px 16px;border-radius:4px;font-size:14px;color:#991b1b;">
+                        Please update your payment method to resume automatic translations.
+                    </p>
+                    ${ctaButton("Update payment method", "https://syncling.space/billing")}
+                    <p style="$HINT">If you believe this is a mistake, please contact support@androidplay.in.</p>
+                """.trimIndent()
+            )
+        )
+    }
+
+    suspend fun sendPaymentReceived(user: User, plan: BillingPlan, amount: String, periodEnd: String) {
+        val email = user.email ?: return
+        send(
+            to = email,
+            subject = "Payment confirmed — ${plan.displayName} renewed",
+            html = buildHtml(
+                title = "Payment received",
+                bodyHtml = """
+                    <p style="$TEXT">Hi <b>${user.githubUsername}</b>,</p>
+                    <p style="$TEXT">Your <b>${plan.displayName}</b> subscription has been renewed successfully.</p>
+                    <table style="$STAT_TABLE">
+                      <tr><td style="$STAT_LABEL">Amount charged</td><td style="$STAT_VALUE">$amount</td></tr>
+                      <tr><td style="$STAT_LABEL">Plan</td><td style="$STAT_VALUE">${esc(plan.displayName)}</td></tr>
+                      <tr><td style="$STAT_LABEL">Next renewal</td><td style="$STAT_VALUE">$periodEnd</td></tr>
+                    </table>
+                    ${ctaButton("View invoice", "https://syncling.space/billing", secondary = true)}
+                """.trimIndent()
+            )
+        )
+    }
+
+    suspend fun sendSubscriptionEnded(user: User, plan: BillingPlan) {
+        val email = user.email ?: return
+        send(
+            to = email,
+            subject = "Your ${plan.displayName} plan has ended",
+            html = buildHtml(
+                title = "Subscription ended",
+                bodyHtml = """
+                    <p style="$TEXT">Hi <b>${user.githubUsername}</b>,</p>
+                    <p style="$TEXT">Your <b>${plan.displayName}</b> subscription has ended and your account has been moved to the Free plan. Your projects and translation memory are still intact.</p>
+                    ${ctaButton("Reactivate plan", "https://syncling.space/billing")}
+                    <p style="$HINT">You can upgrade again at any time. Your previous settings and history are preserved.</p>
+                """.trimIndent()
+            )
+        )
+    }
+
     suspend fun sendCheckoutAbandoned(user: User, pendingPlan: BillingPlan) {
         val email = user.email ?: return
         send(

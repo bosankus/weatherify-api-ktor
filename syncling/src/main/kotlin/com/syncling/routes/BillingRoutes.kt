@@ -93,7 +93,7 @@ fun Route.configureBillingRoutes(
     jwtSecret: String,
     userActivityService: UserActivityService
 ) {
-    route("/syncling/api/billing") {
+    route("/api/billing") {
 
         get("/subscription") {
             val userId = call.userId() ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
@@ -248,14 +248,14 @@ fun Route.configurePublicCheckoutRoute(
     jwtSecret: String,
     userActivityService: UserActivityService
 ) {
-    get("/syncling/billing/start-subscription") {
+    get("/billing/start-subscription") {
         val planParam = call.request.queryParameters["plan"]?.uppercase()
         val plan = runCatching { BillingPlan.valueOf(planParam ?: "") }.getOrElse {
             log.warn("Invalid plan parameter: {}", planParam)
             return@get call.respondRedirect("/syncling#pricing")
         }
         if (plan == BillingPlan.FREE || plan == BillingPlan.ENTERPRISE) {
-            return@get call.respondRedirect("/syncling/auth/github")
+            return@get call.respondRedirect("/auth/github")
         }
 
         val userId = call.sessionUserId(jwtSecret)
@@ -263,9 +263,9 @@ fun Route.configurePublicCheckoutRoute(
             val currentSub = billingRepository.getSubscription(userId)
             if (currentSub.plan != BillingPlan.FREE) {
                 // Already on a paid plan — send them to their billing dashboard.
-                return@get call.respondRedirect("/syncling/billing")
+                return@get call.respondRedirect("/billing")
             }
-            return@get call.respondRedirect("/syncling/billing/checkout?plan=${plan.name}")
+            return@get call.respondRedirect("/billing/checkout?plan=${plan.name}")
         }
 
         // Not signed in — remember the plan, send the user through GitHub OAuth.
@@ -274,10 +274,10 @@ fun Route.configurePublicCheckoutRoute(
             path = "/", maxAge = 7 * 24 * 3600,
             httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
         ))
-        call.respondRedirect("/syncling/auth/github")
+        call.respondRedirect("/auth/github")
     }
 
-    get("/syncling/billing/checkout") {
+    get("/billing/checkout") {
         val planParam = call.request.queryParameters["plan"]?.uppercase()
         val plan = runCatching { BillingPlan.valueOf(planParam ?: "") }.getOrElse {
             return@get call.respondRedirect("/syncling#pricing")
@@ -294,20 +294,20 @@ fun Route.configurePublicCheckoutRoute(
                 path = "/", maxAge = 900,
                 httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
             ))
-            return@get call.respondRedirect("/syncling/auth/github")
+            return@get call.respondRedirect("/auth/github")
         }
 
         val user = userRepository.findById(userId)
         if (user == null) {
             log.warn("Session cookie userId={} not found in DB — clearing session", userId)
             call.clearSession()
-            return@get call.respondRedirect("/syncling/auth/github")
+            return@get call.respondRedirect("/auth/github")
         }
 
         val currentSub = billingRepository.getSubscription(userId)
         if (currentSub.plan != BillingPlan.FREE) {
             log.info("checkout: userId={} already on plan={} — redirecting to billing dashboard", userId, currentSub.plan)
-            return@get call.respondRedirect("/syncling/billing")
+            return@get call.respondRedirect("/billing")
         }
 
         val init = runCatching { razorpayService.createSubscriptionForUser(userId, plan) }.getOrElse {
@@ -330,7 +330,7 @@ fun Route.configurePublicCheckoutRoute(
      * to a polished success page. The webhook handler does the heavy lifting; this
      * is just the user-facing redirect.
      */
-    get("/syncling/billing/rp-callback") {
+    get("/billing/rp-callback") {
         val paymentId = call.request.queryParameters["razorpay_payment_id"]
         val subscriptionId = call.request.queryParameters["razorpay_subscription_id"]
         val signature = call.request.queryParameters["razorpay_signature"]
@@ -383,10 +383,10 @@ fun Route.configurePublicCheckoutRoute(
                 log.info("Minted and set fresh session cookie for userId={} after payment", sessionUserId)
             }
         }
-        call.respondRedirect("/syncling/billing/success?sub=$subscriptionId")
+        call.respondRedirect("/billing/success?sub=$subscriptionId")
     }
 
-    get("/syncling/billing/success") {
+    get("/billing/success") {
         val subscriptionId = call.request.queryParameters["sub"].orEmpty()
         val token = call.request.cookies[SESSION_COOKIE]?.ifBlank { null }
 
@@ -410,7 +410,7 @@ fun Route.configurePublicCheckoutRoute(
 
     // Called by the checkout page's 15-minute session timer when it expires.
     // Clears pendingPlan so the next checkout attempt starts fresh.
-    post("/syncling/billing/cancel-pending") {
+    post("/billing/cancel-pending") {
         val userId = call.sessionUserId(jwtSecret) ?: run {
             call.respond(HttpStatusCode.Unauthorized, "No session")
             return@post
@@ -424,7 +424,7 @@ fun Route.configurePublicCheckoutRoute(
 // ─── Razorpay webhook ─────────────────────────────────────────────────────────
 
 fun Route.configureRazorpayWebhook(dispatcher: RazorpayWebhookDispatcher) {
-    post("/syncling/razorpay/webhook") {
+    post("/razorpay/webhook") {
         val body = call.receive<ByteArray>()
         val sig = call.request.headers["X-Razorpay-Signature"]
         when (val result = dispatcher.dispatch(body, sig)) {
@@ -446,7 +446,7 @@ fun Route.configureBillingReceiptRoute(
     userRepository: UserRepository,
     userActivityService: UserActivityService
 ) {
-    get("/syncling/api/billing/invoices/{id}/receipt") {
+    get("/api/billing/invoices/{id}/receipt") {
         val userId = call.sessionUserId(jwtSecret)
             ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid session"))
 
@@ -470,13 +470,13 @@ fun Route.configureBillingReceiptRoute(
                 currency = invoice.currency.uppercase(),
                 status = invoice.status.replaceFirstChar { it.uppercase() },
                 userEmail = email,
-                pdfUrl = "/syncling/api/billing/invoices/${invoice.razorpayPaymentId}/pdf"
+                pdfUrl = "/api/billing/invoices/${invoice.razorpayPaymentId}/pdf"
             )
         }
     }
 
     // Branded PDF download — authenticated via httpOnly session cookie sent automatically by the browser.
-    get("/syncling/api/billing/invoices/{id}/pdf") {
+    get("/api/billing/invoices/{id}/pdf") {
         val userId = call.sessionUserId(jwtSecret)
             ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid session"))
 

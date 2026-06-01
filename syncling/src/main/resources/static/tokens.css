@@ -400,6 +400,16 @@
 .tk-type-opt:hover { border-color: var(--accent); color: var(--text); }
 .tk-type-opt.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 .tk-type-opt[disabled] { opacity: 0.45; cursor: not-allowed; }
+.tk-type-opt .tk-type-check {
+    opacity: 0;
+    transform: scale(.7);
+    transition: opacity .15s, transform .15s;
+}
+.tk-type-opt.active .tk-type-check {
+    opacity: 1;
+    transform: scale(1);
+}
+.tk-row-name .tk-type-badge + .tk-type-badge { margin-left: 4px; }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {

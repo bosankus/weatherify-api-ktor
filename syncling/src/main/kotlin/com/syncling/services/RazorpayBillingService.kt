@@ -6,6 +6,7 @@ import com.androidplay.core.secrets.getSecretValue
 import com.syncling.domain.BillingPlan
 import com.syncling.domain.UserEvent
 import com.syncling.repository.BillingRepository
+import com.syncling.repository.UserRepository
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
@@ -17,6 +18,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 import java.util.Base64
@@ -41,7 +44,10 @@ data class SubscriptionInit(
 
 class RazorpayBillingService(
     private val billingRepository: BillingRepository,
-    private val userActivityService: UserActivityService? = null
+    private val userActivityService: UserActivityService? = null,
+    private val userRepository: UserRepository? = null,
+    private val notificationService: NotificationService? = null,
+    private val inAppNotificationService: InAppNotificationService? = null
 ) : RazorpayEventHandler {
 
     private val log = LoggerFactory.getLogger(RazorpayBillingService::class.java)
@@ -71,8 +77,20 @@ class RazorpayBillingService(
             "subscription.activated", "subscription.charged" -> handleSubscriptionCharged(event)
             "subscription.cancelled", "subscription.completed" -> handleSubscriptionEnded(event)
             "subscription.halted" -> {
-                val subId = subEntity(event)?.get("id")?.jsonPrimitive?.contentOrNull
+                val sub = subEntity(event)
+                val subId = sub?.get("id")?.jsonPrimitive?.contentOrNull
                 log.warn("Subscription halted: {}", subId)
+                val haltedPlan = sub?.get("notes")?.jsonObject?.get("plan")?.jsonPrimitive?.contentOrNull
+                    ?.let { runCatching { BillingPlan.valueOf(it) }.getOrNull() }
+                val userId = subId?.let { billingRepository.findByRazorpaySubscription(it) }
+                userId?.let { uid ->
+                    runCatching {
+                        val user = userRepository?.findById(uid)
+                        val plan = haltedPlan ?: BillingPlan.SOLO
+                        if (user != null) notificationService?.sendPaymentFailed(user, plan)
+                        inAppNotificationService?.notifyPaymentFailed(uid, plan.displayName)
+                    }.onFailure { log.warn("Payment-failed notification error userId={}: {}", uid, it.message) }
+                }
                 WebhookResult.Ok
             }
             else -> WebhookResult.Skipped("Unhandled subscription event: $eventType")
@@ -85,14 +103,20 @@ class RazorpayBillingService(
             "Cannot create Razorpay subscription for plan ${plan.name}"
         }
 
-        // Idempotency: if a subscription was already created for this exact plan and hasn't
-        // been activated or cancelled yet, return it rather than creating a new object on
-        // every checkout page load/refresh.
+        // Idempotency: if a subscription was already created for this exact plan and is still
+        // in a state that accepts checkout (created/authenticated), reuse it. Otherwise fall
+        // through to create a fresh one — stale subscriptions (halted, cancelled, completed,
+        // active) cause a 400 on Razorpay's preferences endpoint.
         val existing = billingRepository.getSubscription(userId)
         if (existing.pendingPlan == plan && existing.razorpaySubscriptionId != null) {
-            log.info("Returning existing pending subscription {} for userId={} plan={}",
-                existing.razorpaySubscriptionId, userId, plan.name)
-            return SubscriptionInit(existing.razorpaySubscriptionId, keyId, plan)
+            val status = fetchSubscriptionStatus(existing.razorpaySubscriptionId)
+            if (status == "created" || status == "authenticated") {
+                log.info("Returning existing pending subscription {} (status={}) for userId={} plan={}",
+                    existing.razorpaySubscriptionId, status, userId, plan.name)
+                return SubscriptionInit(existing.razorpaySubscriptionId, keyId, plan)
+            }
+            log.info("Cached subscription {} is stale (status={}), creating new one for userId={} plan={}",
+                existing.razorpaySubscriptionId, status, userId, plan.name)
         }
 
         val planId = plan.razorpayPlanId()
@@ -222,6 +246,16 @@ class RazorpayBillingService(
             userId, UserEvent.SUBSCRIPTION_AUTHENTICATED,
             mapOf("plan" to plan.name, "subscriptionId" to subscriptionId)
         )
+        // Notify user their trial has started
+        runCatching {
+            val user = userRepository?.findById(userId)
+            val sub = billingRepository.getSubscription(userId)
+            val trialEnd = sub.trialStartedAt?.let {
+                (it + 7.days).toLocalDateTime(TimeZone.UTC).date.toString()
+            } ?: "in 7 days"
+            if (user != null) notificationService?.sendTrialStarted(user, plan, trialEnd)
+            inAppNotificationService?.notifyTrialStarted(userId, plan.displayName, trialEnd)
+        }.onFailure { log.warn("Trial-started notification failed userId={}: {}", userId, it.message) }
         log.info("Subscription authenticated (card saved): userId={} plan={} sub={}", userId, plan.name, subscriptionId)
         return WebhookResult.Ok
     }
@@ -275,13 +309,27 @@ class RazorpayBillingService(
             userId, UserEvent.SUBSCRIPTION_CHARGED,
             mapOf("plan" to plan.name, "subscriptionId" to subscriptionId)
         )
+        // Notify user about successful charge (skip first charge — that's the trial-started email)
+        if (payment != null) {
+            runCatching {
+                val user = userRepository?.findById(userId)
+                val amount = payment["amount"]?.jsonPrimitive?.intOrNull
+                    ?.let { "₹${"%.2f".format(it / 100.0)}" } ?: "—"
+                val periodEndStr = currentEnd?.toLocalDateTime(TimeZone.UTC)?.date?.toString() ?: "—"
+                if (user != null) notificationService?.sendPaymentReceived(user, plan, amount, periodEndStr)
+                inAppNotificationService?.notifyPaymentReceived(userId, amount, plan.displayName)
+            }.onFailure { log.warn("Payment-received notification failed userId={}: {}", userId, it.message) }
+        }
         log.info("Subscription charged: userId={} plan={} sub={}", userId, plan.name, subscriptionId)
         return WebhookResult.Ok
     }
 
     private suspend fun handleSubscriptionEnded(event: JsonObject): WebhookResult {
-        val subscriptionId = subEntity(event)?.get("id")?.jsonPrimitive?.contentOrNull
+        val sub = subEntity(event)
+        val subscriptionId = sub?.get("id")?.jsonPrimitive?.contentOrNull
             ?: return WebhookResult.Skipped("No subscription ID")
+        val endedPlan = sub["notes"]?.jsonObject?.get("plan")?.jsonPrimitive?.contentOrNull
+            ?.let { runCatching { BillingPlan.valueOf(it) }.getOrNull() }
         val userId = billingRepository.findByRazorpaySubscription(subscriptionId)
         billingRepository.downgradeToFree(subscriptionId)
         userId?.let {
@@ -289,10 +337,25 @@ class RazorpayBillingService(
                 it, UserEvent.SUBSCRIPTION_CANCELLED,
                 mapOf("subscriptionId" to subscriptionId, "source" to "webhook")
             )
+            runCatching {
+                val user = userRepository?.findById(it)
+                val plan = endedPlan ?: BillingPlan.SOLO
+                if (user != null) notificationService?.sendSubscriptionEnded(user, plan)
+                inAppNotificationService?.notifySubscriptionEnded(it)
+            }.onFailure { e -> log.warn("Subscription-ended notification failed userId={}: {}", it, e.message) }
         }
         log.info("Subscription ended, downgraded to free: sub={}", subscriptionId)
         return WebhookResult.Ok
     }
+
+    private suspend fun fetchSubscriptionStatus(subscriptionId: String): String? = runCatching {
+        withContext(Dispatchers.IO) {
+            http.get("$RAZORPAY_API/subscriptions/$subscriptionId") {
+                header(HttpHeaders.Authorization, authHeader)
+            }.body<JsonObject>()["status"]?.jsonPrimitive?.contentOrNull
+        }
+    }.onFailure { log.warn("Could not fetch subscription status for {}: {}", subscriptionId, it.message) }
+        .getOrNull()
 
     private fun subEntity(event: JsonObject): JsonObject? =
         event["payload"]?.jsonObject?.get("subscription")?.jsonObject?.get("entity")?.jsonObject

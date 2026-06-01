@@ -246,7 +246,10 @@ fun Application.module() {
         inAppNotificationService = inAppNotificationService
     )
     val billingService = BillingService(billingRepository, userActivityService)
-    val razorpayService = RazorpayBillingService(billingRepository, userActivityService)
+    val razorpayService = RazorpayBillingService(
+        billingRepository, userActivityService,
+        userRepository, notificationService, inAppNotificationService
+    )
     val lifecycleMonitor = UserLifecycleMonitor(userActivityService, notificationService, inAppNotificationService)
     lifecycleMonitor.start()
     val webhookDispatcher = RazorpayWebhookDispatcher(

@@ -113,7 +113,7 @@ program
     try {
         const projects = await api.listProjects();
         if (!projects.length) {
-            console.log('No projects yet. Create one at /syncling/projects');
+            console.log('No projects yet. Create one at /projects');
             return;
         }
         console.log('');

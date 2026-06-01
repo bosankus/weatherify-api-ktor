@@ -27,7 +27,7 @@ private data class UnreadCountResponse(val unreadCount: Int)
 
 fun Route.configureNotificationRoutes(notificationRepository: NotificationRepository) {
 
-    route("/syncling/api/notifications") {
+    route("/api/notifications") {
 
         // List — most recent 20, unread first within each time bucket
         get {

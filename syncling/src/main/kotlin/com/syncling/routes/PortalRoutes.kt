@@ -6,12 +6,23 @@ import io.ktor.server.html.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.html.*
+import java.awt.BasicStroke
+import java.awt.Color
+import java.awt.GradientPaint
+import java.awt.RenderingHints
+import java.awt.geom.Arc2D
+import java.awt.geom.Ellipse2D
+import java.awt.geom.Path2D
+import java.awt.geom.RoundRectangle2D
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
+import javax.imageio.ImageIO
 
 private fun ApplicationCall.issueBootstrapCookie() {
     request.cookies[SESSION_COOKIE]?.ifBlank { null }?.let { tok ->
         response.cookies.append(Cookie(
             name = "tl_token_bootstrap", value = tok,
-            path = "/syncling", maxAge = 15,
+            path = "/", maxAge = 15,
             httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
         ))
     }
@@ -21,79 +32,90 @@ private const val FAVICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
     <linearGradient id="favG" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#C084FC"/>
-      <stop offset="100%" stop-color="#6D28D9"/>
+      <stop offset="0%"   stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
     </linearGradient>
   </defs>
-  <rect width="32" height="32" rx="9" fill="url(#favG)"/>
-  <g stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <rect width="32" height="32" rx="8" fill="#080c18"/>
+  <g stroke="url(#favG)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
     <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
     <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/>
     <polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
   </g>
+  <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
 </svg>"""
 
+private const val SITE_WEBMANIFEST = """{
+  "name": "Syncling",
+  "short_name": "Syncling",
+  "icons": [
+    {"src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/favicon.svg",                "sizes": "any",       "type": "image/svg+xml"}
+  ],
+  "theme_color": "#080c18",
+  "background_color": "#080c18",
+  "display": "standalone",
+  "start_url": "/"
+}"""
+
+private fun generateFaviconPng(size: Int): ByteArray {
+    val img = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
+    val g = img.createGraphics()
+    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,    RenderingHints.VALUE_ANTIALIAS_ON)
+    g.setRenderingHint(RenderingHints.KEY_RENDERING,       RenderingHints.VALUE_RENDER_QUALITY)
+    g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL,  RenderingHints.VALUE_STROKE_PURE)
+    val s = size / 32.0
+    // Background
+    g.color = Color(0x08, 0x0c, 0x18)
+    g.fill(RoundRectangle2D.Double(0.0, 0.0, size.toDouble(), size.toDouble(), 8.0 * s, 8.0 * s))
+    // Sky-to-cyan gradient strokes
+    g.paint  = GradientPaint(0f, 0f, Color(0x0e, 0xa5, 0xe9), size.toFloat(), size.toFloat(), Color(0x22, 0xd3, 0xee))
+    g.stroke = BasicStroke((2.8 * s).toFloat(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+    val cx = 16.0 * s
+    val r  =  7.5 * s
+    // Top arc  — center (16, 18.18), angles 222.3°→95.4° sweep
+    g.draw(Arc2D.Double(cx - r, 18.18 * s - r, 2.0 * r, 2.0 * r, 222.3, 95.4, Arc2D.OPEN))
+    g.draw(Path2D.Double().also { p ->
+        p.moveTo(20.5 * s, 10.25 * s); p.lineTo(22.5 * s, 12.25 * s); p.lineTo(24.5 * s, 10.25 * s)
+    })
+    // Bottom arc — center (16, 13.82), angles 42.3°→95.4° sweep
+    g.draw(Arc2D.Double(cx - r, 13.82 * s - r, 2.0 * r, 2.0 * r,  42.3, 95.4, Arc2D.OPEN))
+    g.draw(Path2D.Double().also { p ->
+        p.moveTo(7.5 * s, 21.75 * s); p.lineTo(9.5 * s, 19.75 * s); p.lineTo(11.5 * s, 21.75 * s)
+    })
+    // Center node
+    g.paint = Color(0x22, 0xd3, 0xee, 230)
+    val dr = 1.8 * s
+    g.fill(Ellipse2D.Double(cx - dr, 16.0 * s - dr, 2.0 * dr, 2.0 * dr))
+    g.dispose()
+    return ByteArrayOutputStream().also { ImageIO.write(img, "PNG", it) }.toByteArray()
+}
+
+// Lazily rendered at first request; JVM lifetime cache
+private val FAVICON_PNG_32  by lazy { generateFaviconPng(32) }
+private val FAVICON_PNG_180 by lazy { generateFaviconPng(180) }
+private val FAVICON_PNG_192 by lazy { generateFaviconPng(192) }
+private val FAVICON_PNG_512 by lazy { generateFaviconPng(512) }
+
 fun Route.configurePortalRoutes(jwtSecret: String) {
+    // Landing page — canonical URL stays at /syncling for SEO
     route("/syncling") {
         get {
             if (call.request.headers[HttpHeaders.Host]?.substringBefore(':') == "data.androidplay.in") {
-                call.respondRedirect("https://syncling.space/", permanent = false)
+                call.respondRedirect("https://syncling.space/syncling", permanent = false)
                 return@get
             }
             if (call.sessionUserId(jwtSecret) != null) {
-                call.respondRedirect("/syncling/app")
+                call.respondRedirect("/app")
                 return@get
             }
             call.respondHtml { landingPage() }
         }
-        get("/app") {
-            val pendingPlan = call.request.cookies[PENDING_PLAN_COOKIE]
-            val sessionUserId = call.sessionUserId(jwtSecret)
-
-            if (!pendingPlan.isNullOrBlank() && sessionUserId != null) {
-                call.respondRedirect("/syncling/billing/checkout?plan=$pendingPlan")
-                return@get
-            }
-
-            call.issueBootstrapCookie()
-            call.respondHtml { dashboardApp() }
-        }
-        get("/welcome") { call.respondHtml { welcomePage() } }
-        get("/billing") {
-            call.issueBootstrapCookie()
-            call.respondHtml { billingApp() }
-        }
-        get("/billing/analytics") {
-            call.issueBootstrapCookie()
-            call.respondHtml { billingAnalyticsApp() }
-        }
-        get("/projects") {
-            call.issueBootstrapCookie()
-            call.respondHtml { projectsApp() }
-        }
-        get("/review-portal") {
-            call.issueBootstrapCookie()
-            call.respondHtml { reviewPortal() }
-        }
-        // Members landing — no projectId. Client will pick the first project after
-        // it loads /api/projects; if there are none, the server-rendered empty state shows.
-        get("/members") {
-            call.issueBootstrapCookie()
-            call.respondHtml { membersApp(projectId = null) }
-        }
-        get("/members/{projectId}") {
-            call.issueBootstrapCookie()
-            call.respondHtml { membersApp(projectId = call.parameters["projectId"]) }
-        }
-        // Public invite landing — no session required. The page itself decides whether
-        // to offer Accept (logged in) or Continue with GitHub (logged out).
-        get("/invite/{token}") {
-            call.respondHtml { invitePage() }
-        }
         get("/docs") {
             if (call.request.headers[HttpHeaders.Host]?.substringBefore(':') == "data.androidplay.in") {
-                call.respondRedirect("https://syncling.space/syncling/docs", permanent = false)
+                call.respondRedirect("https://syncling.space/docs", permanent = false)
                 return@get
             }
             call.respondHtml { docsPage() }
@@ -102,31 +124,100 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
             call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
         }
     }
+    // Top-level docs and favicons for clean URLs on syncling.space
+    get("/docs") {
+        call.respondHtml { docsPage() }
+    }
+    get("/favicon.svg") {
+        call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
+    }
+    get("/favicon-32x32.png") {
+        call.respondBytes(FAVICON_PNG_32, ContentType.Image.PNG)
+    }
+    get("/apple-touch-icon.png") {
+        call.respondBytes(FAVICON_PNG_180, ContentType.Image.PNG)
+    }
+    get("/android-chrome-192x192.png") {
+        call.respondBytes(FAVICON_PNG_192, ContentType.Image.PNG)
+    }
+    get("/android-chrome-512x512.png") {
+        call.respondBytes(FAVICON_PNG_512, ContentType.Image.PNG)
+    }
+    get("/site.webmanifest") {
+        call.respondText(SITE_WEBMANIFEST, ContentType.Application.Json)
+    }
+    // App pages — no /syncling/ prefix
+    get("/app") {
+        val pendingPlan = call.request.cookies[PENDING_PLAN_COOKIE]
+        val sessionUserId = call.sessionUserId(jwtSecret)
+
+        if (!pendingPlan.isNullOrBlank() && sessionUserId != null) {
+            call.respondRedirect("/billing/checkout?plan=$pendingPlan")
+            return@get
+        }
+
+        call.issueBootstrapCookie()
+        call.respondHtml { dashboardApp() }
+    }
+    get("/welcome") { call.respondHtml { welcomePage() } }
+    get("/billing") {
+        call.issueBootstrapCookie()
+        call.respondHtml { billingApp() }
+    }
+    get("/billing/analytics") {
+        call.issueBootstrapCookie()
+        call.respondHtml { billingAnalyticsApp() }
+    }
+    get("/projects") {
+        call.issueBootstrapCookie()
+        call.respondHtml { projectsApp() }
+    }
+    get("/review-portal") {
+        call.issueBootstrapCookie()
+        call.respondHtml { reviewPortal() }
+    }
+    // Members landing — no projectId. Client will pick the first project after
+    // it loads /api/projects; if there are none, the server-rendered empty state shows.
+    get("/members") {
+        call.issueBootstrapCookie()
+        call.respondHtml { membersApp(projectId = null) }
+    }
+    get("/members/{projectId}") {
+        call.issueBootstrapCookie()
+        call.respondHtml { membersApp(projectId = call.parameters["projectId"]) }
+    }
+    // Public invite landing — no session required. The page itself decides whether
+    // to offer Accept (logged in) or Continue with GitHub (logged out).
+    get("/invite/{token}") {
+        call.respondHtml { invitePage() }
+    }
 }
 
 internal fun HEAD.favicon() {
-    link {
-        rel = "icon"
-        type = "image/svg+xml"
-        href = "/syncling/favicon.svg"
-    }
+    link { rel = "icon";             type = "image/svg+xml"; href = "/favicon.svg" }
+    link { rel = "icon";             type = "image/png";     sizes = "32x32";   href = "/favicon-32x32.png" }
+    link { rel = "apple-touch-icon"; sizes = "180x180";      href = "/apple-touch-icon.png" }
+    link { rel = "manifest";         href = "/site.webmanifest" }
+    meta(name = "theme-color",              content = "#080c18")
+    meta(name = "msapplication-TileColor", content = "#080c18")
 }
 
 private const val LOGO_SVG = """
 <svg class="brand-mark" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false">
   <defs>
     <linearGradient id="slGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#C084FC"/>
-      <stop offset="100%" stop-color="#6D28D9"/>
+      <stop offset="0%"   stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
     </linearGradient>
   </defs>
-  <rect width="32" height="32" rx="9" fill="url(#slGrad)"/>
-  <g class="sync-arrows" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <rect width="32" height="32" rx="8" fill="#080c18"/>
+  <g class="sync-arrows" stroke="url(#slGrad)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
     <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
     <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/>
     <polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
   </g>
+  <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
 </svg>
 """
 
@@ -139,31 +230,31 @@ internal fun appSidebar(active: String, reviewBadge: Boolean = false) = """
     </button>
   </div>
   <nav class="sidebar-nav">
-    <a href="/syncling/app" class="nav-item${if (active=="dash") " active" else ""}" title="Dashboard">
+    <a href="/app" class="nav-item${if (active=="dash") " active" else ""}" title="Dashboard">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span class="nav-label">Dashboard</span>
     </a>
-    <a href="/syncling/projects" class="nav-item${if (active=="projects") " active" else ""}" title="Projects">
+    <a href="/projects" class="nav-item${if (active=="projects") " active" else ""}" title="Projects">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       <span class="nav-label">Projects</span>
     </a>
-    <a href="/syncling/members" class="nav-item${if (active=="members") " active" else ""}" title="Members">
+    <a href="/members" class="nav-item${if (active=="members") " active" else ""}" title="Members">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       <span class="nav-label">Members</span>
     </a>
-    <a href="/syncling/review-portal" class="nav-item${if (active=="review") " active" else ""}" title="Review">
+    <a href="/review-portal" class="nav-item${if (active=="review") " active" else ""}" title="Review">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       <span class="nav-label">Review</span>${if (reviewBadge) """<span class="nav-badge review-badge" id="review-count"></span>""" else ""}
     </a>
-    <a href="/syncling/billing/analytics" class="nav-item${if (active=="analytics") " active" else ""}" title="Analytics">
+    <a href="/billing/analytics" class="nav-item${if (active=="analytics") " active" else ""}" title="Analytics">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       <span class="nav-label">Analytics</span>
     </a>
-    <a href="/syncling/billing" class="nav-item${if (active=="billing") " active" else ""}" title="Billing">
+    <a href="/billing" class="nav-item${if (active=="billing") " active" else ""}" title="Billing">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
       <span class="nav-label">Billing</span>
     </a>
-    <a href="/syncling/tokens" class="nav-item${if (active=="tokens") " active" else ""}" title="API Tokens">
+    <a href="/tokens" class="nav-item${if (active=="tokens") " active" else ""}" title="API Tokens">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
       <span class="nav-label">API Tokens</span>
     </a>
@@ -226,10 +317,10 @@ button,.btn{cursor:pointer;border:none;font-family:inherit;font-size:14px;font-w
 .btn-ghost{background:transparent;color:var(--text-muted);padding:10px 20px;border:1px solid var(--border)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .25s ease,transform .25s ease,box-shadow .25s ease}.card:hover{border-color:rgba(139,126,255,.35);box-shadow:0 0 0 1px rgba(139,126,255,.08),0 8px 32px -8px rgba(139,126,255,.15)}
-.brand{display:inline-flex;align-items:center;gap:10px;font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.2px}
-.brand-mark{flex-shrink:0;display:block;filter:drop-shadow(0 2px 8px rgba(139,126,255,.18));transform-origin:center;animation:brandSpin 8s linear infinite;transition:transform .35s cubic-bezier(.2,.8,.2,1),filter .35s ease}
+.brand{display:inline-flex;align-items:center;gap:10px;font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.2px}.brand-text{font-family:'Jost',sans-serif;font-weight:700;letter-spacing:-.4px}
+.brand-mark{flex-shrink:0;display:block;filter:drop-shadow(0 2px 8px rgba(34,211,238,.2));transform-origin:center;animation:brandSpin 8s linear infinite;transition:transform .35s cubic-bezier(.2,.8,.2,1),filter .35s ease}
 .brand-mark .sync-arrows{animation:syncPulse 3s ease-in-out infinite}
-.brand:hover .brand-mark,a:hover>.brand-mark{animation:brandSpin 1.5s linear infinite;filter:drop-shadow(0 6px 18px rgba(139,126,255,.5))}
+.brand:hover .brand-mark,a:hover>.brand-mark{animation:brandSpin 1.5s linear infinite;filter:drop-shadow(0 6px 18px rgba(34,211,238,.45))}
 @keyframes brandSpin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 @keyframes syncPulse{0%,100%{opacity:.82}50%{opacity:1}}
 @media(prefers-reduced-motion:reduce){.brand-mark,.brand-mark .sync-arrows{animation:none}}
@@ -316,6 +407,9 @@ private fun HTML.welcomePage() {
         title { +"Welcome to Syncling" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
+        link(rel = "preconnect", href = "https://fonts.googleapis.com")
+        link(rel = "preconnect", href = "https://fonts.gstatic.com") { attributes["crossorigin"] = "" }
+        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Jost:wght@700&display=swap")
         style { unsafe { +"$SHARED_CSS$LANDING_CSS$WELCOME_CSS" } }
     }
     body {
@@ -349,7 +443,7 @@ private fun HTML.welcomePage() {
                             li { +"GitHub webhook" }
                             li { +"AI translation" }
                         }
-                        a("/syncling/app") { classes = setOf("pricing-cta", "outline"); +"Continue free →" }
+                        a("/app") { classes = setOf("pricing-cta", "outline"); +"Continue free →" }
                     }
                     div("pricing-card recommended") {
                         span("rec-badge") { +"Best for Solo Developers" }
@@ -365,7 +459,7 @@ private fun HTML.welcomePage() {
                             li { +"Translation memory" }
                             li { +"Review portal" }
                         }
-                        a("/syncling/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
+                        a("/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
                     }
                     div("pricing-card") {
                         span("trial-badge") { +"7-day free trial" }
@@ -379,7 +473,7 @@ private fun HTML.welcomePage() {
                             li { +"Everything in Solo" }
                             li { +"Priority support" }
                         }
-                        a("/syncling/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 7-day free trial" }
+                        a("/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 7-day free trial" }
                     }
                 }
                 p("pricing-note") { +"All paid plans include a 7-day free trial. No charge until the trial ends — cancel any time." }
@@ -630,7 +724,7 @@ private const val LANDING_JS = """
     document.body.prepend(banner);
     history.replaceState({},'','/syncling');
   } else {
-    var t=localStorage.getItem('syncling_token');if(t){window.location.href='/syncling/app';}
+    var t=localStorage.getItem('syncling_token');if(t){window.location.href='/app';}
   }
 
   var io=new IntersectionObserver(function(entries){
@@ -711,7 +805,7 @@ private const val LANDING_JSON_LD = """{
   ]
 }"""
 
-private fun HTML.landingPage() {
+internal fun HTML.landingPage() {
     head {
         title { +"Syncling — Automated App Localization & AI Translation for Android & iOS" }
         meta(charset = "UTF-8")
@@ -732,7 +826,7 @@ private fun HTML.landingPage() {
         favicon()
         link(rel = "preconnect", href = "https://fonts.googleapis.com")
         link(rel = "preconnect", href = "https://fonts.gstatic.com") { attributes["crossorigin"] = "" }
-        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap")
+        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600&family=Jost:wght@700&display=swap")
         style { unsafe { +"$SHARED_CSS$LANDING_CSS" } }
         script {
             attributes["type"] = "application/ld+json"
@@ -757,8 +851,8 @@ private fun HTML.landingPage() {
                     a("#cli") { +"CLI" }
                     a("#pricing") { +"Pricing" }
                     a("#faq") { +"FAQ" }
-                    a("/syncling/docs") { +"Docs" }
-                    a("/syncling/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
+                    a("/docs") { +"Docs" }
+                    a("/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
                     a("#pricing") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
                 }
             }
@@ -777,7 +871,7 @@ private fun HTML.landingPage() {
                     +"Syncling automates mobile app localization for Android and iOS — detects what changed, translates into every target language with AI, and publishes to a global CDN. No manual steps, no app release required."
                 }
                 div("hero-actions fade-up d3") {
-                    a("/syncling/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started free" }
+                    a("/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started free" }
                     a("#how") { classes = setOf("btn", "btn-ghost"); +"See how it works →" }
                 }
                 div("hero-stats fade-up d4") {
@@ -902,7 +996,7 @@ private fun HTML.landingPage() {
                                     }
                                     div("cli-t-out") {
                                         +"Create an API token at: "
-                                        span("term-accent") { +"syncling.space/syncling/tokens" }
+                                        span("term-accent") { +"syncling.space/tokens" }
                                     }
                                     div("cli-t-out") {
                                         +"Paste your token (sli_…): "
@@ -970,8 +1064,8 @@ private fun HTML.landingPage() {
                             }
                         }
                         div("cli-cta-row") {
-                            a("/syncling/docs#cli") { classes = setOf("btn", "btn-ghost"); +"Full CLI reference →" }
-                            a("/syncling/docs") { classes = setOf("btn", "btn-primary"); +"Read the docs" }
+                            a("/docs#cli") { classes = setOf("btn", "btn-ghost"); +"Full CLI reference →" }
+                            a("/docs") { classes = setOf("btn", "btn-primary"); +"Read the docs" }
                         }
                     }
                 }
@@ -1152,7 +1246,7 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
                             li { +"AI translation" }
                             li { +"CDN delivery" }
                         }
-                        a("/syncling/auth/github") { classes = setOf("pricing-cta", "outline"); +"Get started free" }
+                        a("/auth/github") { classes = setOf("pricing-cta", "outline"); +"Get started free" }
                     }
                     div("pricing-card recommended fade-up d1") {
                         span("rec-badge") { +"Best for Solo Developers" }
@@ -1170,7 +1264,7 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
                             li { +"Outbound webhooks" }
                             li { +"CDN + SDK access" }
                         }
-                        a("/syncling/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
+                        a("/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
                     }
                     div("pricing-card fade-up d2") {
                         span("trial-badge") { +"7-day free trial" }
@@ -1186,7 +1280,7 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
                             li { +"Priority support" }
                             li { +"Priority CDN SLA" }
                         }
-                        a("/syncling/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 7-day free trial" }
+                        a("/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 7-day free trial" }
                     }
                 }
                 p("pricing-note") { +"All paid plans include a 7-day free trial. No charge until the trial ends — cancel any time." }
@@ -1247,7 +1341,7 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
             div("cta-inner") {
                 h2("fade-up") { +"Ready to go global?" }
                 p("fade-up d1") { +"Free tier includes 500 strings/month, CDN delivery, and SDK access." }
-                a("/syncling/auth/github") { classes = setOf("btn","btn-primary","cta-btn","fade-up","d2"); +"Get started free" }
+                a("/auth/github") { classes = setOf("btn","btn-primary","cta-btn","fade-up","d2"); +"Get started free" }
             }
         }
 
@@ -1260,9 +1354,9 @@ Text(Syncling.string(<span class="sdk-str">"onboarding_welcome_title"</span>))</
                     a("#cli") { +"CLI" }
                     a("#pricing") { +"Pricing" }
                     a("#faq") { +"FAQ" }
-                    a("/syncling/docs") { +"Docs" }
+                    a("/docs") { +"Docs" }
                 }
-                p("footer-copy") { +"© 2026 Syncling · Automated app localization for Android & iOS developers." }
+                p("footer-copy") { +"© 2026 Syncling" }
             }
         }
 
@@ -1294,27 +1388,51 @@ private fun HTML.docsPage() {
                     a("/syncling") { +"Home" }
                     a("/syncling#features") { +"Features" }
                     a("/syncling#pricing") { +"Pricing" }
-                    a("/syncling/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
-                    a("/syncling/auth/github") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started free" }
+                    a("/auth/github") { classes = setOf("btn", "btn-ghost", "nav-cta"); +"Login" }
+                    a("/auth/github") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started free" }
+                }
+                button(classes = "docs-menu-btn") {
+                    attributes["aria-label"] = "Toggle navigation"
+                    unsafe { +"""<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>""" }
                 }
             }
         }
 
-        div("docs-toc-bar") {
-            div("docs-toc-inner") {
-                a(href = "#quickstart", classes = "docs-toc-link") { +"Quick Start" }
-                a(href = "#cli", classes = "docs-toc-link") { +"CLI" }
-                a(href = "#android-sdk", classes = "docs-toc-link") { +"Android SDK" }
-                a(href = "#ios-sdk", classes = "docs-toc-link") { +"iOS SDK" }
-                a(href = "#webhook", classes = "docs-toc-link") { +"Webhook" }
-                a(href = "#api-tokens", classes = "docs-toc-link") { +"API Tokens" }
-                a(href = "#cdn", classes = "docs-toc-link") { +"CDN" }
-                a(href = "#pricing", classes = "docs-toc-link") { +"Pricing" }
-                a(href = "#faq", classes = "docs-toc-link") { +"FAQ" }
+        div("docs-layout") {
+            nav("docs-sidebar") {
+                div("docs-nav-group") {
+                    span("docs-nav-label") { +"Getting Started" }
+                    a(href = "#quickstart", classes = "docs-nav-link") { +"Quick Start" }
+                    a(href = "#connect-repo", classes = "docs-nav-link") { +"Connect a Repository" }
+                    a(href = "#add-sdk", classes = "docs-nav-link") { +"Add the SDK" }
+                }
+                div("docs-nav-group") {
+                    span("docs-nav-label") { +"CLI" }
+                    a(href = "#cli", classes = "docs-nav-link") { +"Installation" }
+                    a(href = "#cli-auth", classes = "docs-nav-link") { +"Authentication" }
+                    a(href = "#cli-commands", classes = "docs-nav-link") { +"Commands" }
+                }
+                div("docs-nav-group") {
+                    span("docs-nav-label") { +"SDKs" }
+                    a(href = "#android-sdk", classes = "docs-nav-link") { +"Android SDK" }
+                    a(href = "#ios-sdk", classes = "docs-nav-link") { +"iOS SDK" }
+                }
+                div("docs-nav-group") {
+                    span("docs-nav-label") { +"Platform" }
+                    a(href = "#projects", classes = "docs-nav-link") { +"Projects" }
+                    a(href = "#webhook", classes = "docs-nav-link") { +"GitHub Webhook" }
+                    a(href = "#api-tokens", classes = "docs-nav-link") { +"API Tokens" }
+                    a(href = "#glossary", classes = "docs-nav-link") { +"Glossary" }
+                    a(href = "#cdn", classes = "docs-nav-link") { +"CDN & OTA" }
+                    a(href = "#semantic", classes = "docs-nav-link") { +"Semantic Detection" }
+                }
+                div("docs-nav-group") {
+                    span("docs-nav-label") { +"Billing & Help" }
+                    a(href = "#pricing", classes = "docs-nav-link") { +"Pricing" }
+                    a(href = "#faq", classes = "docs-nav-link") { +"FAQ" }
+                    a(href = "#support", classes = "docs-nav-link") { +"Support" }
+                }
             }
-        }
-
-        div("docs-wrapper") {
             main("docs-main") {
 
                 // ── Quick Start ─────────────────────────────────────────────────────────
@@ -1330,7 +1448,7 @@ private fun HTML.docsPage() {
                             div("step-number") { +"1" }
                             div("step-body") {
                                 h3 { +"Sign up with GitHub" }
-                                p { +"Go to "; a("/syncling/auth/github") { +"syncling/auth/github" }; +" and authenticate with your GitHub account. The Free plan activates instantly — no card needed." }
+                                p { +"Go to "; a("/auth/github") { +"syncling.space/auth/github" }; +" and authenticate with your GitHub account. The Free plan activates instantly — no card needed." }
                             }
                         }
                         div("step-card") {
@@ -1415,10 +1533,10 @@ private fun HTML.docsPage() {
                     h2 { +"CLI Authentication" }
                     p { +"The CLI authenticates using an API token, not your GitHub session. Tokens start with "; code { +"sli_" }; +" and are scoped to your account." }
                     h4 { +"Step 1 — Generate a token" }
-                    p { +"Go to "; a("/syncling/tokens") { +"syncling/tokens" }; +" in the dashboard and click "; strong { +"New Token" }; +". Give it a descriptive name (e.g. "; code { +"my-laptop" }; +"). Copy the token — it's shown only once." }
+                    p { +"Go to "; a("/tokens") { +"syncling.space/tokens" }; +" in the dashboard and click "; strong { +"New Token" }; +". Give it a descriptive name (e.g. "; code { +"my-laptop" }; +"). Copy the token — it's shown only once." }
                     h4 { +"Step 2 — Login" }
                     div("docs-code-block") {
-                        pre("docs-code") { +"syncling login\n\nCreate an API token at: https://syncling.space/syncling/tokens\nPaste your token (sli_…): sli_xxxxxxxxxxxxxxxx\n\nLogged in. Plan: Solo · 3 project(s)" }
+                        pre("docs-code") { +"syncling login\n\nCreate an API token at: https://syncling.space/tokens\nPaste your token (sli_…): sli_xxxxxxxxxxxxxxxx\n\nLogged in. Plan: Solo · 3 project(s)" }
                     }
                     p { +"Credentials are stored in "; code { +"~/.syncling/config.json" }; +" on your machine. To remove them:" }
                     div("docs-code-block") {
@@ -1614,7 +1732,7 @@ struct ContentView: View {
                     p { +"Each project maps to one GitHub repository. A project has exactly one source language and one or more target languages. The pipeline runs once per push to the configured watch branch." }
                     h4 { +"Creating a project" }
                     ol("docs-list") {
-                        li { +"Open "; a("/syncling/projects") { +"Projects" }; +" in the dashboard and click "; strong { +"New Project" }; +"." }
+                        li { +"Open "; a("/projects") { +"Projects" }; +" in the dashboard and click "; strong { +"New Project" }; +"." }
                         li { +"Select the GitHub repository from the list (only repos you authorised are shown)." }
                         li { +"Set the "; strong { +"Watch Branch" }; +" (default: "; code { +"main" }; +")." }
                         li { +"Set the "; strong { +"Source File Path" }; +" — e.g. "; code { +"src/main/res/values/strings.xml" }; +" for Android." }
@@ -1655,14 +1773,14 @@ struct ContentView: View {
                     h2 { +"API Tokens" }
                     p { +"API tokens authenticate the CLI and REST API calls on behalf of your account. Tokens start with "; code { +"sli_" }; +" and carry the same permissions as the account that created them." }
                     h4 { +"Create a token" }
-                    p { +"Go to "; a("/syncling/tokens") { +"syncling/tokens" }; +" → "; strong { +"New Token" }; +". Give it a descriptive name. The full token value is shown only once at creation — store it securely (e.g. as a CI secret)." }
+                    p { +"Go to "; a("/tokens") { +"syncling.space/tokens" }; +" → "; strong { +"New Token" }; +". Give it a descriptive name. The full token value is shown only once at creation — store it securely (e.g. as a CI secret)." }
                     h4 { +"Use in the CLI" }
                     div("docs-code-block") {
                         pre("docs-code") { +"syncling login   # interactive, stores token in ~/.syncling/config.json" }
                     }
                     h4 { +"Use in REST API calls" }
                     div("docs-code-block") {
-                        pre("docs-code") { +"curl -H \"Authorization: Bearer sli_xxxxxxxxxxxxxxxx\" \\\n     https://syncling.space/syncling/api/projects" }
+                        pre("docs-code") { +"curl -H \"Authorization: Bearer sli_xxxxxxxxxxxxxxxx\" \\\n     https://syncling.space/api/projects" }
                     }
                     h4 { +"Revoking a token" }
                     p { +"Tokens can be revoked instantly from the dashboard or via the CLI:" }
@@ -1763,9 +1881,9 @@ struct ContentView: View {
                         }
                     }
                     div("docs-pricing-cta") {
-                        a("/syncling/auth/github") { classes = setOf("btn", "btn-ghost"); +"Start free →" }
-                        a("/syncling/billing/start-subscription?plan=SOLO") { classes = setOf("btn", "btn-primary"); +"Start Solo trial" }
-                        a("/syncling/billing/start-subscription?plan=TEAM") { classes = setOf("btn", "btn-primary"); +"Start Team trial" }
+                        a("/auth/github") { classes = setOf("btn", "btn-ghost"); +"Start free →" }
+                        a("/billing/start-subscription?plan=SOLO") { classes = setOf("btn", "btn-primary"); +"Start Solo trial" }
+                        a("/billing/start-subscription?plan=TEAM") { classes = setOf("btn", "btn-primary"); +"Start Team trial" }
                     }
                 }
 
@@ -1858,90 +1976,127 @@ struct ContentView: View {
 
         script { unsafe { +"""
 (function(){
-  var links = document.querySelectorAll('a.docs-toc-link');
+  var links = document.querySelectorAll('a.docs-nav-link');
   var sections = Array.from(document.querySelectorAll('.docs-section[id]'));
   function activate(){
-    var scrollY = window.scrollY + 100;
+    var scrollY = window.scrollY + 90;
     var active = sections.reduce(function(a,s){ return s.offsetTop <= scrollY ? s : a; }, sections[0]);
     if(!active) return;
     links.forEach(function(l){ l.classList.toggle('active', l.getAttribute('href') === '#'+active.id); });
   }
   window.addEventListener('scroll', activate, {passive:true});
   activate();
+
+  var menuBtn = document.querySelector('.docs-menu-btn');
+  var sidebar = document.querySelector('.docs-sidebar');
+  if(menuBtn && sidebar){
+    menuBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e){
+      if(sidebar.classList.contains('open') && !sidebar.contains(e.target) && !menuBtn.contains(e.target)){
+        sidebar.classList.remove('open');
+      }
+    });
+    sidebar.querySelectorAll('a.docs-nav-link').forEach(function(l){
+      l.addEventListener('click', function(){ sidebar.classList.remove('open'); });
+    });
+  }
 })();
 """ } }
     }
 }
 
 private const val DOCS_CSS = """
-nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
-.nav-inner{max-width:100%;margin:0 auto;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+nav{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:100%;margin:0 auto;padding:13px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .nav-links{display:flex;align-items:center;gap:24px}
-.nav-links a:not(.btn){color:var(--text-muted);font-size:14px;transition:color .2s ease}
+.nav-links a:not(.btn){color:var(--text-muted);font-size:13.5px;transition:color .18s}
 .nav-links a:not(.btn):hover{color:var(--text)}
-.nav-cta{padding:8px 16px!important;font-size:13px!important}
-.docs-toc-bar{position:sticky;top:57px;z-index:100;background:rgba(8,8,8,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
-.docs-toc-bar::-webkit-scrollbar{display:none}
-.docs-toc-inner{display:flex;align-items:center;gap:4px;padding:0 32px;min-width:max-content}
-a.docs-toc-link{display:inline-block;padding:10px 14px;font-size:13px;color:var(--text-muted);border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,border-color .15s}
-a.docs-toc-link:hover{color:var(--text);border-bottom-color:rgba(139,126,255,.4)}
-a.docs-toc-link.active{color:var(--accent);border-bottom-color:var(--accent)}
-.docs-wrapper{width:100%}
-.docs-main{max-width:960px;margin:0 auto;padding:56px 32px 80px}
-.docs-section{margin-bottom:72px;padding-bottom:72px;border-bottom:1px solid var(--border)}
-.docs-section:last-child{border-bottom:none}
-.docs-section-header{margin-bottom:32px}
-.docs-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(139,126,255,.2);border-radius:20px;padding:3px 10px;margin-bottom:12px}
-.docs-main h1{font-size:clamp(26px,3.5vw,40px);font-weight:800;letter-spacing:-.5px;margin-bottom:8px;line-height:1.2}
-.docs-main h2{font-size:clamp(21px,2.8vw,30px);font-weight:700;letter-spacing:-.3px;margin-bottom:8px;margin-top:0;padding-top:0}
-.docs-main h3{font-size:17px;font-weight:700;margin-bottom:8px;margin-top:0;color:var(--text)}
-.docs-main h4{font-size:13px;font-weight:700;color:var(--text);margin:28px 0 10px;text-transform:uppercase;letter-spacing:.8px}
-.docs-lead{font-size:16px;color:var(--text-muted);line-height:1.7;margin-top:8px}
-.docs-main p{font-size:14px;color:var(--text-muted);line-height:1.75;margin-bottom:14px}
-.docs-main a{color:var(--accent);text-decoration:none}.docs-main a:hover{text-decoration:underline}
+.nav-cta{padding:7px 16px!important;font-size:13px!important}
+.docs-menu-btn{display:none;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:32px;height:32px;cursor:pointer;flex-shrink:0;transition:border-color .15s,color .15s}
+.docs-menu-btn:hover{border-color:rgba(139,126,255,.4);color:var(--accent)}
+.docs-layout{display:flex;min-height:calc(100vh - 57px)}
+.docs-sidebar{width:236px;flex-shrink:0;position:sticky;top:57px;height:calc(100vh - 57px);overflow-y:auto;padding:28px 0 32px;border-right:1px solid var(--border);scrollbar-width:none}
+.docs-sidebar::-webkit-scrollbar{display:none}
+.docs-nav-group{margin-bottom:20px}
+.docs-nav-label{display:block;font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-muted);padding:0 20px 6px;opacity:.45}
+a.docs-nav-link{display:block;font-size:13px;color:var(--text-muted);padding:5px 20px;border-left:2px solid transparent;transition:color .14s,border-color .14s;line-height:1.45}
+a.docs-nav-link:hover{color:var(--text-dim)}
+a.docs-nav-link.active{color:var(--text);border-left-color:var(--accent)}
+.docs-main{flex:1;min-width:0;padding:56px 72px 96px}
+.docs-main>*{max-width:700px}
+.docs-section{margin-bottom:80px;padding-bottom:80px;border-bottom:1px solid var(--border);max-width:700px}
+.docs-section:last-child{border-bottom:none;margin-bottom:0}
+.docs-section-header{margin-bottom:28px}
+.docs-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(139,126,255,.18);border-radius:20px;padding:3px 10px;margin-bottom:12px}
+.docs-main h1{font-size:26px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px;line-height:1.25;color:var(--text)}
+.docs-main h2{font-size:21px;font-weight:700;letter-spacing:-.3px;margin-bottom:6px;line-height:1.3;color:var(--text)}
+.docs-main h3{font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text)}
+.docs-main h4{font-size:11px;font-weight:700;color:var(--text-dim);margin:28px 0 10px;text-transform:uppercase;letter-spacing:1px}
+.docs-lead{font-size:15.5px;color:var(--text-muted);line-height:1.75;margin-top:6px}
+.docs-main p{font-size:14.5px;color:var(--text-muted);line-height:1.8;margin-bottom:14px}
+.docs-main a{color:var(--accent);text-decoration:none}
+.docs-main a:hover{text-decoration:underline}
 .docs-main strong{color:var(--text);font-weight:600}
 .docs-main code{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:12.5px;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;color:var(--accent)}
-.docs-list{padding-left:20px;display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
-.docs-list li{font-size:14px;color:var(--text-muted);line-height:1.65}
-.steps-list{display:flex;flex-direction:column;gap:16px;margin-bottom:28px}
-.step-card{display:flex;gap:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;align-items:flex-start}
-.step-number{width:32px;height:32px;border-radius:50%;background:var(--accent);color:#000;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
-.step-body h3{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px}
-.step-body p{font-size:13px;color:var(--text-muted);line-height:1.65;margin:0}
-.docs-callout{border-radius:8px;padding:14px 18px;font-size:13px;line-height:1.65;margin:20px 0;border:1px solid}
-.docs-callout-tip{background:rgba(61,220,132,.06);border-color:rgba(61,220,132,.2);color:#b0ddc0}
-.docs-callout-info{background:rgba(139,126,255,.06);border-color:rgba(139,126,255,.2);color:var(--text-muted)}
-.docs-callout-warning{background:rgba(254,188,46,.06);border-color:rgba(254,188,46,.2);color:#d4b97a}
+.docs-list{padding-left:20px;display:flex;flex-direction:column;gap:8px;margin:0 0 16px}
+.docs-list li{font-size:14.5px;color:var(--text-muted);line-height:1.75}
+.steps-list{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+.step-card{display:flex;gap:16px;border:1px solid var(--border);border-radius:8px;padding:18px 20px;align-items:flex-start}
+.step-number{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#0d0720;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:3px}
+.step-body h3{font-size:14.5px;font-weight:600;color:var(--text);margin-bottom:5px}
+.step-body p{font-size:13.5px;color:var(--text-muted);line-height:1.7;margin:0}
+.docs-callout{border-radius:6px;padding:13px 16px;font-size:13.5px;line-height:1.65;margin:20px 0;border:1px solid}
+.docs-callout-tip{background:rgba(61,220,132,.04);border-color:rgba(61,220,132,.15);color:#a8d5b8}
+.docs-callout-info{background:rgba(139,126,255,.04);border-color:rgba(139,126,255,.15);color:var(--text-muted)}
+.docs-callout-warning{background:rgba(254,188,46,.04);border-color:rgba(254,188,46,.15);color:#c8b26e}
 .docs-callout strong{color:inherit}
 .docs-code-block{margin:12px 0 20px;border-radius:8px;overflow:hidden;border:1px solid var(--border)}
-.docs-code{background:#0d0d0d;color:var(--text-dim);font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:12.5px;line-height:1.75;padding:18px 20px;margin:0;white-space:pre;overflow-x:auto;display:block}
-.docs-code-example{border-top:1px solid #1a1a1a}
+.docs-code{background:#0a0a0a;color:#888;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13px;line-height:1.75;padding:18px 20px;margin:0;white-space:pre;overflow-x:auto;display:block}
+.docs-code-example{border-top:1px solid var(--border)}
 .cmd-doc-block{margin-bottom:36px;padding-bottom:36px;border-bottom:1px solid var(--border)}
 .cmd-doc-block:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
-.cmd-doc-name{font-size:16px;font-weight:700;color:var(--text);font-family:ui-monospace,'SF Mono',Menlo,monospace;margin-bottom:12px;display:block}
-.docs-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 20px;overflow-x:auto;display:block}
-.docs-table th{text-align:left;padding:10px 14px;background:var(--surface2);color:var(--text);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--border)}
-.docs-table td{padding:10px 14px;color:var(--text-muted);border-bottom:1px solid var(--border);vertical-align:top;line-height:1.55}
+.cmd-doc-name{font-size:15px;font-weight:700;color:var(--text);font-family:ui-monospace,'SF Mono',Menlo,monospace;margin-bottom:10px;display:block}
+.docs-table{width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0 20px;overflow-x:auto;display:block}
+.docs-table th{text-align:left;padding:9px 13px;background:var(--surface2);color:var(--text-dim);font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.docs-table td{padding:10px 13px;color:var(--text-muted);border-bottom:1px solid var(--border);vertical-align:top;line-height:1.6}
 .docs-table tr:last-child td{border-bottom:none}
 .docs-pricing-table td:nth-child(n+2){text-align:center}
 .docs-pricing-table th:nth-child(n+2){text-align:center}
 .docs-pricing-cta{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}
 .docs-faq-item{margin-bottom:28px;padding-bottom:28px;border-bottom:1px solid var(--border)}
 .docs-faq-item:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
-.docs-faq-q{font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px;line-height:1.4}
-.docs-faq-a{font-size:13px;color:var(--text-muted);line-height:1.75;margin:0}
-.docs-support-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-top:16px}
-.docs-support-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:10px}
-.docs-support-icon{color:var(--accent);line-height:0}
-.docs-support-card h4{font-size:14px;font-weight:700;color:var(--text);margin:0;letter-spacing:0;text-transform:none}
+.docs-faq-q{font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px;line-height:1.4}
+.docs-faq-a{font-size:13.5px;color:var(--text-muted);line-height:1.8;margin:0}
+.docs-support-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:16px}
+.docs-support-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;display:flex;flex-direction:column;gap:8px}
+.docs-support-icon{color:var(--text-dim);line-height:0}
+.docs-support-card h4{font-size:14px;font-weight:600;color:var(--text);margin:0}
 .docs-support-card p{font-size:13px;color:var(--text-muted);line-height:1.65;margin:0}
-footer{padding:28px 32px;border-top:1px solid var(--border)}
+footer{padding:26px 32px;border-top:1px solid var(--border)}
 .footer-inner{max-width:100%;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
 .footer-nav{display:flex;gap:20px;flex-wrap:wrap}
-.footer-nav a{color:var(--text-muted);font-size:13px;transition:color .15s}.footer-nav a:hover{color:var(--accent)}
+.footer-nav a{color:var(--text-muted);font-size:13px;transition:color .15s}
+.footer-nav a:hover{color:var(--accent)}
 .footer-copy{font-size:12px;color:var(--text-muted)}
-@media(max-width:768px){.nav-inner{padding:12px 20px}.nav-links{gap:12px}.nav-links a:not(.btn):not(.nav-cta){display:none}.docs-toc-inner{padding:0 16px}.docs-main{padding:36px 20px 64px}.docs-support-grid{grid-template-columns:1fr}footer{padding:24px 20px}}
-@media(max-width:480px){.docs-main{padding:28px 16px 48px}.step-card{flex-direction:column;gap:12px}.docs-pricing-cta{flex-direction:column}.docs-pricing-cta .btn{width:100%;text-align:center}}
+@media(max-width:1024px){.docs-main{padding:48px 40px 80px}}
+@media(max-width:860px){
+  .docs-menu-btn{display:flex}
+  .docs-sidebar{display:none;position:fixed;top:57px;left:0;height:calc(100vh - 57px);background:var(--bg);z-index:150;width:252px;padding:24px 0;border-right:1px solid var(--border)}
+  .docs-sidebar.open{display:block}
+  .nav-links a:not(.btn):not(.nav-cta){display:none}
+  .docs-main{padding:36px 24px 64px}
+  footer{padding:22px 20px}
+}
+@media(max-width:480px){
+  .docs-main{padding:28px 16px 48px}
+  .step-card{flex-direction:column;gap:10px}
+  .docs-pricing-cta{flex-direction:column}
+  .docs-pricing-cta .btn{width:100%;text-align:center}
+  .docs-support-grid{grid-template-columns:1fr}
+}
 """
 
 private const val LANDING_CSS = """
@@ -2299,7 +2454,7 @@ private fun HTML.dashboardApp() {
                                     }
                                     span("widget-title") { +"Plan & Usage" }
                                 }
-                                a("/syncling/billing") { classes = setOf("widget-link"); +"Manage →" }
+                                a("/billing") { classes = setOf("widget-link"); +"Manage →" }
                             }
                             div("widget-body") {
                                 div("plan-row-sm") {
@@ -2327,7 +2482,7 @@ private fun HTML.dashboardApp() {
                                     }
                                     span("widget-title") { +"Review Queue" }
                                 }
-                                a("/syncling/review-portal") { classes = setOf("widget-link"); +"Open →" }
+                                a("/review-portal") { classes = setOf("widget-link"); +"Open →" }
                             }
                             div("widget-body") {
                                 div { id = "w-review-queue" }
@@ -2363,19 +2518,19 @@ private fun HTML.dashboardApp() {
                                 }
                             }
                             div("widget-body qa-body") {
-                                a("/syncling/projects") {
+                                a("/projects") {
                                     id = "qa-new-project"; classes = setOf("qa-btn")
                                     unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/><line x1='12' y1='11' x2='12' y2='17'/><line x1='9' y1='14' x2='15' y2='14'/></svg> New project" }
                                 }
-                                a("/syncling/review-portal") {
+                                a("/review-portal") {
                                     classes = setOf("qa-btn")
                                     unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg> Review translations" }
                                 }
-                                a("/syncling/projects") {
+                                a("/projects") {
                                     classes = setOf("qa-btn")
                                     unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg> Edit glossary" }
                                 }
-                                a("/syncling/billing") {
+                                a("/billing") {
                                     classes = setOf("qa-btn")
                                     unsafe { +"<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='1' y='4' width='22' height='16' rx='2' ry='2'/><line x1='1' y1='10' x2='23' y2='10'/></svg> Manage plan" }
                                 }
@@ -2688,18 +2843,19 @@ body{font-family:'DM Sans',system-ui,sans-serif}
 """
 
 private val DASHBOARD_JS = """
-const BASE='/syncling/api';
+const BASE='/api';
 let token=localStorage.getItem('syncling_token');
 if(!token){var _bc=(document.cookie.match(/(?:^|;\s*)tl_token_bootstrap=([^;]*)/))||[];if(_bc[1]){token=decodeURIComponent(_bc[1]);localStorage.setItem('syncling_token',token);}}
-document.cookie='tl_token_bootstrap=;path=/syncling;max-age=0;secure;samesite=lax';
+document.cookie='tl_token_bootstrap=;path=/;max-age=0;secure;samesite=lax';
 if(!token){window.location.href='/syncling';throw new Error('no token');}
+
 
 function authHeaders(){return{'Authorization':'Bearer '+token,'Content-Type':'application/json'};}
 async function api(path,opts={}){
   const res=await fetch(BASE+path,{...opts,headers:{...authHeaders(),...(opts.headers||{})}});
   if(res.status===401){logout();return null;}return res;
 }
-function logout(){localStorage.removeItem('syncling_token');window.location.href='/syncling/auth/logout';}
+function logout(){localStorage.removeItem('syncling_token');window.location.href='/auth/logout';}
 function toast(msg,type='success'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.className='toast',2800);}
 function esc(s){if(!s)return '';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
 
@@ -2733,7 +2889,7 @@ function updateDashAlert(pending,blocked){
   const parts=[];
   if(pending>0)parts.push('<strong>'+pending+'</strong> pending review');
   if(blocked>0)parts.push('<strong>'+blocked+'</strong> blocked');
-  el.innerHTML='<span class="dash-alert-msg">'+parts.join(' &middot; ')+'</span><a class="dash-alert-action" href="/syncling/review-portal">Review now &rarr;</a>';
+  el.innerHTML='<span class="dash-alert-msg">'+parts.join(' &middot; ')+'</span><a class="dash-alert-action" href="/review-portal">Review now &rarr;</a>';
   el.className='dash-alert visible'+(blocked>0?' critical':'');
 }
 
@@ -2746,7 +2902,7 @@ function updateReviewQueueWidget(pending,blocked){
   el.innerHTML='<div class="rq-rows">'
     +(pending>0?'<div class="rq-row rq-pending"><span class="rq-num">'+pending+'</span><div class="rq-info"><span class="rq-label">pending review</span><span class="rq-sublabel">awaiting your approval</span></div></div>':'')
     +(blocked>0?'<div class="rq-row rq-blocked"><span class="rq-num">'+blocked+'</span><div class="rq-info"><span class="rq-label">blocked</span><span class="rq-sublabel">rejected &mdash; needs rework</span></div></div>':'')
-    +'</div><a href="/syncling/review-portal" class="rq-cta btn btn-primary">Open review portal &rarr;</a>';
+    +'</div><a href="/review-portal" class="rq-cta btn btn-primary">Open review portal &rarr;</a>';
 }
 
 async function loadPlanWidget(){
@@ -2776,7 +2932,7 @@ async function loadPlanWidget(){
     else if(sub.currentPeriodEnd&&sub.plan!=='FREE'){hint.textContent=(sub.cancelAtPeriodEnd?'Cancels ':'Renews ')+sub.currentPeriodEnd;}
   }
   const cta=document.getElementById('w-upgrade-cta');
-  if(cta&&sub.plan==='FREE')cta.innerHTML='<a href="/syncling/billing" class="w-upgrade-link">Upgrade for more capacity &rarr;</a>';
+  if(cta&&sub.plan==='FREE')cta.innerHTML='<a href="/billing" class="w-upgrade-link">Upgrade for more capacity &rarr;</a>';
 }
 
 function updateRunSummaryWidget(){
@@ -3403,7 +3559,7 @@ function showConvBanner(msgHtml){
   var existing=document.querySelector('.conv-toast');if(existing)existing.remove();
   var el=document.createElement('div');el.className='conv-toast';
   el.innerHTML='<div class="conv-msg">'+msgHtml+'</div>'
-    +'<a href="/syncling/billing" class="conv-cta">Upgrade →</a>'
+    +'<a href="/billing" class="conv-cta">Upgrade →</a>'
     +'<button type="button" class="conv-close" aria-label="Dismiss">×</button>';
   document.body.appendChild(el);
   requestAnimationFrame(function(){el.classList.add('visible');});
@@ -3414,7 +3570,7 @@ function showConvBanner(msgHtml){
 loadStats();loadPlanWidget();loadPipelineRuns();loadCdnStatus();connectPipelineSSE();
 """
 
-internal val NOTIFICATIONS_JS = """(function(){const NOTIF_BASE='/syncling/api/notifications';let notifState=[];let panelOpen=!1;function notifApi(path,opts){return fetch(NOTIF_BASE+path,{...opts,headers:{...authHeaders(),...(opts?.headers||{})}})}async function loadNotifications(){try{const res=await notifApi('');if(!res.ok)return;const d=await res.json();notifState=d.notifications||[];renderNotifBadge(d.unreadCount||0);renderNotifList()}catch{}}function renderNotifBadge(count){const bell=document.getElementById('notif-bell'),badge=document.getElementById('notif-badge');if(!bell||!badge)return;if(count>0){badge.textContent=count>9?'9+':String(count);badge.style.display='block';bell.classList.add('has-unread')}else{badge.style.display='none';bell.classList.remove('has-unread')}}function renderNotifList(){const list=document.getElementById('notif-list');if(!list)return;if(!notifState.length){list.innerHTML='<div class="notif-empty">No notifications yet</div>';return}list.innerHTML=notifState.map(n=>{const isUnread=!n.readAt,dotClass=isUnread?n.level||'info':'read',timeAgo=formatTimeAgo(n.createdAt),action=n.actionUrl?`<a class="notif-action-link" href="${'$'}{esc(n.actionUrl)}" onclick="event.stopPropagation()">${'$'}{esc(n.actionLabel||'View')}</a>`:'';return `<div class="notif-item${'$'}{isUnread?' unread':''}" onclick="onNotifClick('${'$'}{n.id}','${'$'}{esc(n.actionUrl||'')}')"><div class="notif-dot ${'$'}{dotClass}"></div><div class="notif-body"><div class="notif-title">${'$'}{esc(n.title)}</div><div class="notif-msg">${'$'}{esc(n.message)}</div><div class="notif-meta"><span class="notif-time">${'$'}{timeAgo}</span>${'$'}{action}</div></div></div>`}).join('')}function formatTimeAgo(ms){const diff=Date.now()-ms;if(diff<60000)return'just now';if(diff<3600000)return Math.floor(diff/60000)+'m ago';if(diff<86400000)return Math.floor(diff/3600000)+'h ago';return Math.floor(diff/86400000)+'d ago'}async function onNotifClick(id,actionUrl){const n=notifState.find(x=>x.id===id);if(n&&!n.readAt){n.readAt=Date.now();const unread=notifState.filter(x=>!x.readAt).length;renderNotifBadge(unread);renderNotifList();notifApi('/'+id+'/read',{method:'POST'}).catch(()=>{})}if(actionUrl){window.location.href=actionUrl}}async function markAllNotifsRead(){notifState.forEach(n=>{if(!n.readAt)n.readAt=Date.now()});renderNotifBadge(0);renderNotifList();try{await notifApi('/read-all',{method:'POST'})}catch{}}function toggleNotifPanel(){panelOpen?closeNotifPanel():openNotifPanel()}function openNotifPanel(){panelOpen=!0;document.getElementById('notif-panel')?.classList.add('open');document.getElementById('notif-overlay')?.classList.add('open')}function closeNotifPanel(){panelOpen=!1;document.getElementById('notif-panel')?.classList.remove('open');document.getElementById('notif-overlay')?.classList.remove('open')}window.pushInAppNotification=function(evt){const existing=notifState.find(n=>n.id===evt.notificationId);if(existing)return;const n={id:evt.notificationId,title:evt.notificationTitle,message:evt.notificationMessage,level:evt.notificationLevel||'info',actionUrl:evt.notificationActionUrl,actionLabel:evt.notificationActionLabel,createdAt:Date.now(),readAt:null};notifState.unshift(n);const unread=notifState.filter(x=>!x.readAt).length;renderNotifBadge(unread);renderNotifList();const bell=document.getElementById('notif-bell');if(bell){bell.classList.add('ringing');setTimeout(()=>bell.classList.remove('ringing'),600)}};window.toggleNotifPanel=toggleNotifPanel;window.closeNotifPanel=closeNotifPanel;window.markAllNotifsRead=markAllNotifsRead;loadNotifications()})();"""
+internal val NOTIFICATIONS_JS = """(function(){const NOTIF_BASE='/api/notifications';let notifState=[];let panelOpen=!1;function notifApi(path,opts){return fetch(NOTIF_BASE+path,{...opts,headers:{...authHeaders(),...(opts?.headers||{})}})}async function loadNotifications(){try{const res=await notifApi('');if(!res.ok)return;const d=await res.json();notifState=d.notifications||[];renderNotifBadge(d.unreadCount||0);renderNotifList()}catch{}}function renderNotifBadge(count){const bell=document.getElementById('notif-bell'),badge=document.getElementById('notif-badge');if(!bell||!badge)return;if(count>0){badge.textContent=count>9?'9+':String(count);badge.style.display='block';bell.classList.add('has-unread')}else{badge.style.display='none';bell.classList.remove('has-unread')}}function renderNotifList(){const list=document.getElementById('notif-list');if(!list)return;if(!notifState.length){list.innerHTML='<div class="notif-empty">No notifications yet</div>';return}list.innerHTML=notifState.map(n=>{const isUnread=!n.readAt,dotClass=isUnread?n.level||'info':'read',timeAgo=formatTimeAgo(n.createdAt),action=n.actionUrl?`<a class="notif-action-link" href="${'$'}{esc(n.actionUrl)}" onclick="event.stopPropagation()">${'$'}{esc(n.actionLabel||'View')}</a>`:'';return `<div class="notif-item${'$'}{isUnread?' unread':''}" onclick="onNotifClick('${'$'}{n.id}','${'$'}{esc(n.actionUrl||'')}')"><div class="notif-dot ${'$'}{dotClass}"></div><div class="notif-body"><div class="notif-title">${'$'}{esc(n.title)}</div><div class="notif-msg">${'$'}{esc(n.message)}</div><div class="notif-meta"><span class="notif-time">${'$'}{timeAgo}</span>${'$'}{action}</div></div></div>`}).join('')}function formatTimeAgo(ms){const diff=Date.now()-ms;if(diff<60000)return'just now';if(diff<3600000)return Math.floor(diff/60000)+'m ago';if(diff<86400000)return Math.floor(diff/3600000)+'h ago';return Math.floor(diff/86400000)+'d ago'}async function onNotifClick(id,actionUrl){const n=notifState.find(x=>x.id===id);if(n&&!n.readAt){n.readAt=Date.now();const unread=notifState.filter(x=>!x.readAt).length;renderNotifBadge(unread);renderNotifList();notifApi('/'+id+'/read',{method:'POST'}).catch(()=>{})}if(actionUrl){window.location.href=actionUrl}}async function markAllNotifsRead(){notifState.forEach(n=>{if(!n.readAt)n.readAt=Date.now()});renderNotifBadge(0);renderNotifList();try{await notifApi('/read-all',{method:'POST'})}catch{}}function toggleNotifPanel(){panelOpen?closeNotifPanel():openNotifPanel()}function openNotifPanel(){panelOpen=!0;document.getElementById('notif-panel')?.classList.add('open');document.getElementById('notif-overlay')?.classList.add('open')}function closeNotifPanel(){panelOpen=!1;document.getElementById('notif-panel')?.classList.remove('open');document.getElementById('notif-overlay')?.classList.remove('open')}window.pushInAppNotification=function(evt){const existing=notifState.find(n=>n.id===evt.notificationId);if(existing)return;const n={id:evt.notificationId,title:evt.notificationTitle,message:evt.notificationMessage,level:evt.notificationLevel||'info',actionUrl:evt.notificationActionUrl,actionLabel:evt.notificationActionLabel,createdAt:Date.now(),readAt:null};notifState.unshift(n);const unread=notifState.filter(x=>!x.readAt).length;renderNotifBadge(unread);renderNotifList();const bell=document.getElementById('notif-bell');if(bell){bell.classList.add('ringing');setTimeout(()=>bell.classList.remove('ringing'),600)}};window.toggleNotifPanel=toggleNotifPanel;window.closeNotifPanel=closeNotifPanel;window.markAllNotifsRead=markAllNotifsRead;loadNotifications()})();"""
 
 internal const val ONBOARDING_CSS = """
 .ob-overlay{position:fixed;inset:0;z-index:9000;pointer-events:none}
@@ -3447,4 +3603,4 @@ internal const val ONBOARDING_CSS = """
 @media (prefers-reduced-motion:reduce){.ob-spot,.ob-pop{transition:none}}
 """
 
-internal val ONBOARDING_JS = """(function(){if(window.Onboarding)return;var BASE='/syncling/api/onboarding',state=null,page='dashboard',steps=[],idx=0,prevFocus=null;function authHeaders(){var t=localStorage.getItem('syncling_token');return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'}}function fetchState(){return fetch(BASE+'/state',{headers:authHeaders()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}function postSkip(){return fetch(BASE+'/skip',{method:'POST',headers:authHeaders()}).catch(function(){})}function postResume(){return fetch(BASE+'/resume',{method:'POST',headers:authHeaders()}).catch(function(){})}function host(){var h=document.getElementById('ob-host');if(!h){h=document.createElement('div');h.id='ob-host';document.body.appendChild(h)}return h}function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML}function planLabel(p){return p==='SOLO'?'Solo':p==='TEAM'?'Team':p==='ENTERPRISE'?'Enterprise':'Free'}function buildSteps(){var planChip='<span class="ob-chip">Plan: <strong style="margin-left:4px">'+esc(planLabel(state.plan))+'</strong></span>',trialChip=state.inTrial?'<span class="ob-chip warn">Trial</span>':'',meta=planChip+trialChip;if(page==='dashboard'){return[{eyebrow:'Welcome',title:'Welcome to Syncling',body:'You\'re all set on the <strong>'+esc(planLabel(state.plan))+'</strong> plan. In the next two steps we\'ll connect your GitHub repo and watch your first translation run.',meta:meta,anchor:null,primary:{label:'Get started',action:'next'},secondary:{label:'Skip',action:'skip'}},{eyebrow:'Step 1 of 2',title:'Connect your first repository',body:'Click <strong>+ New project</strong> to point Syncling at your GitHub repo. We\'ll auto-install the webhook so every push triggers translation.',anchor:'#qa-new-project',primary:{label:'Open projects',action:'navigate',href:'/syncling/projects?ob=connect'},secondary:{label:'Skip',action:'skip'}}]}if(page==='projects'){return[{eyebrow:'Step 2 of 2',title:'Create your project',body:'Fill in your GitHub repo URL (e.g. <strong>owner/repo</strong>), pick a branch and target languages. We\'ll handle the webhook.',anchor:'#new-proj-btn',primary:{label:'Open form',action:'click-anchor'},secondary:{label:'Skip',action:'skip'}}]}return[]}function getAnchorRect(sel){if(!sel)return null;var el=document.querySelector(sel);if(!el)return null;el.scrollIntoView({block:'center',behavior:'smooth'});return el.getBoundingClientRect()}function positionPop(pop,rect){var pad=12,vw=window.innerWidth,vh=window.innerHeight,pw=pop.offsetWidth,ph=pop.offsetHeight;if(!rect){pop.style.left=Math.max(16,(vw-pw)/2)+'px';pop.style.top=Math.max(16,(vh-ph)/2)+'px';return}var preferBelow=(rect.bottom+pad+ph)<=vh-8,top=preferBelow?(rect.bottom+pad):Math.max(16,rect.top-pad-ph),left=Math.min(Math.max(16,rect.left+(rect.width-pw)/2),vw-pw-16);pop.style.left=left+'px';pop.style.top=top+'px'}function render(){cleanup();var step=steps[idx];if(!step)return;var overlay=document.createElement('div');overlay.className='ob-overlay active';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-live','polite');var shade=document.createElement('div');shade.className='ob-shade';shade.style.inset='0';overlay.appendChild(shade);var spot=document.createElement('div');spot.className='ob-spot';overlay.appendChild(spot);var pop=document.createElement('div');pop.className='ob-pop';var meta=step.meta?'<div class="ob-pop-meta">'+step.meta+'</div>':'',progress=steps.length>1?(idx+1)+' / '+steps.length:'';pop.innerHTML='<div class="ob-pop-eyebrow">'+esc(step.eyebrow||'')+'</div>'+'<div class="ob-pop-title">'+esc(step.title)+'</div>'+'<div class="ob-pop-body">'+step.body+'</div>'+meta+'<div class="ob-pop-actions">'+'<span class="ob-pop-progress">'+esc(progress)+'</span>'+'<div class="ob-pop-buttons">'+(step.secondary?'<button type="button" class="ob-pop-btn" data-act="'+esc(step.secondary.action)+'">'+esc(step.secondary.label)+'</button>':'')+(step.primary?'<button type="button" class="ob-pop-btn primary" data-act="'+esc(step.primary.action)+'">'+esc(step.primary.label)+'</button>':'')+'</div></div>';overlay.appendChild(pop);host().appendChild(overlay);var rect=getAnchorRect(step.anchor);if(rect){var pad=8;spot.style.left=(rect.left-pad)+'px';spot.style.top=(rect.top-pad)+'px';spot.style.width=(rect.width+pad*2)+'px';spot.style.height=(rect.height+pad*2)+'px';spot.classList.add('visible')}requestAnimationFrame(function(){positionPop(pop,rect);pop.classList.add('visible')});var btns=pop.querySelectorAll('button[data-act]');btns.forEach(function(b){b.addEventListener('click',function(){handleAction(b.getAttribute('data-act'),step)})});var first=pop.querySelector('button.primary')||btns[0];if(first){prevFocus=document.activeElement;first.focus()}overlay._onKey=function(e){if(e.key==='Escape'){e.preventDefault();skip()}else if(e.key==='Tab'){var nodes=Array.prototype.slice.call(btns);if(!nodes.length)return;var i=nodes.indexOf(document.activeElement);if(e.shiftKey){if(i<=0){e.preventDefault();nodes[nodes.length-1].focus()}}else{if(i===nodes.length-1){e.preventDefault();nodes[0].focus()}}}};document.addEventListener('keydown',overlay._onKey);overlay._onResize=function(){positionPop(pop,getAnchorRect(step.anchor))};window.addEventListener('resize',overlay._onResize);window.addEventListener('scroll',overlay._onResize,!0)}function cleanup(){var h=document.getElementById('ob-host');if(!h)return;Array.prototype.slice.call(h.querySelectorAll('.ob-overlay')).forEach(function(o){if(o._onKey)document.removeEventListener('keydown',o._onKey);if(o._onResize){window.removeEventListener('resize',o._onResize);window.removeEventListener('scroll',o._onResize,!0)}o.remove()});if(prevFocus&&prevFocus.focus){try{prevFocus.focus()}catch(_){}prevFocus=null}}function handleAction(act,step){if(act==='next'){idx++;if(idx>=steps.length){finish()}else{render()}}else if(act==='skip'){skip()}else if(act==='navigate'){postSkip();window.location.href=step.primary.href}else if(act==='click-anchor'){var el=step.anchor&&document.querySelector(step.anchor);cleanup();if(el)el.click()}}function finish(){cleanup();renderResumePill(!1)}function skip(){postSkip();cleanup();renderResumePill(!0)}function renderResumePill(show){var existing=document.getElementById('ob-resume-pill');if(!show){if(existing)existing.classList.remove('visible');return}if(existing){existing.classList.add('visible');return}var pill=document.createElement('div');pill.id='ob-resume-pill';pill.className='ob-resume-pill';pill.setAttribute('role','button');pill.setAttribute('tabindex','0');pill.setAttribute('aria-label','Resume setup');pill.innerHTML='<span class="ob-resume-dot"></span><span>Resume setup</span>';function resume(){postResume().then(function(){pill.classList.remove('visible');state.dismissed=!1;steps=buildSteps();idx=0;render()})}pill.addEventListener('click',resume);pill.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();resume()}});document.body.appendChild(pill);requestAnimationFrame(function(){pill.classList.add('visible')})}function shouldRun(){if(!state)return!1;if(state.completed)return!1;if(page==='dashboard')return state.step==='SIGNED_UP';if(page==='projects'){var fromDash=new URLSearchParams(window.location.search).get('ob')==='connect';return(state.step==='SIGNED_UP'&&!state.hasProject)||fromDash}return!1}var Onboarding={boot:function(pageName){page=pageName||'dashboard';fetchState().then(function(s){if(!s)return;state=s;if(state.dismissed&&!state.completed){renderResumePill(!0);return}if(!shouldRun())return;steps=buildSteps();idx=0;render()})},refresh:function(){fetchState().then(function(s){if(!s)return;state=s;if(state.completed){cleanup();renderResumePill(!1);return}if(state.step!=='SIGNED_UP'){cleanup()}})},cleanup:cleanup};window.Onboarding=Onboarding})();"""
+internal val ONBOARDING_JS = """(function(){if(window.Onboarding)return;var BASE='/api/onboarding',state=null,page='dashboard',steps=[],idx=0,prevFocus=null;function authHeaders(){var t=localStorage.getItem('syncling_token');return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'}}function fetchState(){return fetch(BASE+'/state',{headers:authHeaders()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}function postSkip(){return fetch(BASE+'/skip',{method:'POST',headers:authHeaders()}).catch(function(){})}function postResume(){return fetch(BASE+'/resume',{method:'POST',headers:authHeaders()}).catch(function(){})}function host(){var h=document.getElementById('ob-host');if(!h){h=document.createElement('div');h.id='ob-host';document.body.appendChild(h)}return h}function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML}function planLabel(p){return p==='SOLO'?'Solo':p==='TEAM'?'Team':p==='ENTERPRISE'?'Enterprise':'Free'}function buildSteps(){var planChip='<span class="ob-chip">Plan: <strong style="margin-left:4px">'+esc(planLabel(state.plan))+'</strong></span>',trialChip=state.inTrial?'<span class="ob-chip warn">Trial</span>':'',meta=planChip+trialChip;if(page==='dashboard'){return[{eyebrow:'Welcome',title:'Welcome to Syncling',body:'You\'re all set on the <strong>'+esc(planLabel(state.plan))+'</strong> plan. In the next two steps we\'ll connect your GitHub repo and watch your first translation run.',meta:meta,anchor:null,primary:{label:'Get started',action:'next'},secondary:{label:'Skip',action:'skip'}},{eyebrow:'Step 1 of 2',title:'Connect your first repository',body:'Click <strong>+ New project</strong> to point Syncling at your GitHub repo. We\'ll auto-install the webhook so every push triggers translation.',anchor:'#qa-new-project',primary:{label:'Open projects',action:'navigate',href:'/projects?ob=connect'},secondary:{label:'Skip',action:'skip'}}]}if(page==='projects'){return[{eyebrow:'Step 2 of 2',title:'Create your project',body:'Fill in your GitHub repo URL (e.g. <strong>owner/repo</strong>), pick a branch and target languages. We\'ll handle the webhook.',anchor:'#new-proj-btn',primary:{label:'Open form',action:'click-anchor'},secondary:{label:'Skip',action:'skip'}}]}return[]}function getAnchorRect(sel){if(!sel)return null;var el=document.querySelector(sel);if(!el)return null;el.scrollIntoView({block:'center',behavior:'smooth'});return el.getBoundingClientRect()}function positionPop(pop,rect){var pad=12,vw=window.innerWidth,vh=window.innerHeight,pw=pop.offsetWidth,ph=pop.offsetHeight;if(!rect){pop.style.left=Math.max(16,(vw-pw)/2)+'px';pop.style.top=Math.max(16,(vh-ph)/2)+'px';return}var preferBelow=(rect.bottom+pad+ph)<=vh-8,top=preferBelow?(rect.bottom+pad):Math.max(16,rect.top-pad-ph),left=Math.min(Math.max(16,rect.left+(rect.width-pw)/2),vw-pw-16);pop.style.left=left+'px';pop.style.top=top+'px'}function render(){cleanup();var step=steps[idx];if(!step)return;var overlay=document.createElement('div');overlay.className='ob-overlay active';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-live','polite');var shade=document.createElement('div');shade.className='ob-shade';shade.style.inset='0';overlay.appendChild(shade);var spot=document.createElement('div');spot.className='ob-spot';overlay.appendChild(spot);var pop=document.createElement('div');pop.className='ob-pop';var meta=step.meta?'<div class="ob-pop-meta">'+step.meta+'</div>':'',progress=steps.length>1?(idx+1)+' / '+steps.length:'';pop.innerHTML='<div class="ob-pop-eyebrow">'+esc(step.eyebrow||'')+'</div>'+'<div class="ob-pop-title">'+esc(step.title)+'</div>'+'<div class="ob-pop-body">'+step.body+'</div>'+meta+'<div class="ob-pop-actions">'+'<span class="ob-pop-progress">'+esc(progress)+'</span>'+'<div class="ob-pop-buttons">'+(step.secondary?'<button type="button" class="ob-pop-btn" data-act="'+esc(step.secondary.action)+'">'+esc(step.secondary.label)+'</button>':'')+(step.primary?'<button type="button" class="ob-pop-btn primary" data-act="'+esc(step.primary.action)+'">'+esc(step.primary.label)+'</button>':'')+'</div></div>';overlay.appendChild(pop);host().appendChild(overlay);var rect=getAnchorRect(step.anchor);if(rect){var pad=8;spot.style.left=(rect.left-pad)+'px';spot.style.top=(rect.top-pad)+'px';spot.style.width=(rect.width+pad*2)+'px';spot.style.height=(rect.height+pad*2)+'px';spot.classList.add('visible')}requestAnimationFrame(function(){positionPop(pop,rect);pop.classList.add('visible')});var btns=pop.querySelectorAll('button[data-act]');btns.forEach(function(b){b.addEventListener('click',function(){handleAction(b.getAttribute('data-act'),step)})});var first=pop.querySelector('button.primary')||btns[0];if(first){prevFocus=document.activeElement;first.focus()}overlay._onKey=function(e){if(e.key==='Escape'){e.preventDefault();skip()}else if(e.key==='Tab'){var nodes=Array.prototype.slice.call(btns);if(!nodes.length)return;var i=nodes.indexOf(document.activeElement);if(e.shiftKey){if(i<=0){e.preventDefault();nodes[nodes.length-1].focus()}}else{if(i===nodes.length-1){e.preventDefault();nodes[0].focus()}}}};document.addEventListener('keydown',overlay._onKey);overlay._onResize=function(){positionPop(pop,getAnchorRect(step.anchor))};window.addEventListener('resize',overlay._onResize);window.addEventListener('scroll',overlay._onResize,!0)}function cleanup(){var h=document.getElementById('ob-host');if(!h)return;Array.prototype.slice.call(h.querySelectorAll('.ob-overlay')).forEach(function(o){if(o._onKey)document.removeEventListener('keydown',o._onKey);if(o._onResize){window.removeEventListener('resize',o._onResize);window.removeEventListener('scroll',o._onResize,!0)}o.remove()});if(prevFocus&&prevFocus.focus){try{prevFocus.focus()}catch(_){}prevFocus=null}}function handleAction(act,step){if(act==='next'){idx++;if(idx>=steps.length){finish()}else{render()}}else if(act==='skip'){skip()}else if(act==='navigate'){postSkip();window.location.href=step.primary.href}else if(act==='click-anchor'){var el=step.anchor&&document.querySelector(step.anchor);cleanup();if(el)el.click()}}function finish(){cleanup();renderResumePill(!1)}function skip(){postSkip();cleanup();renderResumePill(!0)}function renderResumePill(show){var existing=document.getElementById('ob-resume-pill');if(!show){if(existing)existing.classList.remove('visible');return}if(existing){existing.classList.add('visible');return}var pill=document.createElement('div');pill.id='ob-resume-pill';pill.className='ob-resume-pill';pill.setAttribute('role','button');pill.setAttribute('tabindex','0');pill.setAttribute('aria-label','Resume setup');pill.innerHTML='<span class="ob-resume-dot"></span><span>Resume setup</span>';function resume(){postResume().then(function(){pill.classList.remove('visible');state.dismissed=!1;steps=buildSteps();idx=0;render()})}pill.addEventListener('click',resume);pill.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();resume()}});document.body.appendChild(pill);requestAnimationFrame(function(){pill.classList.add('visible')})}function shouldRun(){if(!state)return!1;if(state.completed)return!1;if(page==='dashboard')return state.step==='SIGNED_UP';if(page==='projects'){var fromDash=new URLSearchParams(window.location.search).get('ob')==='connect';return(state.step==='SIGNED_UP'&&!state.hasProject)||fromDash}return!1}var Onboarding={boot:function(pageName){page=pageName||'dashboard';fetchState().then(function(s){if(!s)return;state=s;if(state.dismissed&&!state.completed){renderResumePill(!0);return}if(!shouldRun())return;steps=buildSteps();idx=0;render()})},refresh:function(){fetchState().then(function(s){if(!s)return;state=s;if(state.completed){cleanup();renderResumePill(!1);return}if(state.step!=='SIGNED_UP'){cleanup()}})},cleanup:cleanup};window.Onboarding=Onboarding})();"""

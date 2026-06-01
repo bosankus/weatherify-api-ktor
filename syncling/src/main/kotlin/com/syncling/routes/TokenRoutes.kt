@@ -15,7 +15,12 @@ import java.security.SecureRandom
 // ── REST API ──────────────────────────────────────────────────────────────────
 
 @Serializable
-data class CreateTokenBody(val name: String, val type: String = "CLI")
+data class CreateTokenBody(
+    val name: String,
+    val platforms: List<String>? = null,
+    // Legacy single-platform field; kept for backward compatibility with older clients.
+    val type: String? = null,
+)
 
 @Serializable
 data class CreateTokenResponse(
@@ -23,7 +28,7 @@ data class CreateTokenResponse(
     val name: String,
     val token: String,
     val createdAt: Long,
-    val type: String,
+    val platforms: List<String>,
 )
 
 @Serializable
@@ -32,16 +37,18 @@ data class TokenListItem(
     val name: String,
     val createdAt: Long,
     val lastUsedAt: Long?,
-    val type: String,
+    val platforms: List<String>,
 )
 
+private val ALLOWED_PLATFORMS = setOf("CLI", "ANDROID", "IOS")
+
 fun Route.configureTokenApiRoutes(tokenRepository: ApiTokenRepository) {
-    route("/syncling/api/me/tokens") {
+    route("/api/me/tokens") {
         get {
             val userId = call.userId()
                 ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
             val items = tokenRepository.listForUser(userId).map {
-                TokenListItem(it.id, it.name, it.createdAt.toEpochMilliseconds(), it.lastUsedAt?.toEpochMilliseconds(), it.type)
+                TokenListItem(it.id, it.name, it.createdAt.toEpochMilliseconds(), it.lastUsedAt?.toEpochMilliseconds(), it.platforms)
             }
             call.respond(HttpStatusCode.OK, mapOf("tokens" to items))
         }
@@ -54,21 +61,26 @@ fun Route.configureTokenApiRoutes(tokenRepository: ApiTokenRepository) {
             }
             if (body.name.isBlank() || body.name.length > 64)
                 return@post call.respond(HttpStatusCode.BadRequest, ApiError("name must be 1–64 characters"))
-            val tokenType = body.type.uppercase()
-            if (tokenType !in setOf("CLI", "ANDROID", "IOS"))
-                return@post call.respond(HttpStatusCode.BadRequest, ApiError("type must be CLI, ANDROID, or IOS"))
+
+            val requested = (body.platforms ?: listOfNotNull(body.type))
+                .map { it.trim().uppercase() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .ifEmpty { listOf("CLI") }
+            if (requested.any { it !in ALLOWED_PLATFORMS })
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("platforms must be any of CLI, ANDROID, IOS"))
 
             if (tokenRepository.listForUser(userId).size >= 10)
                 return@post call.respond(HttpStatusCode.Conflict, ApiError("Maximum 10 API tokens per account. Revoke one first."))
 
-            val rawToken = generateApiToken(tokenType)
-            val created = tokenRepository.create(userId, body.name.trim(), sha256(rawToken), tokenType)
+            val rawToken = generateApiToken(requested)
+            val created = tokenRepository.create(userId, body.name.trim(), sha256(rawToken), requested)
             call.respond(HttpStatusCode.Created, CreateTokenResponse(
                 id = created.id,
                 name = created.name,
                 token = rawToken,
                 createdAt = created.createdAt.toEpochMilliseconds(),
-                type = created.type,
+                platforms = created.platforms,
             ))
         }
 
@@ -88,7 +100,7 @@ fun Route.configureTokenApiRoutes(tokenRepository: ApiTokenRepository) {
 // ── Portal page ───────────────────────────────────────────────────────────────
 
 fun Route.configureTokenPortalRoute() {
-    get("/syncling/tokens") {
+    get("/tokens") {
         call.respondHtml { tokensApp() }
     }
 }
@@ -191,9 +203,10 @@ internal fun HTML.tokensApp() {
 
 private val rng = SecureRandom()
 
-private fun generateApiToken(type: String = "CLI"): String {
+private fun generateApiToken(platforms: List<String>): String {
     val bytes = ByteArray(32)
     rng.nextBytes(bytes)
-    val prefix = if (type == "CLI") "sli_" else "slk_"
+    // sli_ for CLI-only tokens; slk_ as soon as any SDK platform is included.
+    val prefix = if (platforms.any { it == "ANDROID" || it == "IOS" }) "slk_" else "sli_"
     return prefix + bytes.joinToString("") { "%02x".format(it) }
 }

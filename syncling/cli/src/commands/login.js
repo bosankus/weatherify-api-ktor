@@ -5,7 +5,7 @@ import { apiFetch } from '../api.js';
 
 export async function loginCommand() {
   console.log(chalk.bold('\nSyncling login'));
-  console.log(`Open ${chalk.cyan(`${API_BASE}/syncling/tokens`)} to create an API token.\n`);
+  console.log(`Open ${chalk.cyan(`${API_BASE}/tokens`)} to create an API token.\n`);
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const token = await new Promise(resolve => {
@@ -19,7 +19,7 @@ export async function loginCommand() {
 
   // Validate token against the API
   try {
-    const data = await apiFetch('/syncling/api/me/bootstrap', token);
+    const data = await apiFetch('/api/me/bootstrap', token);
     const cfg = readConfig();
     writeConfig({ ...cfg, token });
     const email = data?.user?.email ?? data?.email ?? '';

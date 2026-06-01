@@ -41,7 +41,7 @@ class InAppNotificationService(
         title = "$pendingCount string${if (pendingCount != 1) "s" else ""} need your review",
         message = "Approve or reject flagged translations to unblock the next PR.",
         level = "warning",
-        actionUrl = "/syncling/review-portal",
+        actionUrl = "/review-portal",
         actionLabel = "Review now",
         dedupMs = DEDUP_6H
     )
@@ -52,7 +52,7 @@ class InAppNotificationService(
         title = "Free plan limit reached",
         message = "You've used all 500 free strings this month. Upgrade to keep translating.",
         level = "error",
-        actionUrl = "/syncling/billing",
+        actionUrl = "/billing",
         actionLabel = "Upgrade",
         dedupMs = DEDUP_6H
     )
@@ -63,7 +63,7 @@ class InAppNotificationService(
         title = "Your ${pendingPlan.displayName} trial is waiting",
         message = "You started a free trial but didn't finish. No charge until the trial ends.",
         level = "warning",
-        actionUrl = "/syncling/billing",
+        actionUrl = "/billing",
         actionLabel = "Complete setup",
         dedupMs = DEDUP_6H
     )
@@ -74,7 +74,7 @@ class InAppNotificationService(
         title = "${plan.displayName} plan renews in $daysLeft day${if (daysLeft != 1L) "s" else ""}",
         message = "Make sure your payment method is up to date to avoid interruption.",
         level = "warning",
-        actionUrl = "/syncling/billing",
+        actionUrl = "/billing",
         actionLabel = "Manage billing",
         dedupMs = DEDUP_6H
     )
@@ -85,7 +85,7 @@ class InAppNotificationService(
         title = "GitHub access lost — re-authenticate",
         message = "Syncling can no longer access $repo. Re-connect GitHub to resume automatic translations.",
         level = "error",
-        actionUrl = "/syncling/auth/github",
+        actionUrl = "/auth/github",
         actionLabel = "Re-connect GitHub",
         dedupMs = DEDUP_6H
     )
@@ -96,7 +96,7 @@ class InAppNotificationService(
         title = "Pipeline failed — $repo",
         message = reason,
         level = "error",
-        actionUrl = "/syncling/app#activity",
+        actionUrl = "/app#activity",
         actionLabel = "View details",
         dedupMs = DEDUP_1H
     )
@@ -107,8 +107,52 @@ class InAppNotificationService(
         title = "Pick up where you left off",
         message = stuckReason,
         level = "info",
-        actionUrl = "/syncling/app",
+        actionUrl = "/app",
         actionLabel = "Continue setup",
+        dedupMs = DEDUP_6H
+    )
+
+    suspend fun notifyTrialStarted(userId: String, planDisplayName: String, trialEndsOn: String) = notify(
+        userId = userId,
+        type = NotificationType.TRIAL_STARTED,
+        title = "$planDisplayName trial activated",
+        message = "Your 7-day free trial is live. First charge on $trialEndsOn — cancel any time before then.",
+        level = "success",
+        actionUrl = "/billing",
+        actionLabel = "View billing",
+        dedupMs = DEDUP_6H
+    )
+
+    suspend fun notifyPaymentFailed(userId: String, planDisplayName: String) = notify(
+        userId = userId,
+        type = NotificationType.PAYMENT_FAILED,
+        title = "Payment failed — action required",
+        message = "We couldn't charge your card for the $planDisplayName plan. Update your payment method to keep translating.",
+        level = "error",
+        actionUrl = "/billing",
+        actionLabel = "Update payment",
+        dedupMs = DEDUP_6H
+    )
+
+    suspend fun notifyPaymentReceived(userId: String, amount: String, planDisplayName: String) = notify(
+        userId = userId,
+        type = NotificationType.PAYMENT_RECEIVED,
+        title = "Payment received — $planDisplayName renewed",
+        message = "$amount charged successfully. Your subscription is active for another month.",
+        level = "success",
+        actionUrl = "/billing",
+        actionLabel = "View invoices",
+        dedupMs = DEDUP_1H
+    )
+
+    suspend fun notifySubscriptionEnded(userId: String) = notify(
+        userId = userId,
+        type = NotificationType.SUBSCRIPTION_ENDED,
+        title = "Subscription ended — downgraded to Free",
+        message = "Your paid plan has ended. Upgrade any time to resume automatic translations.",
+        level = "warning",
+        actionUrl = "/billing",
+        actionLabel = "Upgrade",
         dedupMs = DEDUP_6H
     )
 
@@ -123,7 +167,7 @@ class InAppNotificationService(
         title = "$memberName joined $projectName",
         message = "They now have access based on the role you assigned.",
         level = "success",
-        actionUrl = "/syncling/members/$projectId",
+        actionUrl = "/members/$projectId",
         actionLabel = "Manage members",
         dedupMs = 0
     )

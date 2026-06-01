@@ -10,7 +10,7 @@ const modalMount = document.getElementById('tk-modal-mount');
 
 async function loadTokens() {
   try {
-    const res = await fetch('/syncling/api/me/tokens', { headers: window.authHeaders ? window.authHeaders() : {} });
+    const res = await fetch('/api/me/tokens', { headers: window.authHeaders ? window.authHeaders() : {} });
     const data = await res.json();
     render(data.tokens || []);
   } catch {
@@ -26,6 +26,20 @@ const TYPE_META = {
 
 function typeMeta(type) {
   return TYPE_META[type] || TYPE_META.CLI;
+}
+
+function platformsOf(t) {
+  if (Array.isArray(t.platforms) && t.platforms.length) return t.platforms;
+  if (t.type) return [t.type];
+  return ['CLI'];
+}
+
+// Pick a primary icon for the row: prefer SDK platforms over CLI for visual emphasis.
+function primaryPlatform(platforms) {
+  return platforms.find(p => p === 'ANDROID')
+    || platforms.find(p => p === 'IOS')
+    || platforms[0]
+    || 'CLI';
 }
 
 function render(tokens) {
@@ -48,16 +62,21 @@ function render(tokens) {
   }
 
   listBody.innerHTML = tokens.map(t => {
-    const meta = typeMeta(t.type || 'CLI');
+    const platforms = platformsOf(t);
+    const primaryMeta = typeMeta(primaryPlatform(platforms));
+    const badges = platforms.map(p => {
+      const m = typeMeta(p);
+      return `<span class="tk-type-badge ${esc(m.cls)}">${esc(m.label)}</span>`;
+    }).join('');
     return `
     <div class="tk-row" data-id="${esc(t.id)}">
       <div class="tk-icon">
-        ${meta.icon}
+        ${primaryMeta.icon}
       </div>
       <div class="tk-row-info">
         <div class="tk-row-name">
           ${esc(t.name)}
-          <span class="tk-type-badge ${esc(meta.cls)}">${esc(meta.label)}</span>
+          ${badges}
         </div>
         <div class="tk-row-meta">${t.lastUsedAt ? 'Last used ' + fmtDate(t.lastUsedAt) : 'Never used'}</div>
       </div>
@@ -111,7 +130,7 @@ async function revokeToken(id) {
   const btn = listBody.querySelector(`.tk-action-btn[data-id="${id}"]`);
   if (btn) { btn.disabled = true; }
   try {
-    const res = await fetch(`/syncling/api/me/tokens/${id}`, {
+    const res = await fetch(`/api/me/tokens/${id}`, {
       method: 'DELETE',
       headers: window.authHeaders ? window.authHeaders() : {}
     });
@@ -142,21 +161,22 @@ function openCreateModal() {
           </svg>
         </button>
       </div>
-      <p class="tk-modal-sub">Choose a type and give it a descriptive name — you'll see this in the list.</p>
+      <p class="tk-modal-sub">Pick one or more platforms and give the key a descriptive name. A single key can authenticate the CLI plus your Android &amp; iOS SDKs.</p>
 
       <div class="tk-form-row">
-        <label>Type</label>
-        <div class="tk-type-selector" id="tk-type-selector">
-          <button type="button" class="tk-type-opt active" data-type="CLI">
-            ${terminalIcon(14)} CLI
+        <label>Platforms</label>
+        <div class="tk-type-selector" id="tk-type-selector" role="group" aria-label="Platforms">
+          <button type="button" class="tk-type-opt active" data-type="CLI" aria-pressed="true">
+            ${checkIcon()} ${terminalIcon(14)} CLI
           </button>
-          <button type="button" class="tk-type-opt" data-type="ANDROID">
-            ${androidIcon(14)} Android SDK
+          <button type="button" class="tk-type-opt" data-type="ANDROID" aria-pressed="false">
+            ${checkIcon()} ${androidIcon(14)} Android SDK
           </button>
-          <button type="button" class="tk-type-opt" data-type="IOS">
-            ${appleIcon(14)} iOS SDK
+          <button type="button" class="tk-type-opt" data-type="IOS" aria-pressed="false">
+            ${checkIcon()} ${appleIcon(14)} iOS SDK
           </button>
         </div>
+        <div class="tk-form-hint">Select multiple to issue one key that works across surfaces.</div>
       </div>
 
       <div class="tk-form-row">
@@ -185,8 +205,13 @@ function openCreateModal() {
 
   overlay.querySelectorAll('.tk-type-opt').forEach(btn => {
     btn.addEventListener('click', () => {
-      overlay.querySelectorAll('.tk-type-opt').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      const opts = overlay.querySelectorAll('.tk-type-opt');
+      const isActive = btn.classList.contains('active');
+      const activeCount = Array.from(opts).filter(b => b.classList.contains('active')).length;
+      // Prevent deselecting the last remaining platform.
+      if (isActive && activeCount === 1) return;
+      btn.classList.toggle('active');
+      btn.setAttribute('aria-pressed', btn.classList.contains('active') ? 'true' : 'false');
     });
   });
 
@@ -204,8 +229,9 @@ async function createToken() {
   if (!name) { input?.focus(); input?.setAttribute('aria-invalid', 'true'); return; }
   input?.removeAttribute('aria-invalid');
 
-  const activeType = document.querySelector('.tk-type-opt.active');
-  const type = activeType?.dataset.type || 'CLI';
+  const platforms = Array.from(document.querySelectorAll('.tk-type-opt.active'))
+    .map(b => b.dataset.type);
+  if (!platforms.length) platforms.push('CLI');
 
   const createBtn = document.getElementById('tk-create-btn');
   const cancelBtn = document.getElementById('tk-cancel-btn');
@@ -213,15 +239,19 @@ async function createToken() {
   createBtn.innerHTML = '<span class="bl-spin"></span>Creating…';
 
   try {
-    const res = await fetch('/syncling/api/me/tokens', {
+    const res = await fetch('/api/me/tokens', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(window.authHeaders ? window.authHeaders() : {}) },
-      body: JSON.stringify({ name, type })
+      body: JSON.stringify({ name, platforms })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed');
 
-    const typeLabel = { CLI: 'CLI token', ANDROID: 'Android SDK key', IOS: 'iOS SDK key' }[type] || 'key';
+    const granted = (data.platforms && data.platforms.length) ? data.platforms : platforms;
+    const niceNames = { CLI: 'CLI', ANDROID: 'Android SDK', IOS: 'iOS SDK' };
+    const typeLabel = granted.length === 1
+      ? `${niceNames[granted[0]] || 'key'} token`
+      : `key for ${granted.map(p => niceNames[p] || p).join(' + ')}`;
 
     document.getElementById('tk-reveal-area').innerHTML = `
       <div class="tk-reveal">
@@ -267,12 +297,19 @@ function terminalIcon(size = 16) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
 }
 
+// Linear outline of the actual Android (bugdroid) brand logo: domed head, two
+// antennae, two eyes. Kept stroke-only so it inherits currentColor cleanly.
 function androidIcon(size = 16) {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16V8a7 7 0 0 1 14 0v8"/><rect x="3" y="16" width="18" height="5" rx="2"/><line x1="8" y1="4" x2="6" y2="2"/><line x1="16" y1="4" x2="18" y2="2"/></svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 15.5V12a7.5 7.5 0 0 1 15 0v3.5z"/><line x1="7.5" y1="6.5" x2="5.5" y2="3.5"/><line x1="16.5" y1="6.5" x2="18.5" y2="3.5"/><circle cx="9" cy="11" r="0.9" fill="currentColor" stroke="none"/><circle cx="15" cy="11" r="0.9" fill="currentColor" stroke="none"/></svg>`;
 }
 
+// Linear outline of the actual Apple brand logo: bitten apple silhouette with leaf.
 function appleIcon(size = 16) {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C9.5 2 8 4 8 4S5 4.5 4 7c-1.5 3.5 0 8 2 10 1 1.5 2 2 3 2s1.5-.5 3-.5 2 .5 3 .5 2-.5 3-2c1-1.5 2-4 2-6 0-3-2-5-5-5-1.5 0-2.5 1-3 1s-1.5-1-3-1z"/><path d="M12 2c0-1 1-2 2-2"/></svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.7 12.6c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9 .9-3.7 .9-.8 0-1.9-.9-3.1-.9-1.6 0-3.1 .9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6 .8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9 .8 3.1 .8 1.3 0 2.1-1.2 2.9-2.4 .9-1.4 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.5-3.7z"/><path d="M14.2 5.4c.6-.8 1.1-1.9 1-3-1 0-2.1 .6-2.8 1.4-.6 .7-1.1 1.8-.9 2.8 1.1 .1 2.2-.5 2.7-1.2z"/></svg>`;
+}
+
+function checkIcon(size = 12) {
+  return `<svg class="tk-type-check" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17.5 19 7"/></svg>`;
 }
 
 // ── Utils ─────────────────────────────────────────────────────────────────────

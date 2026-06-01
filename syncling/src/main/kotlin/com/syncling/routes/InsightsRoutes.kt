@@ -41,7 +41,7 @@ data class UserInsightsResponse(
  * Suggestions returned here are designed to be shown verbatim as dashboard banners.
  */
 fun Route.configureInsightsRoutes(userActivityService: UserActivityService) {
-    route("/syncling/api/insights") {
+    route("/api/insights") {
 
         get("/me") {
             val userId = call.userId()

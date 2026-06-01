@@ -9,7 +9,7 @@ export async function projectsCommand() {
 
   let data;
   try {
-    data = await apiFetch('/syncling/api/projects', token);
+    data = await apiFetch('/api/projects', token);
     spin.stop();
   } catch (err) {
     spin.fail(`Failed: ${err.message}`);

@@ -2535,6 +2535,133 @@ fun Route.adminAuthRoute() {
                                         justify-content: center;
                                     }
                                 }
+
+                                /* ── Support Chat Modal ──────────────────────────── */
+                                .support-chat-backdrop {
+                                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                                    background: rgba(0,0,0,.58); backdrop-filter: blur(4px);
+                                    z-index: 20000; opacity: 0; visibility: hidden;
+                                    transition: opacity .22s ease, visibility .22s;
+                                }
+                                .support-chat-backdrop.open { opacity: 1; visibility: visible; }
+                                .support-chat-modal {
+                                    position: fixed; top: 50%; left: 50%;
+                                    transform: translate(-50%, -52%) scale(.95);
+                                    width: min(720px, 96vw); height: min(84vh, 820px);
+                                    background: var(--bg-gradient-1, #2a2438);
+                                    border: 1px solid var(--card-border);
+                                    border-radius: 14px;
+                                    box-shadow: 0 24px 64px rgba(0,0,0,.45), 0 0 0 1px rgba(99,102,241,.08);
+                                    z-index: 20001; display: flex; flex-direction: column;
+                                    opacity: 0; visibility: hidden;
+                                    transition: transform .26s cubic-bezier(.2,0,0,1), opacity .22s, visibility .22s;
+                                    overflow: hidden;
+                                }
+                                .support-chat-modal.open {
+                                    transform: translate(-50%, -50%) scale(1);
+                                    opacity: 1; visibility: visible;
+                                }
+                                .support-chat-header {
+                                    padding: 1rem 1.4rem 0.85rem;
+                                    border-bottom: 1px solid var(--card-border);
+                                    background: var(--card-bg); flex-shrink: 0; position: relative;
+                                }
+                                .support-chat-title-row {
+                                    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-right: 2.4rem;
+                                }
+                                .support-chat-title { font-size: 0.95rem; font-weight: 700; color: var(--heading-color); margin: 0; }
+                                .support-chat-subject {
+                                    font-size: 0.8rem; color: var(--text-secondary); margin-top: 3px;
+                                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%;
+                                }
+                                .support-chat-close-btn {
+                                    position: absolute; top: 0.85rem; right: 1rem;
+                                    background: none; border: none; cursor: pointer;
+                                    color: var(--text-secondary); padding: 4px; border-radius: 6px;
+                                    display: flex; align-items: center; transition: background .14s, color .14s;
+                                }
+                                .support-chat-close-btn:hover { background: var(--card-hover-bg); color: var(--text-color); }
+                                .support-chat-messages {
+                                    flex: 1; overflow-y: auto; padding: 1.2rem 1.5rem;
+                                    display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth;
+                                }
+                                .chat-msg-row { display: flex; flex-direction: column; }
+                                .chat-msg-row.user { align-items: flex-start; }
+                                .chat-msg-row.admin { align-items: flex-end; }
+                                .chat-bubble {
+                                    max-width: 78%; padding: 9px 13px; border-radius: 12px;
+                                    font-size: 0.875rem; line-height: 1.55; word-break: break-word; white-space: pre-wrap;
+                                }
+                                .chat-bubble.user {
+                                    background: var(--card-bg); border: 1px solid var(--card-border);
+                                    border-bottom-left-radius: 3px; color: var(--text-color);
+                                }
+                                .chat-bubble.admin {
+                                    background: rgba(99,102,241,.13); border: 1px solid rgba(99,102,241,.28);
+                                    border-bottom-right-radius: 3px; color: var(--text-color);
+                                }
+                                .chat-label {
+                                    font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+                                    letter-spacing: .4px; margin-bottom: 3px; opacity: .5;
+                                }
+                                .chat-label.user { color: var(--text-secondary); }
+                                .chat-label.admin { color: #6366f1; text-align: right; }
+                                .chat-time { font-size: 0.66rem; opacity: .38; margin-top: 3px; }
+                                .chat-time.admin { text-align: right; }
+                                .support-chat-note-strip {
+                                    border-top: 1px solid rgba(234,179,8,.2);
+                                    border-bottom: 1px solid rgba(234,179,8,.2);
+                                    background: rgba(234,179,8,.04); flex-shrink: 0;
+                                }
+                                .support-chat-note-toggle {
+                                    padding: 6px 1.4rem;
+                                    display: flex; align-items: center; gap: 6px;
+                                    font-size: 0.73rem; font-weight: 600; color: #ca8a04;
+                                    cursor: pointer; user-select: none; transition: background .14s;
+                                }
+                                .support-chat-note-toggle:hover { background: rgba(234,179,8,.1); }
+                                .support-chat-note-body { padding: 0.6rem 1.4rem 0.75rem; display: none; }
+                                .support-chat-note-body.open { display: block; }
+                                .support-chat-note-ta {
+                                    width: 100%; box-sizing: border-box;
+                                    background: var(--card-bg); border: 1px solid rgba(234,179,8,.35);
+                                    border-radius: 8px; color: var(--text-color); font-size: 0.84rem;
+                                    padding: 8px 11px; font-family: inherit; resize: none; min-height: 65px;
+                                    line-height: 1.5; outline: none; transition: border-color .12s;
+                                }
+                                .support-chat-note-ta:focus { border-color: #ca8a04; }
+                                .support-chat-compose {
+                                    padding: 0.8rem 1.4rem 0.9rem;
+                                    border-top: 1px solid var(--card-border);
+                                    background: var(--card-bg); flex-shrink: 0;
+                                }
+                                .support-chat-reply-ta {
+                                    width: 100%; box-sizing: border-box;
+                                    background: var(--bg-gradient-1, #2a2438); border: 1px solid var(--card-border);
+                                    border-radius: 8px; color: var(--text-color); font-size: 0.875rem;
+                                    padding: 9px 12px; font-family: inherit; resize: none; min-height: 68px;
+                                    line-height: 1.5; outline: none; transition: border-color .12s, box-shadow .12s; margin-bottom: 8px;
+                                }
+                                .support-chat-reply-ta:focus {
+                                    border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.1);
+                                }
+                                .support-chat-actions {
+                                    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+                                }
+                                .support-chat-status-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+                                .support-chat-right-btns { display: flex; gap: 7px; align-items: center; }
+                                .support-chat-pill {
+                                    font-size: 0.78rem; padding: 5px 13px; border-radius: 20px;
+                                    cursor: pointer; transition: all .14s; font-family: inherit;
+                                }
+                                @media (max-width: 600px) {
+                                    .support-chat-modal {
+                                        width: 100%; height: 100%; max-height: 100%;
+                                        border-radius: 0; top: 0; left: 0;
+                                        transform: translateY(3%) scale(.98);
+                                    }
+                                    .support-chat-modal.open { transform: translateY(0) scale(1); }
+                                }
                                 """
                                 )
                             }
@@ -3285,16 +3412,47 @@ fun Route.adminAuthRoute() {
 </table>
 </div>
 
-<!-- Ticket detail sliding panel (reuse sliding-panel pattern) -->
-<div id="support-detail-backdrop" class="sliding-backdrop" onclick="window.closeSupportDetail()"></div>
-<div id="support-detail-panel" class="sliding-panel" style="display:none;">
-  <div class="sliding-panel-header">
-    <h2 class="sliding-panel-title" id="support-detail-title">Ticket</h2>
-    <button class="sliding-panel-close" onclick="window.closeSupportDetail()" aria-label="Close panel">
-      <span class="material-icons">close</span>
+<!-- Support Chat Modal -->
+<div id="support-chat-backdrop" class="support-chat-backdrop" onclick="window.closeSupportDetail()"></div>
+<div id="support-chat-modal" class="support-chat-modal" role="dialog" aria-modal="true" aria-labelledby="support-chat-title" style="display:none;">
+  <div class="support-chat-header">
+    <div class="support-chat-title-row">
+      <span id="support-chat-title" class="support-chat-title">Ticket</span>
+      <span id="support-chat-badges" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;"></span>
+    </div>
+    <div id="support-chat-subject" class="support-chat-subject"></div>
+    <button class="support-chat-close-btn" onclick="window.closeSupportDetail()" aria-label="Close">
+      <span class="material-icons" style="font-size:20px;">close</span>
     </button>
   </div>
-  <div id="support-detail-body" style="padding:1.5rem;overflow-y:auto;flex:1;"></div>
+  <div class="support-chat-messages" id="support-chat-messages"></div>
+  <div class="support-chat-note-strip">
+    <div class="support-chat-note-toggle" id="support-chat-note-toggle" onclick="window.toggleSupportChatNote()">
+      <span class="material-icons" style="font-size:13px;flex-shrink:0;">sticky_note_2</span>
+      <span id="support-chat-note-label">Internal note</span>
+      <span class="material-icons" id="support-chat-note-chevron" style="font-size:13px;margin-left:auto;transition:transform .18s;">expand_more</span>
+    </div>
+    <div class="support-chat-note-body" id="support-chat-note-body">
+      <textarea id="support-chat-note-ta" class="support-chat-note-ta" maxlength="2000" placeholder="Internal note (not visible to user)…"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:5px;">
+        <button id="support-chat-note-save-btn" onclick="window.saveSupportChatNote()" class="btn btn-primary" style="font-size:0.78rem;padding:5px 13px;">Save note</button>
+      </div>
+    </div>
+  </div>
+  <div class="support-chat-compose">
+    <textarea id="support-chat-reply-ta" class="support-chat-reply-ta" maxlength="3000" placeholder="Write a reply to the user…"></textarea>
+    <div class="support-chat-actions">
+      <div class="support-chat-status-pills" id="support-chat-status-pills"></div>
+      <div class="support-chat-right-btns">
+        <button id="support-chat-resolve-btn" onclick="window.resolveSupportChat()" class="btn" style="background:#10b981;border-color:#10b981;color:#fff;font-size:0.8rem;padding:6px 14px;">
+          <span class="material-icons" style="font-size:14px;">check_circle</span>Resolve &amp; Close
+        </button>
+        <button id="support-chat-send-btn" onclick="window.sendSupportChatReply()" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;">
+          <span class="material-icons" style="font-size:14px;">send</span>Send
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 """)
                                                         }

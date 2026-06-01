@@ -28,25 +28,25 @@ export class SynclingApi {
   }
 
   async getBootstrap(): Promise<BootstrapResponse> {
-    const res = await fetch(`${this.base}/syncling/api/me/bootstrap`, { headers: this.headers() });
+    const res = await fetch(`${this.base}/api/me/bootstrap`, { headers: this.headers() });
     return (await (await this.check(res)).json()) as BootstrapResponse;
   }
 
   async listProjects(): Promise<ProjectResponse[]> {
-    const res = await fetch(`${this.base}/syncling/api/projects`, { headers: this.headers() });
+    const res = await fetch(`${this.base}/api/projects`, { headers: this.headers() });
     const data = (await (await this.check(res)).json()) as { projects: ProjectResponse[] };
     return data.projects;
   }
 
   async getProject(id: string): Promise<ProjectDetailResponse> {
-    const res = await fetch(`${this.base}/syncling/api/projects/${id}`, { headers: this.headers() });
+    const res = await fetch(`${this.base}/api/projects/${id}`, { headers: this.headers() });
     return (await (await this.check(res)).json()) as ProjectDetailResponse;
   }
 
   async exportTranslation(projectId: string, lang: string, format?: string): Promise<{ content: string; filename: string }> {
     const params = new URLSearchParams({ lang });
     if (format) params.set('format', format);
-    const res = await fetch(`${this.base}/syncling/api/projects/${projectId}/export?${params}`, { headers: this.headers() });
+    const res = await fetch(`${this.base}/api/projects/${projectId}/export?${params}`, { headers: this.headers() });
     await this.check(res);
     const content = await res.text();
     const cd = res.headers.get('content-disposition') ?? '';
@@ -55,7 +55,7 @@ export class SynclingApi {
   }
 
   async triggerSync(projectId: string): Promise<SyncResponse> {
-    const res = await fetch(`${this.base}/syncling/api/projects/${projectId}/sync`, {
+    const res = await fetch(`${this.base}/api/projects/${projectId}/sync`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({ branch: 'main' })
@@ -64,18 +64,18 @@ export class SynclingApi {
   }
 
   async listPipelineRuns(): Promise<PipelineRun[]> {
-    const res = await fetch(`${this.base}/syncling/api/pipeline/runs`, { headers: this.headers() });
+    const res = await fetch(`${this.base}/api/pipeline/runs`, { headers: this.headers() });
     return (await (await this.check(res)).json()) as PipelineRun[];
   }
 
   async listTokens(): Promise<TokenListItem[]> {
-    const res = await fetch(`${this.base}/syncling/api/me/tokens`, { headers: this.headers() });
+    const res = await fetch(`${this.base}/api/me/tokens`, { headers: this.headers() });
     const data = (await (await this.check(res)).json()) as { tokens: TokenListItem[] };
     return data.tokens;
   }
 
   async createToken(name: string): Promise<CreateTokenResponse> {
-    const res = await fetch(`${this.base}/syncling/api/me/tokens`, {
+    const res = await fetch(`${this.base}/api/me/tokens`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({ name })
@@ -84,7 +84,7 @@ export class SynclingApi {
   }
 
   async revokeToken(id: string): Promise<void> {
-    const res = await fetch(`${this.base}/syncling/api/me/tokens/${id}`, {
+    const res = await fetch(`${this.base}/api/me/tokens/${id}`, {
       method: 'DELETE',
       headers: this.headers()
     });

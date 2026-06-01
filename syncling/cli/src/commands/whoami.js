@@ -7,7 +7,7 @@ export async function whoamiCommand() {
   const token = requireToken();
   const spin = ora('Checking identity…').start();
   try {
-    const data = await apiFetch('/syncling/api/me/bootstrap', token);
+    const data = await apiFetch('/api/me/bootstrap', token);
     spin.stop();
     const email = data?.user?.email ?? data?.email ?? '(unknown)';
     const plan = data?.subscription?.plan ?? data?.plan ?? '';

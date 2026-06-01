@@ -9,5 +9,5 @@ data class ApiToken(
     val tokenHash: String,
     val createdAt: Instant,
     val lastUsedAt: Instant? = null,
-    val type: String = "CLI",
+    val platforms: List<String> = listOf("CLI"),
 )

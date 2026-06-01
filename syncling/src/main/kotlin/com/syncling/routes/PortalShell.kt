@@ -37,6 +37,9 @@ internal fun HTML.portalShell(
         title { +"Syncling — $pageTitle" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         favicon()
+        link(rel = "preconnect", href = "https://fonts.googleapis.com")
+        link(rel = "preconnect", href = "https://fonts.gstatic.com") { attributes["crossorigin"] = "" }
+        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Jost:wght@700&display=swap")
         style { unsafe { +"$SHARED_CSS$SHELL_LAYOUT_CSS$SIDEBAR_QUOTA_CSS$CONVERSION_CSS$ONBOARDING_CSS$SUPPORT_CHAT_CSS" } }
         staticStylesheets.forEach { href ->
             link(rel = "stylesheet", href = href)
@@ -180,8 +183,8 @@ internal val SHELL_RUNTIME_JS = """
   // already on the invite page (avoids a redirect loop) or have no session.
   if(token){
     var pending=localStorage.getItem('pending_invite_token');
-    if(pending && !/^\/syncling\/invite\//.test(location.pathname)){
-      window.location.replace('/syncling/invite/'+encodeURIComponent(pending));
+    if(pending && !/^\/invite\//.test(location.pathname)){
+      window.location.replace('/invite/'+encodeURIComponent(pending));
       return;
     }
   }
@@ -204,7 +207,7 @@ internal val SHELL_RUNTIME_JS = """
   };
   window.logout=function(){
     localStorage.removeItem('syncling_token');
-    window.location.href='/syncling/auth/logout';
+    window.location.href='/auth/logout';
   };
   function fillUserChip(){
     if(!token)return;
@@ -272,8 +275,8 @@ internal const val BILLING_CACHE_JS = """
   if(window.tlSubscription)return;
   function H(){var t=localStorage.getItem('syncling_token');return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
   var _s=null,_u=null;
-  window.tlSubscription=function(f){if(f||!_s){_s=fetch('/syncling/api/billing/subscription',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _s;};
-  window.tlUsage=function(f){if(f||!_u){_u=fetch('/syncling/api/billing/usage',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _u;};
+  window.tlSubscription=function(f){if(f||!_s){_s=fetch('/api/billing/subscription',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _s;};
+  window.tlUsage=function(f){if(f||!_u){_u=fetch('/api/billing/usage',{headers:H()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});}return _u;};
 })();
 """
 
@@ -316,7 +319,7 @@ internal val SIDEBAR_QUOTA_JS = """
       } else {
         html+='<div class="sb-quota-sub">Translate something to see your rate</div>';
       }
-      html+='<a href="/syncling/billing" class="sb-quota-cta">Compare plans →</a>';
+      html+='<a href="/billing" class="sb-quota-cta">Compare plans →</a>';
     } else {
       var current=price/Math.max(1,strings);
       var lm=findLast(history,lastMonthKey());
@@ -340,7 +343,7 @@ internal val SIDEBAR_QUOTA_JS = """
       html+='<div class="sb-quota-eyebrow">Cost / string</div>';
       html+='<div class="sb-quota-num">₹'+fmt(current)+deltaHtml+'</div>';
       html+=subHtml;
-      html+='<a href="/syncling/billing/analytics" class="sb-quota-cta">See analytics →</a>';
+      html+='<a href="/billing/analytics" class="sb-quota-cta">See analytics →</a>';
     }
     host.className='sb-quota visible';
     host.innerHTML=html;
@@ -505,7 +508,7 @@ internal const val SUPPORT_CHAT_CSS = """
 """
 
 internal val SUPPORT_CHAT_JS = """(function(){
-  var BASE='/syncling/api/support';
+  var BASE='/api/support';
   var _open=false,_view='home',_convId=null,_convs=null,_loaded=false,_submitting=false,_lastSent=null;
   var CAT_LABELS={'bug':'Bug report','question':'Question','feature':'Feature request','billing':'Billing'};
   var CAT_EMOJIS={'bug':'🐛','question':'💬','feature':'✨','billing':'💳'};

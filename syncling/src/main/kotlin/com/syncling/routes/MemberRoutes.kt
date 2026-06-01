@@ -84,7 +84,7 @@ fun Route.configureMemberRoutes(
     notifications: NotificationService?,
     inApp: InAppNotificationService?
 ) {
-    route("/syncling/api/projects/{id}/members") {
+    route("/api/projects/{id}/members") {
         get {
             val userId = call.userId()
                 ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
@@ -299,7 +299,7 @@ fun Route.configureMemberRoutes(
         }
     }
 
-    route("/syncling/api/invites/{token}") {
+    route("/api/invites/{token}") {
         // Unauthenticated preview so the invitee can see what they're accepting
         // before logging in. Returns 404 for any token mismatch or already-consumed invite.
         get {
@@ -402,7 +402,7 @@ private fun buildAcceptUrl(call: ApplicationCall, token: String): String {
     val host = origin.serverHost
     val port = origin.serverPort
     val portPart = if ((scheme == "https" && port == 443) || (scheme == "http" && port == 80)) "" else ":$port"
-    return "$scheme://$host$portPart/syncling/invite/$token"
+    return "$scheme://$host$portPart/invite/$token"
 }
 
 // Pragmatic email regex — good enough for "did the user fat-finger this" and matches

@@ -52,7 +52,7 @@ fun Route.configureWebhookRoutes(
         log.warn("GITHUB_WEBHOOK_SECRET not set — webhook signature verification is DISABLED (dev mode only, never run this in production)")
     }
 
-    route("/transloom/webhook") {
+    route("/webhook") {
         post("/github") {
             val eventType = call.request.headers["X-GitHub-Event"]
             if (eventType != null && eventType != "push") {

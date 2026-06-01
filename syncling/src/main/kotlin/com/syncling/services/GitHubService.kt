@@ -301,7 +301,7 @@ class GitHubService {
         }
 
         val webhookSecret = getSecretValue("github-webhook-secret").ifBlank { "dev_secret" }
-        val webhookUrl = "https://syncling.space/syncling/webhook/github"
+        val webhookUrl = "https://syncling.space/webhook/github"
 
         val req = WebhookCreateRequest(
             name = "web",
@@ -338,7 +338,7 @@ class GitHubService {
     suspend fun ensureWebhook(repo: String, token: String): Boolean {
         if (token == "dummy-token") return false
 
-        val correctUrl = "https://syncling.space/syncling/webhook/github"
+        val correctUrl = "https://syncling.space/webhook/github"
         val webhookSecret = getSecretValue("github-webhook-secret").ifBlank { "dev_secret" }
 
         val existing = runCatching {

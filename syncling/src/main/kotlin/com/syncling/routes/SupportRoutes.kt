@@ -44,7 +44,7 @@ fun Route.configureSupportRoutes(
     notificationService: NotificationService?,
     adminEmail: String,
 ) {
-    route("/syncling/api/support") {
+    route("/api/support") {
         post {
             val userId = call.userId() ?: run {
                 call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))

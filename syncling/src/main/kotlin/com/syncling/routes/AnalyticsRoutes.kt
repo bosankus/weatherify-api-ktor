@@ -25,7 +25,7 @@ fun Route.configureAnalyticsRoutes(
     analyticsService: AnalyticsService,
     billingRepository: BillingRepository
 ) {
-    route("/syncling/api/analytics") {
+    route("/api/analytics") {
 
         get("/overview") {
             val userId = call.userId()

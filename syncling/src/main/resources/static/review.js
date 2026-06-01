@@ -17,7 +17,7 @@
         return;
     }
 
-    const API = '/syncling/api/review';
+    const API = '/api/review';
     const MAX_FETCH = 200; // server caps at 200 anyway
 
     const state = {

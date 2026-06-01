@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Syncling — Brand Identity</title>
+
+  <!-- ── New Syncling Favicon (all variants) ──────────────────────── -->
+  <link rel="icon"             type="image/svg+xml"   href="#" id="fav-svg">
+  <link rel="icon"             type="image/png" sizes="32x32"  href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180"                 href="/apple-touch-icon.png">
+  <link rel="manifest"                                         href="/site.webmanifest">
+  <meta name="theme-color"    content="#080c18">
+  <meta name="msapplication-TileColor" content="#080c18">
+  <!-- ──────────────────────────────────────────────────────────────── -->
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:       #060a12;
+      --surface:  #0d1524;
+      --surface2: #131e30;
+      --border:   #1a2b42;
+      --cyan:     #22d3ee;
+      --sky:      #0ea5e9;
+      --text:     #d9edf7;
+      --muted:    #4a6882;
+      --code-bg:  #0a1520;
+      --radius:   14px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Jost', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ──────────────────────────────────────────────────── */
+    .page { max-width: 960px; margin: 0 auto; padding: 60px 24px 100px; }
+
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: clamp(28px, 5vw, 42px);
+      font-weight: 300;
+      letter-spacing: -1.5px;
+      color: #ecf6fb;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+    h1 span { font-weight: 700; }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 64px;
+    }
+
+    /* ── Hero ─────────────────────────────────────────────────────── */
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+    @media (max-width: 600px) { .hero { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .panel-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Icon ─────────────────────────────────────────────────────── */
+    .icon-hero {
+      position: relative;
+    }
+    .icon-hero svg {
+      animation: slowSpin 10s linear infinite;
+      filter: drop-shadow(0 0 28px rgba(34,211,238,.28)) drop-shadow(0 0 72px rgba(14,165,233,.14));
+      display: block;
+    }
+    @keyframes slowSpin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .icon-hero:hover svg {
+      animation: slowSpin 1.6s linear infinite;
+      filter: drop-shadow(0 0 40px rgba(34,211,238,.5)) drop-shadow(0 0 100px rgba(14,165,233,.25));
+    }
+
+    /* ── Wordmark ─────────────────────────────────────────────────── */
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .wordmark-icon svg {
+      animation: slowSpin 10s linear infinite;
+      filter: drop-shadow(0 0 12px rgba(34,211,238,.3));
+    }
+    .wordmark-icon:hover svg { animation-duration: 1.6s; }
+    .wordmark-text {
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.8px;
+      color: #ecf6fb;
+    }
+    .wordmark-text em {
+      font-style: normal;
+      background: linear-gradient(120deg, var(--sky), var(--cyan));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* ── Size Grid ────────────────────────────────────────────────── */
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .size-grid {
+      display: flex;
+      align-items: flex-end;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+      padding: 32px 40px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .size-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .size-item svg, .size-item img { display: block; }
+    .size-label {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Light Background Preview ─────────────────────────────────── */
+    .light-panel {
+      background: #f0f4f8;
+      border-radius: var(--radius);
+      padding: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .light-wordmark {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .light-wordmark-text {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.6px;
+      color: #1a2b3c;
+    }
+
+    /* ── Code Blocks ──────────────────────────────────────────────── */
+    .code-section { margin-bottom: 48px; }
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow-x: auto;
+    }
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .code-filename {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .copy-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--cyan);
+      background: none;
+      border: 1px solid rgba(34,211,238,.2);
+      border-radius: 5px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .copy-btn:hover { background: rgba(34,211,238,.08); border-color: rgba(34,211,238,.4); }
+    pre {
+      padding: 20px 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.8;
+      color: #8bb8d0;
+      white-space: pre;
+    }
+    .hl-tag   { color: #4b9fd5; }
+    .hl-attr  { color: #22d3ee; }
+    .hl-val   { color: #86efac; }
+    .hl-cmt   { color: #335566; }
+    .hl-key   { color: #22d3ee; }
+    .hl-str   { color: #86efac; }
+    .hl-punc  { color: #4a6882; }
+
+    /* ── Color Swatches ───────────────────────────────────────────── */
+    .swatches {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .swatch {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .swatch-box {
+      width: 72px;
+      height: 72px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .swatch-name {
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--muted);
+    }
+    .swatch-hex {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text);
+      letter-spacing: .5px;
+    }
+
+    /* ── Divider ──────────────────────────────────────────────────── */
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    /* ── Background noise / atmosphere ───────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 700px 500px at 20% 20%, rgba(14,165,233,.04) 0%, transparent 70%),
+        radial-gradient(ellipse 500px 400px at 80% 80%, rgba(34,211,238,.03) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .page { position: relative; z-index: 1; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <p class="eyebrow">Brand Identity</p>
+    <h1><span>Syncling</span> — Logo &amp; Favicon</h1>
+    <p class="subtitle">Orbit Node mark · Sky-to-cyan gradient · Deep navy ground · All favicon formats included</p>
+
+    <!-- ── Hero: 512px icon + full wordmark ── -->
+    <div class="hero">
+      <div class="panel">
+        <div class="icon-hero">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="180" height="180">
+            <defs>
+              <linearGradient id="g512" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%"   stop-color="#0ea5e9"/>
+                <stop offset="100%" stop-color="#22d3ee"/>
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" rx="8" fill="#080c18"/>
+            <g class="sync-arrows" stroke="url(#g512)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+              <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
+              <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+              <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/>
+              <polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+            </g>
+            <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+          </svg>
+        </div>
+        <span class="panel-label">Icon mark · Hover to accelerate</span>
+      </div>
+
+      <div class="panel" style="justify-content: center; gap: 32px;">
+        <div class="wordmark">
+          <div class="wordmark-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="40" height="40">
+              <defs>
+                <linearGradient id="gwm1" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"   stop-color="#0ea5e9"/>
+                  <stop offset="100%" stop-color="#22d3ee"/>
+                </linearGradient>
+              </defs>
+              <rect width="32" height="32" rx="8" fill="#080c18"/>
+              <g stroke="url(#gwm1)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
+                <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+                <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/>
+                <polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+              </g>
+              <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+            </svg>
+          </div>
+          <span class="wordmark-text"><em>sync</em>ling</span>
+        </div>
+
+        <div class="wordmark" style="opacity:.55; transform: scale(.75); transform-origin: left center;">
+          <div class="wordmark-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="40" height="40">
+              <defs>
+                <linearGradient id="gwm2" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"   stop-color="#0ea5e9"/>
+                  <stop offset="100%" stop-color="#22d3ee"/>
+                </linearGradient>
+              </defs>
+              <rect width="32" height="32" rx="8" fill="#080c18"/>
+              <g stroke="url(#gwm2)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
+                <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+                <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/>
+                <polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+              </g>
+              <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+            </svg>
+          </div>
+          <span class="wordmark-text" style="font-weight:300; font-size:26px; color:#d9edf7;">Syncling</span>
+        </div>
+
+        <span class="panel-label">Wordmark variants</span>
+      </div>
+    </div>
+
+    <!-- ── Size Grid ── -->
+    <p class="section-title">All favicon sizes</p>
+    <div class="size-grid">
+      <!-- 512 -->
+      <div class="size-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="96" height="96">
+          <defs><linearGradient id="gs512" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs>
+          <rect width="32" height="32" rx="8" fill="#080c18"/>
+          <g stroke="url(#gs512)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/><polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+            <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/><polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+          </g>
+          <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+        </svg>
+        <span class="size-label">512×512</span>
+      </div>
+      <!-- 192 -->
+      <div class="size-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="64" height="64">
+          <defs><linearGradient id="gs192" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs>
+          <rect width="32" height="32" rx="8" fill="#080c18"/>
+          <g stroke="url(#gs192)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/><polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+            <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/><polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+          </g>
+          <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+        </svg>
+        <span class="size-label">192×192</span>
+      </div>
+      <!-- 180 Apple Touch -->
+      <div class="size-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="56" height="56">
+          <defs><linearGradient id="gs180" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs>
+          <rect width="32" height="32" rx="8" fill="#080c18"/>
+          <g stroke="url(#gs180)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/><polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+            <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/><polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+          </g>
+          <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+        </svg>
+        <span class="size-label">180×180<br>apple-touch</span>
+      </div>
+      <!-- 64 -->
+      <div class="size-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="40" height="40">
+          <defs><linearGradient id="gs64" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs>
+          <rect width="32" height="32" rx="8" fill="#080c18"/>
+          <g stroke="url(#gs64)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/><polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+            <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/><polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+          </g>
+          <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+        </svg>
+        <span class="size-label">64×64</span>
+      </div>
+      <!-- 32 -->
+      <div class="size-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28">
+          <defs><linearGradient id="gs32" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs>
+          <rect width="32" height="32" rx="8" fill="#080c18"/>
+          <g stroke="url(#gs32)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/><polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+            <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/><polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+          </g>
+          <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+        </svg>
+        <span class="size-label">32×32</span>
+      </div>
+      <!-- 16 -->
+      <div class="size-item">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="16" height="16">
+          <defs><linearGradient id="gs16" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs>
+          <rect width="32" height="32" rx="8" fill="#080c18"/>
+          <g stroke="url(#gs16)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/><polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+            <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/><polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+          </g>
+          <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+        </svg>
+        <span class="size-label">16×16</span>
+      </div>
+    </div>
+
+    <!-- ── Light Background Preview ── -->
+    <p class="section-title">Light background preview</p>
+    <div class="light-panel" style="margin-bottom: 48px;">
+      <div class="light-wordmark">
+        <!-- On light bg: icon uses light-adapted version (same icon reads well on white) -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="36" height="36">
+          <defs><linearGradient id="glight" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0284c7"/><stop offset="100%" stop-color="#0891b2"/></linearGradient></defs>
+          <rect width="32" height="32" rx="8" fill="#0f2235"/>
+          <g stroke="url(#glight)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/><polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+            <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/><polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+          </g>
+          <circle cx="16" cy="16" r="1.8" fill="#0891b2" opacity=".9"/>
+        </svg>
+        <span class="light-wordmark-text">syncling</span>
+      </div>
+      <div style="color:#64748b;font-size:13px;letter-spacing:.3px;">Light background · icon on dark pill</div>
+    </div>
+
+    <!-- ── Color Palette ── -->
+    <p class="section-title">Brand colours</p>
+    <div class="swatches">
+      <div class="swatch">
+        <div class="swatch-box" style="background:#080c18;"></div>
+        <span class="swatch-name">icon-bg</span>
+        <span class="swatch-hex">#080c18</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:linear-gradient(135deg,#0ea5e9,#22d3ee);"></div>
+        <span class="swatch-name">gradient</span>
+        <span class="swatch-hex">#0ea5e9→#22d3ee</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#0ea5e9;"></div>
+        <span class="swatch-name">sky-500</span>
+        <span class="swatch-hex">#0ea5e9</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#22d3ee;"></div>
+        <span class="swatch-name">cyan-400</span>
+        <span class="swatch-hex">#22d3ee</span>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- ── head tags ── -->
+    <div class="code-section">
+      <p class="section-title">HTML &lt;head&gt; tags</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-filename">index.html</span>
+          <button class="copy-btn" onclick="copyCode('head-tags')">copy</button>
+        </div>
+        <pre id="head-tags"><span class="hl-cmt">&lt;!-- Syncling favicons — all devices &amp; browsers --&gt;</span>
+<span class="hl-tag">&lt;link</span> <span class="hl-attr">rel</span>=<span class="hl-val">"icon"</span>             <span class="hl-attr">type</span>=<span class="hl-val">"image/svg+xml"</span>    <span class="hl-attr">href</span>=<span class="hl-val">"/favicon.svg"</span><span class="hl-tag">&gt;</span>
+<span class="hl-tag">&lt;link</span> <span class="hl-attr">rel</span>=<span class="hl-val">"icon"</span>             <span class="hl-attr">type</span>=<span class="hl-val">"image/png"</span> <span class="hl-attr">sizes</span>=<span class="hl-val">"32x32"</span>   <span class="hl-attr">href</span>=<span class="hl-val">"/favicon-32x32.png"</span><span class="hl-tag">&gt;</span>
+<span class="hl-tag">&lt;link</span> <span class="hl-attr">rel</span>=<span class="hl-val">"apple-touch-icon"</span> <span class="hl-attr">sizes</span>=<span class="hl-val">"180x180"</span>              <span class="hl-attr">href</span>=<span class="hl-val">"/apple-touch-icon.png"</span><span class="hl-tag">&gt;</span>
+<span class="hl-tag">&lt;link</span> <span class="hl-attr">rel</span>=<span class="hl-val">"manifest"</span>                                         <span class="hl-attr">href</span>=<span class="hl-val">"/site.webmanifest"</span><span class="hl-tag">&gt;</span>
+<span class="hl-tag">&lt;meta</span> <span class="hl-attr">name</span>=<span class="hl-val">"theme-color"</span>           <span class="hl-attr">content</span>=<span class="hl-val">"#080c18"</span><span class="hl-tag">&gt;</span>
+<span class="hl-tag">&lt;meta</span> <span class="hl-attr">name</span>=<span class="hl-val">"msapplication-TileColor"</span> <span class="hl-attr">content</span>=<span class="hl-val">"#080c18"</span><span class="hl-tag">&gt;</span></pre>
+      </div>
+    </div>
+
+    <!-- ── Kotlin favicon() ── -->
+    <div class="code-section">
+      <p class="section-title">Kotlin HEAD extension</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-filename">PortalRoutes.kt</span>
+          <button class="copy-btn" onclick="copyCode('kt-tags')">copy</button>
+        </div>
+        <pre id="kt-tags"><span class="hl-key">internal fun</span> HEAD.favicon() {
+    link { <span class="hl-attr">rel</span> = <span class="hl-str">"icon"</span>; <span class="hl-attr">type</span> = <span class="hl-str">"image/svg+xml"</span>; <span class="hl-attr">href</span> = <span class="hl-str">"/favicon.svg"</span> }
+    link { <span class="hl-attr">rel</span> = <span class="hl-str">"icon"</span>; <span class="hl-attr">type</span> = <span class="hl-str">"image/png"</span>; <span class="hl-attr">sizes</span> = <span class="hl-str">"32x32"</span>; <span class="hl-attr">href</span> = <span class="hl-str">"/favicon-32x32.png"</span> }
+    link { <span class="hl-attr">rel</span> = <span class="hl-str">"apple-touch-icon"</span>; <span class="hl-attr">sizes</span> = <span class="hl-str">"180x180"</span>; <span class="hl-attr">href</span> = <span class="hl-str">"/apple-touch-icon.png"</span> }
+    link { <span class="hl-attr">rel</span> = <span class="hl-str">"manifest"</span>; <span class="hl-attr">href</span> = <span class="hl-str">"/site.webmanifest"</span> }
+    meta(<span class="hl-attr">name</span> = <span class="hl-str">"theme-color"</span>, <span class="hl-attr">content</span> = <span class="hl-str">"#080c18"</span>)
+    meta(<span class="hl-attr">name</span> = <span class="hl-str">"msapplication-TileColor"</span>, <span class="hl-attr">content</span> = <span class="hl-str">"#080c18"</span>)
+}</pre>
+      </div>
+    </div>
+
+    <!-- ── site.webmanifest ── -->
+    <div class="code-section">
+      <p class="section-title">site.webmanifest</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-filename">site.webmanifest</span>
+          <button class="copy-btn" onclick="copyCode('manifest-json')">copy</button>
+        </div>
+        <pre id="manifest-json"><span class="hl-punc">{</span>
+  <span class="hl-key">"name"</span><span class="hl-punc">:</span>        <span class="hl-str">"Syncling"</span><span class="hl-punc">,</span>
+  <span class="hl-key">"short_name"</span><span class="hl-punc">:</span> <span class="hl-str">"Syncling"</span><span class="hl-punc">,</span>
+  <span class="hl-key">"icons"</span><span class="hl-punc">: [</span>
+    <span class="hl-punc">{</span> <span class="hl-key">"src"</span><span class="hl-punc">:</span> <span class="hl-str">"/android-chrome-192x192.png"</span><span class="hl-punc">,</span> <span class="hl-key">"sizes"</span><span class="hl-punc">:</span> <span class="hl-str">"192x192"</span><span class="hl-punc">,</span> <span class="hl-key">"type"</span><span class="hl-punc">:</span> <span class="hl-str">"image/png"</span> <span class="hl-punc">},</span>
+    <span class="hl-punc">{</span> <span class="hl-key">"src"</span><span class="hl-punc">:</span> <span class="hl-str">"/android-chrome-512x512.png"</span><span class="hl-punc">,</span> <span class="hl-key">"sizes"</span><span class="hl-punc">:</span> <span class="hl-str">"512x512"</span><span class="hl-punc">,</span> <span class="hl-key">"type"</span><span class="hl-punc">:</span> <span class="hl-str">"image/png"</span> <span class="hl-punc">},</span>
+    <span class="hl-punc">{</span> <span class="hl-key">"src"</span><span class="hl-punc">:</span> <span class="hl-str">"/favicon.svg"</span><span class="hl-punc">,</span>                <span class="hl-key">"sizes"</span><span class="hl-punc">:</span> <span class="hl-str">"any"</span><span class="hl-punc">,</span>       <span class="hl-key">"type"</span><span class="hl-punc">:</span> <span class="hl-str">"image/svg+xml"</span> <span class="hl-punc">}</span>
+  <span class="hl-punc">],</span>
+  <span class="hl-key">"theme_color"</span><span class="hl-punc">:</span>      <span class="hl-str">"#080c18"</span><span class="hl-punc">,</span>
+  <span class="hl-key">"background_color"</span><span class="hl-punc">:</span> <span class="hl-str">"#080c18"</span><span class="hl-punc">,</span>
+  <span class="hl-key">"display"</span><span class="hl-punc">:</span>          <span class="hl-str">"standalone"</span><span class="hl-punc">,</span>
+  <span class="hl-key">"start_url"</span><span class="hl-punc">:</span>        <span class="hl-str">"/"</span>
+<span class="hl-punc">}</span></pre>
+      </div>
+    </div>
+
+    <!-- ── Raw SVG source ── -->
+    <div class="code-section">
+      <p class="section-title">favicon.svg source</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-filename">favicon.svg</span>
+          <button class="copy-btn" onclick="copyCode('svg-src')">copy</button>
+        </div>
+        <pre id="svg-src"><span class="hl-tag">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
+<span class="hl-tag">&lt;svg</span> <span class="hl-attr">xmlns</span>=<span class="hl-val">"http://www.w3.org/2000/svg"</span> <span class="hl-attr">viewBox</span>=<span class="hl-val">"0 0 32 32"</span><span class="hl-tag">&gt;</span>
+  <span class="hl-tag">&lt;defs&gt;</span>
+    <span class="hl-tag">&lt;linearGradient</span> <span class="hl-attr">id</span>=<span class="hl-val">"g"</span> <span class="hl-attr">x1</span>=<span class="hl-val">"0%"</span> <span class="hl-attr">y1</span>=<span class="hl-val">"0%"</span> <span class="hl-attr">x2</span>=<span class="hl-val">"100%"</span> <span class="hl-attr">y2</span>=<span class="hl-val">"100%"</span><span class="hl-tag">&gt;</span>
+      <span class="hl-tag">&lt;stop</span> <span class="hl-attr">offset</span>=<span class="hl-val">"0%"</span>   <span class="hl-attr">stop-color</span>=<span class="hl-val">"#0ea5e9"</span><span class="hl-tag">/&gt;</span>
+      <span class="hl-tag">&lt;stop</span> <span class="hl-attr">offset</span>=<span class="hl-val">"100%"</span> <span class="hl-attr">stop-color</span>=<span class="hl-val">"#22d3ee"</span><span class="hl-tag">/&gt;</span>
+    <span class="hl-tag">&lt;/linearGradient&gt;</span>
+  <span class="hl-tag">&lt;/defs&gt;</span>
+  <span class="hl-tag">&lt;rect</span> <span class="hl-attr">width</span>=<span class="hl-val">"32"</span> <span class="hl-attr">height</span>=<span class="hl-val">"32"</span> <span class="hl-attr">rx</span>=<span class="hl-val">"8"</span> <span class="hl-attr">fill</span>=<span class="hl-val">"#080c18"</span><span class="hl-tag">/&gt;</span>
+  <span class="hl-tag">&lt;g</span> <span class="hl-attr">stroke</span>=<span class="hl-val">"url(#g)"</span> <span class="hl-attr">stroke-width</span>=<span class="hl-val">"2.8"</span> <span class="hl-attr">stroke-linecap</span>=<span class="hl-val">"round"</span> <span class="hl-attr">stroke-linejoin</span>=<span class="hl-val">"round"</span> <span class="hl-attr">fill</span>=<span class="hl-val">"none"</span><span class="hl-tag">&gt;</span>
+    <span class="hl-tag">&lt;path</span> <span class="hl-attr">d</span>=<span class="hl-val">"M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"</span><span class="hl-tag">/&gt;</span>
+    <span class="hl-tag">&lt;polyline</span> <span class="hl-attr">points</span>=<span class="hl-val">"20.5,10.25 22.5,12.25 24.5,10.25"</span><span class="hl-tag">/&gt;</span>
+    <span class="hl-tag">&lt;path</span> <span class="hl-attr">d</span>=<span class="hl-val">"M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"</span><span class="hl-tag">/&gt;</span>
+    <span class="hl-tag">&lt;polyline</span> <span class="hl-attr">points</span>=<span class="hl-val">"7.5,21.75 9.5,19.75 11.5,21.75"</span><span class="hl-tag">/&gt;</span>
+  <span class="hl-tag">&lt;/g&gt;</span>
+  <span class="hl-tag">&lt;circle</span> <span class="hl-attr">cx</span>=<span class="hl-val">"16"</span> <span class="hl-attr">cy</span>=<span class="hl-val">"16"</span> <span class="hl-attr">r</span>=<span class="hl-val">"1.8"</span> <span class="hl-attr">fill</span>=<span class="hl-val">"#22d3ee"</span> <span class="hl-attr">opacity</span>=<span class="hl-val">".9"</span><span class="hl-tag">/&gt;</span>
+<span class="hl-tag">&lt;/svg&gt;</span></pre>
+      </div>
+    </div>
+
+  </div><!-- .page -->
+
+  <script>
+    // Set the actual SVG favicon on this page
+    const svgData = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="#080c18"/>
+  <g stroke="url(#g)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M 9.5 12.25 A 7.5 7.5 0 0 1 22.5 12.25"/>
+    <polyline points="20.5,10.25 22.5,12.25 24.5,10.25"/>
+    <path d="M 22.5 19.75 A 7.5 7.5 0 0 1 9.5 19.75"/>
+    <polyline points="7.5,21.75 9.5,19.75 11.5,21.75"/>
+  </g>
+  <circle cx="16" cy="16" r="1.8" fill="#22d3ee" opacity=".9"/>
+</svg>`;
+    const encoded = encodeURIComponent(svgData);
+    document.getElementById('fav-svg').href = 'data:image/svg+xml,' + encoded;
+
+    function copyCode(id) {
+      const el = document.getElementById(id);
+      const text = el.innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = el.closest('.code-block').querySelector('.copy-btn');
+        const orig = btn.textContent;
+        btn.textContent = 'copied!';
+        btn.style.color = '#86efac';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1800);
+      });
+    }
+  </script>
+</body>
+</html>

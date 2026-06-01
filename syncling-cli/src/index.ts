@@ -83,7 +83,7 @@ program
     const api = new SynclingApi(cfg);
     try {
       const projects = await api.listProjects();
-      if (!projects.length) { console.log('No projects yet. Create one at /syncling/projects'); return; }
+      if (!projects.length) { console.log('No projects yet. Create one at /projects'); return; }
       console.log('');
       for (const p of projects) {
         console.log(`  ${p.id}`);

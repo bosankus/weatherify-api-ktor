@@ -88,6 +88,11 @@ internal fun HTML.checkoutPage(
                             span { +"Due today" }
                             span("co-summary-due") { +"₹0.00" }
                         }
+                        div {
+                            id = "co-pay-error"
+                            attributes["style"] = "display:none"
+                            classes = setOf("co-pay-error")
+                        }
                         button(type = ButtonType.button, classes = "co-pay-btn") {
                             id = "co-pay"
                             unsafe { +ICON_LOCK_SOLID }
@@ -117,9 +122,10 @@ internal fun HTML.checkoutPage(
                 (function(){
                   var TIMEOUT=900000,startedAt=Date.now(),timerText=document.getElementById('co-timer-text'),timerFill=document.getElementById('co-timer-fill'),expired=!1;
                   function pad(n){return n<10?'0'+n:''+n}
-                  function tick(){if(expired)return;var left=Math.max(0,TIMEOUT-(Date.now()-startedAt));if(timerText)timerText.textContent=pad(Math.floor(left/60000))+':'+pad(Math.floor((left%60000)/1000));if(timerFill)timerFill.style.transform='scaleX('+(left/TIMEOUT)+')';if(left===0){expired=!0;fetch('/syncling/billing/cancel-pending',{method:'POST',credentials:'include'});var el=document.getElementById('co-expired');if(el)el.classList.add('co-expired-overlay-show');return}setTimeout(tick,1000)}tick();
-                  var cfg={key:${quote(init.keyId)},subscription_id:${quote(init.subscriptionId)},name:'Syncling',description:${quote("${plan.displayName} plan · 7-day free trial")},image:'https://syncling.space/syncling/favicon.svg',prefill:{name:${quote(userName)},email:${quote(userEmail ?: "")}},theme:{color:'#8B7EFF',backdrop_color:'#000000'},handler:function(resp){var params=new URLSearchParams({razorpay_payment_id:resp.razorpay_payment_id||'',razorpay_subscription_id:resp.razorpay_subscription_id||${quote(init.subscriptionId)},razorpay_signature:resp.razorpay_signature||''});window.location.href='/syncling/billing/rp-callback?'+params.toString()},modal:{ondismiss:function(){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1},escape:!0,backdropclose:!1},notes:{plan:${quote(plan.name)}}};
-                  function openCheckout(){var rzp=new Razorpay(cfg);rzp.on('payment.failed',function(resp){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1;alert('Payment failed: '+(resp.error&&resp.error.description?resp.error.description:'Please try again.'))});rzp.open()}
+                  function tick(){if(expired)return;var left=Math.max(0,TIMEOUT-(Date.now()-startedAt));if(timerText)timerText.textContent=pad(Math.floor(left/60000))+':'+pad(Math.floor((left%60000)/1000));if(timerFill)timerFill.style.transform='scaleX('+(left/TIMEOUT)+')';if(left===0){expired=!0;fetch('/billing/cancel-pending',{method:'POST',credentials:'include'});var el=document.getElementById('co-expired');if(el)el.classList.add('co-expired-overlay-show');return}setTimeout(tick,1000)}tick();
+                  var cfg={key:${quote(init.keyId)},subscription_id:${quote(init.subscriptionId)},name:'Syncling',description:${quote("${plan.displayName} plan · 7-day free trial")},image:'https://syncling.space/syncling/favicon.svg',prefill:{name:${quote(userName)},email:${quote(userEmail ?: "")}},theme:{color:'#8B7EFF',backdrop_color:'#000000'},handler:function(resp){var params=new URLSearchParams({razorpay_payment_id:resp.razorpay_payment_id||'',razorpay_subscription_id:resp.razorpay_subscription_id||${quote(init.subscriptionId)},razorpay_signature:resp.razorpay_signature||''});window.location.href='/billing/rp-callback?'+params.toString()},modal:{ondismiss:function(){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1},escape:!0,backdropclose:!1},notes:{plan:${quote(plan.name)}}};
+                  function showPayError(msg){var el=document.getElementById('co-pay-error');if(el){el.textContent=msg;el.style.display='block';setTimeout(function(){el.style.display='none'},8000)}}
+                  function openCheckout(){var rzp=new Razorpay(cfg);rzp.on('payment.failed',function(resp){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1;showPayError('Payment failed: '+(resp.error&&resp.error.description?resp.error.description:'Please try again.'))});rzp.open()}
                   var btn=document.getElementById('co-pay'),overlay=document.getElementById('co-overlay');
                   function ready(){overlay.classList.remove('co-overlay-show');btn.addEventListener('click',function(){btn.disabled=!0;overlay.classList.add('co-overlay-show');setTimeout(openCheckout,80)})}
                   if(window.Razorpay){overlay.classList.add('co-overlay-show');ready()}else{overlay.classList.add('co-overlay-show');var checkReady=setInterval(function(){if(window.Razorpay){clearInterval(checkReady);ready()}},50)}
@@ -142,7 +148,7 @@ internal fun HTML.successPage(
     plan: BillingPlan? = null,
     trialEndsOn: String? = null
 ) {
-    val dashUrl = if (!token.isNullOrBlank()) "/syncling/app?token=${token}" else "/syncling/app"
+    val dashUrl = if (!token.isNullOrBlank()) "/app?token=${token}" else "/app"
     val planName = plan?.displayName ?: "your plan"
     head {
         meta { charset = "utf-8" }
@@ -189,7 +195,7 @@ internal fun HTML.successPage(
                 +"""
                 var dashUrl=${quote(dashUrl)},token=${if (token.isNullOrBlank()) "null" else quote(token)};
                 var activateBtn=document.getElementById('co-activate-now');
-                if(activateBtn&&token){activateBtn.addEventListener('click',function(){activateBtn.disabled=!0;activateBtn.textContent='Activating…';fetch('/syncling/api/billing/activate-now',{method:'POST',headers:{'Authorization':'Bearer '+token}}).finally(function(){window.location.href=dashUrl})})}
+                if(activateBtn&&token){activateBtn.addEventListener('click',function(){activateBtn.disabled=!0;activateBtn.textContent='Activating…';fetch('/api/billing/activate-now',{method:'POST',headers:{'Authorization':'Bearer '+token}}).finally(function(){window.location.href=dashUrl})})}
                 """.trimIndent()
             }
         }
@@ -294,4 +300,5 @@ ul{list-style:none}
 .co-expired-title{font-size:24px;font-weight:800;margin-bottom:16px;color:var(--text)}
 .co-expired-body{font-size:15px;color:var(--text-dim);margin-bottom:32px;line-height:1.6}
 .co-expired-btn{display:inline-flex;width:auto;padding:14px 32px;text-decoration:none}
+.co-pay-error{background:#2d1212;border:1px solid #7f1d1d;border-radius:var(--radius-sm);color:#fca5a5;font-size:14px;font-weight:500;padding:12px 16px;margin-bottom:16px;line-height:1.5}
 """

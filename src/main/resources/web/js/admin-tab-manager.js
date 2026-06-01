@@ -591,12 +591,56 @@
         }
     };
 
+    let _currentChatTicketId = null;
+
+    function _renderChatStatusPills(t) {
+        const container = document.getElementById('support-chat-status-pills');
+        if (!container || !t) return;
+        container.innerHTML = ['open', 'acknowledged', 'resolved'].map(s => {
+            const active = t.status === s;
+            return `<button class="support-chat-pill" onclick="window.updateTicketStatus('${escHtml(t.id)}','${s}')" style="border:1px solid ${active ? 'transparent' : 'var(--card-border)'};background:${active ? '#6366f1' : 'transparent'};color:${active ? '#fff' : 'var(--text-color)'};font-weight:${active ? '600' : '400'};">${s.charAt(0).toUpperCase() + s.slice(1)}</button>`;
+        }).join('');
+    }
+
+    function _renderChatMessages(t) {
+        const area = document.getElementById('support-chat-messages');
+        if (!area) return;
+        const msgs = [];
+        if (t.message) {
+            const age = ticketAge(t.createdAt);
+            msgs.push({ role: 'user', text: t.message, label: t.userEmail || t.userId, time: fmtDate(t.createdAt) });
+        }
+        if (t.adminReply) {
+            msgs.push({ role: 'admin', text: t.adminReply, label: 'Support', time: '' });
+        }
+        if (!msgs.length) {
+            area.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-secondary);font-size:0.84rem;opacity:.6;"><span class="material-icons" style="font-size:32px;">forum</span>No messages yet</div>';
+            return;
+        }
+        area.innerHTML = msgs.map(m => `
+            <div class="chat-msg-row ${m.role}">
+                <div class="chat-label ${m.role}">${escHtml(m.label)}</div>
+                <div class="chat-bubble ${m.role}">${escHtml(m.text)}</div>
+                ${m.time ? `<div class="chat-time ${m.role}">${escHtml(m.time)}</div>` : ''}
+            </div>`).join('');
+        area.scrollTop = area.scrollHeight;
+    }
+
     window.updateTicketStatus = async function (id, newStatus) {
         const t = _supportTickets.find(x => x.id === id);
         const prev = t ? t.status : null;
-        if (t) t.status = newStatus; // optimistic
+        if (t) t.status = newStatus;
         renderSupportTable(_supportTickets);
         updateOpenBadge(_supportTickets);
+        const modal = document.getElementById('support-chat-modal');
+        if (modal && modal.style.display !== 'none' && modal.dataset.ticketId === id) {
+            _renderChatStatusPills(t);
+            const badges = document.getElementById('support-chat-badges');
+            if (badges && t) {
+                const stStyle = ST_COLORS[t.status] || '';
+                badges.innerHTML = `<span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span>`;
+            }
+        }
         try {
             const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/status', {
                 method: 'PATCH',
@@ -604,26 +648,51 @@
                 body: JSON.stringify({ status: newStatus }),
             });
             if (!res.ok) throw new Error('HTTP ' + res.status);
-            // Refresh detail panel if open for this ticket
-            const panel = document.getElementById('support-detail-panel');
-            if (panel && panel.style.display !== 'none' && panel.dataset.ticketId === id) {
-                window.openSupportDetail(id);
-            }
         } catch (e) {
-            // Roll back optimistic update
             if (t && prev) t.status = prev;
             renderSupportTable(_supportTickets);
             updateOpenBadge(_supportTickets);
+            if (modal && modal.style.display !== 'none' && modal.dataset.ticketId === id) _renderChatStatusPills(t);
             if (typeof showBanner === 'function') showBanner('error', 'Failed to update status: ' + e.message);
             else console.error('Failed to update status:', e.message);
         }
     };
 
-    window.saveTicketNote = async function (id) {
-        const textarea = document.getElementById('support-note-' + id);
-        if (!textarea) return;
-        const note = textarea.value.trim();
-        const btn = document.getElementById('support-note-save-' + id);
+    window.sendSupportChatReply = async function () {
+        const id = _currentChatTicketId;
+        if (!id) return;
+        const ta = document.getElementById('support-chat-reply-ta');
+        if (!ta) return;
+        const reply = ta.value.trim();
+        if (!reply) return;
+        const btn = document.getElementById('support-chat-send-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">hourglass_top</span>Sending…'; }
+        try {
+            const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/reply', {
+                method: 'PATCH',
+                headers: adminHeaders(),
+                body: JSON.stringify({ reply }),
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const t = _supportTickets.find(x => x.id === id);
+            if (t) t.adminReply = reply;
+            ta.value = '';
+            _renderChatMessages(_supportTickets.find(x => x.id === id));
+            renderSupportTable(_supportTickets);
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">send</span>Send'; }
+        } catch (e) {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">send</span>Send'; }
+            if (typeof showBanner === 'function') showBanner('error', 'Failed to send reply: ' + e.message);
+        }
+    };
+
+    window.saveSupportChatNote = async function () {
+        const id = _currentChatTicketId;
+        if (!id) return;
+        const ta = document.getElementById('support-chat-note-ta');
+        if (!ta) return;
+        const note = ta.value.trim();
+        const btn = document.getElementById('support-chat-note-save-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
         try {
             const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/note', {
@@ -642,114 +711,88 @@
         }
     };
 
-    window.saveTicketReply = async function (id) {
-        const textarea = document.getElementById('support-reply-' + id);
-        if (!textarea) return;
-        const reply = textarea.value.trim();
-        const btn = document.getElementById('support-reply-save-' + id);
-        if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
-        try {
-            const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/reply', {
-                method: 'PATCH',
-                headers: adminHeaders(),
-                body: JSON.stringify({ reply }),
-            });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const t = _supportTickets.find(x => x.id === id);
-            if (t) t.adminReply = reply || null;
-            renderSupportTable(_supportTickets);
-            if (btn) { btn.disabled = false; btn.textContent = 'Sent ✓'; setTimeout(() => { if (btn) btn.textContent = 'Send reply'; }, 1800); }
-        } catch (e) {
-            if (btn) { btn.disabled = false; btn.textContent = 'Send reply'; }
-            if (typeof showBanner === 'function') showBanner('error', 'Failed to send reply: ' + e.message);
-        }
+    window.toggleSupportChatNote = function () {
+        const body = document.getElementById('support-chat-note-body');
+        const chevron = document.getElementById('support-chat-note-chevron');
+        if (!body) return;
+        const open = body.classList.toggle('open');
+        if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+    };
+
+    window.resolveSupportChat = async function () {
+        const id = _currentChatTicketId;
+        if (!id) return;
+        await window.updateTicketStatus(id, 'resolved');
+        window.closeSupportDetail();
     };
 
     window.openSupportDetail = function (id) {
         const t = _supportTickets.find(x => x.id === id);
         if (!t) return;
-        const stStyle = ST_COLORS[t.status] || '';
-        const catStyle = CAT_COLORS[t.category] || '';
-        const age = ticketAge(t.createdAt);
-        const panel = document.getElementById('support-detail-panel');
-        const backdrop = document.getElementById('support-detail-backdrop');
-        const title = document.getElementById('support-detail-title');
-        const body = document.getElementById('support-detail-body');
-        if (!panel || !body) return;
-        panel.dataset.ticketId = id;
-        if (title) title.textContent = 'Ticket #' + t.id.substring(0, 8);
-        const noteId = 'support-note-' + escHtml(t.id);
-        const noteSaveId = 'support-note-save-' + escHtml(t.id);
-        body.innerHTML = `
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:1.5rem;">
-              <span class="status-badge" style="${catStyle}">${escHtml(t.category)}</span>
-              <span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span>
-              <span style="font-size:0.78rem;color:${age.color};font-weight:500;margin-left:auto;">${age.label}</span>
-            </div>
+        _currentChatTicketId = id;
+        const modal = document.getElementById('support-chat-modal');
+        const backdrop = document.getElementById('support-chat-backdrop');
+        if (!modal) return;
+        modal.dataset.ticketId = id;
 
-            <div style="margin-bottom:1.1rem;">
-              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:5px;">Subject</div>
-              <div style="font-size:0.975rem;font-weight:600;color:var(--text-color);line-height:1.4;">${escHtml(t.subject)}</div>
-            </div>
+        // Header
+        const titleEl = document.getElementById('support-chat-title');
+        if (titleEl) titleEl.textContent = 'Ticket #' + t.id.substring(0, 8);
+        const subjectEl = document.getElementById('support-chat-subject');
+        if (subjectEl) subjectEl.textContent = (t.userEmail || t.userId) + ' · ' + t.subject;
+        const badges = document.getElementById('support-chat-badges');
+        if (badges) {
+            const catStyle = CAT_COLORS[t.category] || '';
+            const stStyle = ST_COLORS[t.status] || '';
+            badges.innerHTML = `<span class="status-badge" style="${catStyle}">${escHtml(t.category)}</span><span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span>`;
+        }
 
-            <div style="margin-bottom:1.1rem;">
-              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:5px;">From</div>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <span style="font-size:0.875rem;color:var(--text-color);">${escHtml(t.userEmail || t.userId)}</span>
-                ${t.userEmail ? `<button onclick="navigator.clipboard.writeText('${escHtml(t.userEmail)}')" title="Copy email" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-secondary);padding:2px 5px;border-radius:4px;" onmouseenter="this.style.background='var(--endpoint-bg)'" onmouseleave="this.style.background='none'">⎘</button>` : ''}
-              </div>
-            </div>
+        // Messages
+        _renderChatMessages(t);
 
-            <div style="margin-bottom:1.5rem;">
-              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:5px;">Message</div>
-              <div style="font-size:0.875rem;color:var(--text-color);background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;padding:14px 16px;white-space:pre-wrap;line-height:1.65;max-height:220px;overflow-y:auto;">${escHtml(t.message)}</div>
-            </div>
+        // Status pills
+        _renderChatStatusPills(t);
 
-            <div style="margin-bottom:1.5rem;">
-              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:8px;">Update Status</div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                ${['open','acknowledged','resolved'].map(s => {
-                  const active = t.status === s;
-                  return `<button onclick="window.updateTicketStatus('${escHtml(t.id)}','${s}')" style="font-size:0.8rem;padding:6px 14px;border-radius:20px;border:1px solid ${active?'transparent':'var(--card-border)'};background:${active?'#6366f1':'transparent'};color:${active?'#fff':'var(--text-color)'};cursor:pointer;font-weight:${active?'600':'400'};transition:all .15s;" onmouseenter="if(this.style.background!='rgb(99, 102, 241)')this.style.background='var(--endpoint-bg)'" onmouseleave="if(this.style.background!='rgb(99, 102, 241)')this.style.background='transparent'">${s.charAt(0).toUpperCase()+s.slice(1)}</button>`;
-                }).join('')}
-              </div>
-            </div>
+        // Note
+        const noteTa = document.getElementById('support-chat-note-ta');
+        if (noteTa) noteTa.value = t.adminNote || '';
+        const noteBody = document.getElementById('support-chat-note-body');
+        const noteChevron = document.getElementById('support-chat-note-chevron');
+        if (noteBody) { noteBody.classList.remove('open'); }
+        if (noteChevron) noteChevron.style.transform = '';
 
-            <div style="margin-bottom:1.5rem;">
-              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:8px;">Reply to User <span style="font-weight:400;font-size:0.7rem;text-transform:none;letter-spacing:0;">(visible to user in chat)</span></div>
-              ${t.adminReply ? `<div style="font-size:0.82rem;color:var(--text-color);background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);border-radius:8px;padding:10px 12px;margin-bottom:10px;white-space:pre-wrap;line-height:1.55;">${escHtml(t.adminReply)}</div>` : '<div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:8px;font-style:italic;">No reply sent yet.</div>'}
-              <textarea id="${'support-reply-' + escHtml(t.id)}" style="width:100%;box-sizing:border-box;background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;color:var(--text-color);font-size:0.85rem;padding:10px 12px;font-family:inherit;resize:vertical;min-height:90px;line-height:1.5;outline:none;transition:border-color .12s;" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='var(--endpoint-border)'" maxlength="3000" placeholder="Write a reply to the user…">${escHtml(t.adminReply || '')}</textarea>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-                <span style="font-size:0.72rem;color:var(--text-secondary);">Max 3000 characters · User will see this in their chat</span>
-                <button id="${'support-reply-save-' + escHtml(t.id)}" onclick="window.saveTicketReply('${escHtml(t.id)}')" class="btn btn-primary" style="font-size:0.78rem;padding:5px 16px;">Send reply</button>
-              </div>
-            </div>
+        // Reply
+        const replyTa = document.getElementById('support-chat-reply-ta');
+        if (replyTa) replyTa.value = '';
 
-            <div style="margin-bottom:0.5rem;">
-              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:8px;">Internal Note <span style="font-weight:400;font-size:0.7rem;text-transform:none;letter-spacing:0;">(not visible to user)</span></div>
-              <textarea id="${noteId}" style="width:100%;box-sizing:border-box;background:var(--endpoint-bg);border:1px solid var(--endpoint-border);border-radius:8px;color:var(--text-color);font-size:0.85rem;padding:10px 12px;font-family:inherit;resize:vertical;min-height:80px;line-height:1.5;outline:none;transition:border-color .12s;" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='var(--endpoint-border)'" maxlength="2000" placeholder="Add an internal note…">${escHtml(t.adminNote || '')}</textarea>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-                <span style="font-size:0.72rem;color:var(--text-secondary);">Max 2000 characters</span>
-                <button id="${noteSaveId}" onclick="window.saveTicketNote('${escHtml(t.id)}')" class="btn btn-primary" style="font-size:0.78rem;padding:5px 14px;">Save note</button>
-              </div>
-            </div>`;
-        panel.style.display = 'flex';
-        if (backdrop) { backdrop.style.display = 'block'; backdrop.classList.add('open'); }
-        setTimeout(() => panel.classList.add('open'), 10);
+        // Show
+        modal.style.display = 'flex';
+        if (backdrop) { backdrop.style.display = 'block'; }
+        requestAnimationFrame(() => {
+            modal.classList.add('open');
+            if (backdrop) backdrop.classList.add('open');
+        });
     };
 
     window.closeSupportDetail = function () {
-        const panel = document.getElementById('support-detail-panel');
-        const backdrop = document.getElementById('support-detail-backdrop');
-        if (panel) { panel.classList.remove('open'); setTimeout(() => { panel.style.display = 'none'; }, 250); }
-        if (backdrop) { backdrop.classList.remove('open'); backdrop.style.display = 'none'; }
+        const modal = document.getElementById('support-chat-modal');
+        const backdrop = document.getElementById('support-chat-backdrop');
+        if (modal) {
+            modal.classList.remove('open');
+            setTimeout(() => { modal.style.display = 'none'; }, 260);
+        }
+        if (backdrop) {
+            backdrop.classList.remove('open');
+            setTimeout(() => { backdrop.style.display = 'none'; }, 260);
+        }
+        _currentChatTicketId = null;
     };
 
-    // Escape key closes the detail panel
+    // Escape key closes the chat modal
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            const panel = document.getElementById('support-detail-panel');
-            if (panel && panel.style.display !== 'none') window.closeSupportDetail();
+            const modal = document.getElementById('support-chat-modal');
+            if (modal && modal.style.display !== 'none') window.closeSupportDetail();
         }
     });
 

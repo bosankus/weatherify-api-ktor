@@ -53,6 +53,8 @@ import io.ktor.server.application.Application
 import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
+import com.syncling.routes.landingPage
+import io.ktor.server.html.respondHtml
 import io.ktor.server.request.host
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
@@ -115,7 +117,7 @@ fun Application.installSynclingRoutes(d: SynclingDeps) {
         get("/") {
             val host = call.request.host()
             if (host == "syncling.space" || host == "www.syncling.space") {
-                call.respondRedirect("/syncling", permanent = false)
+                call.respondHtml { landingPage() }
             } else {
                 call.respondRedirect("/admin", permanent = false)
             }
@@ -144,15 +146,15 @@ fun Application.installSynclingRoutes(d: SynclingDeps) {
             call.respondText("""
 User-agent: *
 Allow: /syncling
-Allow: /syncling/auth/github
-Allow: /syncling/docs
-Disallow: /syncling/api/
-Disallow: /syncling/app
-Disallow: /syncling/billing
-Disallow: /syncling/projects
-Disallow: /syncling/review-portal
-Disallow: /syncling/members
-Disallow: /syncling/invite/
+Allow: /auth/github
+Allow: /docs
+Disallow: /api/
+Disallow: /app
+Disallow: /billing
+Disallow: /projects
+Disallow: /review-portal
+Disallow: /members
+Disallow: /invite/
 Disallow: /health
 Disallow: /ready
 Disallow: /admin

@@ -109,7 +109,7 @@ fun Route.configureApiRoutes(
     pipelineRunRepository: PipelineRunRepository? = null
 ) {
 
-    route("/syncling/api") {
+    route("/api") {
 
         // Single endpoint that replaces the 5 separate page-load calls. All queries run in
         // parallel (9 concurrent coroutines) — total latency equals the slowest single query.
@@ -252,7 +252,7 @@ fun Route.configureApiRoutes(
                             error = "GitHub access is required to connect a repository.",
                             code = "GITHUB_REAUTH_REQUIRED",
                             actionHint = "Reconnect your GitHub account to continue.",
-                            reauthUrl = "/syncling/auth/github"
+                            reauthUrl = "/auth/github"
                         )
                     )
                 }

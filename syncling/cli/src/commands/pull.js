@@ -15,7 +15,7 @@ export async function pullCommand(projectId, opts) {
   if (!targetLangs) {
     const spin = ora('Fetching project info…').start();
     try {
-      const res = await fetch(`${API_BASE}/syncling/api/projects/${projectId}`, {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -40,7 +40,7 @@ export async function pullCommand(projectId, opts) {
   for (const lang of targetLangs) {
     const spin = ora(`Pulling ${lang}…`).start();
     try {
-      const url = `${API_BASE}/syncling/api/projects/${projectId}/export?lang=${encodeURIComponent(lang)}${opts.format ? `&format=${opts.format}` : ''}`;
+      const url = `${API_BASE}/api/projects/${projectId}/export?lang=${encodeURIComponent(lang)}${opts.format ? `&format=${opts.format}` : ''}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 
       if (res.status === 204) {

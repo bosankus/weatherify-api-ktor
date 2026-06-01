@@ -17,18 +17,19 @@ class MongoApiTokenRepository(db: MongoDatabase) : ApiTokenRepository {
 
     private val col = db.getCollection<Document>("api_tokens")
 
-    override suspend fun create(userId: String, name: String, tokenHash: String, type: String): ApiToken {
+    override suspend fun create(userId: String, name: String, tokenHash: String, platforms: List<String>): ApiToken {
         val now = Clock.System.now()
         val id = UUID.randomUUID().toString()
+        val normalized = platforms.ifEmpty { listOf("CLI") }
         col.insertOne(
             Document("_id", id)
                 .append("userId", userId)
                 .append("name", name)
                 .append("tokenHash", tokenHash)
-                .append("type", type)
+                .append("platforms", normalized)
                 .append("createdAt", now.toEpochMilliseconds())
         )
-        return ApiToken(id = id, userId = userId, name = name, tokenHash = tokenHash, createdAt = now, type = type)
+        return ApiToken(id = id, userId = userId, name = name, tokenHash = tokenHash, createdAt = now, platforms = normalized)
     }
 
     override suspend fun findByHash(tokenHash: String): ApiToken? =
@@ -47,13 +48,18 @@ class MongoApiTokenRepository(db: MongoDatabase) : ApiTokenRepository {
         )
     }
 
-    private fun Document.toApiToken() = ApiToken(
-        id = getString("_id"),
-        userId = getString("userId"),
-        name = getString("name"),
-        tokenHash = getString("tokenHash"),
-        createdAt = Instant.fromEpochMilliseconds(getLong("createdAt")),
-        lastUsedAt = getLong("lastUsedAt")?.let { Instant.fromEpochMilliseconds(it) },
-        type = getString("type") ?: "CLI",
-    )
+    private fun Document.toApiToken(): ApiToken {
+        @Suppress("UNCHECKED_CAST")
+        val storedPlatforms = (get("platforms") as? List<String>)?.takeIf { it.isNotEmpty() }
+            ?: listOfNotNull(getString("type")).ifEmpty { listOf("CLI") }
+        return ApiToken(
+            id = getString("_id"),
+            userId = getString("userId"),
+            name = getString("name"),
+            tokenHash = getString("tokenHash"),
+            createdAt = Instant.fromEpochMilliseconds(getLong("createdAt")),
+            lastUsedAt = getLong("lastUsedAt")?.let { Instant.fromEpochMilliseconds(it) },
+            platforms = storedPlatforms,
+        )
+    }
 }

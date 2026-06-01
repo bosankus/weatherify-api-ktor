@@ -51,7 +51,7 @@ fun Route.configureDashboardRoutes(
     billingRepository: BillingRepository,
     cdnPublishRepository: com.syncling.repository.CdnPublishRepository
 ) {
-    route("/syncling/api/dashboard") {
+    route("/api/dashboard") {
 
         get("/stats") {
             val userId = call.userId()

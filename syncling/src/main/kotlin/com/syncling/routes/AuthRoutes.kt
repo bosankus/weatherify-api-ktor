@@ -59,16 +59,16 @@ fun Route.configureAuthRoutes(
 
     val clientId = getSecretValue("github-client-id")
     val clientSecret = getSecretValue("github-client-secret")
-    val redirectUri = "https://syncling.space/syncling/auth/github/callback"
+    val redirectUri = "https://syncling.space/auth/github/callback"
     val frontendRedirectUrl = getSecretValue("frontend-url")
 
-    route("/syncling/auth") {
+    route("/auth") {
 
         get("/github") {
             val state = UUID.randomUUID().toString()
             call.response.cookies.append(Cookie(
                 name = "oauth_state", value = state,
-                path = "/syncling/auth", maxAge = 600,
+                path = "/auth", maxAge = 600,
                 httpOnly = true, secure = true, extensions = mapOf("SameSite" to "Lax")
             ))
             val url = "https://github.com/login/oauth/authorize" +
@@ -87,7 +87,7 @@ fun Route.configureAuthRoutes(
                 call.respondText("Invalid OAuth state — authorization rejected", status = HttpStatusCode.Forbidden)
                 return@get
             }
-            call.response.cookies.append(Cookie("oauth_state", "", path = "/syncling/auth",
+            call.response.cookies.append(Cookie("oauth_state", "", path = "/auth",
                 expires = GMTDate.START, maxAge = 0))
 
             // Pull the plan the user picked on the pricing page (if any) so we can route them
@@ -178,15 +178,15 @@ private suspend fun redirectAfterAuth(
     isNewUser: Boolean
 ) {
     when {
-        !pendingPlan.isNullOrBlank() -> call.respondRedirect("/syncling/billing/checkout?plan=${pendingPlan.uppercase()}")
-        isNewUser -> call.respondRedirect("/syncling/welcome")
+        !pendingPlan.isNullOrBlank() -> call.respondRedirect("/billing/checkout?plan=${pendingPlan.uppercase()}")
+        isNewUser -> call.respondRedirect("/welcome")
         else -> {
             // Session cookie (httpOnly) is already set. Use a short-lived JS-readable bootstrap
             // cookie instead of putting the JWT in the URL — keeps the token out of proxy logs,
             // browser history, and Referer headers.
             call.response.cookies.append(Cookie(
                 name = "tl_token_bootstrap", value = jwtToken,
-                path = "/syncling", maxAge = 15,
+                path = "/", maxAge = 15,
                 httpOnly = false, secure = true, extensions = mapOf("SameSite" to "Lax")
             ))
             call.respondRedirect(frontendRedirectUrl)

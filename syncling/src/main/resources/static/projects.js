@@ -16,7 +16,7 @@
         return;
     }
 
-    const API = '/syncling/api/projects';
+    const API = '/api/projects';
 
     // ── Catalog data ─────────────────────────────────────────────────────────
     // Curated dropdowns. Backend accepts free strings, so adding to these lists
@@ -271,7 +271,7 @@
                 placeholder="syncling/translations-{timestamp}"
                 ${isPaid ? '' : 'disabled'}>
               <div class="pr-form-hint">Tokens: <code>{timestamp}</code>, <code>{date}</code>, <code>{branch}</code>.
-                ${isPaid ? 'Leave blank for the default.' : '<a href="/syncling/billing" style="color:var(--accent)">Upgrade to Solo</a> to customise.'}
+                ${isPaid ? 'Leave blank for the default.' : '<a href="/billing" style="color:var(--accent)">Upgrade to Solo</a> to customise.'}
               </div>
             </div>
 
@@ -330,7 +330,7 @@
                 const err = await r.json().catch(() => ({ error: 'Failed to create project' }));
                 if (err.code === 'GITHUB_REAUTH_REQUIRED') {
                     toast('Reconnect GitHub to create this project', 'error');
-                    setTimeout(() => window.location.href = err.reauthUrl || '/syncling/auth/github', 1000);
+                    setTimeout(() => window.location.href = err.reauthUrl || '/auth/github', 1000);
                     return;
                 }
                 throw new Error(err.error || 'Failed to create');
@@ -506,7 +506,7 @@
             <p class="pr-toggle-hint" style="margin:0 0 8px">Trigger a translation run from any CI step. Drop your JWT in <code>$TL_TOKEN</code>:</p>
             <pre class="pr-ci-snippet" data-ci-snippet><code>curl -X POST \\
   -H "Authorization: Bearer $TL_TOKEN" \\
-  ${location.origin}/syncling/api/projects/${esc(p.id)}/sync</code></pre>
+  ${location.origin}/api/projects/${esc(p.id)}/sync</code></pre>
             <button type="button" class="bl-btn" data-drawer-act="copy-ci" style="margin-top:8px;padding:6px 12px;font-size:12px">Copy snippet</button>
           </section>
         `;
@@ -578,7 +578,7 @@
                     <div class="pr-locked-title">${esc(r.title)} <span class="pr-locked-badge">${esc(r.plan)}</span></div>
                     <div class="pr-locked-hint">${esc(r.hint)}</div>
                   </div>
-                  <a href="/syncling/billing" class="pr-locked-cta">Upgrade</a>
+                  <a href="/billing" class="pr-locked-cta">Upgrade</a>
                 </div>`).join(''));
             host.style.display = '';
         }).catch(() => {});
@@ -696,7 +696,7 @@
                     input.style.opacity = '0.55';
                     saveBtn.disabled = true;
                     badge.style.display = '';
-                    hint.innerHTML = 'Custom branch patterns require Solo or Team. <a href="/syncling/billing" style="color:var(--accent)">Upgrade</a>';
+                    hint.innerHTML = 'Custom branch patterns require Solo or Team. <a href="/billing" style="color:var(--accent)">Upgrade</a>';
                 }
             }).catch(() => {});
         }
