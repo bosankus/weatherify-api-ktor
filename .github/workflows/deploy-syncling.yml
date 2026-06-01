@@ -53,4 +53,4 @@ jobs:
             --region asia-southeast1 \
             --allow-unauthenticated \
             --update-env-vars="ALLOWED_ORIGIN=https://syncling.space" \
-            --update-secrets=APP_SECRETS=app-secrets:latest
+            --set-secrets=APP_SECRETS=app-secrets:latest
