@@ -30,6 +30,10 @@ import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.response.*
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.compression.gzip
+import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
+import com.syncling.model.ApiError
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -73,7 +77,10 @@ fun Application.module() {
     }
 
     val db: MongoDatabase by inject()
-    runBlocking { MongoIndexer.ensure(db, synclingIndexes()) }
+    runBlocking {
+        runCatching { MongoIndexer.ensure(db, synclingIndexes()) }
+            .onFailure { log.error("MongoDB index setup failed — DB may be unreachable: {}", it.message, it) }
+    }
 
     install(com.syncling.plugins.RequestContextPlugin)
 
@@ -87,6 +94,13 @@ fun Application.module() {
             encodeDefaults = true
             ignoreUnknownKeys = true
         })
+    }
+
+    install(StatusPages) {
+        exception<Throwable> { call, cause ->
+            log.error("Unhandled exception on {} {}: {}", call.request.httpMethod.value, call.request.path(), cause.message, cause)
+            call.respond(HttpStatusCode.InternalServerError, ApiError("Internal server error"))
+        }
     }
 
     install(CORS) {

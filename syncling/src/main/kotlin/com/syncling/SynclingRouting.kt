@@ -119,7 +119,7 @@ fun Application.installSynclingRoutes(d: SynclingDeps) {
             if (host == "syncling.space" || host == "www.syncling.space") {
                 call.respondHtml { landingPage() }
             } else {
-                call.respondRedirect("/admin", permanent = false)
+                call.respondRedirect("/login", permanent = false)
             }
         }
 
