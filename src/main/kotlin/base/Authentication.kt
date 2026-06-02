@@ -79,8 +79,8 @@ fun Application.configureAuthentication() {
             realm = "Syncling API"
             verifier(
                 JWT.require(Algorithm.HMAC256(synclingJwtSecret))
-                    .withAudience("transloom-app")
-                    .withIssuer("transloom-backend")
+                    .withAudience("syncling-app")
+                    .withIssuer("syncling-backend")
                     .build()
             )
             validate { credential ->

@@ -222,7 +222,7 @@ Sitemap: https://syncling.space/sitemap.xml
         rateLimit(RateLimitName("bundle_fetch")) {
             configureCdnBundleRoutes(d.projectRepository, d.cdnPublishRepository, d.cdnPublishService, d.membershipRepository)
         }
-        d.apiTokenRepository?.let { configureTokenPortalRoute() }
+        d.apiTokenRepository?.let { configureTokenPortalRoute(d.jwtSecret) }
         authenticate("auth-jwt", "api-token") {
             d.apiTokenRepository?.let { configureTokenApiRoutes(it) }
             configureApiRoutes(

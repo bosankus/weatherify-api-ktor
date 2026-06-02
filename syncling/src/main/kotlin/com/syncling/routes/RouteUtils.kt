@@ -92,7 +92,7 @@ internal const val JWT_TTL_MS = 7L * 24 * 60 * 60 * 1000
 
 internal fun mintJwt(secret: String, userId: String, githubId: Long, username: String): String =
     JWT.create()
-        .withAudience("transloom-app").withIssuer("transloom-backend")
+        .withAudience("syncling-app").withIssuer("syncling-backend")
         .withClaim("userId", userId).withClaim("githubId", githubId)
         .withClaim("username", username)
         .withExpiresAt(Date(System.currentTimeMillis() + JWT_TTL_MS))

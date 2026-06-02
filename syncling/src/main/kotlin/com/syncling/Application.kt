@@ -174,8 +174,8 @@ fun Application.module() {
             realm = "Syncling API"
             verifier(
                 JWT.require(Algorithm.HMAC256(jwtSecret))
-                    .withAudience("transloom-app")
-                    .withIssuer("transloom-backend")
+                    .withAudience("syncling-app")
+                    .withIssuer("syncling-backend")
                     .build()
             )
             validate { credential ->

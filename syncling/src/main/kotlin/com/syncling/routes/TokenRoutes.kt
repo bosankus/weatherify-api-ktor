@@ -99,8 +99,12 @@ fun Route.configureTokenApiRoutes(tokenRepository: ApiTokenRepository) {
 
 // ── Portal page ───────────────────────────────────────────────────────────────
 
-fun Route.configureTokenPortalRoute() {
+fun Route.configureTokenPortalRoute(jwtSecret: String) {
     get("/tokens") {
+        if (call.sessionUserId(jwtSecret) == null) {
+            call.respondRedirect("/auth/github")
+            return@get
+        }
         call.respondHtml { tokensApp() }
     }
 }
