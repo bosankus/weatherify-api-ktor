@@ -11,6 +11,7 @@ import io.ktor.server.application.install
 import kotlin.time.Duration.Companion.minutes
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.compression.deflate
+import io.ktor.server.plugins.compression.excludeContentType
 import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
@@ -69,8 +70,17 @@ fun Application.configureHTTP() {
     }
 
     install(Compression) {
-        gzip { priority = 1.0 }
-        deflate { priority = 10.0 }
+        // SSE connections must not be compressed — gzip/deflate buffer the entire stream,
+        // preventing events from reaching the client. Handled per-response via
+        // Content-Encoding: identity header on the SSE route, but this is the global guard.
+        gzip {
+            priority = 1.0
+            excludeContentType(io.ktor.http.ContentType.parse("text/event-stream"))
+        }
+        deflate {
+            priority = 10.0
+            excludeContentType(io.ktor.http.ContentType.parse("text/event-stream"))
+        }
     }
 
     install(DefaultHeaders) {

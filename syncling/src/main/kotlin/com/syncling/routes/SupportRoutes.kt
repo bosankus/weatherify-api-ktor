@@ -21,14 +21,14 @@ private val log = LoggerFactory.getLogger("SupportRoutes")
 private val ALLOWED_CATEGORIES = setOf("bug", "question", "feature", "billing")
 
 @Serializable
-private data class SubmitTicketRequest(
+internal data class SubmitTicketRequest(
     val category: String,
     val subject: String,
     val message: String,
 )
 
 @Serializable
-private data class TicketResponse(
+internal data class TicketResponse(
     val id: String,
     val category: String,
     val subject: String,
@@ -72,14 +72,23 @@ fun Route.configureSupportRoutes(
                 return@post
             }
 
-            val user = userRepository.findById(userId)
-            val ticket = supportTicketRepository.create(
-                userId = userId,
-                userEmail = user?.email,
-                category = category,
-                subject = subject,
-                message = message,
-            )
+            val user = runCatching { userRepository.findById(userId) }.getOrElse {
+                log.error("Failed to look up user {} for support ticket: {}", userId, it.message, it)
+                null
+            }
+            val ticket = runCatching {
+                supportTicketRepository.create(
+                    userId = userId,
+                    userEmail = user?.email,
+                    category = category,
+                    subject = subject,
+                    message = message,
+                )
+            }.getOrElse {
+                log.error("Failed to create support ticket for user {}: {}", userId, it.message, it)
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to create support ticket. Please try again."))
+                return@post
+            }
             log.info("Support ticket created id={} userId={} category={}", ticket.id.take(8), userId, category)
 
             if (notificationService != null) {

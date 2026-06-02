@@ -1005,6 +1005,9 @@ fun Route.configureApiRoutes(
             call.response.header(HttpHeaders.CacheControl, "no-cache, no-transform")
             call.response.header(HttpHeaders.Connection, "keep-alive")
             call.response.header("X-Accel-Buffering", "no")
+            // Explicitly opt out of gzip — the Compression plugin would otherwise buffer the
+            // entire stream waiting to compress it, preventing events from reaching the client.
+            call.response.header(HttpHeaders.ContentEncoding, "identity")
             call.respondBytesWriter(contentType = ContentType.parse("text/event-stream; charset=utf-8")) {
                 // Flush an initial comment so Cloud Run / GFE see upstream bytes immediately.
                 // Without this, headers stay buffered until the first event/heartbeat and GFE 503s the connection.

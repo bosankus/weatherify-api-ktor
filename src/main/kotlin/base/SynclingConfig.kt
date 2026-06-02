@@ -29,12 +29,18 @@ fun Application.configureSyncling(refundService: RefundService) {
     val log = LoggerFactory.getLogger("Syncling")
 
     val jwtSecret = getSecretValue("jwt-secret")
-    val mongoUri = getSecretValue("db-connection-string")
+    // "mongo-uri" is the Syncling/transloom Atlas cluster; "db-connection-string" is the
+    // separate weatherify cluster and does NOT have transloom credentials — using it here
+    // caused MongoCommandException (auth failed) on every request → 500 for all API routes.
+    val mongoUri = getSecretValue("mongo-uri")
     val encryptionKey = getSecretValue("token-encryption-key")
     val webhookSecret = getSecretValue("razorpay-webhook-secret")
 
     val db = MongoConnection.connect(mongoUri, "transloom")
-    runBlocking { MongoIndexer.ensure(db, synclingIndexes()) }
+    runBlocking {
+        runCatching { MongoIndexer.ensure(db, synclingIndexes()) }
+            .onFailure { log.error("Syncling MongoDB index setup failed — DB may be unreachable: {}", it.message, it) }
+    }
 
     val userRepository = MongoUserRepository(db, encryptionKey)
     val projectRepository = MongoProjectRepository(db)
