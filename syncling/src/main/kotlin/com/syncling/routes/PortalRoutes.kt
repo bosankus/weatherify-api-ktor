@@ -906,6 +906,15 @@ internal fun HTML.landingPage() {
         nav {
             div("nav-inner") {
                 div("brand") { unsafe { +LOGO_SVG }; span { unsafe { +"<span class=\"brand-sync\">Sync</span>ling" } } }
+                div("nav-links") {
+                    id = "nav-menu"
+                    a("#how") { +"How it works" }
+                    a("#features") { +"Features" }
+                    a("#pricing") { +"Pricing" }
+                    a("#faq") { +"FAQ" }
+                    a("/docs") { +"Docs" }
+                    a("/auth/github") { id = "nav-cta-btn"; classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
+                }
                 div("nav-right") {
                     button {
                         id = "theme-toggle"
@@ -921,15 +930,6 @@ internal fun HTML.landingPage() {
                         unsafe { +"""<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>""" }
                     }
                 }
-                div("nav-links") {
-                    id = "nav-menu"
-                    a("#how") { +"How it works" }
-                    a("#features") { +"Features" }
-                    a("#pricing") { +"Pricing" }
-                    a("#faq") { +"FAQ" }
-                    a("/docs") { +"Docs" }
-                    a("/auth/github") { id = "nav-cta-btn"; classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
-                }
             }
         }
 
@@ -940,10 +940,10 @@ internal fun HTML.landingPage() {
             div("hero-inner") {
                 span("badge fade-up") { +"Android & iOS · 10+ Languages · Free to start" }
                 h1("hero-title fade-up d1") {
-                    +"Your app,"; br {}; +"everywhere. "; span("accent") { +"Automatically." }
+                    +"Your app,"; br {}; +"every language. "; span("accent") { +"Automatically." }
                 }
                 p("hero-sub fade-up d2") {
-                    +"Push a commit — Syncling detects what changed, translates into every language with AI, and publishes to a global CDN in 45 seconds. No manual steps. No app release required."
+                    +"Push a commit. Syncling detects changed strings, translates them into 10+ languages with AI, and ships to a global CDN in 45 seconds — no manual work, no app release needed."
                 }
                 div("hero-actions fade-up d3") {
                     a("/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started free" }
@@ -1278,11 +1278,8 @@ private fun HTML.docsPage() {
                         span { unsafe { +"<span class=\"brand-sync\">Sync</span>ling" } }
                     }
                 }
-                div("nav-links") {
-                    id = "docs-nav-menu"
-                    a("/auth/github") { id = "docs-cta-btn"; classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
-                }
                 div("docs-nav-right") {
+                    a("/auth/github") { id = "docs-cta-btn"; classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
                     button {
                         id = "docs-theme-toggle"
                         classes = setOf("nav-theme-toggle")
@@ -1952,8 +1949,10 @@ html[data-theme="light"] nav{background:rgba(245,247,250,.95)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 .btn-primary{background:var(--accent);color:#fff;border:1px solid var(--accent)}
 .btn-primary:hover{background:#7d6ff5;border-color:#7d6ff5;color:#fff;transform:translateY(-1px);box-shadow:0 4px 16px -4px rgba(139,126,255,.45)}
-.docs-nav-right{display:flex;align-items:center;gap:6px}
-.docs-menu-btn{display:none;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:32px;height:32px;cursor:pointer;flex-shrink:0;transition:border-color .15s,color .15s}
+.docs-nav-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+.nav-theme-toggle{display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:34px;height:34px;padding:0;flex-shrink:0;transition:border-color .2s,color .2s,background .2s;cursor:pointer}
+.nav-theme-toggle:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim2)}
+.docs-menu-btn{display:none;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:34px;height:34px;padding:0;cursor:pointer;flex-shrink:0;transition:border-color .15s,color .15s}
 .docs-menu-btn:hover{border-color:rgba(139,126,255,.4);color:var(--accent)}
 .theme-sun{display:none}.theme-moon{display:block}
 html[data-theme="light"] .theme-sun{display:block}html[data-theme="light"] .theme-moon{display:none}
@@ -3398,7 +3397,7 @@ function scheduleReconnect(){
   stopSseWatchdog();
   _sseHadGap=true;
   sseRetries++;
-  if(sseRetries>=SSE_MAX_RETRIES){setSseStatus('disconnected','Live updates unavailable');return;}
+  if(sseRetries>=SSE_MAX_RETRIES){setSseStatus('disconnected','Live updates unavailable');loadPipelineRuns();return;}
   setSseStatus('reconnecting','Reconnecting…');
   setTimeout(connectPipelineSSE,sseBackoff);
   sseBackoff=Math.min(sseBackoff*2,30000);

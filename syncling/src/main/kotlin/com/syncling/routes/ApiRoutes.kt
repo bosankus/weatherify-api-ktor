@@ -1041,6 +1041,12 @@ fun Route.configureApiRoutes(
                         }
                     } catch (_: CancellationException) {
                         // Normal shutdown when heartbeat detected disconnect
+                    } catch (e: Exception) {
+                        // SSE response is already started — StatusPages cannot respond with a 500.
+                        // Log here; the client will reconnect via EventSource retry.
+                        LoggerFactory.getLogger("SSE").warn(
+                            "Pipeline SSE stream error for user {}: {}", userId, e.message
+                        )
                     } finally {
                         heartbeat.cancel()
                     }

@@ -12,6 +12,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
@@ -77,6 +78,7 @@ class SemanticChangeAnalyzer(private val cache: SemanticChangeCacheRepository) {
             val batch = chunk.associate { it.key to it.value }
             val batchResults = semaphore.withPermit {
                 runCatching { callGeminiBatch(batch) }.getOrElse { e ->
+                    if (e is CancellationException) throw e  // never swallow coroutine cancellation
                     log.warn("Batch semantic analysis failed for {} string(s) — defaulting all to SEMANTIC: {}",
                         batch.size, e.message)
                     batch.mapValues { SemanticChangeRecord(ChangeType.SEMANTIC, "Analysis failed — retranslating to be safe") }

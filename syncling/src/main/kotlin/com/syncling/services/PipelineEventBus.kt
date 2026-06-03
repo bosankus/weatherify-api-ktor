@@ -160,7 +160,14 @@ class PipelineEventBus(
         val count = subCounts.getOrPut(userId) { AtomicInteger(0) }
         if (count.getAndIncrement() == 0) {
             // First subscriber — open the Redis channel subscription. Non-blocking.
-            pubSubConn.async().subscribe(channelKey(userId))
+            // Guard against a degraded Lettuce connection; fall back to in-memory rather than
+            // letting the exception escape into the SSE respondBytesWriter and crashing the stream.
+            runCatching { pubSubConn.async().subscribe(channelKey(userId)) }
+                .onFailure {
+                    log.warn("Lettuce subscribe failed for userId={} — falling back to in-memory flow: {}", userId, it.message)
+                    count.decrementAndGet()
+                    return memFlowFor(userId).asSharedFlow()
+                }
         }
 
         return callbackFlow {
