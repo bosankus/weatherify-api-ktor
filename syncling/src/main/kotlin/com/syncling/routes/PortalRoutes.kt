@@ -2198,16 +2198,28 @@ h2{font-size:clamp(26px,4.2vw,52px);font-weight:800;letter-spacing:-2.5px;margin
 .pricing-features{list-style:none;display:flex;flex-direction:column;gap:11px;flex:1;margin-bottom:32px}
 .pricing-features li{font-size:13px;color:var(--lp-text-soft);display:flex;align-items:center;gap:10px;font-weight:400;font-family:'Inter',-apple-system,sans-serif}
 .pricing-features li::before{content:'';width:15px;height:15px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238B7EFF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");background-size:contain;background-repeat:no-repeat;background-position:center;flex-shrink:0;opacity:.65}
+.pricing-card.recommended .pricing-name{color:rgba(200,190,255,.45)}
+.pricing-card.recommended .pricing-price,.pricing-card.recommended .pricing-price .price-mo{color:#f0eeff}
+.pricing-card.recommended .price-mo{color:rgba(200,190,255,.5)}
+.pricing-card.recommended .pricing-period{color:rgba(200,190,255,.4)}
 .pricing-card.recommended .pricing-features li{color:rgba(232,228,255,.7)}
-/* ── pricing CTAs — fixed contrast ───────────────────────────── */
+/* ── pricing CTAs ────────────────────────────────────────────── */
 .pricing-cta{display:block;text-align:center;padding:13px 20px;border-radius:10px;font-size:13.5px;font-weight:600;transition:all .18s;cursor:pointer;text-decoration:none;letter-spacing:.01em;font-family:'Inter',-apple-system,sans-serif}
-.pricing-cta.accent{background:var(--accent);color:#fff;box-shadow:0 4px 24px -6px rgba(139,126,255,.45)}
-.pricing-cta.accent:hover{background:#7d6ff5;color:#fff;transform:translateY(-1px);box-shadow:0 10px 32px -4px rgba(139,126,255,.6)}
+.pricing-cta.accent{background:var(--accent);color:#fff!important;box-shadow:0 4px 24px -6px rgba(139,126,255,.45)}
+.pricing-cta.accent:hover{background:#7d6ff5;color:#fff!important;transform:translateY(-1px);box-shadow:0 10px 32px -4px rgba(139,126,255,.6)}
 .pricing-cta.outline{background:rgba(255,255,255,.055);color:var(--text);border:1px solid rgba(255,255,255,.12)}
 .pricing-cta.outline:hover{border-color:rgba(139,126,255,.45);color:var(--accent);background:rgba(139,126,255,.06);transform:translateY(-1px)}
+/* ── light theme: recommended card ──────────────────────────── */
+html[data-theme="light"] .pricing-card.recommended{background:linear-gradient(160deg,rgba(139,126,255,.06) 0%,var(--surface) 55%);border-color:rgba(139,126,255,.35);box-shadow:0 0 0 1px rgba(139,126,255,.15),0 20px 60px -30px rgba(139,126,255,.12)}
+html[data-theme="light"] .pricing-card.recommended:hover{border-color:rgba(139,126,255,.5);box-shadow:0 0 0 1px rgba(139,126,255,.22),0 32px 64px -20px rgba(139,126,255,.18)}
+html[data-theme="light"] .pricing-card.recommended .pricing-name{color:var(--accent)}
+html[data-theme="light"] .pricing-card.recommended .pricing-price{color:var(--text)}
+html[data-theme="light"] .pricing-card.recommended .price-mo{color:var(--text-muted)}
+html[data-theme="light"] .pricing-card.recommended .pricing-period{color:var(--text-muted)}
+html[data-theme="light"] .pricing-card.recommended .pricing-features li{color:var(--text-dim)}
 html[data-theme="light"] .pricing-cta.outline{background:rgba(0,0,0,.04);color:var(--text);border:1px solid rgba(0,0,0,.12)}
 html[data-theme="light"] .pricing-cta.outline:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
-@media(prefers-color-scheme:light){html:not([data-theme="dark"]) .pricing-cta.outline{background:rgba(0,0,0,.04);color:var(--text);border:1px solid rgba(0,0,0,.12)}}
+@media(prefers-color-scheme:light){html:not([data-theme="dark"]) .pricing-card.recommended{background:linear-gradient(160deg,rgba(139,126,255,.06) 0%,var(--surface) 55%);border-color:rgba(139,126,255,.35);box-shadow:0 0 0 1px rgba(139,126,255,.15)}html:not([data-theme="dark"]) .pricing-card.recommended .pricing-name{color:var(--accent)}html:not([data-theme="dark"]) .pricing-card.recommended .pricing-price{color:var(--text)}html:not([data-theme="dark"]) .pricing-card.recommended .price-mo{color:var(--text-muted)}html:not([data-theme="dark"]) .pricing-card.recommended .pricing-period{color:var(--text-muted)}html:not([data-theme="dark"]) .pricing-card.recommended .pricing-features li{color:var(--text-dim)}html:not([data-theme="dark"]) .pricing-cta.outline{background:rgba(0,0,0,.04);color:var(--text);border:1px solid rgba(0,0,0,.12)}}
 .pricing-note{text-align:center;margin-top:36px;font-size:12px;color:var(--lp-text-faint);font-weight:400;font-family:'Inter',-apple-system,sans-serif}
 /* ── cta section ─────────────────────────────────────────────── */
 .cta-section{background:var(--bg);border-top:1px solid rgba(139,126,255,.08);border-bottom:1px solid rgba(139,126,255,.08);text-align:center;position:relative;overflow:hidden;padding:120px 24px}

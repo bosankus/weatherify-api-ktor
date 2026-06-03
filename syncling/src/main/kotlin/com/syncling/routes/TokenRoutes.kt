@@ -121,7 +121,7 @@ internal fun HTML.tokensApp() {
         div("tk-header") {
             div("tk-header-text") {
                 h1("page-title") { +"API Tokens & SDK Keys" }
-                p("page-sub") { +"Authenticate the Syncling CLI, Android SDK, and iOS SDK." }
+                p("page-sub") { +"Authenticate the Syncling CLI. Native SDKs are coming soon." }
             }
             button(classes = "bl-btn primary") {
                 id = "tk-new-btn"
@@ -146,40 +146,44 @@ internal fun HTML.tokensApp() {
 
         div { id = "tk-modal-mount" }
 
-        // ── SDK Quickstart card ──────────────────────────────────────────────
-        div("tk-qs-card") {
+        // ── SDK Quickstart cards ─────────────────────────────────────────────
+        div("tk-qs-card tk-qs-soon") {
             div("tk-qs-head") {
-                h2 { +"Android SDK" }
-            }
-            pre("tk-code") {
-                unsafe {
-                    +"""<span class="tk-c-comment">// 1. Add dependency (build.gradle.kts)</span>
-<span class="tk-c-cmd">implementation("space.syncling:syncling-android:1.0.0")</span>
-
-<span class="tk-c-comment">// 2. Initialize in Application.onCreate()</span>
-<span class="tk-c-cmd">Syncling.init(context, apiKey = "slk_your_android_key", projectId = "&lt;project-id&gt;")</span>
-
-<span class="tk-c-comment">// 3. Use translations (returns live CDN string)</span>
-<span class="tk-c-cmd">val greeting = Syncling.getString("welcome_message")</span>"""
+                div("tk-qs-platform-icon tk-qs-icon-android") {
+                    unsafe {
+                        +"""<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-label="Android">
+  <path d="M17.523 15.341a.999.999 0 1 1 0-1.998.999.999 0 0 1 0 1.998zm-11.046 0a.999.999 0 1 1 0-1.998.999.999 0 0 1 0 1.998zm11.405-6.02 1.997-3.459a.416.416 0 0 0-.72-.416l-2.022 3.503A11.963 11.963 0 0 0 12 7.851c-1.854 0-3.59.393-5.137 1.098L4.841 5.446a.416.416 0 0 0-.72.416l1.997 3.459C2.689 10.163.343 13.74 0 18h24c-.343-4.26-2.689-7.837-6.118-9.679z"/>
+</svg>"""
+                    }
                 }
+                div("tk-qs-head-info") {
+                    h2 { +"Android SDK" }
+                    span("tk-kmp-badge") { +"Kotlin Multiplatform" }
+                }
+                span("tk-soon-badge") { +"Yet to come" }
+            }
+            p("tk-qs-soon-desc") {
+                +"The Syncling Android SDK is being built with Kotlin Multiplatform (KMP) and will bring live CDN-backed translations natively to Android apps."
             }
         }
 
-        div("tk-qs-card") {
+        div("tk-qs-card tk-qs-soon") {
             div("tk-qs-head") {
-                h2 { +"iOS SDK" }
-            }
-            pre("tk-code") {
-                unsafe {
-                    +"""<span class="tk-c-comment">// 1. Add via Swift Package Manager</span>
-<span class="tk-c-cmd">// URL: https://github.com/syncling/syncling-ios</span>
-
-<span class="tk-c-comment">// 2. Initialize in AppDelegate / @main App</span>
-<span class="tk-c-cmd">Syncling.configure(apiKey: "slk_your_ios_key", projectId: "&lt;project-id&gt;")</span>
-
-<span class="tk-c-comment">// 3. Use translations</span>
-<span class="tk-c-cmd">let greeting = Syncling.string("welcome_message")</span>"""
+                div("tk-qs-platform-icon tk-qs-icon-ios") {
+                    unsafe {
+                        +"""<svg xmlns="http://www.w3.org/2000/svg" width="20" height="22" viewBox="0 0 24 24" fill="currentColor" aria-label="iOS / Apple">
+  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+</svg>"""
+                    }
                 }
+                div("tk-qs-head-info") {
+                    h2 { +"iOS SDK" }
+                    span("tk-kmp-badge") { +"Kotlin Multiplatform" }
+                }
+                span("tk-soon-badge") { +"Yet to come" }
+            }
+            p("tk-qs-soon-desc") {
+                +"The Syncling iOS SDK is being built with Kotlin Multiplatform (KMP) and will enable live CDN-backed translations natively on iOS."
             }
         }
 
