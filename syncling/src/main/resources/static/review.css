@@ -211,14 +211,13 @@
 .rv-list {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 24px;
 }
 
 .rv-group {
-    border-radius: var(--radius);
-    overflow: hidden;
-    border: 1px solid var(--border);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 /* ── Group header ── */
@@ -227,8 +226,10 @@
     align-items: center;
     gap: 10px;
     padding: 10px 16px;
-    background: linear-gradient(to right, var(--surface2), color-mix(in srgb, var(--surface2) 80%, var(--surface)));
-    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .05);
 }
 
 .rv-commit-badge {
@@ -305,25 +306,25 @@
 /* ── Card ── */
 .rv-card {
     background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .1);
     overflow: hidden;
-    transition: box-shadow .15s, border-color .15s;
+    transition: box-shadow .15s, border-color .15s, transform .15s;
     position: relative;
 }
 
-.rv-group .rv-card+.rv-card {
-    border-top: 1px solid var(--border);
-}
-
 .rv-card:hover {
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .15);
+    border-color: color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
 }
 
 .rv-card.status-review {
-    border-left: 3px solid var(--yellow);
+    border-left: 4px solid var(--yellow);
 }
 
 .rv-card.status-blocked {
-    border-left: 3px solid var(--red);
+    border-left: 4px solid var(--red);
 }
 
 /* ── Card header ── */
@@ -331,8 +332,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 18px;
-    background: var(--surface2);
+    padding: 14px 18px;
+    background: linear-gradient(to bottom, var(--surface2), transparent);
     border-bottom: 1px solid var(--border);
     gap: 12px;
 }
@@ -349,7 +350,7 @@
 .rv-card-header-right {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-shrink: 0;
 }
 
@@ -358,28 +359,29 @@
     font-family: 'SFMono-Regular', Consolas, monospace;
     color: var(--accent);
     background: var(--accent-dim2);
-    padding: 3px 8px;
-    border-radius: 4px;
-    border: 1px solid rgba(0, 229, 160, .15);
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 229, 160, .2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 260px;
+    max-width: 320px;
     display: inline-block;
     vertical-align: middle;
+    font-weight: 500;
 }
 
 .rv-badges {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     flex-wrap: wrap;
 }
 
 .rv-badge {
     font-size: 11px;
     font-weight: 500;
-    padding: 2px 8px;
+    padding: 3px 10px;
     border-radius: 20px;
     white-space: nowrap;
     border: 1px solid;
@@ -413,7 +415,7 @@
 .rv-status-pill {
     font-size: 11px;
     font-weight: 700;
-    padding: 3px 10px;
+    padding: 4px 12px;
     border-radius: 20px;
     letter-spacing: .2px;
     flex-shrink: 0;
@@ -443,9 +445,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: transparent;
+    width: 30px;
+    height: 30px;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-muted);
@@ -493,7 +495,7 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 3px 10px;
+    padding: 4px 12px;
     border-radius: var(--radius-sm);
     background: transparent;
     border: 1px solid rgba(250, 173, 20, .35);
@@ -507,14 +509,14 @@
 }
 
 .rv-btn-unlock:hover {
-    background: rgba(250, 173, 20, .08);
+    background: rgba(250, 173, 20, .1);
 }
 
 .rv-diff-banner {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    padding: 9px 18px;
+    padding: 10px 18px;
     background: rgba(0, 229, 160, .03);
     border-bottom: 1px solid rgba(0, 229, 160, .1);
     font-size: 12px;
@@ -562,91 +564,102 @@
 .rv-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    background: var(--surface);
 }
 
 .rv-source {
-    padding: 18px 20px;
+    padding: 20px;
     border-right: 1px solid var(--border);
 }
 
 .rv-target {
-    padding: 18px 20px;
+    padding: 20px;
 }
 
 .rv-pane-label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 1px;
     color: var(--text-muted);
     text-transform: uppercase;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
 }
 
 .rv-editable-hint {
-    font-weight: 400;
+    font-weight: 500;
     letter-spacing: 0;
     text-transform: none;
     font-size: 11px;
-    opacity: .6;
-    margin-left: 2px;
+    color: var(--accent);
+    opacity: .7;
+    margin-left: 4px;
+    background: var(--accent-dim2);
+    padding: 2px 6px;
+    border-radius: 4px;
 }
 
 .rv-source-text {
     font-size: 14px;
     color: var(--text-dim);
-    line-height: 1.75;
+    line-height: 1.8;
 }
 
 .rv-textarea {
     font-size: 14px;
-    line-height: 1.75;
+    line-height: 1.8;
     resize: vertical;
-    min-height: 80px;
-    background: var(--bg) !important;
-    border-color: rgba(255, 255, 255, .06) !important;
-    transition: border-color .15s, box-shadow .15s !important;
+    min-height: 90px;
+    background: var(--surface2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    color: var(--text);
+    transition: border-color .15s, box-shadow .15s, background .15s !important;
 }
 
 .rv-textarea:focus {
+    background: var(--surface) !important;
     border-color: var(--accent) !important;
-    box-shadow: 0 0 0 3px rgba(0, 229, 160, .08) !important;
+    box-shadow: 0 0 0 3px rgba(0, 229, 160, .1) !important;
+    outline: none;
 }
 
 /* ── Actions footer ── */
 .rv-actions {
-    padding: 11px 18px;
+    padding: 14px 20px;
     border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    background: var(--surface2);
+    gap: 16px;
+    background: color-mix(in srgb, var(--surface2) 40%, var(--surface));
 }
 
 .rv-char-hint {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    font-weight: 500;
 }
 
 .rv-action-btns {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     flex-shrink: 0;
 }
 
 .rv-btn-reject {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    background: transparent;
+    gap: 6px;
+    background: var(--surface);
     color: var(--text-muted);
     border: 1px solid var(--border);
-    padding: 6px 14px;
+    padding: 7px 16px;
     font-size: 13px;
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -658,16 +671,16 @@
 .rv-btn-reject:hover:not(:disabled) {
     border-color: var(--red);
     color: var(--red);
-    background: rgba(255, 77, 79, .06);
+    background: rgba(255, 77, 79, .08);
 }
 
 .rv-btn-approve {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     background: var(--accent);
     color: #000;
-    padding: 6px 16px;
+    padding: 7px 20px;
     font-size: 13px;
     font-weight: 600;
     border-radius: var(--radius-sm);
@@ -678,15 +691,15 @@
 }
 
 .rv-btn-approve:hover:not(:disabled) {
-    background: #7A6DEE;
+    background: #00f0a8;
     transform: translateY(-1px);
-    box-shadow: 0 4px 14px -4px rgba(0, 229, 160, .4);
+    box-shadow: 0 4px 12px -2px rgba(0, 229, 160, .3);
 }
 
 .rv-btn-approve:disabled,
 .rv-btn-reject:disabled,
 .rv-btn-hotfix:disabled {
-    opacity: .38;
+    opacity: .4;
     cursor: not-allowed !important;
     transform: none !important;
     box-shadow: none !important;
@@ -696,11 +709,11 @@
 .rv-btn-hotfix {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     background: transparent;
     color: #b57bee;
-    border: 1px solid rgba(138, 43, 226, .35);
-    padding: 6px 14px;
+    border: 1px solid rgba(138, 43, 226, .4);
+    padding: 7px 16px;
     font-size: 13px;
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -710,8 +723,8 @@
 }
 
 .rv-btn-hotfix:hover:not(:disabled) {
-    background: rgba(138, 43, 226, .08);
-    border-color: rgba(138, 43, 226, .6);
+    background: rgba(138, 43, 226, .1);
+    border-color: rgba(138, 43, 226, .8);
     color: #c89af0;
     transform: translateY(-1px);
 }
@@ -725,9 +738,9 @@
 /* ── Hotfix confirm panel (inline, mirrors the reject panel pattern) ── */
 .rv-hotfix-panel {
     display: none;
-    padding: 14px 18px 16px;
-    border-top: 1px solid rgba(138, 43, 226, .18);
-    background: rgba(138, 43, 226, .03);
+    padding: 16px 20px 20px;
+    border-top: 1px solid rgba(138, 43, 226, .2);
+    background: color-mix(in srgb, rgba(138, 43, 226, .05) 50%, var(--surface));
 }
 
 .rv-hotfix-panel.open {
@@ -737,21 +750,21 @@
 .rv-hotfix-warning {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    font-size: 12px;
+    gap: 10px;
+    font-size: 13px;
     color: var(--text-dim);
-    line-height: 1.55;
-    margin-bottom: 12px;
-    padding: 9px 11px;
-    background: rgba(138, 43, 226, .05);
-    border: 1px solid rgba(138, 43, 226, .18);
+    line-height: 1.6;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    background: rgba(138, 43, 226, .08);
+    border: 1px solid rgba(138, 43, 226, .25);
     border-radius: var(--radius-sm);
 }
 
 .rv-hotfix-warning svg {
     color: #b57bee;
     flex-shrink: 0;
-    margin-top: 1px;
+    margin-top: 2px;
 }
 
 .rv-hotfix-warning strong {
@@ -761,24 +774,26 @@
 
 .rv-hotfix-footer {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     justify-content: flex-end;
     align-items: center;
 }
 
 .rv-hotfix-footer .rv-hotfix-summary {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     margin-right: auto;
     font-variant-numeric: tabular-nums;
+    font-weight: 500;
 }
 
 .rv-btn-confirm-hotfix {
     background: #8a2be2;
     color: #fff;
     border: none;
-    padding: 6px 14px;
+    padding: 7px 18px;
     font-size: 13px;
+    font-weight: 500;
     border-radius: var(--radius-sm);
     cursor: pointer;
     font-family: inherit;
@@ -793,16 +808,16 @@
 }
 
 .rv-btn-confirm-hotfix:disabled {
-    opacity: .4;
+    opacity: .5;
     cursor: not-allowed;
 }
 
 /* ── Reject panel ── */
 .rv-reject-panel {
     display: none;
-    padding: 16px 18px;
-    border-top: 1px solid rgba(255, 77, 79, .14);
-    background: rgba(255, 77, 79, .025);
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255, 77, 79, .15);
+    background: color-mix(in srgb, rgba(255, 77, 79, .03) 50%, var(--surface));
 }
 
 .rv-reject-panel.open {
@@ -810,17 +825,23 @@
 }
 
 .rv-reject-textarea {
-    min-height: 64px;
+    min-height: 70px;
     resize: vertical;
     font-size: 13px;
-    margin-top: 8px;
-    margin-bottom: 10px;
+    margin-top: 10px;
+    margin-bottom: 14px;
     border-color: rgba(255, 77, 79, .3) !important;
+    background: var(--surface) !important;
+}
+
+.rv-reject-textarea:focus {
+    border-color: var(--red) !important;
+    box-shadow: 0 0 0 3px rgba(255, 77, 79, .1) !important;
 }
 
 .rv-reject-footer {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     justify-content: flex-end;
 }
 
@@ -828,8 +849,9 @@
     background: var(--red);
     color: #fff;
     border: none;
-    padding: 6px 14px;
+    padding: 7px 18px;
     font-size: 13px;
+    font-weight: 500;
     border-radius: var(--radius-sm);
     cursor: pointer;
     font-family: inherit;
@@ -841,16 +863,17 @@
 }
 
 .rv-btn-confirm-reject:disabled {
-    opacity: .4;
+    opacity: .5;
     cursor: not-allowed;
 }
 
 .rv-btn-cancel {
-    background: transparent;
+    background: var(--surface);
     color: var(--text-muted);
     border: 1px solid var(--border);
-    padding: 6px 14px;
+    padding: 7px 16px;
     font-size: 13px;
+    font-weight: 500;
     border-radius: var(--radius-sm);
     cursor: pointer;
     font-family: inherit;
@@ -860,6 +883,7 @@
 .rv-btn-cancel:hover {
     color: var(--text);
     border-color: var(--text-muted);
+    background: var(--surface2);
 }
 
 /* ── Empty state ── */

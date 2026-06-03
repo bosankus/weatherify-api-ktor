@@ -1123,6 +1123,22 @@ fun Route.configureApiRoutes(
             call.respond(RetryEnqueuedResponse(queued = true, originalRunId = runId, attempt = attempt, maxRetries = MAX_RETRIES))
         }
 
+        // Cancel a stuck pipeline run
+        post("/pipeline/runs/{runId}/cancel") {
+            val userId = call.userId()
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val runId = call.parameters["runId"]
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Missing runId"))
+
+            val run = pipelineEventBus.recentRuns(userId).find { it.runId == runId }
+                ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("Run not found"))
+
+            pipelineEventBus.finishRun(userId, runId, error = "Cancelled by user")
+            apiLog.info("Run cancelled by user: runId={} repo={}", runId, run.repo)
+            call.respond(HttpStatusCode.OK, mapOf("status" to "cancelled", "runId" to runId))
+        }
+
+
         // --- Manual Sync (rate-limited: 5/min per IP) ---
         rateLimit(RateLimitName("manual_sync")) {
         post("/projects/{id}/sync") {

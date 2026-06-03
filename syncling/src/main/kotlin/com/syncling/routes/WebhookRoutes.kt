@@ -134,7 +134,9 @@ fun Route.configureWebhookRoutes(
                 }
             }
 
-            val sourceModified = if (commits != null) {
+            val headCommit = json["head_commit"]?.jsonObject
+                ?: commits?.lastOrNull()?.jsonObject
+            var sourceModified = if (commits != null) {
                 commits.any { commit ->
                     val modified = commit.jsonObject["modified"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
                     val added = commit.jsonObject["added"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
@@ -144,6 +146,13 @@ fun Route.configureWebhookRoutes(
                     }
                 }
             } else true
+            if (!sourceModified && headCommit != null) {
+                val parents = headCommit["parents"]?.jsonArray
+                if (parents != null && parents.size > 1) {
+                    log.info("Push may contain a merge commit. Bypassing initial file check. Commit: {}", commitHash.take(7))
+                    sourceModified = true
+                }
+            }
 
             if (!sourceModified) {
                 log.info("Webhook ignored: source files {} not modified in push to {}", project.sourceFilePaths, repo)
@@ -174,8 +183,6 @@ fun Route.configureWebhookRoutes(
             // Capture the head-commit author email for analytics attribution. The pipeline
             // worker resolves this against project_members to credit a member, or falls back
             // to the synthetic "external" actor in the analytics rollup.
-            val headCommit = json["head_commit"]?.jsonObject
-                ?: commits?.lastOrNull()?.jsonObject
             val triggeredByEmail = headCommit?.get("author")?.jsonObject
                 ?.get("email")?.jsonPrimitive?.content
                 ?.trim()?.lowercase()
