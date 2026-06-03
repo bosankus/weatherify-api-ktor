@@ -9,6 +9,9 @@ import com.syncling.repository.ProjectMembershipRepository
 import com.syncling.repository.ProjectRepository
 import com.syncling.repository.TranslationRepository
 import com.syncling.repository.UserRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
@@ -135,24 +138,28 @@ class AnalyticsService(
         val runs = pipelineRunRepository.listForOwner(ownerId, since, limit = 5000)
         val byProject = runs.groupBy { it.projectId }
 
-        return projects.map { p ->
-            val pruns = byProject[p.id].orEmpty()
-            val statusCounts = runCatching { translationRepository.countByStatusForProject(p.id) }
-                .getOrDefault(emptyMap())
-            val auto = statusCounts["auto"] ?: 0
-            val review = statusCounts["review"] ?: 0
-            val blocked = statusCounts["blocked"] ?: 0
-            val decided = auto + review + blocked
-            val acceptance = if (decided > 0) (auto * 100 / decided) else null
-            ProjectRow(
-                projectId = p.id,
-                name = p.name,
-                stringsTranslated = pruns.sumOf { it.stringsTranslated },
-                runs = pruns.size,
-                locales = pruns.flatMap { it.stringsPerLocale.keys }.toSet().size,
-                acceptanceRatePct = acceptance,
-                lastRunMillis = pruns.maxOfOrNull { it.startedAt }
-            )
+        return coroutineScope {
+            projects.map { p ->
+                async {
+                    val pruns = byProject[p.id].orEmpty()
+                    val statusCounts = runCatching { translationRepository.countByStatusForProject(p.id) }
+                        .getOrDefault(emptyMap())
+                    val auto = statusCounts["auto"] ?: 0
+                    val review = statusCounts["review"] ?: 0
+                    val blocked = statusCounts["blocked"] ?: 0
+                    val decided = auto + review + blocked
+                    val acceptance = if (decided > 0) (auto * 100 / decided) else null
+                    ProjectRow(
+                        projectId = p.id,
+                        name = p.name,
+                        stringsTranslated = pruns.sumOf { it.stringsTranslated },
+                        runs = pruns.size,
+                        locales = pruns.flatMap { it.stringsPerLocale.keys }.toSet().size,
+                        acceptanceRatePct = acceptance,
+                        lastRunMillis = pruns.maxOfOrNull { it.startedAt }
+                    )
+                }
+            }.awaitAll()
         }.sortedByDescending { it.stringsTranslated }
     }
 
@@ -259,9 +266,10 @@ class AnalyticsService(
         }
 
         val realIds = byMember.keys.filter { it != MemberUsage.EXTERNAL }.toSet()
-        val users = realIds.mapNotNull { id ->
-            runCatching { userRepository.findById(id) }.getOrNull()?.let { id to it }
-        }.toMap()
+        val users = coroutineScope {
+            realIds.map { id -> async { runCatching { userRepository.findById(id) }.getOrNull()?.let { id to it } } }
+                .awaitAll().filterNotNull().toMap()
+        }
 
         return byMember.map { (key, acc) ->
             val u = users[key]
@@ -309,9 +317,10 @@ class AnalyticsService(
         val rollups = memberUsageRepository.listForOwner(ownerId, ym)
 
         val realIds = rollups.map { it.memberUserId }.filter { it != MemberUsage.EXTERNAL }.toSet()
-        val users = realIds.mapNotNull { id ->
-            runCatching { userRepository.findById(id) }.getOrNull()?.let { id to it }
-        }.toMap()
+        val users = coroutineScope {
+            realIds.map { id -> async { runCatching { userRepository.findById(id) }.getOrNull()?.let { id to it } } }
+                .awaitAll().filterNotNull().toMap()
+        }
         val projects = projectRepository.listForUser(ownerId).associateBy { it.id }
 
         // Total used as the proration base. We deliberately use the rollup sum here so a
@@ -372,18 +381,22 @@ class AnalyticsService(
 
     suspend fun quality(ownerId: String): List<QualityRow> {
         val projects = projectRepository.listForUser(ownerId)
-        return projects.map { p ->
-            val counts = runCatching { translationRepository.countByStatusForProject(p.id) }
-                .getOrDefault(emptyMap())
-            val auto = counts["auto"] ?: 0
-            val review = counts["review"] ?: 0
-            val blocked = counts["blocked"] ?: 0
-            val decided = auto + review + blocked
-            QualityRow(
-                projectId = p.id, name = p.name,
-                auto = auto, review = review, blocked = blocked,
-                acceptanceRatePct = if (decided > 0) auto * 100 / decided else null
-            )
+        return coroutineScope {
+            projects.map { p ->
+                async {
+                    val counts = runCatching { translationRepository.countByStatusForProject(p.id) }
+                        .getOrDefault(emptyMap())
+                    val auto = counts["auto"] ?: 0
+                    val review = counts["review"] ?: 0
+                    val blocked = counts["blocked"] ?: 0
+                    val decided = auto + review + blocked
+                    QualityRow(
+                        projectId = p.id, name = p.name,
+                        auto = auto, review = review, blocked = blocked,
+                        acceptanceRatePct = if (decided > 0) auto * 100 / decided else null
+                    )
+                }
+            }.awaitAll()
         }.sortedByDescending { it.auto + it.review + it.blocked }
     }
 
@@ -391,16 +404,20 @@ class AnalyticsService(
 
     private suspend fun resolveDisplayNames(userIds: Set<String>): Map<String, String> {
         if (userIds.isEmpty()) return emptyMap()
-        return userIds.mapNotNull { id ->
-            runCatching { userRepository.findById(id) }.getOrNull()?.let { u ->
-                val name = when {
-                    u.githubUsername.isNotBlank() -> "@${u.githubUsername}"
-                    u.email?.isNotBlank() == true -> u.email ?: id.take(8)
-                    else -> id.take(8)
+        return coroutineScope {
+            userIds.map { id ->
+                async {
+                    runCatching { userRepository.findById(id) }.getOrNull()?.let { u ->
+                        val name = when {
+                            u.githubUsername.isNotBlank() -> "@${u.githubUsername}"
+                            u.email?.isNotBlank() == true -> u.email ?: id.take(8)
+                            else -> id.take(8)
+                        }
+                        id to name
+                    }
                 }
-                id to name
-            }
-        }.toMap()
+            }.awaitAll().filterNotNull().toMap()
+        }
     }
 
     private fun planPriceInr(plan: BillingPlan): Int =

@@ -171,7 +171,23 @@ class TranslationPipeline(
         val existingDbStrings = translationRepository.getStringKeysAndTexts(project.id)
         val allChangedStrings = allSourceStrings.filter { (key, text) -> existingDbStrings[key] != text }
 
-        if (allChangedStrings.isEmpty()) {
+        // Detect "orphaned" strings: present in the source DB with the right text but no translations yet.
+        // This happens when a previous pipeline run stored the string via bulkUpsertStrings but then
+        // failed before finishing (PR creation error, translation error, etc.) — the hash was never
+        // updated, so the next run's hash check correctly passes, but allChangedStrings comes up empty
+        // because the source text already matches what's in stringsCol.  We must re-process these so
+        // they don't silently disappear.
+        val orphanedKeys: Set<String> = if (allChangedStrings.isEmpty()) {
+            val processedKeys = translationRepository.getProcessedStringKeys(project.id)
+            allSourceStrings.keys.filter { key -> existingDbStrings.containsKey(key) && key !in processedKeys }
+                .toSet()
+        } else emptySet()
+
+        val effectiveChangedStrings: Map<String, String> =
+            if (orphanedKeys.isEmpty()) allChangedStrings
+            else allChangedStrings + allSourceStrings.filterKeys { it in orphanedKeys }
+
+        if (effectiveChangedStrings.isEmpty()) {
             eventBus.stepDone(userId, runId, "DETECTING_CHANGES", "No changes")
             listOf("BILLING_CHECK", "TRANSLATING", "CREATING_PR").forEach {
                 eventBus.stepSkipped(userId, runId, it)
@@ -182,11 +198,22 @@ class TranslationPipeline(
             return
         }
 
+        if (orphanedKeys.isNotEmpty()) {
+            log.info("{} orphaned string(s) (stored by a previous partial run, never translated) will be re-processed",
+                orphanedKeys.size)
+        }
+
         // Split all changed strings into brand-new ones and modifications to existing ones.
+        // Orphaned keys are treated as new (force retranslation — their old and new source text are
+        // identical so the semantic classifier would always mark them SURFACE and skip them).
         // Modifications are then classified: surface-only rewrites skip retranslation;
         // semantic changes (meaning shifted) retranslate all targets.
-        val newStrings = allChangedStrings.filter { (key, _) -> !existingDbStrings.containsKey(key) }
-        val modifiedStrings = allChangedStrings.filter { (key, _) -> existingDbStrings.containsKey(key) }
+        val newStrings = effectiveChangedStrings.filter { (key, _) ->
+            !existingDbStrings.containsKey(key) || key in orphanedKeys
+        }
+        val modifiedStrings = effectiveChangedStrings.filter { (key, _) ->
+            existingDbStrings.containsKey(key) && key !in orphanedKeys
+        }
 
         val (surfaceKeys, semanticKeys) = if (payload.forceTranslate) {
             // User explicitly overrode the classifier — treat every modified string as semantic.

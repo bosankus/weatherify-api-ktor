@@ -818,6 +818,59 @@ private const val LANDING_JS = """
       });
     });
   }
+
+  // ── hero particle network ─────────────────────────────────────
+  var hc=document.getElementById('hero-canvas');
+  if(hc){
+    var hx=hc.getContext('2d');
+    function rsz(){hc.width=hc.offsetWidth;hc.height=hc.offsetHeight;}
+    rsz();
+    window.addEventListener('resize',rsz);
+    var pts=Array.from({length:60},function(){return{x:Math.random()*hc.width,y:Math.random()*hc.height,r:Math.random()*.9+.25,vx:(Math.random()-.5)*.22,vy:(Math.random()-.5)*.22,o:Math.random()*.3+.07};});
+    (function loop(){
+      hx.clearRect(0,0,hc.width,hc.height);
+      for(var i=0;i<pts.length;i++){
+        var p=pts[i];
+        p.x+=p.vx;p.y+=p.vy;
+        if(p.x<0||p.x>hc.width)p.vx*=-1;
+        if(p.y<0||p.y>hc.height)p.vy*=-1;
+        hx.beginPath();hx.arc(p.x,p.y,p.r,0,6.283);
+        hx.fillStyle='rgba(139,126,255,'+p.o+')';hx.fill();
+        for(var j=i+1;j<pts.length;j++){
+          var dx=p.x-pts[j].x,dy=p.y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
+          if(d<130){
+            hx.beginPath();hx.moveTo(p.x,p.y);hx.lineTo(pts[j].x,pts[j].y);
+            hx.strokeStyle='rgba(139,126,255,'+(.11*(1-d/130))+')';hx.lineWidth=.45;hx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(loop);
+    })();
+  }
+
+  // ── cursor glow on hero ───────────────────────────────────────
+  var hs=document.querySelector('.hero');
+  if(hs){
+    var cg=document.createElement('div');cg.className='hero-cursor-glow';hs.appendChild(cg);
+    hs.addEventListener('mousemove',function(e){
+      var r=hs.getBoundingClientRect();
+      cg.style.left=(e.clientX-r.left)+'px';cg.style.top=(e.clientY-r.top)+'px';cg.style.opacity='1';
+    });
+    hs.addEventListener('mouseleave',function(){cg.style.opacity='0';});
+  }
+
+  // ── 3-D tilt on SDK and pricing cards ────────────────────────
+  document.querySelectorAll('.sdk-teaser-card,.pricing-card').forEach(function(card){
+    card.addEventListener('mousemove',function(e){
+      var r=card.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,cx=r.width/2,cy=r.height/2;
+      var rx=(y-cy)/cy*4.5,ry=(cx-x)/cx*4.5;
+      card.style.transform='perspective(880px) rotateX('+rx+'deg) rotateY('+ry+'deg) translateY(-4px)';
+      card.style.boxShadow='0 24px 72px -20px rgba(139,126,255,.32),0 8px 24px -8px rgba(0,0,0,.55)';
+    });
+    card.addEventListener('mouseleave',function(){
+      card.style.transform='';card.style.boxShadow='';
+    });
+  });
 })();
 """
 
@@ -934,16 +987,22 @@ internal fun HTML.landingPage() {
         }
 
         section("hero") {
+            canvas(classes = "hero-canvas") { id = "hero-canvas" }
             div("hero-grid") {}
             div("hero-glow") {}
             div("hero-glow2") {}
+            div("hero-orb-extra hero-orb1") {}
+            div("hero-orb-extra hero-orb2") {}
             div("hero-inner") {
-                span("badge fade-up") { +"Android & iOS · 10+ Languages · Free to start" }
-                h1("hero-title fade-up d1") {
-                    +"Your app,"; br {}; +"every language. "; span("accent") { +"Automatically." }
+                span("badge fade-up") { +"Multiplatform SDK · 10+ Languages · Free to start" }
+                h1("hero-title") {
+                    span("hero-word w1 accent") { +"Commit." }; +" "; span("hero-word w2") { +"Translate." }; +" "; span("hero-word w3") { +"Ship." }
+                }
+                p("hero-funny fade-up") {
+                    +"Your app speaks Japanese now. You still don't. That's okay."
                 }
                 p("hero-sub fade-up d2") {
-                    +"Push a commit. Syncling detects changed strings, translates them into 10+ languages with AI, and ships to a global CDN in 45 seconds — no manual work, no app release needed."
+                    +"Push a commit. AI detects changed strings, translates into 10+ languages, and ships to a global CDN in 45 seconds — no manual work, no app release needed."
                 }
                 div("hero-actions fade-up d3") {
                     a("/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started free" }
@@ -1041,9 +1100,9 @@ internal fun HTML.landingPage() {
         section("sdk-section") {
             id = "sdk"
             div("section-inner") {
-                p("section-label fade-up") { +"NATIVE SDKs" }
+                p("section-label fade-up") { +"MULTIPLATFORM SDK" }
                 h2("fade-up d1") { +"Drop in. Get live translations." }
-                p("sdk-intro fade-up d1") { +"Native SDKs for Android and iOS fetch localized strings from the nearest Cloudflare edge node — offline-first, zero networking code, no caching logic to manage." }
+                p("sdk-intro fade-up d1") { +"One Kotlin Multiplatform SDK — built for Android and iOS from a single codebase. Drop it in, call init, and live translations reach your users from the nearest CDN edge node. Offline-first. Zero networking code to write." }
                 div("sdk-teaser-grid fade-up d2") {
                     div("sdk-teaser-card sdk-android-card") {
                         div("sdk-teaser-top") {
@@ -1052,11 +1111,11 @@ internal fun HTML.landingPage() {
                             }
                             div {
                                 p("sdk-name") { +"Android SDK" }
-                                span("sdk-status") { +"In production" }
+                                span("sdk-status sdk-coming-soon") { +"Coming Soon" }
                             }
                         }
-                        p("sdk-teaser-desc") { +"Kotlin & Java compatible. Works with your existing strings.xml. One-line init, smart cache invalidation, fully offline-first." }
-                        a("/docs#android-sdk") { classes = setOf("sdk-teaser-link"); +"View Android docs →" }
+                        p("sdk-teaser-desc") { +"Kotlin Multiplatform. Drops into your existing strings.xml workflow with a single dependency. Intelligent cache invalidation, fully offline-first." }
+                        span("sdk-teaser-link-disabled") { +"Android docs coming soon" }
                     }
                     div("sdk-teaser-card sdk-ios-card") {
                         div("sdk-teaser-top") {
@@ -1065,11 +1124,11 @@ internal fun HTML.landingPage() {
                             }
                             div {
                                 p("sdk-name") { +"iOS SDK" }
-                                span("sdk-status") { +"In production" }
+                                span("sdk-status sdk-coming-soon") { +"Coming Soon" }
                             }
                         }
-                        p("sdk-teaser-desc") { +"Swift-native. SwiftUI and UIKit compatible. Zero dependencies, intelligent caching, serves strings from the nearest CDN node." }
-                        a("/docs#ios-sdk") { classes = setOf("sdk-teaser-link"); +"View iOS docs →" }
+                        p("sdk-teaser-desc") { +"Same Kotlin Multiplatform core, Swift-native surface. SwiftUI and UIKit ready. One codebase, two platforms, live translations from the global CDN." }
+                        span("sdk-teaser-link-disabled") { +"iOS docs coming soon" }
                     }
                 }
             }
@@ -1181,41 +1240,21 @@ internal fun HTML.landingPage() {
             id = "faq"
             div("section-inner") {
                 p("section-label fade-up") { +"FAQ" }
-                h2("fade-up d1") { +"Frequently asked questions." }
+                h2("fade-up d1") { +"Quick answers." }
                 div("faq-grid") {
                     data class FaqItem(val q: String, val a: String)
                     listOf(
                         FaqItem(
                             "What exactly is Syncling?",
-                            "Syncling is an automated mobile app localization platform for Android and iOS developers. It hooks into your GitHub repository, detects which strings semantically changed, translates them with Claude AI into 10+ languages, and publishes the result to a global Cloudflare CDN — all within ~45 seconds of a git push, no manual work required."
+                            "Syncling is an automated mobile app localization platform. Connect your GitHub repo — every push triggers AI translation into 10+ languages, published to a global CDN in ~45 seconds. No dashboards. No manual steps. No app release needed."
                         ),
                         FaqItem(
                             "How is this different from Phrase, Lokalise, or Crowdin?",
-                            "Those tools manage translation workflows with human translators and dashboards. Syncling is fully automated and git-native — translations trigger from a commit, not a task. Semantic change detection skips unchanged strings so you only pay for real changes, and a CDN-first SDK means you can update copy in any language without a new app store release."
+                            "Those tools are built for human translators with workflow dashboards. Syncling is fully automated and git-native — translations fire from a commit, not a Jira ticket. Semantic change detection skips unchanged strings so you only pay for what actually changed."
                         ),
                         FaqItem(
                             "Can I update translations without releasing a new app version?",
-                            "Yes — this is a core feature. Translations are served over-the-air from Cloudflare's global CDN via the Syncling Android or iOS SDK. Fix a typo or add a language at any time and it goes live in under 45 seconds, with zero App Store or Google Play submission required."
-                        ),
-                        FaqItem(
-                            "Does it work with my existing strings.xml or Localizable.strings?",
-                            "Yes. The Android SDK integrates with your existing strings.xml workflow in Kotlin or Java. The iOS SDK works with SwiftUI and UIKit. Both SDKs are offline-first with smart cache invalidation and fetch from the nearest CDN node."
-                        ),
-                        FaqItem(
-                            "What languages are supported?",
-                            "Currently: Spanish, French, German, Japanese, Korean, Chinese Simplified, Hindi, Brazilian Portuguese, Italian, and Arabic. The Free plan includes 3 target languages; Solo and Team plans unlock all available languages."
-                        ),
-                        FaqItem(
-                            "How accurate are the AI translations?",
-                            "Translations use Claude (Anthropic) with your project's glossary applied so brand terms stay consistent. Post-translation, a cultural sensitivity check flags formality mismatches and regional idiom issues. You can also run translations through the built-in human review portal before they go live on the CDN."
-                        ),
-                        FaqItem(
-                            "Is there a free plan? Do I need a credit card?",
-                            "The Free plan includes 500 strings/month, 1 project, 3 target languages, GitHub webhook, AI translation, and CDN delivery — no credit card required, free forever. Paid plans (Solo ₹499/mo, Team ₹1,999/mo) each start with a 7-day free trial with no charge until it ends."
-                        ),
-                        FaqItem(
-                            "What happens if a translation contains a broken placeholder like %1\$s?",
-                            "Syncling's placeholder guard automatically validates all format specifiers (%1\$s, %d, %@, etc.) after translation. If a placeholder is missing or malformed, that string is blocked and flagged for review — it never reaches the CDN or your users."
+                            "Yes — this is the whole point. Translations are served over-the-air from Cloudflare's global CDN. Fix a typo, add a language, ship in 45 seconds. Zero App Store or Play Store submission required."
                         )
                     ).forEach { item ->
                         div("faq-item fade-up") {
@@ -1223,6 +1262,9 @@ internal fun HTML.landingPage() {
                             p("faq-a") { +item.a }
                         }
                     }
+                }
+                p("faq-docs-link fade-up d2") {
+                    +"Got more questions? "; a("/docs#faq") { +"Read the full FAQ in docs →" }
                 }
             }
         }
@@ -1236,16 +1278,9 @@ internal fun HTML.landingPage() {
         }
 
         footer {
-            div("footer-inner") {
+            div("footer-inner footer-simple") {
                 div("brand") { unsafe { +LOGO_SVG }; span { unsafe { +"<span class=\"brand-sync\">Sync</span>ling" } } }
-                nav("footer-nav") {
-                    a("#how") { +"How it works" }
-                    a("#features") { +"Features" }
-                    a("#pricing") { +"Pricing" }
-                    a("#faq") { +"FAQ" }
-                    a("/docs") { +"Docs" }
-                }
-                p("footer-copy") { +"© 2026 Syncling" }
+                p("footer-copy") { +"© 2026 Syncling · "; a("/docs") { classes = setOf("footer-docs-link"); +"Docs" } }
             }
         }
 
@@ -2293,6 +2328,51 @@ footer{padding:40px 32px;border-top:1px solid var(--border)}
   .pricing-price{font-size:44px}
   .nav-inner{padding:11px 16px}
 }
+/* ── abstract animations & techy effects ────────────────── */
+@keyframes wordIn{0%{opacity:0;transform:translateY(22px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes orbDrift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(56px,-44px) scale(1.06)}66%{transform:translate(-36px,28px) scale(.96)}}
+@keyframes orbDrift2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-48px,36px) scale(1.04)}70%{transform:translate(32px,-22px) scale(.97)}}
+@keyframes scanLine{0%{transform:translateY(-100%);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(200%);opacity:0}}
+/* canvas backdrop */
+.hero-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.55}
+/* hero word stagger */
+.hero-word{display:inline-block;opacity:0;animation:wordIn .72s cubic-bezier(.16,1,.3,1) forwards}
+.hero-word.w1{animation-delay:.06s}
+.hero-word.w2{animation-delay:.28s;color:var(--text)}
+.hero-word.w3{animation-delay:.50s;color:var(--text)}
+/* funny tagline */
+.hero-funny{font-size:clamp(13px,1.6vw,15px);color:var(--lp-text-faint);margin:0 0 28px;font-style:italic;font-weight:400;letter-spacing:.01em;line-height:1.5;font-family:'Inter',-apple-system,sans-serif}
+/* floating abstract orbs */
+.hero-orb-extra{position:absolute;border-radius:50%;pointer-events:none;filter:blur(80px);z-index:0}
+.hero-orb1{width:520px;height:520px;top:-80px;left:3%;background:radial-gradient(circle,rgba(139,126,255,.1),transparent 68%);animation:orbDrift 30s ease-in-out infinite}
+.hero-orb2{width:400px;height:400px;bottom:-60px;right:3%;background:radial-gradient(circle,rgba(34,211,238,.07),transparent 68%);animation:orbDrift2 22s ease-in-out infinite}
+/* cursor glow (injected by JS) */
+.hero-cursor-glow{position:absolute;width:360px;height:360px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);z-index:0;background:radial-gradient(circle,rgba(139,126,255,.065),transparent 68%);opacity:0;transition:opacity .35s ease,left .08s ease-out,top .08s ease-out}
+/* SDK coming-soon badge */
+.sdk-coming-soon{background:rgba(251,191,36,.07)!important;color:#fbbf24!important;border:1px solid rgba(251,191,36,.22)!important}
+/* disabled link */
+.sdk-teaser-link-disabled{display:inline-block;font-size:13px;font-weight:500;color:var(--lp-text-faint);letter-spacing:.01em;opacity:.4;cursor:default;font-family:'Inter',-apple-system,sans-serif;font-style:italic}
+/* FAQ docs link */
+.faq-docs-link{text-align:center;margin-top:44px;font-size:14px;color:var(--lp-text-muted2);font-family:'Inter',-apple-system,sans-serif}
+.faq-docs-link a{color:var(--accent);font-weight:600;transition:opacity .18s}
+.faq-docs-link a:hover{opacity:.7}
+/* footer simple layout */
+.footer-simple{justify-content:space-between;align-items:center}
+.footer-docs-link{color:var(--accent)!important;font-weight:500;transition:opacity .18s}
+.footer-docs-link:hover{opacity:.72}
+/* enhanced card hovers with lift + glow */
+.sdk-teaser-card{transition:background .22s,transform .38s cubic-bezier(.2,.8,.2,1),box-shadow .38s cubic-bezier(.2,.8,.2,1);will-change:transform}
+.sdk-teaser-card:hover{background:rgba(139,126,255,.026);box-shadow:0 24px 68px -20px rgba(139,126,255,.32),0 8px 24px -8px rgba(0,0,0,.55)}
+.feature-card{transition:background .22s,transform .32s cubic-bezier(.2,.8,.2,1),box-shadow .32s;will-change:transform}
+.feature-card:hover{background:rgba(139,126,255,.02);transform:translateY(-3px);box-shadow:0 16px 48px -18px rgba(139,126,255,.22),0 4px 16px -6px rgba(0,0,0,.4)}
+.pricing-card{will-change:transform}
+.pricing-card:hover{box-shadow:0 36px 80px -28px rgba(0,0,0,.8),0 0 56px -28px rgba(139,126,255,.24)}
+/* scan-line shimmer on term-window hover */
+.term-window{position:relative;overflow:hidden}
+.term-window::after{content:'';position:absolute;left:0;right:0;height:60px;background:linear-gradient(180deg,transparent,rgba(139,126,255,.04),transparent);pointer-events:none;transform:translateY(-100%);opacity:0}
+.term-window:hover::after{animation:scanLine 2.2s ease-in-out}
+/* light theme coming soon */
+html[data-theme="light"] .sdk-coming-soon{background:rgba(245,158,11,.08)!important;color:#d97706!important;border:1px solid rgba(245,158,11,.25)!important}
 """
 
 private fun HTML.dashboardApp() {

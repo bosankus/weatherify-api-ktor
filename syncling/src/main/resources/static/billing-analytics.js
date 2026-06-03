@@ -274,7 +274,7 @@
         '<td class="dim">' + fmtDate(r.startedAtMillis) + '</td>' +
         '<td>' + escapeHtml(r.projectName || r.projectId.slice(0, 8)) + '</td>' +
         '<td class="dim">' + escapeHtml(r.commitShort) + '</td>' +
-        '<td>' + escapeHtml(trigger) + ' <span class="bla-tag ' + r.triggeredByLabel + '">' + r.triggeredByLabel + '</span></td>' +
+        '<td>' + escapeHtml(trigger) + ' <span class="bla-tag ' + escapeHtml(r.triggeredByLabel) + '">' + escapeHtml(r.triggeredByLabel) + '</span></td>' +
         '<td class="bla-num">' + fmtInt(r.stringsTranslated) + '</td>' +
         '<td class="bla-num">' + fmtMs(r.durationMs) + '</td>' +
         '<td>' + escapeHtml(r.status) + '</td>';
@@ -406,7 +406,13 @@
 
   // ── Load orchestration ─────────────────────────────────────────────────────
 
-  function loadAll() {
+  function showLoading(hostId) {
+    var host = $(hostId);
+    if (host) { host.innerHTML = '<div class="bla-empty bla-loading">Loading…</div>'; }
+  }
+
+  // Range-dependent sections — re-fetched whenever the picker changes.
+  function loadRangeSections() {
     var r = STATE.range;
     api('/api/analytics/overview').then(function (d) {
       if (showPlanGate(d._forbidden)) return;
@@ -415,14 +421,26 @@
       $('bla-tracking-banner').textContent = 'Could not load analytics: ' + e.message;
     });
 
+    showLoading('bla-projects-body');
     api('/api/analytics/projects?range=' + r).then(function (d) { if (!d._forbidden) renderProjects(d); });
+
+    showLoading('bla-locales-body');
     api('/api/analytics/locales?range=' + r).then(function (d) { if (!d._forbidden) renderLocales(d); });
+
     RUNS_PAG.page = 1;
+    showLoading('bla-runs-body');
     api('/api/analytics/runs?range=' + r + '&limit=500').then(function (d) { if (!d._forbidden) renderRuns(d); });
+
+    showLoading('bla-members-body');
+    api('/api/analytics/members?range=' + r).then(function (d) { if (!d._forbidden) renderMembers(d); });
+  }
+
+  // Point-in-time sections — fetched once on boot, never re-fetched on range switch.
+  function loadStaticSections() {
+    showLoading('bla-quality-body');
     api('/api/analytics/quality').then(function (d) { if (!d._forbidden) renderQuality(d); });
 
-    // Team-only sections — server returns 403 for non-Team; renderOverview also hides them.
-    api('/api/analytics/members?range=' + r).then(function (d) { if (!d._forbidden) renderMembers(d); });
+    showLoading('bla-cost-body');
     api('/api/analytics/cost-breakdown').then(function (d) { if (!d._forbidden) renderCostBreakdown(d); });
   }
 
@@ -437,14 +455,15 @@
         btn.classList.add('active');
         STATE.range = r;
         $('bla-overview-period').textContent = r === 'month' ? 'This month' : 'Last ' + r;
-        loadAll();
+        loadRangeSections();
       });
     });
   }
 
   function boot() {
     bindRangePicker();
-    loadAll();
+    loadRangeSections();
+    loadStaticSections();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

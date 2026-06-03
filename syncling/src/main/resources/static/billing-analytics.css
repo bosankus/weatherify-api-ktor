@@ -172,6 +172,14 @@
   background: var(--surface2);
   border-radius: var(--radius-sm);
 }
+.bla-empty.bla-loading {
+  opacity: 0.5;
+  animation: bla-pulse 1.2s ease-in-out infinite;
+}
+@keyframes bla-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.25; }
+}
 
 .bla-tag {
   display: inline-block;

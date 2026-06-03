@@ -336,9 +336,13 @@ fun Application.module() {
         }
 
         // Create in-app notification + optional email when pipeline produces a PR.
+        // Use the most recent run for this project. Only notify if THAT run produced a PR —
+        // checking for any historical prUrl would re-fire notifications for old runs when
+        // the current run fails.
         val completedRun = runCatching { pipelineEventBus.recentRuns(project.ownerId) }
             .getOrElse { emptyList() }
-            .firstOrNull { it.projectId == project.id && it.prUrl != null }
+            .firstOrNull { it.projectId == project.id }
+            ?.takeIf { it.prUrl != null }
         if (completedRun != null) {
             val langDetail = completedRun.steps
                 .firstOrNull { it.id == "TRANSLATING" }?.detail ?: ""

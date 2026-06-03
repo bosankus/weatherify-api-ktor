@@ -317,6 +317,15 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
             .associate { it.getString("stringKey") to (it.getString("sourceText") ?: "") }
     }
 
+    override suspend fun getProcessedStringKeys(projectId: String): Set<String> {
+        return translationsCol
+            .find(eq("projectId", projectId))
+            .projection(Document("stringKey", 1).append("_id", 0))
+            .toList()
+            .mapNotNull { it.getString("stringKey")?.takeIf { k -> k.isNotEmpty() } }
+            .toSet()
+    }
+
     override suspend fun listPendingReviews(
         ownerId: String,
         limit: Int,

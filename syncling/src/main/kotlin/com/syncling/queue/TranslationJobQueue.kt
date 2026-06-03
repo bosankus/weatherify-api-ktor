@@ -53,6 +53,11 @@ class TranslationJobQueue(private val jobQueue: JobQueueRepository) {
     // so a crashed processor can never permanently block a project.
     private val inFlightProjects = ConcurrentHashMap<String, Long>()
 
+    // Separate map for in-memory webhook rate-limiting (10s TTL). Kept apart from
+    // inFlightProjects (5-min TTL) so the short-TTL cleanup in isWebhookRateLimited
+    // never prematurely evicts in-flight project locks.
+    private val rateLimitMap = ConcurrentHashMap<String, Long>()
+
     suspend fun enqueueJob(payload: WebhookPayload) {
         val now = System.currentTimeMillis()
         val projectId = payload.projectId
@@ -142,13 +147,13 @@ class TranslationJobQueue(private val jobQueue: JobQueueRepository) {
             } catch (e: Exception) {
                 // Redis unavailable — in-memory fallback
                 val now = System.currentTimeMillis()
-                inFlightProjects.entries.removeIf { now - it.value > 10_000 }
-                inFlightProjects.putIfAbsent("rl:$repo", now) != null
+                rateLimitMap.entries.removeIf { now - it.value > 10_000 }
+                rateLimitMap.putIfAbsent(repo, now) != null
             }
         } else {
             val now = System.currentTimeMillis()
-            inFlightProjects.entries.removeIf { now - it.value > 10_000 }
-            inFlightProjects.putIfAbsent("rl:$repo", now) != null
+            rateLimitMap.entries.removeIf { now - it.value > 10_000 }
+            rateLimitMap.putIfAbsent(repo, now) != null
         }
     }
 

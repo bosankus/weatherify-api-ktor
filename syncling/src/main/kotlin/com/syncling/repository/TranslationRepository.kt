@@ -67,6 +67,13 @@ interface TranslationRepository {
 
     suspend fun getStringKeysAndTexts(projectId: String): Map<String, String>
 
+    /**
+     * Returns the set of string keys that have at least one translation entry for the given project.
+     * Used to detect "orphaned" source strings — stored by a previously failed pipeline run but
+     * never translated — so they can be re-processed on the next run rather than silently skipped.
+     */
+    suspend fun getProcessedStringKeys(projectId: String): Set<String>
+
     suspend fun listPendingReviews(
         ownerId: String,
         limit: Int = 50,

@@ -1083,10 +1083,29 @@ fun Route.configureApiRoutes(
             call.requireProjectRole(project, userId, ProjectRole.TRANSLATOR, memberships)
                 ?: return@post
 
+            // Resolve the current HEAD commit on the watched branch so the retry processes
+            // real content and logs show a meaningful commit short hash (not "main").
+            val owner = userRepository.findById(userId)
+            val token = owner?.githubToken
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("No GitHub token on file. Re-authenticate."))
+
+            val commitHash = try {
+                githubService.getLatestCommitHash(project.githubRepo, run.branch, token)
+            } catch (e: com.syncling.services.GitHubBranchNotFoundException) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError(e.message ?: "Branch not found."))
+            } catch (e: com.syncling.services.GitHubRepoNotFoundException) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError(e.message ?: "Repository not found."))
+            } catch (e: com.syncling.services.GitHubAuthException) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError(e.message ?: "GitHub authentication failed."))
+            } catch (e: Exception) {
+                apiLog.error("Retry: failed to resolve HEAD for repo={} branch={}: {}", project.githubRepo, run.branch, e.message)
+                return@post call.respond(HttpStatusCode.BadGateway, ApiError("Failed to reach GitHub. Try again later."))
+            }
+
             val attempt = count.incrementAndGet()
             val payload = WebhookPayload(
                 repositoryFullName = run.repo,
-                commitHash = run.branch,
+                commitHash = commitHash,
                 branchName = run.branch,
                 projectId = projectId,
                 retriedFromRunId = runId,
@@ -1100,7 +1119,7 @@ fun Route.configureApiRoutes(
                     mapOf("originalRunId" to runId, "attempt" to attempt.toString(), "repo" to run.repo)
                 )
             }
-            apiLog.info("Retry enqueued: originalRunId={} attempt={}/{} project={} repo={} forceTranslate={}", runId, attempt, MAX_RETRIES, projectId, run.repo, body.forceTranslate)
+            apiLog.info("Retry enqueued: originalRunId={} attempt={}/{} project={} repo={} commit={} forceTranslate={}", runId, attempt, MAX_RETRIES, projectId, run.repo, commitHash.take(7), body.forceTranslate)
             call.respond(RetryEnqueuedResponse(queued = true, originalRunId = runId, attempt = attempt, maxRetries = MAX_RETRIES))
         }
 
