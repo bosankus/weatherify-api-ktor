@@ -11,7 +11,10 @@ import com.mongodb.client.model.FindOneAndUpdateOptions
 import com.mongodb.client.model.ReturnDocument
 import com.mongodb.client.model.Sorts
 import com.mongodb.client.model.Updates
+import com.mongodb.client.model.BulkWriteOptions
+import com.mongodb.client.model.UpdateManyModel
 import com.mongodb.client.model.UpdateOneModel
+import com.mongodb.client.model.UpdateOptions
 import com.mongodb.client.model.WriteModel
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import com.syncling.domain.StringWithTranslations
@@ -20,6 +23,7 @@ import com.syncling.domain.Translation
 import com.syncling.domain.TranslationHistoryEntry
 import com.syncling.domain.TranslationSummary
 import com.syncling.repository.TranslationRepository
+import com.syncling.repository.TranslationUpsert
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import org.bson.Document
@@ -133,6 +137,138 @@ class MongoTranslationRepository(db: MongoDatabase) : TranslationRepository {
                 put("changedBy", if (pipelineRunId != null) "pipeline" else "manual")
                 if (pipelineRunId != null) put("pipelineRunId", pipelineRunId)
             })
+        }
+    }
+
+    override suspend fun bulkUpsertStrings(
+        projectId: String,
+        keyToSource: Map<String, String>
+    ): Map<String, String> {
+        if (keyToSource.isEmpty()) return emptyMap()
+        val now = System.currentTimeMillis()
+
+        // Single read to learn which keys exist and which sourceText values are changing.
+        val existing = stringsCol
+            .find(and(eq("projectId", projectId), `in`("stringKey", keyToSource.keys.toList())))
+            .toList()
+        val existingByKey = existing.associateBy { it.getString("stringKey") }
+
+        val stringIdByKey = LinkedHashMap<String, String>(keyToSource.size)
+        val changedSourceById = mutableMapOf<String, String>()
+        val ops = ArrayList<WriteModel<Document>>(keyToSource.size)
+
+        for ((key, sourceText) in keyToSource) {
+            val existingDoc = existingByKey[key]
+            val id = existingDoc?.getString("_id") ?: UUID.randomUUID().toString()
+            stringIdByKey[key] = id
+
+            val prevSourceText = existingDoc?.getString("sourceText")
+            if (existingDoc != null && prevSourceText != sourceText) {
+                changedSourceById[id] = sourceText
+            }
+
+            ops += UpdateOneModel(
+                and(eq("projectId", projectId), eq("stringKey", key)),
+                Updates.combine(
+                    Updates.setOnInsert("_id", id),
+                    Updates.setOnInsert("projectId", projectId),
+                    Updates.setOnInsert("stringKey", key),
+                    Updates.setOnInsert("createdAt", now),
+                    Updates.set("sourceText", sourceText),
+                    Updates.set("updatedAt", now)
+                ),
+                UpdateOptions().upsert(true)
+            )
+        }
+
+        stringsCol.bulkWrite(ops, BulkWriteOptions().ordered(false))
+
+        // Fan source-text edits out to denormalized translation docs — one unordered bulkWrite
+        // instead of an updateMany per changed string.
+        if (changedSourceById.isNotEmpty()) {
+            val fanOutOps: List<WriteModel<Document>> = changedSourceById.map { (sid, src) ->
+                UpdateManyModel(eq("stringId", sid), Updates.set("sourceText", src))
+            }
+            translationsCol.bulkWrite(fanOutOps, BulkWriteOptions().ordered(false))
+        }
+
+        return stringIdByKey
+    }
+
+    override suspend fun bulkUpsertTranslations(upserts: List<TranslationUpsert>) {
+        if (upserts.isEmpty()) return
+        val now = System.currentTimeMillis()
+
+        // Pre-read all (stringId, targetLanguage) pairs in scope so we can honour locks,
+        // capture prev-text diffs, and reuse existing _ids — without an extra round-trip per row.
+        val stringIds = upserts.map { it.stringId }.distinct()
+        val existingByKey: Map<Pair<String, String>, Document> = translationsCol
+            .find(`in`("stringId", stringIds))
+            .toList()
+            .associateBy { it.getString("stringId") to it.getString("targetLanguage") }
+
+        val ops = ArrayList<WriteModel<Document>>(upserts.size)
+        val historyDocs = ArrayList<Document>()
+
+        for (u in upserts) {
+            val existing = existingByKey[u.stringId to u.targetLanguage]
+            // Respect lock: same guard as the singleton upsertTranslation() path.
+            if (existing?.get("lockedAt") != null) continue
+
+            val setUpdates = mutableListOf(
+                Updates.set("translatedText", u.translatedText),
+                Updates.set("status", u.status),
+                Updates.set("updatedAt", now),
+                Updates.set("projectId", u.projectId),
+                Updates.set("ownerId", u.ownerId),
+                Updates.set("stringKey", u.stringKey),
+                Updates.set("sourceText", u.sourceText),
+                Updates.set("projectName", u.projectName)
+            )
+            if (u.blockReason != null) setUpdates += Updates.set("blockReason", u.blockReason)
+            else setUpdates += Updates.unset("blockReason")
+            if (u.pipelineRunId != null) setUpdates += Updates.set("pipelineRunId", u.pipelineRunId)
+            if (u.commitShort != null) setUpdates += Updates.set("commitShort", u.commitShort)
+
+            val prevText = existing?.getString("translatedText")
+                ?.takeIf { it.isNotBlank() && it != u.translatedText }
+            if (prevText != null) setUpdates += Updates.set("previousTranslatedText", prevText)
+
+            val docId = existing?.getString("_id") ?: UUID.randomUUID().toString()
+            ops += UpdateOneModel(
+                and(eq("stringId", u.stringId), eq("targetLanguage", u.targetLanguage)),
+                Updates.combine(
+                    Updates.setOnInsert("_id", docId),
+                    Updates.setOnInsert("stringId", u.stringId),
+                    Updates.setOnInsert("targetLanguage", u.targetLanguage),
+                    Updates.setOnInsert("targetRegion", u.targetRegion),
+                    Updates.setOnInsert("createdAt", now),
+                    *setUpdates.toTypedArray()
+                ),
+                UpdateOptions().upsert(true)
+            )
+
+            if (prevText != null && existing != null) {
+                historyDocs += Document().apply {
+                    put("_id", UUID.randomUUID().toString())
+                    put("translationId", existing.getString("_id"))
+                    put("stringKey", u.stringKey)
+                    put("projectId", u.projectId)
+                    put("targetLanguage", u.targetLanguage)
+                    put("previousText", prevText)
+                    put("newText", u.translatedText)
+                    put("changedAt", now)
+                    put("changedBy", if (u.pipelineRunId != null) "pipeline" else "manual")
+                    if (u.pipelineRunId != null) put("pipelineRunId", u.pipelineRunId)
+                }
+            }
+        }
+
+        if (ops.isNotEmpty()) {
+            translationsCol.bulkWrite(ops, BulkWriteOptions().ordered(false))
+        }
+        if (historyDocs.isNotEmpty()) {
+            historyCol.insertMany(historyDocs)
         }
     }
 

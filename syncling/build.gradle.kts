@@ -19,13 +19,6 @@ kotlin {
     jvmToolchain(17)
 }
 
-// jwks-rsa (transitive of ktor-server-auth-jwt) drags in Guava (~6.7 MB) and is unused —
-// JWT verification uses static secrets via auth0 java-jwt directly. Excluding shaves ~7 MB
-// off the fat jar. Applied to all configurations so it can't sneak back in transitively.
-configurations.all {
-    exclude(group = "com.auth0", module = "jwks-rsa")
-}
-
 dependencies {
     implementation(project(":core"))
 

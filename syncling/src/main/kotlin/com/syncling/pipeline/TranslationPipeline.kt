@@ -7,6 +7,7 @@ import com.syncling.domain.Project
 import com.syncling.domain.TargetConfig
 import com.syncling.repository.ProjectRepository
 import com.syncling.repository.TranslationRepository
+import com.syncling.repository.TranslationUpsert
 import com.syncling.model.AppConfig
 import com.syncling.model.SourceConfig
 import com.syncling.model.SynclingConfig
@@ -196,8 +197,11 @@ class TranslationPipeline(
 
         // Surface changes: source text drifted cosmetically (capitalization, punctuation, phrasing).
         // Persist the updated text but skip retranslation — existing translations stay valid.
-        for (key in surfaceKeys) {
-            translationRepository.upsertString(project.id, key, modifiedStrings.getValue(key))
+        if (surfaceKeys.isNotEmpty()) {
+            translationRepository.bulkUpsertStrings(
+                project.id,
+                surfaceKeys.associateWith { modifiedStrings.getValue(it) }
+            )
         }
         if (surfaceKeys.isNotEmpty()) {
             log.info("{} surface change(s) in {} — source text updated, retranslation skipped", surfaceKeys.size, payload.commitHash.take(7))
@@ -267,6 +271,10 @@ class TranslationPipeline(
         val updatedFiles = ConcurrentHashMap<String, String>()
         val translatedCounts = ConcurrentHashMap<String, Int>()
 
+        // Bulk-upsert every source string up-front — one round-trip shared by all target languages,
+        // replacing the per-(key × target) upsertString() calls that used to dominate the write path.
+        val stringIdByKey = translationRepository.bulkUpsertStrings(project.id, addedStrings)
+
         val totalCacheHits = AtomicInteger(0)
         coroutineScope {
             config.targets.map { target ->
@@ -275,7 +283,7 @@ class TranslationPipeline(
                         code = target.code, name = target.name, status = "translating",
                         done = 0, total = perLocaleTotal
                     ))
-                    val outcome = processTarget(payload, project, config, target, addedStrings, runId = runId, commitShort = payload.commitHash.take(7), userId = userId)
+                    val outcome = processTarget(payload, project, config, target, addedStrings, stringIdByKey, runId = runId, commitShort = payload.commitHash.take(7), userId = userId)
                     translatedCounts[target.code] = outcome.count
                     totalCacheHits.addAndGet(outcome.cacheHits)
                     val done = completedLangs.incrementAndGet()
@@ -469,6 +477,7 @@ class TranslationPipeline(
         config: SynclingConfig,
         target: TargetConfig,
         addedStrings: Map<String, String>,
+        stringIdByKey: Map<String, String>,
         runId: String,
         commitShort: String,
         userId: String
@@ -485,6 +494,34 @@ class TranslationPipeline(
             ))
         }
         data class StringResult(val key: String, val text: String, val status: String)
+
+        // Per-target accumulator. The pipeline used to write every translation row inline,
+        // which meant N × M MongoDB round-trips. We now build the entire matrix in memory
+        // and flush via a single bulkUpsertTranslations() call at the end of this function.
+        val pendingUpserts = LinkedHashMap<String, TranslationUpsert>()
+        val sourceTextByKey = HashMap<String, String>(addedStrings)
+        // Track stringIds locally so we can backfill any plural quantities Gemini invented
+        // (keys not present in `addedStrings` / `stringIdByKey`).
+        val stringIds = HashMap<String, String>(stringIdByKey)
+
+        fun queueUpsert(key: String, sourceText: String, translatedText: String, status: String, blockReason: String? = null) {
+            val sid = stringIds[key] ?: return  // caller must ensure stringId exists
+            pendingUpserts[key] = TranslationUpsert(
+                stringId = sid,
+                projectId = project.id,
+                ownerId = project.ownerId,
+                stringKey = key,
+                sourceText = sourceText,
+                projectName = project.name,
+                targetLanguage = target.code,
+                targetRegion = target.region,
+                translatedText = translatedText,
+                status = status,
+                blockReason = blockReason,
+                pipelineRunId = runId,
+                commitShort = commitShort
+            )
+        }
 
         // ── Phase 1a: Separate plural forms from simple strings ────────────────
         // Keys like "item_count.one" / "item_count.other" are plural variants.
@@ -521,24 +558,40 @@ class TranslationPipeline(
                 emptyMap()
             }
 
+            // Gemini may emit CLDR quantities not present in the source (e.g. Russian "few").
+            // Bulk-upsert those new string rows first so we have stringIds when queueing translations.
+            val extraStrings = mutableMapOf<String, String>()
+            for ((baseName, forms) in pluralGroups) {
+                val translatedForms = pluralResults[baseName] ?: continue
+                for ((quantity, _) in translatedForms) {
+                    val key = "$baseName.$quantity"
+                    if (key !in stringIds) {
+                        val src = forms[quantity] ?: forms["other"] ?: forms.values.firstOrNull() ?: ""
+                        extraStrings[key] = src
+                        sourceTextByKey[key] = src
+                    }
+                }
+            }
+            if (extraStrings.isNotEmpty()) {
+                stringIds.putAll(translationRepository.bulkUpsertStrings(project.id, extraStrings))
+            }
+
             for ((baseName, forms) in pluralGroups) {
                 val translatedForms = pluralResults[baseName]
                 if (translatedForms.isNullOrEmpty()) {
-                    // Fallback: store each form as blocked
+                    // Fallback: queue each form as blocked
                     for ((quantity, sourceText) in forms) {
                         val key = "$baseName.$quantity"
-                        val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                        translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, "", "blocked", "Plural translation failed", pipelineRunId = runId, commitShort = commitShort)
+                        queueUpsert(key, sourceText, "", "blocked", "Plural translation failed")
                     }
                     bumpLane(forms.size)
                 } else {
                     bumpLane(forms.size)
-                    // Store all translated forms — including any new quantities Gemini generated
                     for ((quantity, translatedText) in translatedForms) {
                         val key = "$baseName.$quantity"
-                        val sourceText = forms[quantity] ?: forms["other"] ?: forms.values.firstOrNull() ?: ""
-                        val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                        translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, translatedText, "auto", pipelineRunId = runId, commitShort = commitShort)
+                        val sourceText = sourceTextByKey[key]
+                            ?: forms[quantity] ?: forms["other"] ?: forms.values.firstOrNull() ?: ""
+                        queueUpsert(key, sourceText, translatedText, "auto")
                         allResults += StringResult(key, translatedText, "auto")
                         if (project.sharedMemoryOptIn) {
                             runCatching { sharedMemoryRepository?.contribute(sourceText, target.name, translatedText) }
@@ -552,7 +605,11 @@ class TranslationPipeline(
         val semaphore = Semaphore(translationConcurrency)
         val batches = simpleStrings.entries.chunked(BATCH_SIZE).map { chunk -> chunk.associate { it.key to it.value } }
 
-        val simpleResults: List<StringResult?> = coroutineScope {
+        // Each per-batch coroutine returns the translated rows it produced — translation upserts
+        // are queued (not flushed) so the whole target locale lands in one bulkWrite at the end.
+        data class BatchPiece(val results: List<StringResult?>, val queued: List<TranslationUpsert>)
+
+        val simpleBatchPieces: List<BatchPiece> = coroutineScope {
             batches.map { batch ->
                 async {
                     semaphore.withPermit {
@@ -568,23 +625,34 @@ class TranslationPipeline(
                         val batchResults = batchOutcome.results
                         localeCacheHits.addAndGet(batchOutcome.cacheHits)
                         bumpLane(batch.size)
-                        batch.keys.map { key ->
+                        val queuedHere = mutableListOf<TranslationUpsert>()
+                        val results = batch.keys.map { key ->
                             val sourceText = batch[key]!!
+                            val sid = stringIds[key]
                             val outcome = batchResults[key]
+                            // Build a TranslationUpsert for the row's terminal state; the calling
+                            // thread merges these into pendingUpserts after awaitAll().
+                            fun row(text: String, status: String, reason: String?): TranslationUpsert? =
+                                sid?.let {
+                                    TranslationUpsert(
+                                        stringId = it, projectId = project.id, ownerId = project.ownerId,
+                                        stringKey = key, sourceText = sourceText, projectName = project.name,
+                                        targetLanguage = target.code, targetRegion = target.region,
+                                        translatedText = text, status = status, blockReason = reason,
+                                        pipelineRunId = runId, commitShort = commitShort
+                                    )
+                                }
                             when {
                                 outcome == null -> {
                                     log.warn("Missing batch result for key='{}' lang={}", key, target.code)
-                                    val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, "", "blocked", "Missing from batch", pipelineRunId = runId, commitShort = commitShort)
+                                    row("", "blocked", "Missing from batch")?.let(queuedHere::add)
                                     null
                                 }
                                 outcome.isSuccess -> {
                                     val r = outcome.getOrThrow()
                                     val status = if (r.flags.isNotEmpty()) "review" else "auto"
-                                    val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, r.text, status, pipelineRunId = runId, commitShort = commitShort)
+                                    row(r.text, status, null)?.let(queuedHere::add)
                                     if (status != "auto") log.info("'{}' → {} flagged: {}", key, target.code, r.flags)
-                                    // Contribute auto-approved strings to shared pool if opted in
                                     if (status == "auto" && project.sharedMemoryOptIn && sharedMemoryRepository != null) {
                                         runCatching { sharedMemoryRepository.contribute(sourceText, target.name, r.text) }
                                     }
@@ -593,16 +661,19 @@ class TranslationPipeline(
                                 else -> {
                                     val error = outcome.exceptionOrNull()?.message
                                     log.warn("Failed key='{}' lang={}: {}", key, target.code, error)
-                                    val stringId = translationRepository.upsertString(project.id, key, sourceText)
-                                    translationRepository.upsertTranslation(stringId, project.id, project.ownerId, key, sourceText, project.name, target.code, target.region, "", "blocked", error, pipelineRunId = runId, commitShort = commitShort)
+                                    row("", "blocked", error)?.let(queuedHere::add)
                                     null
                                 }
                             }
                         }
+                        BatchPiece(results, queuedHere)
                     }
                 }
-            }.awaitAll().flatten()
+            }.awaitAll()
         }
+
+        val simpleResults: List<StringResult?> = simpleBatchPieces.flatMap { it.results }
+        simpleBatchPieces.flatMap { it.queued }.forEach { pendingUpserts[it.stringKey] = it }
 
         allResults.addAll(simpleResults)
 
@@ -624,11 +695,15 @@ class TranslationPipeline(
                 if (!analysis.needsReview) return@map r
                 val srcText = addedStrings[r.key] ?: return@map r
                 val notes = "Cultural: ${analysis.issues.joinToString("; ")}"
-                val stringId = translationRepository.upsertString(project.id, r.key, srcText)
-                translationRepository.upsertTranslation(stringId, project.id, project.ownerId, r.key, srcText, project.name, target.code, target.region, r.text, "review", notes, pipelineRunId = runId, commitShort = commitShort)
+                queueUpsert(r.key, srcText, r.text, "review", notes)
                 log.info("Cultural flag key='{}' lang={}: {}", r.key, target.code, analysis.issues)
                 StringResult(r.key, r.text, "review")
             }
+        }
+
+        // Single round-trip: write every queued translation row for this locale at once.
+        if (pendingUpserts.isNotEmpty()) {
+            translationRepository.bulkUpsertTranslations(pendingUpserts.values.toList())
         }
 
         val approved = finalResults.filterNotNull()

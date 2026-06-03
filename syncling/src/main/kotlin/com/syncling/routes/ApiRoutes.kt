@@ -31,6 +31,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
+import io.ktor.server.http.content.suppressCompression
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.plugins.ratelimit.*
@@ -1002,12 +1003,13 @@ fun Route.configureApiRoutes(
             val userId = call.userId()
                 ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
 
+            // Suppress gzip — the Compression plugin would otherwise buffer the entire stream
+            // waiting to compress it, preventing events from reaching the client.
+            // Content-Encoding is an unsafe header in Ktor 3.x and cannot be set manually.
+            call.suppressCompression()
             call.response.header(HttpHeaders.CacheControl, "no-cache, no-transform")
             call.response.header(HttpHeaders.Connection, "keep-alive")
             call.response.header("X-Accel-Buffering", "no")
-            // Explicitly opt out of gzip — the Compression plugin would otherwise buffer the
-            // entire stream waiting to compress it, preventing events from reaching the client.
-            call.response.header(HttpHeaders.ContentEncoding, "identity")
             call.respondBytesWriter(contentType = ContentType.parse("text/event-stream; charset=utf-8")) {
                 // Flush an initial comment so Cloud Run / GFE see upstream bytes immediately.
                 // Without this, headers stay buffered until the first event/heartbeat and GFE 503s the connection.

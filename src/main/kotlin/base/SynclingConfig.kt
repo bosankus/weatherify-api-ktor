@@ -35,6 +35,7 @@ fun Application.configureSyncling(refundService: RefundService) {
     val mongoUri = getSecretValue("mongo-uri")
     val encryptionKey = getSecretValue("token-encryption-key")
     val webhookSecret = getSecretValue("razorpay-webhook-secret")
+    val redisUrl = getSecretValue("redis-url").ifBlank { null }
 
     val db = MongoConnection.connect(mongoUri, "transloom")
     runBlocking {
@@ -67,7 +68,7 @@ fun Application.configureSyncling(refundService: RefundService) {
     val pipelineRunRepository = MongoPipelineRunRepository(db)
     val memberUsageRepository = MongoMemberUsageRepository(db)
     val memberUsageService = MemberUsageService(memberUsageRepository)
-    val pipelineEventBus = PipelineEventBus(redisUrl = null, runRepository = pipelineRunRepository)
+    val pipelineEventBus = PipelineEventBus(redisUrl = redisUrl, runRepository = pipelineRunRepository)
     val semanticChangeAnalyzer = SemanticChangeAnalyzer(MongoSemanticChangeCacheRepository(db))
     val culturalSensitivityAnalyzer = CulturalSensitivityAnalyzer(MongoCulturalAnalysisCacheRepository(db))
     val cdnPublishRepository: CdnPublishRepository = MongoCdnPublishRepository(db)

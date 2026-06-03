@@ -4,6 +4,26 @@ import com.syncling.domain.StringsPage
 import com.syncling.domain.Translation
 import com.syncling.domain.TranslationHistoryEntry
 
+/**
+ * One translation document to be upserted by [TranslationRepository.bulkUpsertTranslations].
+ * Field semantics match [TranslationRepository.upsertTranslation].
+ */
+data class TranslationUpsert(
+    val stringId: String,
+    val projectId: String,
+    val ownerId: String,
+    val stringKey: String,
+    val sourceText: String,
+    val projectName: String,
+    val targetLanguage: String,
+    val targetRegion: String?,
+    val translatedText: String,
+    val status: String,
+    val blockReason: String? = null,
+    val pipelineRunId: String? = null,
+    val commitShort: String? = null
+)
+
 interface TranslationRepository {
     suspend fun upsertString(projectId: String, key: String, sourceText: String): String
 
@@ -22,6 +42,23 @@ interface TranslationRepository {
         pipelineRunId: String? = null,
         commitShort: String? = null
     )
+
+    /**
+     * Atomic bulk upsert of source strings keyed by [keyToSource]. Replaces N round trips
+     * with a single unordered bulkWrite. Returns the stringId for every input key — stable
+     * across calls (existing IDs reused, new keys get fresh UUIDs). When a key's sourceText
+     * differs from the persisted value, the change fans out to denormalized translation docs
+     * in a second unordered bulkWrite (preserving the [upsertString] contract).
+     */
+    suspend fun bulkUpsertStrings(projectId: String, keyToSource: Map<String, String>): Map<String, String>
+
+    /**
+     * Atomic bulk upsert of translation documents. Replaces N · M round trips with a single
+     * unordered bulkWrite per call. Honours per-translation locks (locked rows are skipped),
+     * captures previousTranslatedText diffs, and writes the same translation_history audit
+     * entries as [upsertTranslation].
+     */
+    suspend fun bulkUpsertTranslations(upserts: List<TranslationUpsert>)
 
     /** Backfills denormalized fields (stringKey, sourceText, projectId, ownerId, projectName) on translations docs that are missing them. Safe to run repeatedly. */
     suspend fun backfillDenormalizedFields(): Int

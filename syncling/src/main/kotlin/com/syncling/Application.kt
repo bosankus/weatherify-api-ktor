@@ -28,7 +28,9 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.response.*
+import io.ktor.http.ContentType
 import io.ktor.server.plugins.compression.Compression
+import io.ktor.server.plugins.compression.excludeContentType
 import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.httpMethod
@@ -167,7 +169,11 @@ fun Application.module() {
         header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
     }
 
-    install(Compression) { gzip() }
+    install(Compression) {
+        gzip {
+            excludeContentType(ContentType.parse("text/event-stream"))
+        }
+    }
 
     install(Authentication) {
         jwt("auth-jwt") {

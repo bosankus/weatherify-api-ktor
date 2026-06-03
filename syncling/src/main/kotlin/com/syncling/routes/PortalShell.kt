@@ -238,6 +238,15 @@ internal val SHELL_RUNTIME_JS = """
   function boot(){fillUserChip();applySidebarState();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);
   else boot();
+  // Page-visibility wake system: after 3 min away, fire all registered callbacks on return.
+  // SSE already disconnects on hide; this handles stale REST data (stats, CDN, notifications).
+  var _tlHiddenAt=0;
+  var _tlWakeCbs=[];
+  window._tlOnWake=function(fn){_tlWakeCbs.push(fn);};
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){_tlHiddenAt=Date.now();}
+    else if(_tlHiddenAt){var away=Date.now()-_tlHiddenAt;_tlHiddenAt=0;if(away>=60000){_tlWakeCbs.forEach(function(f){try{f(away);}catch(_){}});}}
+  });
 })();
 """
 
