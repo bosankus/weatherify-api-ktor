@@ -209,7 +209,7 @@ Sitemap: https://syncling.space/sitemap.xml
         staticResources("/transloom/static", "static")
         configurePortalRoutes(d.jwtSecret)
         rateLimit(RateLimitName("github_webhook")) {
-            configureWebhookRoutes(d.jobQueue, d.projectRepository, d.billingRepository)
+            configureWebhookRoutes(d.jobQueue, d.projectRepository, d.billingRepository, d.pipelineEventBus)
         }
         rateLimit(RateLimitName("auth")) {
             configureAuthRoutes(d.jwtSecret, d.userRepository, d.userActivityService)
@@ -244,7 +244,7 @@ Sitemap: https://syncling.space/sitemap.xml
                 d.billingService, d.notificationService, d.inAppNotificationService
             )
             d.supportTicketRepository?.let { repo ->
-                configureSupportRoutes(repo, d.userRepository, d.notificationService, d.supportAdminEmail)
+                configureSupportRoutes(repo, d.userRepository, d.notificationService, d.supportAdminEmail, d.pipelineEventBus)
             }
         }
     }

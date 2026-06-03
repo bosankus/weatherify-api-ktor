@@ -412,22 +412,24 @@ internal const val SUPPORT_CHAT_CSS = """
 .sc-fab-dot.show{display:block}
 @keyframes sc-pulse{0%,100%{box-shadow:0 0 0 0 rgba(167,139,250,.6)}50%{box-shadow:0 0 0 6px rgba(167,139,250,0)}}
 /* Panel */
-.sc-panel{position:fixed;bottom:88px;right:24px;z-index:8901;width:400px;max-width:calc(100vw - 24px);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 60px -10px rgba(0,0,0,.6),0 4px 20px -4px rgba(0,0,0,.3);display:flex;flex-direction:column;height:560px;max-height:calc(100vh - 120px);opacity:0;transform:translateY(24px) scale(.95);pointer-events:none;transition:opacity .22s cubic-bezier(.4,0,.2,1),transform .22s cubic-bezier(.4,0,.2,1);overflow:hidden}
+.sc-panel{position:fixed;bottom:88px;right:24px;z-index:8901;width:400px;max-width:calc(100vw - 24px);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 60px -10px rgba(0,0,0,.6),0 4px 20px -4px rgba(0,0,0,.3);display:flex;flex-direction:column;height:580px;max-height:calc(100vh - 120px);opacity:0;transform:translateY(24px) scale(.95);pointer-events:none;transition:opacity .22s cubic-bezier(.4,0,.2,1),transform .22s cubic-bezier(.4,0,.2,1);overflow:hidden}
 .sc-panel.open{opacity:1;transform:none;pointer-events:auto}
 /* Header */
-.sc-header{flex-shrink:0;background:linear-gradient(135deg,#5535dd 0%,#7c3aed 60%,#a855f7 100%);padding:16px 16px 14px;display:flex;align-items:center;gap:10px}
+.sc-header{flex-shrink:0;background:linear-gradient(135deg,#5535dd 0%,#7c3aed 60%,#a855f7 100%);padding:14px 16px 12px;display:flex;align-items:center;gap:10px}
 .sc-header-back{background:rgba(255,255,255,.15);border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center;color:#fff;flex-shrink:0;transition:background .12s;font-size:16px;line-height:1}
 .sc-header-back.visible{display:flex}
 .sc-header-back:hover{background:rgba(255,255,255,.25)}
 .sc-header-brand{flex:1;min-width:0}
-.sc-header-name{font-size:14px;font-weight:700;color:#fff;line-height:1.2}
+.sc-header-name{font-size:14px;font-weight:700;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-header-status{font-size:11px;color:rgba(255,255,255,.8);display:flex;align-items:center;gap:5px;margin-top:2px}
-.sc-header-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0}
+.sc-header-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0;animation:sc-pulse 2s infinite}
 .sc-header-close{background:rgba(255,255,255,.15);border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;transition:background .12s;font-size:15px;line-height:1}
 .sc-header-close:hover{background:rgba(255,255,255,.25)}
 /* Body */
 .sc-body{flex:1;overflow:hidden;position:relative}
-.sc-body-inner{position:absolute;inset:0;overflow-y:auto;transition:opacity .16s ease,transform .18s cubic-bezier(.4,0,.2,1);padding:16px}
+.sc-body-inner{position:absolute;inset:0;overflow-y:auto;padding:16px}
+/* Thread wrap — replaces sc-body-inner for the chat view */
+.sc-thread-wrap{position:absolute;inset:0;display:none;flex-direction:column}
 /* Hero (home view) */
 .sc-hero{background:linear-gradient(135deg,#5535dd 0%,#7c3aed 60%,#a855f7 100%);margin:-16px -16px 16px;padding:18px 18px 20px;text-align:center}
 .sc-hero-avatar{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.2);margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:22px}
@@ -442,28 +444,32 @@ internal const val SUPPORT_CHAT_CSS = """
 .sc-conv-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;animation:sc-pulse 2s infinite;display:none}
 .sc-conv-dot.active{display:block}
 .sc-conv-body{flex:1;min-width:0}
-.sc-conv-subject{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
+.sc-conv-subject{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.sc-conv-email{font-size:10px;color:var(--text-muted);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sc-conv-preview{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:5px}
 .sc-conv-footer{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .sc-conv-arrow{color:var(--text-dim);font-size:16px;flex-shrink:0}
 .sc-new-conv{width:100%;padding:11px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:filter .14s;margin-top:2px}
 .sc-new-conv:hover{filter:brightness(1.1)}
-/* Thread view */
-.sc-thread-header{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px}
-.sc-thread-subject{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;line-height:1.3}
-.sc-thread-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.sc-messages{display:flex;flex-direction:column;gap:14px}
+/* Thread info bar */
+.sc-thread-info{flex-shrink:0;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.sc-thread-subject{font-size:13px;font-weight:700;color:var(--text);margin-bottom:7px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.sc-thread-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sc-resolve-btn{margin-left:auto;flex-shrink:0;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(139,126,255,.3);border-radius:6px;padding:3px 10px;cursor:pointer;transition:background .12s;white-space:nowrap}
+.sc-resolve-btn:hover{background:rgba(139,126,255,.2)}
+/* Messages area */
+.sc-msg-area{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
 /* Chat bubbles */
-.sc-msg{display:flex;flex-direction:column;max-width:88%}
-.sc-msg-user{align-self:flex-end;align-items:flex-end}
-.sc-msg-admin{align-self:flex-start;align-items:flex-start;flex-direction:row;gap:8px;max-width:92%}
-.sc-msg-admin-inner{display:flex;flex-direction:column;align-items:flex-start;flex:1;min-width:0}
-.sc-bubble{padding:11px 14px;border-radius:16px;font-size:13px;line-height:1.55;color:var(--text);white-space:pre-wrap;word-break:break-word}
-.sc-bubble-user{background:linear-gradient(135deg,#5535dd,#7c3aed);color:#fff;border-bottom-right-radius:4px}
-.sc-bubble-admin{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px}
+.sc-msg{display:flex;flex-direction:column;max-width:86%}
+.sc-msg-me{align-self:flex-end;align-items:flex-end}
+.sc-msg-other{align-self:flex-start;align-items:flex-start;flex-direction:row;gap:8px;max-width:90%}
+.sc-msg-other-inner{display:flex;flex-direction:column;align-items:flex-start;flex:1;min-width:0}
+.sc-bubble{padding:10px 13px;border-radius:16px;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.sc-bubble-me{background:linear-gradient(135deg,#5535dd,#7c3aed);color:#fff;border-bottom-right-radius:4px}
+.sc-bubble-other{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:4px}
 .sc-msg-meta{font-size:10px;color:var(--text-dim);margin-top:4px;padding:0 2px}
-.sc-msg-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#5535dd,#a855f7);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:4px}
-/* Waiting/typing indicator */
+.sc-msg-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#5535dd,#a855f7);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+/* Waiting / typing indicator */
 .sc-waiting{align-self:flex-start;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;border-bottom-left-radius:4px}
 .sc-waiting-text{font-size:12px;color:var(--text-muted)}
 .sc-dots{display:flex;gap:4px;align-items:center}
@@ -471,6 +477,18 @@ internal const val SUPPORT_CHAT_CSS = """
 .sc-dot:nth-child(2){animation-delay:.15s}
 .sc-dot:nth-child(3){animation-delay:.3s}
 @keyframes sc-bounce{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-5px);opacity:1}}
+/* Compose bar (chat reply) */
+.sc-compose-bar{flex-shrink:0;border-top:1px solid var(--border);padding:10px 12px;display:flex;align-items:flex-end;gap:8px;background:var(--surface)}
+.sc-reply-textarea{flex:1;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;resize:none;min-height:38px;max-height:100px;line-height:1.45;transition:border-color .15s,box-shadow .15s;overflow-y:auto}
+.sc-reply-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,126,255,.12)}
+.sc-reply-textarea::placeholder{color:var(--text-dim)}
+.sc-reply-send{flex-shrink:0;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#5535dd,#7c3aed);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:filter .12s,opacity .12s;padding:0}
+.sc-reply-send:hover:not(:disabled){filter:brightness(1.1)}
+.sc-reply-send:disabled{opacity:.4;cursor:default}
+/* Resolved state */
+.sc-resolved-note{flex-shrink:0;border-top:1px solid var(--border);padding:10px 14px;text-align:center;font-size:12px;color:var(--text-muted);background:var(--surface)}
+.sc-link-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;padding:0}
+.sc-link-btn:hover{text-decoration:underline}
 /* Status badges */
 .sc-status{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border-radius:10px;padding:2px 8px;flex-shrink:0}
 .sc-status.st-open{background:rgba(251,146,60,.15);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
@@ -480,7 +498,7 @@ internal const val SUPPORT_CHAT_CSS = """
 .sc-status.cat-question{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(139,126,255,.25)}
 .sc-status.cat-feature{background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid rgba(167,139,250,.25)}
 .sc-status.cat-billing{background:rgba(163,230,53,.1);color:#a3e635;border:1px solid rgba(163,230,53,.2)}
-/* Compose form */
+/* Compose form (new ticket) */
 .sc-compose-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px}
 .sc-field{margin-bottom:14px}
 .sc-label{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
@@ -518,7 +536,8 @@ internal const val SUPPORT_CHAT_CSS = """
 
 internal val SUPPORT_CHAT_JS = """(function(){
   var BASE='/api/support';
-  var _open=false,_view='home',_convId=null,_convs=null,_loaded=false,_submitting=false,_lastSent=null;
+  var _open=false,_view='home',_convId=null,_convs=null,_thread=null,_loaded=false,_isAdmin=false,_submitting=false,_lastSent=null;
+  var _unread={},_sseCtrl=null,_pollTimer=null;
   var CAT_LABELS={'bug':'Bug report','question':'Question','feature':'Feature request','billing':'Billing'};
   var CAT_EMOJIS={'bug':'🐛','question':'💬','feature':'✨','billing':'💳'};
 
@@ -526,46 +545,107 @@ internal val SUPPORT_CHAT_JS = """(function(){
   function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
   function ago(ms){
     var diff=Date.now()-ms,m=Math.floor(diff/60000),h=Math.floor(m/60),dy=Math.floor(h/24);
-    if(m<1)return 'just now';
-    if(m<60)return m+'m ago';
-    if(h<24)return h+'h ago';
+    if(m<1)return 'just now';if(m<60)return m+'m ago';if(h<24)return h+'h ago';
     if(dy<7)return dy+'d ago';
     return new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
   }
   function statusLabel(st){
-    if(st==='open')return 'Waiting for reply';
-    if(st==='acknowledged')return 'In progress';
-    if(st==='resolved')return 'Resolved';
-    return st;
-  }
-  function hasUnread(){
-    if(!_convs)return false;
-    return _convs.some(function(t){return t.adminReply&&t.status!=='resolved';});
+    if(st==='open')return 'Open';if(st==='acknowledged')return 'In progress';if(st==='resolved')return 'Resolved';return st;
   }
 
+  // ── Ting sound ──────────────────────────────────────────────────────────────
+  function playTing(){
+    try{
+      var ctx=new(window.AudioContext||window.webkitAudioContext)();
+      var osc=ctx.createOscillator(),gain=ctx.createGain();
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.type='sine';
+      osc.frequency.setValueAtTime(880,ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(660,ctx.currentTime+0.15);
+      gain.gain.setValueAtTime(0.25,ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.6);
+      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.6);
+      setTimeout(function(){try{ctx.close();}catch(_){}},1000);
+    }catch(_){}
+  }
+
+  // ── SSE (user-side real-time: admin→user notifications) ────────────────────
+  function startSse(){
+    if(_sseCtrl)return;
+    var token=localStorage.getItem('syncling_token');if(!token)return;
+    _sseCtrl=new AbortController();
+    fetch('/api/pipeline/events',{headers:{'Authorization':'Bearer '+token},signal:_sseCtrl.signal})
+      .then(function(res){
+        var reader=res.body.getReader(),decoder=new TextDecoder(),buf='';
+        function pump(){
+          reader.read().then(function(r){
+            if(r.done){_sseCtrl=null;return;}
+            buf+=decoder.decode(r.value,{stream:true});
+            var parts=buf.split('\n\n');buf=parts.pop();
+            parts.forEach(function(chunk){
+              var line=chunk.trim();if(!line.startsWith('data:'))return;
+              try{var evt=JSON.parse(line.slice(5).trim());if(evt.type==='support_message')onSseMessage(evt);}catch(_){}
+            });
+            pump();
+          }).catch(function(){_sseCtrl=null;});
+        }
+        pump();
+      }).catch(function(){_sseCtrl=null;});
+  }
+
+  function onSseMessage(evt){
+    var tid=evt.supportTicketId;if(!tid)return;
+    if(evt.supportSenderType!=='admin')return; // only notify user when admin sends
+    if(_view==='thread'&&_convId===tid){
+      silentRefreshThread();
+    } else {
+      _unread[tid]=true;updateFabDot();
+      if(_view==='home'&&_convs)renderBody();
+    }
+    playTing();
+  }
+
+  // ── Admin polling (admin-side: user→admin notifications every 5s) ──────────
+  function startPoll(){if(_pollTimer)return;_pollTimer=setInterval(function(){if(_view==='thread'&&_convId)silentRefreshThread(true);},5000);}
+  function stopPoll(){if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}}
+
+  function silentRefreshThread(isAdminPoll){
+    var id=_convId;if(!id)return;
+    var prevCount=_thread?(_thread.messages||[]).length:0;
+    fetch(BASE+'/'+id,{headers:H()})
+      .then(function(r){return r.ok?r.json():Promise.reject(r.status);})
+      .then(function(data){
+        var gotNew=(data.messages||[]).length>prevCount;
+        _thread=data;
+        if(_convs)_convs.forEach(function(t){if(t.id===id)t.status=data.status;});
+        if(_view==='thread'&&_convId===id){renderThread(false);if(gotNew&&isAdminPoll)playTing();}
+      }).catch(function(){});
+  }
+
+  // ── Home view ───────────────────────────────────────────────────────────────
   function viewHome(){
     var h='<div class="sc-hero">'+
       '<div class="sc-hero-avatar">💬</div>'+
-      '<div class="sc-hero-title">Syncling Support</div>'+
-      '<div class="sc-hero-sub">We\'re here to help you out</div>'+
-      '<div class="sc-sla">⏱ We reply within 24 hours</div>'+
+      '<div class="sc-hero-title">'+(_isAdmin?'🛠 Support Inbox':'Syncling Support')+'</div>'+
+      '<div class="sc-hero-sub">'+(_isAdmin?'All customer conversations':'We\'re here to help you out')+'</div>'+
+      (!_isAdmin?'<div class="sc-sla">⏱ We reply within 24 hours</div>':'')+
     '</div>';
-
     if(!_loaded){
       h+='<div class="sc-loading">Loading conversations…</div>';
     } else if(_convs&&_convs.length){
-      h+='<div class="sc-section-label">Your conversations</div><div class="sc-conv-list">';
+      h+='<div class="sc-section-label">'+(_isAdmin?'All tickets':'Your conversations')+'</div><div class="sc-conv-list">';
       _convs.forEach(function(t){
-        var preview=t.adminReply?('Support: '+t.adminReply):t.message;
-        var hasNew=t.adminReply&&t.status!=='open';
+        var preview=t.lastMessage||'';var hasNew=!!_unread[t.id];
+        var timeMs=t.updatedAt||t.createdAt;
         h+='<div class="sc-conv-item" onclick="window._scThread(\''+esc(t.id)+'\')">'+
           '<div class="sc-conv-dot'+(hasNew?' active':'')+'"></div>'+
           '<div class="sc-conv-body">'+
             '<div class="sc-conv-subject">'+esc(t.subject)+'</div>'+
-            '<div class="sc-conv-preview">'+esc(preview.substring(0,80))+(preview.length>80?'…':'')+'</div>'+
+            (_isAdmin&&t.userEmail?'<div class="sc-conv-email">'+esc(t.userEmail)+'</div>':'')+
+            '<div class="sc-conv-preview">'+esc(preview.substring(0,70))+(preview.length>70?'…':'')+'</div>'+
             '<div class="sc-conv-footer">'+
               '<span class="sc-status st-'+esc(t.status)+'">'+statusLabel(t.status)+'</span>'+
-              '<span style="font-size:10px;color:var(--text-dim);margin-left:4px;">'+ago(t.createdAt)+'</span>'+
+              '<span style="font-size:10px;color:var(--text-dim);margin-left:4px">'+ago(timeMs)+'</span>'+
             '</div>'+
           '</div>'+
           '<div class="sc-conv-arrow">›</div>'+
@@ -573,210 +653,221 @@ internal val SUPPORT_CHAT_JS = """(function(){
       });
       h+='</div>';
     } else {
-      h+='<div class="sc-empty"><div class="sc-empty-icon">💬</div>No conversations yet.<br>Start one below and we\'ll get back to you within 24 hours.</div>';
+      h+='<div class="sc-empty"><div class="sc-empty-icon">💬</div>'+(_isAdmin?'No support tickets yet.':'No conversations yet.<br>Start one below.')+'</div>';
     }
-    h+='<button class="sc-new-conv" onclick="window._scCompose()">'+
-      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'+
-      'New conversation</button>';
-    return h;
-  }
-
-  function viewThread(){
-    var t=null;
-    if(_convs)for(var i=0;i<_convs.length;i++){if(_convs[i].id===_convId){t=_convs[i];break;}}
-    if(!t)return '<div class="sc-empty">Conversation not found.</div>';
-
-    var h='<div class="sc-thread-header">'+
-      '<div class="sc-thread-subject">'+esc(t.subject)+'</div>'+
-      '<div class="sc-thread-meta">'+
-        '<span class="sc-status cat-'+esc(t.category)+'" title="'+esc(CAT_LABELS[t.category]||t.category)+'">'+esc(CAT_EMOJIS[t.category]||'')+' '+esc(CAT_LABELS[t.category]||t.category)+'</span>'+
-        '<span class="sc-status st-'+esc(t.status)+'">'+statusLabel(t.status)+'</span>'+
-        '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">'+ago(t.createdAt)+'</span>'+
-      '</div>'+
-    '</div>'+
-    '<div class="sc-messages">'+
-      '<div class="sc-msg sc-msg-user">'+
-        '<div class="sc-bubble sc-bubble-user">'+esc(t.message)+'</div>'+
-        '<div class="sc-msg-meta">You &middot; '+ago(t.createdAt)+'</div>'+
-      '</div>';
-
-    if(t.adminReply){
-      h+='<div class="sc-msg sc-msg-admin">'+
-        '<div class="sc-msg-avatar">S</div>'+
-        '<div class="sc-msg-admin-inner">'+
-          '<div class="sc-bubble sc-bubble-admin">'+esc(t.adminReply)+'</div>'+
-          '<div class="sc-msg-meta">Syncling Support</div>'+
-        '</div>'+
-      '</div>';
-    } else if(t.status!=='resolved'){
-      h+='<div class="sc-waiting">'+
-        '<div class="sc-dots"><div class="sc-dot"></div><div class="sc-dot"></div><div class="sc-dot"></div></div>'+
-        '<span class="sc-waiting-text">Support will reply shortly</span>'+
-      '</div>';
-    }
-
-    h+='</div>';
-    if(t.status==='resolved'){
-      h+='<div style="text-align:center;padding:16px 0 4px;font-size:12px;color:var(--text-muted);">This conversation has been resolved. <button onclick="window._scCompose()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;">Open a new one</button></div>';
+    if(!_isAdmin){
+      h+='<button class="sc-new-conv" onclick="window._scCompose()">'+
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'+
+        ' New conversation</button>';
     }
     return h;
   }
 
+  // ── Compose view ────────────────────────────────────────────────────────────
   function viewCompose(){
     return '<div class="sc-compose-title">New conversation</div>'+
-      '<div class="sc-field">'+
-        '<label class="sc-label">Category</label>'+
+      '<div class="sc-field"><label class="sc-label">Category</label>'+
         '<select class="sc-select" id="sc-cat">'+
           Object.keys(CAT_LABELS).map(function(k){return '<option value="'+k+'">'+CAT_EMOJIS[k]+' '+CAT_LABELS[k]+'</option>';}).join('')+
-        '</select>'+
-      '</div>'+
-      '<div class="sc-field">'+
-        '<label class="sc-label"><span>Subject</span><span class="sc-counter" id="sc-subj-ctr">0/200</span></label>'+
+        '</select></div>'+
+      '<div class="sc-field"><label class="sc-label"><span>Subject</span><span class="sc-counter" id="sc-subj-ctr">0/200</span></label>'+
         '<input class="sc-input" id="sc-subj" type="text" placeholder="Brief description" maxlength="200" autocomplete="off">'+
-        '<div class="sc-ferr" id="sc-subj-err"></div>'+
-      '</div>'+
-      '<div class="sc-field">'+
-        '<label class="sc-label"><span>Message</span><span class="sc-counter" id="sc-msg-ctr">0/5000</span></label>'+
+        '<div class="sc-ferr" id="sc-subj-err"></div></div>'+
+      '<div class="sc-field"><label class="sc-label"><span>Message</span><span class="sc-counter" id="sc-msg-ctr">0/5000</span></label>'+
         '<textarea class="sc-textarea" id="sc-msg" placeholder="Describe your issue in detail…" maxlength="5000"></textarea>'+
-        '<div class="sc-ferr" id="sc-msg-err"></div>'+
-      '</div>'+
+        '<div class="sc-ferr" id="sc-msg-err"></div></div>'+
       '<button class="sc-send" id="sc-send" onclick="window._scSubmit()" '+(_submitting?'disabled':'')+'>'+
-        (_submitting?('<span class="sc-spinner"></span><span>Sending…</span>'):'<span>Send message</span>')+
+        (_submitting?'<span class="sc-spinner"></span><span>Sending…</span>':'<span>Send message</span>')+
       '</button>';
   }
 
+  // ── Sent confirmation view ──────────────────────────────────────────────────
   function viewSent(){
-    var t=_lastSent;
-    if(!t)return '';
+    var t=_lastSent;if(!t)return '';
     return '<div class="sc-sent">'+
       '<div class="sc-sent-icon">✅</div>'+
       '<div class="sc-sent-title">Message sent!</div>'+
-      '<div class="sc-sent-sub">We\'ll reply to your account email within 24 hours.</div>'+
-      '<div class="sc-sent-ref">#'+esc(t.id.substring(0,8))+'</div>'+
+      '<div class="sc-sent-sub">You\'ll see the reply here in real time.</div>'+
+      '<div class="sc-sent-ref">#'+esc((t.id||'').substring(0,8))+'</div>'+
       '<div class="sc-sent-btns">'+
         '<button class="sc-btn-ghost" onclick="window._scCompose()">+ New</button>'+
-        '<button class="sc-btn-accent" onclick="window._scHome()">View all</button>'+
+        '<button class="sc-btn-accent" onclick="window._scThread(\''+esc(t.id||'')+'\')">Open chat →</button>'+
       '</div>'+
     '</div>';
   }
 
-  function renderHeader(){
-    var panel=document.getElementById('sc-panel');
-    if(!panel)return;
-    var back=panel.querySelector('.sc-header-back');
-    var nameEl=panel.querySelector('.sc-header-name');
-    var statusEl=panel.querySelector('.sc-header-status');
-    var atHome=(_view==='home');
-    if(back)back.classList.toggle('visible',!atHome);
-    if(nameEl){
-      if(_view==='thread'&&_convs){
-        var t=null;
-        for(var i=0;i<_convs.length;i++){if(_convs[i].id===_convId){t=_convs[i];break;}}
-        nameEl.textContent=t?t.subject:'Conversation';
-      } else if(_view==='compose'){
-        nameEl.textContent='New conversation';
-      } else {
-        nameEl.textContent='Syncling Support';
-      }
+  // ── Thread render ───────────────────────────────────────────────────────────
+  function renderThread(scroll){
+    if(scroll===undefined)scroll=true;
+    var panel=document.getElementById('sc-panel');if(!panel)return;
+    var body=panel.querySelector('.sc-body');if(!body)return;
+    var inner=panel.querySelector('.sc-body-inner');if(inner)inner.style.display='none';
+    var wrap=document.getElementById('sc-thread-wrap');
+    if(!wrap){wrap=document.createElement('div');wrap.id='sc-thread-wrap';wrap.className='sc-thread-wrap';body.appendChild(wrap);}
+    wrap.style.display='flex';
+    if(!_thread){
+      wrap.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px">Loading…</div>';
+      return;
     }
-    if(statusEl){
-      if(_view==='home'){
-        statusEl.innerHTML='<div class="sc-header-dot"></div>Usually reply within 24h';
+    var t=_thread,isResolved=t.status==='resolved';
+    var msgs=t.messages||[];
+
+    // Preserve scroll position for silent refresh
+    var prevArea=document.getElementById('sc-msg-area');
+    var prevTop=prevArea?prevArea.scrollTop:-1,prevH=prevArea?prevArea.scrollHeight:-1,prevCH=prevArea?prevArea.clientHeight:0;
+
+    var msgsHtml='';
+    msgs.forEach(function(m){
+      var fromUser=m.senderType==='user';
+      var fromMe=_isAdmin?!fromUser:fromUser;
+      if(fromMe){
+        msgsHtml+='<div class="sc-msg sc-msg-me">'+
+          '<div class="sc-bubble sc-bubble-me">'+esc(m.content)+'</div>'+
+          '<div class="sc-msg-meta">'+(_isAdmin?'You (Support)':'You')+' · '+ago(m.sentAt)+'</div>'+
+        '</div>';
       } else {
-        statusEl.innerHTML='';
+        msgsHtml+='<div class="sc-msg sc-msg-other">'+
+          '<div class="sc-msg-avatar">'+(fromUser?'?':'S')+'</div>'+
+          '<div class="sc-msg-other-inner">'+
+            '<div class="sc-bubble sc-bubble-other">'+esc(m.content)+'</div>'+
+            '<div class="sc-msg-meta">'+(fromUser?'User':'Support')+' · '+ago(m.sentAt)+'</div>'+
+          '</div>'+
+        '</div>';
       }
+    });
+    if(!isResolved&&msgs.length<=1&&!_isAdmin){
+      msgsHtml+='<div class="sc-waiting"><div class="sc-dots"><div class="sc-dot"></div><div class="sc-dot"></div><div class="sc-dot"></div></div><span class="sc-waiting-text">Support will reply shortly</span></div>';
     }
+
+    wrap.innerHTML=
+      '<div class="sc-thread-info">'+
+        '<div class="sc-thread-subject">'+esc(t.subject)+'</div>'+
+        '<div class="sc-thread-meta">'+
+          '<span class="sc-status cat-'+esc(t.category)+'">'+esc(CAT_EMOJIS[t.category]||'')+' '+esc(CAT_LABELS[t.category]||t.category)+'</span>'+
+          '<span class="sc-status st-'+esc(t.status)+'">'+statusLabel(t.status)+'</span>'+
+          '<span style="flex:1"></span>'+
+          (!isResolved?'<button class="sc-resolve-btn" onclick="window._scResolve()">✓ Mark resolved</button>':'')+
+        '</div>'+
+      '</div>'+
+      '<div class="sc-msg-area" id="sc-msg-area">'+msgsHtml+'</div>'+
+      (!isResolved?
+        '<div class="sc-compose-bar">'+
+          '<textarea class="sc-reply-textarea" id="sc-reply-ta" placeholder="Reply… (Ctrl+Enter to send)" rows="1" maxlength="5000"></textarea>'+
+          '<button class="sc-reply-send" id="sc-reply-send" onclick="window._scSendReply()" title="Send">'+
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>'+
+          '</button>'+
+        '</div>':
+        '<div class="sc-resolved-note">Conversation resolved. <button class="sc-link-btn" onclick="window._scCompose()">Start a new one →</button></div>'
+      );
+
+    wireReplyBox();
+
+    var newArea=document.getElementById('sc-msg-area');
+    if(newArea){
+      if(scroll){newArea.scrollTop=newArea.scrollHeight;}
+      else{var wasAtBottom=prevH<0||(prevTop+prevCH+10>=prevH);if(wasAtBottom)newArea.scrollTop=newArea.scrollHeight;else newArea.scrollTop=prevTop;}
+    }
+  }
+
+  function wireReplyBox(){
+    var ta=document.getElementById('sc-reply-ta');if(!ta)return;
+    ta.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px';});
+    ta.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();window._scSendReply();}});
+    setTimeout(function(){if(ta)ta.focus();},50);
+  }
+
+  // ── Shared render helpers ───────────────────────────────────────────────────
+  function setThreadMode(on){
+    var panel=document.getElementById('sc-panel');if(!panel)return;
+    var inner=panel.querySelector('.sc-body-inner');
+    var wrap=document.getElementById('sc-thread-wrap');
+    if(on){if(inner)inner.style.display='none';if(wrap)wrap.style.display='flex';}
+    else{if(inner)inner.style.display='';if(wrap)wrap.style.display='none';}
   }
 
   function renderBody(){
-    var panel=document.getElementById('sc-panel');
-    if(!panel)return;
-    var inner=panel.querySelector('.sc-body-inner');
-    if(!inner)return;
+    setThreadMode(false);
+    var panel=document.getElementById('sc-panel');if(!panel)return;
+    var inner=panel.querySelector('.sc-body-inner');if(!inner)return;
     var html='';
     if(_view==='home')html=viewHome();
-    else if(_view==='thread')html=viewThread();
     else if(_view==='compose')html=viewCompose();
     else if(_view==='sent')html=viewSent();
     inner.innerHTML=html;
-    wireListeners();
+    wireFormListeners();
     updateFabDot();
   }
 
-  function wireListeners(){
-    var subj=document.getElementById('sc-subj');
-    var msg=document.getElementById('sc-msg');
+  function wireFormListeners(){
+    var subj=document.getElementById('sc-subj'),msg=document.getElementById('sc-msg');
     if(subj){
-      subj.addEventListener('input',function(){
-        var ctr=document.getElementById('sc-subj-ctr');
-        if(ctr){ctr.textContent=this.value.length+'/200';ctr.classList.toggle('warn',this.value.length>170);}
-      });
-      subj.addEventListener('blur',function(){
-        var e=document.getElementById('sc-subj-err');
-        if(e)e.textContent=this.value.trim()?'':'Subject is required';
-        this.classList.toggle('sc-err',!this.value.trim());
-      });
+      subj.addEventListener('input',function(){var c=document.getElementById('sc-subj-ctr');if(c){c.textContent=this.value.length+'/200';c.classList.toggle('warn',this.value.length>170);}});
+      subj.addEventListener('blur',function(){var e=document.getElementById('sc-subj-err');if(e)e.textContent=this.value.trim()?'':'Subject is required';this.classList.toggle('sc-err',!this.value.trim());});
     }
     if(msg){
-      msg.addEventListener('input',function(){
-        var ctr=document.getElementById('sc-msg-ctr');
-        if(ctr){ctr.textContent=this.value.length+'/5000';ctr.classList.toggle('warn',this.value.length>4250);}
-      });
-      msg.addEventListener('blur',function(){
-        var e=document.getElementById('sc-msg-err');
-        if(e)e.textContent=this.value.trim()?'':'Message is required';
-        this.classList.toggle('sc-err',!this.value.trim());
-      });
+      msg.addEventListener('input',function(){var c=document.getElementById('sc-msg-ctr');if(c){c.textContent=this.value.length+'/5000';c.classList.toggle('warn',this.value.length>4250);}});
+      msg.addEventListener('blur',function(){var e=document.getElementById('sc-msg-err');if(e)e.textContent=this.value.trim()?'':'Message is required';this.classList.toggle('sc-err',!this.value.trim());});
+    }
+  }
+
+  function renderHeader(){
+    var panel=document.getElementById('sc-panel');if(!panel)return;
+    var back=panel.querySelector('.sc-header-back'),nameEl=panel.querySelector('.sc-header-name'),statusEl=panel.querySelector('.sc-header-status');
+    if(back)back.classList.toggle('visible',_view!=='home');
+    if(nameEl){
+      if(_view==='thread'&&_thread)nameEl.textContent=_thread.subject||'Conversation';
+      else if(_view==='compose')nameEl.textContent='New conversation';
+      else nameEl.textContent=_isAdmin?'🛠 Support Inbox':'Syncling Support';
+    }
+    if(statusEl){
+      if(_view==='thread'&&_thread)statusEl.innerHTML='<span class="sc-status st-'+esc(_thread.status)+'" style="font-size:10px">'+statusLabel(_thread.status)+'</span>';
+      else statusEl.innerHTML='<div class="sc-header-dot"></div>'+(_isAdmin?'Admin view':'Usually reply within 24h');
     }
   }
 
   function updateFabDot(){
-    var dot=document.getElementById('sc-fab-dot');
-    if(dot)dot.classList.toggle('show',hasUnread());
+    var dot=document.getElementById('sc-fab-dot');if(!dot)return;
+    var any=Object.keys(_unread).some(function(k){return _unread[k];});
+    dot.classList.toggle('show',any);
   }
 
-  function navigate(newView,newConvId,direction){
-    var panel=document.getElementById('sc-panel');
-    if(!panel)return;
-    var inner=panel.querySelector('.sc-body-inner');
-    if(!inner){_view=newView;_convId=newConvId;renderBody();return;}
-    var dx=(direction||1)*28;
-    inner.style.transition='none';
-    inner.style.opacity='0';
-    inner.style.transform='translateX('+dx+'px)';
-    _view=newView;_convId=newConvId;
-    setTimeout(function(){
-      renderBody();
-      renderHeader();
-      inner.style.transform='translateX('+(-dx)+'px)';
-      requestAnimationFrame(function(){
-        inner.style.transition='opacity .16s ease,transform .18s cubic-bezier(.4,0,.2,1)';
-        inner.style.opacity='1';
-        inner.style.transform='none';
-      });
-    },20);
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  function navigate(newView,newId){
+    if(_view==='thread'&&_isAdmin)stopPoll();
+    _view=newView;_convId=newId;
+    if(newView==='thread'){
+      _thread=null;renderHeader();setThreadMode(true);renderThread(true);
+      fetch(BASE+'/'+newId,{headers:H()})
+        .then(function(r){return r.ok?r.json():Promise.reject(r.status);})
+        .then(function(data){
+          _thread=data;_unread[newId]=false;
+          if(_convs)_convs.forEach(function(t){if(t.id===newId)t.status=data.status;});
+          renderThread(true);renderHeader();updateFabDot();
+          if(_isAdmin)startPoll();
+        }).catch(function(){});
+    } else {
+      renderBody();renderHeader();
+    }
   }
 
-  window._scHome=function(){
-    if(_view!=='home')navigate('home',null,-1);
-    _loaded=false;loadConvs();
-  };
-  window._scThread=function(id){navigate('thread',id,1);};
-  window._scCompose=function(){navigate('compose',null,1);};
+  // ── Public API ──────────────────────────────────────────────────────────────
+  window._scHome=function(){if(_view==='thread'&&_isAdmin)stopPoll();navigate('home',null);_loaded=false;loadConvs();};
+  window._scThread=function(id){navigate('thread',id);};
+  window._scCompose=function(){navigate('compose',null);};
   window._scToggle=function(){
     _open=!_open;
     var panel=document.getElementById('sc-panel');
     if(panel)panel.classList.toggle('open',_open);
-    if(_open&&!_loaded)loadConvs();
+    if(_open){if(!_loaded)loadConvs();startSse();}
   };
-  window._scClose=function(){_open=false;var panel=document.getElementById('sc-panel');if(panel)panel.classList.remove('open');};
-  window._scBack=function(){
-    if(_view==='thread'||_view==='compose'||_view==='sent')navigate('home',null,-1);
+  window._scClose=function(){
+    _open=false;if(_view==='thread'&&_isAdmin)stopPoll();
+    var panel=document.getElementById('sc-panel');if(panel)panel.classList.remove('open');
   };
+  window._scBack=function(){if(_view!=='home')window._scHome();};
+
   window._scSubmit=function(){
-    var cat=document.getElementById('sc-cat');
-    var subj=document.getElementById('sc-subj');
-    var msg=document.getElementById('sc-msg');
+    var cat=document.getElementById('sc-cat'),subj=document.getElementById('sc-subj'),msg=document.getElementById('sc-msg');
     if(!subj||!msg)return;
     var sv=subj.value.trim(),mv=msg.value.trim(),valid=true;
     var se=document.getElementById('sc-subj-err'),me=document.getElementById('sc-msg-err');
@@ -787,45 +878,63 @@ internal val SUPPORT_CHAT_JS = """(function(){
     fetch(BASE,{method:'POST',headers:H(),body:JSON.stringify({category:cat?cat.value:'question',subject:sv,message:mv})})
       .then(function(r){return r.ok?r.json():r.json().then(function(e){throw new Error(e.error||'Failed');});})
       .then(function(d){
-        _submitting=false;
-        _lastSent=d;
-        _loaded=false;_convs=null;
-        navigate('sent',null,1);
+        _submitting=false;_lastSent=d;_loaded=false;_convs=null;
+        navigate('sent',null);
       })
-      .catch(function(e){
-        _submitting=false;renderBody();
-        if(window.toast)toast(e.message||'Failed to send. Please try again.','error');
-      });
+      .catch(function(e){_submitting=false;renderBody();if(window.toast)toast(e.message||'Failed to send.','error');});
+  };
+
+  window._scSendReply=function(){
+    var ta=document.getElementById('sc-reply-ta');if(!ta)return;
+    var content=ta.value.trim();if(!content)return;
+    var btn=document.getElementById('sc-reply-send');
+    if(btn)btn.disabled=true;ta.disabled=true;
+    fetch(BASE+'/'+_convId+'/messages',{method:'POST',headers:H(),body:JSON.stringify({content:content})})
+      .then(function(r){return r.ok?r.json():r.json().then(function(e){throw new Error(e.error||'Failed');});})
+      .then(function(msg){
+        if(_thread){
+          _thread.messages=_thread.messages||[];_thread.messages.push(msg);
+          if(msg.senderType==='admin'&&_thread.status==='open')_thread.status='acknowledged';
+        }
+        ta.value='';ta.style.height='auto';ta.disabled=false;if(btn)btn.disabled=false;
+        renderThread(true);renderHeader();
+      })
+      .catch(function(e){ta.disabled=false;if(btn)btn.disabled=false;if(window.toast)toast(e.message||'Failed to send.','error');});
+  };
+
+  window._scResolve=function(){
+    if(!_convId)return;
+    if(!confirm('Mark this conversation as resolved?'))return;
+    fetch(BASE+'/'+_convId+'/resolve',{method:'POST',headers:H()})
+      .then(function(r){return r.ok?r.json():Promise.reject(r.status);})
+      .then(function(){
+        if(_thread)_thread.status='resolved';
+        if(_convs)_convs.forEach(function(t){if(t.id===_convId)t.status='resolved';});
+        stopPoll();renderThread(false);renderHeader();
+      })
+      .catch(function(){if(window.toast)toast('Failed to resolve. Please try again.','error');});
   };
 
   function loadConvs(){
-    _loaded=false;
-    renderBody();
+    _loaded=false;if(_view==='home')renderBody();
     fetch(BASE,{headers:H()})
       .then(function(r){return r.ok?r.json():Promise.reject('HTTP '+r.status);})
-      .then(function(d){_loaded=true;_convs=d&&d.tickets?d.tickets:[];renderBody();updateFabDot();})
-      .catch(function(){_loaded=true;_convs=[];renderBody();});
+      .then(function(d){_loaded=true;_convs=d.tickets||[];_isAdmin=!!d.isAdmin;if(_view==='home')renderBody();renderHeader();updateFabDot();})
+      .catch(function(){_loaded=true;_convs=[];if(_view==='home')renderBody();});
   }
 
   function mount(){
     if(document.getElementById('sc-fab'))return;
     var fab=document.createElement('button');
-    fab.id='sc-fab';
-    fab.className='sc-fab';
-    fab.setAttribute('aria-label','Help & Support');
-    fab.setAttribute('title','Help & support');
-    fab.innerHTML=
-      '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg>'+
+    fab.id='sc-fab';fab.className='sc-fab';
+    fab.setAttribute('aria-label','Help & Support');fab.setAttribute('title','Help & support');
+    fab.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg>'+
       '<div class="sc-fab-dot" id="sc-fab-dot"></div>';
-    fab.onclick=window._scToggle;
-    document.body.appendChild(fab);
+    fab.onclick=window._scToggle;document.body.appendChild(fab);
 
     var panel=document.createElement('div');
-    panel.id='sc-panel';
-    panel.className='sc-panel';
-    panel.setAttribute('role','dialog');
-    panel.setAttribute('aria-modal','true');
-    panel.setAttribute('aria-label','Help and Support');
+    panel.id='sc-panel';panel.className='sc-panel';
+    panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Help and Support');
     panel.innerHTML=
       '<div class="sc-header">'+
         '<button class="sc-header-back" onclick="window._scBack()" aria-label="Go back">&#8592;</button>'+

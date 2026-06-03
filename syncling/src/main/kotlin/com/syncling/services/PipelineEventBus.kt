@@ -57,7 +57,18 @@ data class PipelineEvent(
     val locale: LocaleProgressState? = null,
     val locales: List<LocaleProgressState>? = null,
     val progressDone: Int? = null,
-    val progressTotal: Int? = null
+    val progressTotal: Int? = null,
+    // Webhook rejected — type = "webhook_rejected". Fired when a push arrives but the
+    // pipeline is NOT started, so the user knows why nothing appeared in their activity feed.
+    val rejectedReason: String? = null,  // branch_mismatch | source_not_modified | usage_limit | rate_limited
+    val rejectedDetail: String? = null,  // human-readable explanation
+    val rejectedRepo: String? = null,
+    val rejectedBranch: String? = null,
+    val rejectedProjectId: String? = null,
+    // Support chat — type = "support_message". Delivered to user's SSE channel when admin replies.
+    val supportTicketId: String? = null,
+    val supportSenderType: String? = null,   // "user" | "admin"
+    val supportTicketStatus: String? = null, // ticket status after the event
 )
 
 /**
@@ -243,6 +254,33 @@ class PipelineEventBus(
             runId = runId,
             cdnBundleVersion = bundleVersion,
             cdnLocales = locales
+        ))
+    }
+
+    fun emitSupportMessage(userId: String, ticketId: String, senderType: String, ticketStatus: String) {
+        emit(userId, PipelineEvent(
+            type = "support_message",
+            supportTicketId = ticketId,
+            supportSenderType = senderType,
+            supportTicketStatus = ticketStatus,
+        ))
+    }
+
+    fun emitWebhookRejected(
+        ownerId: String,
+        repo: String,
+        branch: String,
+        projectId: String,
+        reason: String,
+        detail: String
+    ) {
+        emit(ownerId, PipelineEvent(
+            type = "webhook_rejected",
+            rejectedReason = reason,
+            rejectedDetail = detail,
+            rejectedRepo = repo,
+            rejectedBranch = branch,
+            rejectedProjectId = projectId
         ))
     }
 

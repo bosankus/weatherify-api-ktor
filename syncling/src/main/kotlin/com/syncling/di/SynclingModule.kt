@@ -128,7 +128,8 @@ fun synclingIndexes(): List<IndexSpec> {
         ),
         IndexSpec("member_usage_logs", Document(mapOf("ownerId" to 1, "yearMonth" to 1))),
         IndexSpec("member_usage_logs", Document(mapOf("projectId" to 1, "yearMonth" to 1))),
-        IndexSpec("support_tickets", Document(mapOf("userId" to 1, "createdAt" to -1))),
+        IndexSpec("support_tickets", Document(mapOf("userId" to 1, "updatedAt" to -1))),
+        IndexSpec("support_messages", Document(mapOf("ticketId" to 1, "sentAt" to 1))),
         // API tokens: tokenHash is the primary lookup key (must be unique); userId for list queries
         IndexSpec("api_tokens", Document("tokenHash", 1), unique),
         IndexSpec("api_tokens", Document("userId", 1)),

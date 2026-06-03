@@ -5,6 +5,7 @@ import com.syncling.repository.ProjectRepository
 import com.androidplay.core.secrets.getSecretValue
 import com.syncling.queue.TranslationJobQueue
 import com.syncling.queue.WebhookPayload
+import com.syncling.services.PipelineEventBus
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -46,7 +47,8 @@ private fun verifySignature(body: ByteArray, signatureHeader: String?): Boolean 
 fun Route.configureWebhookRoutes(
     jobQueue: TranslationJobQueue,
     projectRepository: ProjectRepository,
-    billingRepository: BillingRepository
+    billingRepository: BillingRepository,
+    eventBus: PipelineEventBus
 ) {
     if (webhookSecret == null) {
         log.warn("GITHUB_WEBHOOK_SECRET not set — webhook signature verification is DISABLED (dev mode only, never run this in production)")
@@ -80,14 +82,6 @@ fun Route.configureWebhookRoutes(
                 return@post
             }
 
-            // Distributed per-repo rate-limit (1 per 10s across all instances via Redis SETNX).
-            // Falls back to in-memory if Redis is unavailable.
-            if (jobQueue.isWebhookRateLimited(repo)) {
-                log.info("Ignored webhook: rate limited for repo {}", repo)
-                call.respond(HttpStatusCode.TooManyRequests, "Rate limit exceeded (1 per 10s)")
-                return@post
-            }
-
             // Delivery-level dedup: GitHub sends a unique X-GitHub-Delivery UUID.
             // Prevents GitHub's own retry from double-processing the same delivery.
             val deliveryId = call.request.headers["X-GitHub-Delivery"]
@@ -117,6 +111,11 @@ fun Route.configureWebhookRoutes(
 
             if (branchName != project.watchBranch) {
                 log.info("Ignored webhook: push to branch '{}' (watching '{}')", branchName, project.watchBranch)
+                eventBus.emitWebhookRejected(
+                    ownerId = project.ownerId, repo = repo, branch = branchName,
+                    projectId = project.id, reason = "branch_mismatch",
+                    detail = "Push to '$branchName' ignored — this project watches '${project.watchBranch}'. Update the watch branch in project settings if you want to track this branch."
+                )
                 call.respond(HttpStatusCode.Accepted, "Ignored: branch not watched")
                 return@post
             }
@@ -148,6 +147,12 @@ fun Route.configureWebhookRoutes(
 
             if (!sourceModified) {
                 log.info("Webhook ignored: source files {} not modified in push to {}", project.sourceFilePaths, repo)
+                val paths = project.sourceFilePaths.joinToString(", ") { "'$it'" }
+                eventBus.emitWebhookRejected(
+                    ownerId = project.ownerId, repo = repo, branch = branchName,
+                    projectId = project.id, reason = "source_not_modified",
+                    detail = "Push to '$branchName' didn't change the source strings file ($paths). The pipeline only runs when a watched file is modified."
+                )
                 call.respond(HttpStatusCode.Accepted, "Ignored: source file not modified")
                 return@post
             }
@@ -157,6 +162,11 @@ fun Route.configureWebhookRoutes(
             val subscription = billingRepository.getSubscription(project.ownerId)
             if (subscription.limitHitAt != null) {
                 log.info("Webhook ignored: project={} owner={} has hit usage limit", project.id, project.ownerId)
+                eventBus.emitWebhookRejected(
+                    ownerId = project.ownerId, repo = repo, branch = branchName,
+                    projectId = project.id, reason = "usage_limit",
+                    detail = "Monthly string quota reached. The pipeline is paused until you upgrade your plan or the quota resets next month."
+                )
                 call.respond(HttpStatusCode.Accepted, "Ignored: usage limit reached — upgrade your plan to resume translations")
                 return@post
             }
@@ -170,6 +180,21 @@ fun Route.configureWebhookRoutes(
                 ?.get("email")?.jsonPrimitive?.content
                 ?.trim()?.lowercase()
                 ?.takeIf { it.isNotEmpty() }
+
+            // Rate-limit check moved here so the key is only consumed when we are actually
+            // about to enqueue work. Checking earlier meant a failed validation gate (wrong
+            // branch, source file untouched, etc.) would burn the slot and block the next
+            // legitimate delivery within the 10s window.
+            if (jobQueue.isWebhookRateLimited(repo)) {
+                log.info("Ignored webhook: rate limited for repo {}", repo)
+                eventBus.emitWebhookRejected(
+                    ownerId = project.ownerId, repo = repo, branch = branchName,
+                    projectId = project.id, reason = "rate_limited",
+                    detail = "A pipeline run for this repo was already queued moments ago. This delivery was deduplicated — your translations are being processed."
+                )
+                call.respond(HttpStatusCode.TooManyRequests, "Rate limit exceeded (1 per 10s)")
+                return@post
+            }
 
             jobQueue.enqueueJob(WebhookPayload(
                 repositoryFullName = repo,

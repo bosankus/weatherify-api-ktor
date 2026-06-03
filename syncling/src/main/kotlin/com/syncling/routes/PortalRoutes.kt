@@ -2313,6 +2313,7 @@ private fun HTML.dashboardApp() {
                 }
 
                 div("dash-alert") { id = "dash-alert" }
+                div { id = "wh-reject-banner" }
 
                 div("stats-grid") {
                     div("stat-card card stat-card-green") {
@@ -2767,6 +2768,22 @@ body{font-family:'DM Sans',system-ui,sans-serif}
 .dash-alert-action{font-size:13px;font-weight:600;color:var(--yellow);white-space:nowrap;padding:5px 12px;border-radius:var(--radius-sm);border:1px solid rgba(250,173,20,.28);transition:all .15s}
 .dash-alert.critical .dash-alert-action{color:var(--red);border-color:rgba(255,77,79,.28)}
 .dash-alert-action:hover{opacity:.8}
+.wh-reject-banner{display:none;flex-direction:column;gap:6px;padding:14px 16px;border-radius:var(--radius);border:1px solid rgba(250,173,20,.22);background:rgba(250,173,20,.04);margin-bottom:20px;font-size:13px;position:relative;animation:fadeSlideIn .22s ease}
+.wh-reject-banner.visible{display:flex}
+.wh-reject-banner-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.wh-reject-icon{flex-shrink:0;width:16px;height:16px;margin-top:1px;color:#fbbf24;opacity:.9}
+.wh-reject-body{flex:1;min-width:0}
+.wh-reject-title{font-size:12px;font-weight:700;color:#fbbf24;letter-spacing:.04em;text-transform:uppercase;margin-bottom:3px}
+.wh-reject-title.reason-branch_mismatch{color:#f97316}
+.wh-reject-title.reason-usage_limit{color:var(--red)}
+.wh-reject-detail{font-size:12.5px;color:var(--text-muted);line-height:1.6}
+.wh-reject-meta{font-size:11px;color:var(--text-dim);margin-top:4px;font-family:'JetBrains Mono',monospace}
+.wh-reject-dismiss{flex-shrink:0;background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;border-radius:4px;font-size:16px;line-height:1;transition:color .15s}
+.wh-reject-dismiss:hover{color:var(--text)}
+.wh-reject-action{display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-size:12px;font-weight:600;color:#fbbf24;border:1px solid rgba(251,191,36,.25);border-radius:5px;padding:3px 10px;transition:opacity .15s}
+.wh-reject-action:hover{opacity:.75}
+.wh-reject-action.action-billing{color:var(--red);border-color:rgba(255,77,79,.25)}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 /* ── Review Queue widget ─────────────────────────────────────────────────── */
 .rq-rows{display:flex;flex-direction:column;gap:7px;margin-bottom:10px}
 .rq-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);background:var(--surface2);border:1px solid var(--border)}
@@ -3170,6 +3187,7 @@ function handlePipelineEvent(evt){
   let d;try{d=JSON.parse(evt.data);}catch{return;}
 
   if(d.type==='start'&&d.snapshot){
+    dismissWebhookRejected();
     applySnapshot(d.snapshot);
     // For a retry run, replace the parent's slot in-place so the activity feed
     // shows one card whose state advances, not two stacked entries. Re-key the
@@ -3224,9 +3242,63 @@ function handlePipelineEvent(evt){
     toast('Translations live on edge — SDK consumers will refresh on next launch');
   }else if(d.type==='notification'){
     if(typeof window.pushInAppNotification==='function')window.pushInAppNotification(d);
+  }else if(d.type==='webhook_rejected'){
+    showWebhookRejected(d);
   }
 }
 
+// ── Webhook rejected banner ───────────────────────────────────────────────────
+var _whRejectDismissTimer=null;
+function showWebhookRejected(d){
+  var el=document.getElementById('wh-reject-banner');
+  if(!el)return;
+  var reason=d.rejectedReason||'unknown';
+  var detail=d.rejectedDetail||'The push was received but the pipeline did not start.';
+  var repo=d.rejectedRepo||'';
+  var branch=d.rejectedBranch||'';
+
+  var titles={
+    branch_mismatch:'Wrong branch',
+    source_not_modified:'No string changes',
+    usage_limit:'Quota reached',
+    rate_limited:'Already queued'
+  };
+  var icons={
+    branch_mismatch:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>',
+    source_not_modified:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+    usage_limit:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    rate_limited:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+  };
+  var actionHtml='';
+  if(reason==='branch_mismatch'){
+    actionHtml='<a class="wh-reject-action" href="/projects">Fix in project settings &rarr;</a>';
+  }else if(reason==='usage_limit'){
+    actionHtml='<a class="wh-reject-action action-billing" href="/billing">Upgrade plan &rarr;</a>';
+  }
+  var metaHtml=repo?('<span class="wh-reject-meta">'+esc(repo)+(branch?' &rarr; '+esc(branch):'')+'</span>'):'';
+  el.innerHTML=
+    '<div class="wh-reject-banner-row">'+
+      '<span class="wh-reject-icon">'+(icons[reason]||icons['source_not_modified'])+'</span>'+
+      '<div class="wh-reject-body">'+
+        '<div class="wh-reject-title reason-'+esc(reason)+'">'+(titles[reason]||'Push ignored')+'</div>'+
+        '<div class="wh-reject-detail">'+esc(detail)+'</div>'+
+        metaHtml+
+        actionHtml+
+      '</div>'+
+      '<button class="wh-reject-dismiss" aria-label="Dismiss" onclick="dismissWebhookRejected()">&times;</button>'+
+    '</div>';
+  el.className='wh-reject-banner visible';
+  // Auto-dismiss rate_limited (it is informational only) after 8s; others persist until dismissed
+  clearTimeout(_whRejectDismissTimer);
+  if(reason==='rate_limited'){
+    _whRejectDismissTimer=setTimeout(dismissWebhookRejected,8000);
+  }
+}
+function dismissWebhookRejected(){
+  var el=document.getElementById('wh-reject-banner');
+  if(el)el.className='wh-reject-banner';
+  clearTimeout(_whRejectDismissTimer);
+}
 // ── Retrigger a failed run ────────────────────────────────────────────────────
 async function retriggerRun(runId){
   const run=runState.get(runId);

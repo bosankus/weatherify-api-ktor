@@ -12,6 +12,9 @@ data class SupportTicket(
     val message: String,
     val status: String = "open",
     val createdAt: Long,
+    val updatedAt: Long? = null,
     val adminNote: String? = null,
     val adminReply: String? = null,
+    val resolvedBy: String? = null,
+    val resolvedAt: Long? = null,
 )
