@@ -2739,6 +2739,15 @@ body{font-family:'DM Sans',system-ui,sans-serif}
 .retry-btn:hover{background:rgba(255,77,79,.13);border-color:rgba(255,77,79,.38)}
 .retry-btn:disabled{opacity:.5;cursor:not-allowed}
 .retry-btn.retrying{background:rgba(250,173,20,.09);color:var(--yellow);border-color:rgba(250,173,20,.28)}
+.run-error-section{display:flex;align-items:flex-start;gap:9px;padding:10px 16px;background:rgba(255,77,79,.04);border-top:1px solid rgba(255,77,79,.12);border-bottom:1px solid rgba(255,77,79,.12)}
+.run-error-section-icon{flex-shrink:0;color:var(--red);opacity:.85;margin-top:1px}
+.run-error-section-msg{font-size:12.5px;color:var(--red);line-height:1.5;word-break:break-word;flex:1}
+.run-collapse-btn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:4px;background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;flex-shrink:0;transition:color .15s,background .15s}
+.run-collapse-btn:hover{color:var(--text);background:rgba(255,255,255,.06)}
+.run-collapse-chevron{transition:transform .2s ease}
+.run-card.run-collapsed .run-collapse-chevron{transform:rotate(-90deg)}
+.run-card.run-collapsed .run-steps{display:none}
+.run-card.run-collapsed .run-locales{display:none}
 .ob-guide{background:var(--surface);border:1px solid rgba(139,126,255,.2);border-radius:var(--radius);padding:32px}
 .ob-intro{margin-bottom:28px}
 .ob-intro h3{font-size:18px;font-weight:700;margin-bottom:6px}
@@ -3065,20 +3074,28 @@ function buildRunHtml(runId){
       +' '+(cdnStep.detail||'CDN live')+'</span>'
     :'';
 
-  // Footer: error + retry button, or PR link, or no-changes message
+  // Error section — prominent banner shown between header and steps when a finished run failed.
+  // Visible even when the card is collapsed so the reason is never hidden.
+  const errorSection=hasError&&run.finishedAt
+    ?'<div class="run-error-section">'
+      +'<svg class="run-error-section-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      +'<span class="run-error-section-msg">'+esc(run.error)+'</span>'
+      +'</div>'
+    :'';
+
+  // Footer: retry button (error), PR link, or no-changes message.
+  // Error message is now in errorSection above — not duplicated here.
   let left='',right='';
   if(run.prUrl){
     left='<a class="pr-link" href="'+esc(run.prUrl)+'" target="_blank" rel="noopener">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>'
       +' View pull request</a>';
   } else if(hasError&&!isRetrying){
-    left='<span class="run-error-msg">&#9888; '+esc(run.error)+'</span>';
-    left+='<button class="retry-btn" onclick="retriggerRun(\''+runId+'\')">'
+    left='<button class="retry-btn" onclick="retriggerRun(\''+runId+'\')">'
       +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>'
       +' Retry</button>';
   } else if(hasError&&isRetrying){
-    left='<span class="run-error-msg">&#9888; '+esc(run.error)+'</span>';
-    left+='<button class="retry-btn retrying" disabled>'
+    left='<button class="retry-btn retrying" disabled>'
       +'<svg class="step-spin" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M2.5 9.5l1.4-1.4M8.1 3.9l1.4-1.4"/></svg>'
       +' Retrying…</button>';
   } else if(!isActive){
@@ -3101,9 +3118,17 @@ function buildRunHtml(runId){
   if(isActive)cardCls+=' run-active';
   else if(isRetrying)cardCls+=' run-retrying';
   else if(hasError)cardCls+=' run-error';
+  if(!isActive&&run.collapsed)cardCls+=' run-collapsed';
 
   const retriedBadge=run.retriedFromRunId
     ?'<span class="run-retried-badge">↺ Retry</span>' : '';
+
+  // Collapse/expand chevron — only on finished (non-active) cards.
+  const collapseBtn=!isActive
+    ?'<button class="run-collapse-btn" onclick="toggleRunCollapse(\''+runId+'\')" title="'+(run.collapsed?'Expand':'Collapse')+' run details">'
+      +'<svg class="run-collapse-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+      +'</button>'
+    :'';
 
   return '<div class="'+cardCls+'" id="rc-'+runId+'">'
     +'<div class="run-header"><div class="run-repo">'+esc(run.repo)+' '+retriedBadge+'</div>'
@@ -3112,10 +3137,18 @@ function buildRunHtml(runId){
     +'<span class="run-commit">'+esc(run.commitShort)+'</span>'
     +'<span class="run-ago" data-started="'+run.startedAt+'">'+timeAgo(run.startedAt)+'</span>'
     +'<div class="run-status-dot '+dot+'"></div>'
+    +collapseBtn
     +'</div></div>'
+    +errorSection
     +'<div class="run-steps">'+steps+'</div>'
     +lanesHtml
     +footHtml+'</div>';
+}
+
+function toggleRunCollapse(runId){
+  const run=runState.get(runId);if(!run)return;
+  run.collapsed=!run.collapsed;
+  scheduleRender(runId);
 }
 
 function applySnapshot(snapshot){
@@ -3124,6 +3157,9 @@ function applySnapshot(snapshot){
   run.repo=snapshot.repo;run.branch=snapshot.branch;run.commitShort=snapshot.commitShort;
   run.startedAt=snapshot.startedAt;run.finishedAt=snapshot.finishedAt||null;
   run.prUrl=snapshot.prUrl||null;run.error=snapshot.error||null;
+  // Set default collapsed state only for newly-seen finished runs so we don't
+  // override a collapse/expand choice the user already made this session.
+  if(!existing&&snapshot.finishedAt){run.collapsed=!snapshot.error;}
   run.projectId=snapshot.projectId||null;run.retriedFromRunId=snapshot.retriedFromRunId||null;
   run.surfaceSkipped=snapshot.surfaceSkipped||0;
   (snapshot.steps||[]).forEach(function(s){
@@ -3232,6 +3268,8 @@ function handlePipelineEvent(evt){
     if(d.prUrl)run.prUrl=d.prUrl;if(d.error)run.error=d.error;
     if(d.surfaceSkipped)run.surfaceSkipped=d.surfaceSkipped;
     run.retryPending=false;
+    // Auto-collapse successful runs; keep error runs expanded so the reason is visible.
+    if(!d.error)run.collapsed=true;
     scheduleRender(d.runId);scheduleWidgets();loadStats();
     if(!run.error)maybeShowConversionToast(run);
   }else if(d.type==='cdn_ready'){

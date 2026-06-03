@@ -402,6 +402,22 @@ fun Application.module() {
         }
     }
 
+    // Scans for pipeline runs that started more than 2 hours ago but never received a
+    // finishRun call — caused by a server crash, a leaked coroutine, or an uncaught
+    // exception that bypassed the normal error path. Runs 30s after startup (to let
+    // the server settle), then once every 24 hours.
+    launch {
+        delay(30_000)
+        while (true) {
+            val cleaned = runCatching { pipelineEventBus.cleanupStuckRuns() }
+                .onFailure { log.warn("stuckRunCleanup: unexpected error — {}", it.message) }
+                .getOrElse { 0 }
+            if (cleaned > 0) log.info("stuckRunCleanup: force-finished {} stuck run(s)", cleaned)
+            else log.debug("stuckRunCleanup: no stuck runs found")
+            delay(24.hours.inWholeMilliseconds)
+        }
+    }
+
     monitor.subscribe(ApplicationStopped) {
         // Close each resource independently — a failure in one must not prevent others from closing.
         listOf<Pair<String, () -> Unit>>(
