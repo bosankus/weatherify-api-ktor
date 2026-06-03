@@ -19,6 +19,10 @@ import org.slf4j.LoggerFactory
 
 data class PrSummary(val status: String, val prUrl: String, val branchName: String)
 
+class GitHubAuthException(message: String) : Exception(message)
+class GitHubRepoNotFoundException(message: String) : Exception(message)
+class GitHubBranchNotFoundException(message: String) : Exception(message)
+
 @Serializable
 data class GitRefResponse(
     @SerialName("object") val gitObject: GitObject
@@ -109,9 +113,22 @@ class GitHubService {
             gitHubAuth(token)
             header(HttpHeaders.Accept, "application/vnd.github+json")
         }
-        if (!response.status.isSuccess()) throw Exception(
-            "Could not resolve HEAD of '$branch' in $repo: HTTP ${response.status.value}"
-        )
+        when (response.status.value) {
+            in 200..299 -> Unit
+            401, 403 -> throw GitHubAuthException("GitHub token is missing or lacks access to '$repo'. Re-authenticate and try again.")
+            404 -> {
+                // Distinguish "repo doesn't exist" from "branch doesn't exist" by probing the repo root.
+                val repoProbe = client.get("https://api.github.com/repos/$repo") {
+                    gitHubAuth(token)
+                    header(HttpHeaders.Accept, "application/vnd.github+json")
+                }
+                if (!repoProbe.status.isSuccess())
+                    throw GitHubRepoNotFoundException("Repository '$repo' was not found or is not accessible.")
+                else
+                    throw GitHubBranchNotFoundException("Branch '$branch' does not exist in '$repo'. Update the watch branch in project settings.")
+            }
+            else -> throw Exception("GitHub returned HTTP ${response.status.value} for '$repo@$branch'.")
+        }
         return response.body<GitRefResponse>().gitObject.sha
     }
 

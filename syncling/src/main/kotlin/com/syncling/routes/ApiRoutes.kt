@@ -1114,12 +1114,20 @@ fun Route.configureApiRoutes(
             val token = owner?.githubToken
                 ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("No GitHub token on file. Re-authenticate."))
 
-            val commitHash = runCatching {
+            val commitHash = try {
                 githubService.getLatestCommitHash(project.githubRepo, project.watchBranch, token)
-            }.getOrElse {
-                apiLog.error("Failed to resolve HEAD for repo={} branch={}: {}", project.githubRepo, project.watchBranch, it.message)
-                return@post call.respond(HttpStatusCode.BadGateway,
-                    ApiError("Failed to resolve branch HEAD. Check repository access and try again."))
+            } catch (e: com.syncling.services.GitHubBranchNotFoundException) {
+                apiLog.warn("Branch not found for repo={} branch={}: {}", project.githubRepo, project.watchBranch, e.message)
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError(e.message ?: "Branch not found."))
+            } catch (e: com.syncling.services.GitHubRepoNotFoundException) {
+                apiLog.warn("Repo not found for repo={}: {}", project.githubRepo, e.message)
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError(e.message ?: "Repository not found."))
+            } catch (e: com.syncling.services.GitHubAuthException) {
+                apiLog.warn("GitHub auth failure for repo={}: {}", project.githubRepo, e.message)
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, ApiError(e.message ?: "GitHub authentication failed."))
+            } catch (e: Exception) {
+                apiLog.error("Failed to resolve HEAD for repo={} branch={}: {}", project.githubRepo, project.watchBranch, e.message)
+                return@post call.respond(HttpStatusCode.BadGateway, ApiError("Failed to reach GitHub. Try again later."))
             }
 
             jobQueue.enqueueJob(WebhookPayload(

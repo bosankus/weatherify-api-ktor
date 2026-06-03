@@ -297,6 +297,18 @@ fun Application.module() {
         val owner = userRepository.findById(project.ownerId)
         val githubToken = owner?.githubToken ?: run {
             log.warn("Project owner {} has no GitHub token — cannot process webhook for {}", project.ownerId, project.githubRepo)
+            // Show a failed run card on the dashboard so the user sees WHY nothing happened,
+            // instead of the push silently disappearing. Also fire the in-app notification.
+            val errMsg = "GitHub access lost — re-connect GitHub to resume automatic translations."
+            val runId = pipelineEventBus.startRun(
+                project.ownerId, payload.repositoryFullName, payload.branchName,
+                payload.commitHash.take(7), projectId = project.id,
+                triggeredByUserId = payload.triggeredByUserId
+            )
+            pipelineEventBus.stepError(project.ownerId, runId, "FETCHING_STRINGS", errMsg)
+            listOf("DETECTING_CHANGES", "BILLING_CHECK", "TRANSLATING", "CREATING_PR", "CDN_PUBLISH")
+                .forEach { pipelineEventBus.stepSkipped(project.ownerId, runId, it) }
+            pipelineEventBus.finishRun(project.ownerId, runId, error = errMsg)
             launch {
                 runCatching {
                     inAppNotificationService.notifyGitHubTokenInvalid(project.ownerId, project.githubRepo)

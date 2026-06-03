@@ -82,6 +82,10 @@ class TranslationJobQueue(private val jobQueue: JobQueueRepository) {
                 return
             } catch (e: QueueConnectionException) {
                 log.error("Failed to enqueue to Redis, falling back to memory: {}", e.message)
+                // isAlreadyInFlight set the key in Redis; the in-memory worker that processes
+                // the fallback job can't see it and won't delete it. Clear it now so the TTL
+                // doesn't orphan the lock for 300 s after Redis recovers.
+                runCatching { jobQueue.deleteKey("$IN_FLIGHT_KEY_PREFIX$projectId") }
             }
         }
         val queued = fallbackChannel.trySend(payload).isSuccess
@@ -119,9 +123,11 @@ class TranslationJobQueue(private val jobQueue: JobQueueRepository) {
 
     private suspend fun releaseInFlight(projectId: String) {
         inFlightProjects.remove(projectId)
-        if (jobQueue.isConnected()) {
-            runCatching { jobQueue.deleteKey("$IN_FLIGHT_KEY_PREFIX$projectId") }
-        }
+        // Always attempt the Redis delete regardless of isConnected() state. If Redis was
+        // briefly unavailable when isAlreadyInFlight set the key but the job was processed
+        // via the in-memory fallback, the stale key must be cleared when Redis recovers —
+        // otherwise it blocks every subsequent push for this project until the TTL fires.
+        runCatching { jobQueue.deleteKey("$IN_FLIGHT_KEY_PREFIX$projectId") }
     }
 
     /**
