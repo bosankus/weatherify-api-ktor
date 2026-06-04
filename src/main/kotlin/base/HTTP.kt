@@ -3,6 +3,7 @@ package bose.ankush.base
 import com.androidplay.core.serialization.FlexibleObjectIdSerializer
 import bose.ankush.data.model.UnitSerializer
 import org.bson.types.ObjectId
+import bose.ankush.route.handleNotFound
 import bose.ankush.route.common.respondError
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -20,6 +21,7 @@ import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.contentType
 import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
 import io.ktor.server.request.uri
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.Json
@@ -135,6 +137,16 @@ fun Application.configureHTTP() {
                 contentType = io.ktor.http.ContentType.Application.Json,
                 status = HttpStatusCode.InternalServerError
             )
+        }
+        status(HttpStatusCode.NotFound) { call, status ->
+            val path = call.request.path()
+            val excluded404Paths = setOf(
+                "/not-found", "/favicon.ico", "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/"
+            )
+            if (path !in excluded404Paths) {
+                call.application.environment.log.info("404 Not Found: ${call.request.httpMethod.value} request to non-existent endpoint: $path")
+                call.handleNotFound()
+            }
         }
     }
 }

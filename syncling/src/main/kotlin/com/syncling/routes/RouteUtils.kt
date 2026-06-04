@@ -50,11 +50,19 @@ class ApiTokenAuthProvider(config: Config) : AuthenticationProvider(config) {
         val hash = sha256(rawToken)
         val repo = runCatching { call.application.attributes[ApiTokenRepoAttr] }.getOrNull() ?: run {
             context.error("api-token", AuthenticationFailedCause.NoCredentials)
+            context.challenge("api-token", AuthenticationFailedCause.NoCredentials) { challenge, c ->
+                c.respond(HttpStatusCode.Unauthorized, ApiError("Authentication failed: API token repository not found"))
+                challenge.complete()
+            }
             return
         }
 
         val token = repo.findByHash(hash) ?: run {
             context.error("api-token", AuthenticationFailedCause.InvalidCredentials)
+            context.challenge("api-token", AuthenticationFailedCause.InvalidCredentials) { challenge, c ->
+                c.respond(HttpStatusCode.Unauthorized, ApiError("Invalid API token"))
+                challenge.complete()
+            }
             return
         }
 

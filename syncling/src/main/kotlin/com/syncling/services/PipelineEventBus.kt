@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -133,6 +135,10 @@ class PipelineEventBus(
 
     // Dedicated scope for fire-and-forget Redis writes (store + publish)
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // Striped mutexes to prevent Redis read-modify-write race conditions when mutating state concurrently
+    private val runMutexes = Array(256) { Mutex() }
+    private fun getMutex(runId: String) = runMutexes[Math.abs(runId.hashCode()) % 256]
 
     // Ephemeral in-memory step tracking for in-progress runs (single-instance, always)
     private val activeSteps = ConcurrentHashMap<String, MutableList<PipelineStepState>>()
@@ -581,14 +587,16 @@ class PipelineEventBus(
     private fun mutateRun(userId: String, runId: String, transform: (PipelineRunState) -> PipelineRunState) {
         if (inRedis) {
             ioScope.launch {
-                runCatching {
-                    pool!!.resource.use { jedis ->
-                        val current = jedis.get(runStateKey(runId))
-                            ?.let { runCatching { json.decodeFromString<PipelineRunState>(it) }.getOrNull() }
-                            ?: return@launch
-                        jedis.setex(runStateKey(runId), RUN_TTL, json.encodeToString(transform(current)))
-                    }
-                }.onFailure { log.warn("Redis mutateRun failed runId={}: {}", runId, it.message) }
+                getMutex(runId).withLock {
+                    runCatching {
+                        pool!!.resource.use { jedis ->
+                            val current = jedis.get(runStateKey(runId))
+                                ?.let { runCatching { json.decodeFromString<PipelineRunState>(it) }.getOrNull() }
+                                ?: return@withLock
+                            jedis.setex(runStateKey(runId), RUN_TTL, json.encodeToString(transform(current)))
+                        }
+                    }.onFailure { log.warn("Redis mutateRun failed runId={}: {}", runId, it.message) }
+                }
             }
         } else {
             val deque = memRuns[userId] ?: return

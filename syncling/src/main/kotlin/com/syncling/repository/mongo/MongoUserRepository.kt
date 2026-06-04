@@ -101,6 +101,9 @@ class MongoUserRepository(
     override suspend fun findByGithubId(githubId: Long): User? =
         collection.find(eq("githubId", githubId)).firstOrNull()?.toUser()
 
+    override suspend fun findByEmail(email: String): User? =
+        collection.find(eq("email", email)).firstOrNull()?.toUser()
+
     override suspend fun findById(userId: String): User? =
         collection.find(eq("_id", userId)).firstOrNull()?.toUser()
 

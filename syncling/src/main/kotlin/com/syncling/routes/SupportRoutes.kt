@@ -297,6 +297,12 @@ fun Route.configureSupportRoutes(
                     if (isAdmin) {
                         // Push event to the ticket owner
                         eventBus.emitSupportMessage(ticket.userId, ticketId, "admin", newStatus)
+                    } else {
+                        // Push event to the admin
+                        val adminUser = runCatching { userRepository.findByEmail(adminEmail) }.getOrNull()
+                        if (adminUser != null) {
+                            eventBus.emitSupportMessage(adminUser.id, ticketId, "user", newStatus)
+                        }
                     }
                     // Always emit to the sender too (other tabs / optimistic refresh)
                     eventBus.emitSupportMessage(userId, ticketId, senderType, newStatus)
@@ -343,6 +349,11 @@ fun Route.configureSupportRoutes(
                 if (eventBus != null) {
                     if (isAdmin) {
                         eventBus.emitSupportMessage(ticket.userId, ticketId, "admin", "resolved")
+                    } else {
+                        val adminUser = runCatching { userRepository.findByEmail(adminEmail) }.getOrNull()
+                        if (adminUser != null) {
+                            eventBus.emitSupportMessage(adminUser.id, ticketId, "user", "resolved")
+                        }
                     }
                     eventBus.emitSupportMessage(userId, ticketId, senderType = if (isAdmin) "admin" else "user", ticketStatus = "resolved")
                 }

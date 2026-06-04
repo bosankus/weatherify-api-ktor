@@ -261,8 +261,8 @@ internal val SHELL_RUNTIME_JS = """
  * end-of-month projection.
  */
 internal const val SIDEBAR_QUOTA_CSS = """
-.sb-quota{padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;display:none}
-.sb-quota.visible{display:block}
+.sb-quota{padding:0 12px;background:var(--surface2);border:1px solid transparent;border-radius:var(--radius-sm);margin-bottom:0;max-height:0;opacity:0;overflow:hidden;transition:all .4s cubic-bezier(0.25,1,0.5,1)}
+.sb-quota.visible{padding:10px 12px;margin-bottom:10px;max-height:160px;opacity:1;border-color:var(--border)}
 .sb-quota-eyebrow{font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .sb-quota-num{font-size:18px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:8px;margin-bottom:4px;line-height:1.1}
 .sb-quota-unit{font-size:11px;color:var(--text-muted);font-weight:500}
@@ -354,7 +354,11 @@ internal val SIDEBAR_QUOTA_JS = """
       html+=subHtml;
       html+='<a href="/billing/analytics" class="sb-quota-cta">See analytics →</a>';
     }
-    host.className='sb-quota visible';
+    if(window.location.pathname.indexOf('/billing/analytics') !== -1){
+      host.className='sb-quota';
+    } else {
+      host.className='sb-quota visible';
+    }
     host.innerHTML=html;
   }
   function readCache(){
@@ -595,9 +599,10 @@ internal val SUPPORT_CHAT_JS = """(function(){
 
   function onSseMessage(evt){
     var tid=evt.supportTicketId;if(!tid)return;
-    if(evt.supportSenderType!=='admin')return; // only notify user when admin sends
+    if (_isAdmin && evt.supportSenderType === 'admin') return;
+    if (!_isAdmin && evt.supportSenderType !== 'admin') return;
     if(_view==='thread'&&_convId===tid){
-      silentRefreshThread();
+      silentRefreshThread(true);
     } else {
       _unread[tid]=true;updateFabDot();
       if(_view==='home'&&_convs)renderBody();
@@ -605,9 +610,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
     playTing();
   }
 
-  // ── Admin polling (admin-side: user→admin notifications every 5s) ──────────
-  function startPoll(){if(_pollTimer)return;_pollTimer=setInterval(function(){if(_view==='thread'&&_convId)silentRefreshThread(true);},5000);}
-  function stopPoll(){if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}}
+  // Polling removed (now fully real-time via SSE)
 
   function silentRefreshThread(isAdminPoll){
     var id=_convId;if(!id)return;
@@ -833,7 +836,6 @@ internal val SUPPORT_CHAT_JS = """(function(){
 
   // ── Navigation ──────────────────────────────────────────────────────────────
   function navigate(newView,newId){
-    if(_view==='thread'&&_isAdmin)stopPoll();
     _view=newView;_convId=newId;
     if(newView==='thread'){
       _thread=null;renderHeader();setThreadMode(true);renderThread(true);
@@ -843,7 +845,6 @@ internal val SUPPORT_CHAT_JS = """(function(){
           _thread=data;_unread[newId]=false;
           if(_convs)_convs.forEach(function(t){if(t.id===newId)t.status=data.status;});
           renderThread(true);renderHeader();updateFabDot();
-          if(_isAdmin)startPoll();
         }).catch(function(){});
     } else {
       renderBody();renderHeader();
@@ -851,17 +852,17 @@ internal val SUPPORT_CHAT_JS = """(function(){
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
-  window._scHome=function(){if(_view==='thread'&&_isAdmin)stopPoll();navigate('home',null);_loaded=false;loadConvs();};
+  window._scHome=function(){navigate('home',null);_loaded=false;loadConvs();};
   window._scThread=function(id){navigate('thread',id);};
   window._scCompose=function(){navigate('compose',null);};
   window._scToggle=function(){
     _open=!_open;
     var panel=document.getElementById('sc-panel');
     if(panel)panel.classList.toggle('open',_open);
-    if(_open){if(!_loaded)loadConvs();startSse();}
+    if(_open){if(!_loaded)loadConvs();}
   };
   window._scClose=function(){
-    _open=false;if(_view==='thread'&&_isAdmin)stopPoll();
+    _open=false;
     var panel=document.getElementById('sc-panel');if(panel)panel.classList.remove('open');
   };
   window._scBack=function(){if(_view!=='home')window._scHome();};
@@ -910,7 +911,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
       .then(function(){
         if(_thread)_thread.status='resolved';
         if(_convs)_convs.forEach(function(t){if(t.id===_convId)t.status='resolved';});
-        stopPoll();renderThread(false);renderHeader();
+        renderThread(false);renderHeader();
       })
       .catch(function(){if(window.toast)toast('Failed to resolve. Please try again.','error');});
   };
@@ -947,6 +948,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
       '<div class="sc-body"><div class="sc-body-inner"></div></div>';
     document.body.appendChild(panel);
     renderBody();
+    startSse();
   }
 
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&_open)window._scClose();});

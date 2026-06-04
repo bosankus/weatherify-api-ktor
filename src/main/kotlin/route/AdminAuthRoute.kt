@@ -2581,27 +2581,26 @@ fun Route.adminAuthRoute() {
 
                                 /* ── Support Chat Modal ──────────────────────────── */
                                 .support-chat-backdrop {
-                                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                                    background: rgba(0,0,0,.58); backdrop-filter: blur(4px);
-                                    z-index: 20000; opacity: 0; visibility: hidden;
-                                    transition: opacity .22s ease, visibility .22s;
+                                    display: none !important;
                                 }
                                 .support-chat-backdrop.open { opacity: 1; visibility: visible; }
                                 .support-chat-modal {
-                                    position: fixed; top: 50%; left: 50%;
-                                    transform: translate(-50%, -52%) scale(.95);
-                                    width: min(720px, 96vw); height: min(84vh, 820px);
+                                    position: fixed; bottom: 0; right: 32px;
+                                    transform: translateY(100%);
+                                    width: min(440px, 92vw); height: min(620px, 85vh);
                                     background: var(--bg-gradient-1, #2a2438);
                                     border: 1px solid var(--card-border);
-                                    border-radius: 14px;
-                                    box-shadow: 0 24px 64px rgba(0,0,0,.45), 0 0 0 1px rgba(99,102,241,.08);
+                                    border-bottom: none;
+                                    border-radius: 12px 12px 0 0;
+                                    box-shadow: 0 -8px 24px rgba(0,0,0,.45), 0 0 0 1px rgba(99,102,241,.08);
                                     z-index: 20001; display: flex; flex-direction: column;
                                     opacity: 0; visibility: hidden;
-                                    transition: transform .26s cubic-bezier(.2,0,0,1), opacity .22s, visibility .22s;
+                                    transition: transform .3s cubic-bezier(.2,0,0,1), opacity .2s, visibility .2s;
                                     overflow: hidden;
+                                    top: auto; left: auto;
                                 }
                                 .support-chat-modal.open {
-                                    transform: translate(-50%, -50%) scale(1);
+                                    transform: translateY(0);
                                     opacity: 1; visibility: visible;
                                 }
                                 .support-chat-header {
@@ -2697,10 +2696,10 @@ fun Route.adminAuthRoute() {
                                 @media (max-width: 600px) {
                                     .support-chat-modal {
                                         width: 100%; height: 100%; max-height: 100%;
-                                        border-radius: 0; top: 0; left: 0;
-                                        transform: translateY(3%) scale(.98);
+                                        border-radius: 0; bottom: 0; right: 0;
+                                        transform: translateY(100%);
                                     }
-                                    .support-chat-modal.open { transform: translateY(0) scale(1); }
+                                    .support-chat-modal.open { transform: translateY(0); }
                                 }
                                 """
                                 )

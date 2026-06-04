@@ -20,6 +20,8 @@ interface UserRepository {
 
     suspend fun findByGithubId(githubId: Long): User?
 
+    suspend fun findByEmail(email: String): User?
+
     suspend fun findById(userId: String): User?
 
     /** Batch lookup by id. Returns only users that exist; order is not guaranteed. */

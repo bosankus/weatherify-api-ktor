@@ -1107,7 +1107,7 @@ internal fun HTML.landingPage() {
                     div("sdk-teaser-card sdk-android-card") {
                         div("sdk-teaser-top") {
                             div("sdk-icon sdk-android") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>""" }
+                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 15.5V12a7.5 7.5 0 0 1 15 0v3.5z"/><line x1="7.5" y1="6.5" x2="5.5" y2="3.5"/><line x1="16.5" y1="6.5" x2="18.5" y2="3.5"/><circle cx="9" cy="11" r="0.9" fill="currentColor" stroke="none"/><circle cx="15" cy="11" r="0.9" fill="currentColor" stroke="none"/></svg>""" }
                             }
                             div {
                                 p("sdk-name") { +"Android SDK" }
@@ -1120,7 +1120,7 @@ internal fun HTML.landingPage() {
                     div("sdk-teaser-card sdk-ios-card") {
                         div("sdk-teaser-top") {
                             div("sdk-icon sdk-ios-icon") {
-                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>""" }
+                                unsafe { +"""<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.7 12.6c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9 .9-3.7 .9-.8 0-1.9-.9-3.1-.9-1.6 0-3.1 .9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6 .8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9 .8 3.1 .8 1.3 0 2.1-1.2 2.9-2.4 .9-1.4 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.5-3.7z"/><path d="M14.2 5.4c.6-.8 1.1-1.9 1-3-1 0-2.1 .6-2.8 1.4-.6 .7-1.1 1.8-.9 2.8 1.1 .1 2.2-.5 2.7-1.2z"/></svg>""" }
                             }
                             div {
                                 p("sdk-name") { +"iOS SDK" }
@@ -2212,8 +2212,8 @@ h2{font-size:clamp(26px,4.2vw,52px);font-weight:800;letter-spacing:-2.5px;margin
 .sdk-teaser-card:hover{background:rgba(139,126,255,.018)}
 .sdk-teaser-top{display:flex;align-items:center;gap:16px}
 .sdk-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.sdk-android{background:rgba(61,220,132,.07);color:#3DDC84;border:1px solid rgba(61,220,132,.15)}
-.sdk-ios-icon{background:rgba(96,165,250,.07);color:#60a5fa;border:1px solid rgba(96,165,250,.15)}
+.sdk-android{background:rgba(139,126,255,.07);color:var(--accent);border:1px solid rgba(139,126,255,.15)}
+.sdk-ios-icon{background:rgba(139,126,255,.07);color:var(--accent);border:1px solid rgba(139,126,255,.15)}
 .sdk-name{font-size:19px;font-weight:800;color:var(--text);margin-bottom:6px;letter-spacing:-.03em;font-family:'Inter',-apple-system,sans-serif}
 .sdk-status{display:inline-block;padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(74,222,128,.06);color:#4ade80;border:1px solid rgba(74,222,128,.15);font-family:'Inter',-apple-system,sans-serif}
 .sdk-teaser-desc{font-size:14px;color:var(--lp-text-muted2);line-height:1.76;flex:1;font-family:'Inter',-apple-system,sans-serif}
@@ -2224,9 +2224,9 @@ h2{font-size:clamp(26px,4.2vw,52px);font-weight:800;letter-spacing:-2.5px;margin
 .pricing-section::before{content:'';position:absolute;bottom:-200px;left:50%;transform:translateX(-50%);width:800px;height:400px;background:radial-gradient(circle,rgba(139,126,255,.038),transparent 68%);pointer-events:none}
 .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:20px;padding-top:4px}
 .pricing-card{background:var(--surface);border:1px solid var(--lp-pricing-border);border-radius:20px;padding:36px;display:flex;flex-direction:column;position:relative;transition:border-color .25s,transform .28s,box-shadow .28s}
-.pricing-card:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.1);box-shadow:0 32px 64px -28px rgba(0,0,0,.8)}
+.pricing-card:hover{transform:translateY(-8px);border-color:rgba(255,255,255,.2);box-shadow:0 24px 64px -16px rgba(0,0,0,.8)}
 .pricing-card.recommended{border-color:rgba(139,126,255,.3);background:linear-gradient(160deg,rgba(14,10,32,.98) 0%,rgba(11,11,20,.98) 60%);box-shadow:0 0 0 1px rgba(139,126,255,.1),0 0 100px -40px rgba(139,126,255,.2)}
-.pricing-card.recommended:hover{border-color:rgba(139,126,255,.5);box-shadow:0 0 0 1px rgba(139,126,255,.22),0 40px 72px -20px rgba(139,126,255,.25)}
+.pricing-card.recommended:hover{border-color:var(--accent);transform:translateY(-8px);box-shadow:0 0 0 1px var(--accent),0 32px 72px -16px rgba(139,126,255,.4)}
 .rec-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:9.5px;font-weight:800;letter-spacing:.12em;padding:4px 18px;border-radius:100px;white-space:nowrap;text-transform:uppercase;font-family:'Inter',-apple-system,sans-serif}
 .trial-badge{display:inline-block;background:rgba(34,211,238,.05);color:#22d3ee;border:1px solid rgba(34,211,238,.15);border-radius:100px;padding:3px 12px;font-size:10.5px;font-weight:600;margin-bottom:16px;letter-spacing:.04em;font-family:'Inter',-apple-system,sans-serif}
 .pricing-subtitle{font-size:15px;color:var(--lp-text-muted2);text-align:center;margin-top:-36px;margin-bottom:52px;font-family:'Inter',-apple-system,sans-serif}
@@ -2245,13 +2245,13 @@ h2{font-size:clamp(26px,4.2vw,52px);font-weight:800;letter-spacing:-2.5px;margin
 .pricing-card.recommended .pricing-features li{color:rgba(232,228,255,.7)}
 /* ── pricing CTAs ────────────────────────────────────────────── */
 .pricing-cta{display:block;text-align:center;padding:13px 20px;border-radius:10px;font-size:13.5px;font-weight:600;transition:all .18s;cursor:pointer;text-decoration:none;letter-spacing:.01em;font-family:'Inter',-apple-system,sans-serif}
-.pricing-cta.accent{background:var(--accent);color:#fff!important;box-shadow:0 4px 24px -6px rgba(139,126,255,.45)}
+.pricing-cta.accent{background:var(--accent);color:#ffffff!important;box-shadow:0 4px 24px -6px rgba(139,126,255,.45)}
 .pricing-cta.accent:hover{background:#7d6ff5;color:#fff!important;transform:translateY(-1px);box-shadow:0 10px 32px -4px rgba(139,126,255,.6)}
 .pricing-cta.outline{background:rgba(255,255,255,.055);color:var(--text);border:1px solid rgba(255,255,255,.12)}
 .pricing-cta.outline:hover{border-color:rgba(139,126,255,.45);color:var(--accent);background:rgba(139,126,255,.06);transform:translateY(-1px)}
 /* ── light theme: recommended card ──────────────────────────── */
 html[data-theme="light"] .pricing-card.recommended{background:linear-gradient(160deg,rgba(139,126,255,.06) 0%,var(--surface) 55%);border-color:rgba(139,126,255,.35);box-shadow:0 0 0 1px rgba(139,126,255,.15),0 20px 60px -30px rgba(139,126,255,.12)}
-html[data-theme="light"] .pricing-card.recommended:hover{border-color:rgba(139,126,255,.5);box-shadow:0 0 0 1px rgba(139,126,255,.22),0 32px 64px -20px rgba(139,126,255,.18)}
+html[data-theme="light"] .pricing-card.recommended:hover{border-color:rgba(139,126,255,.6);transform:scale(1.02) translateY(-6px);box-shadow:0 0 0 1px rgba(139,126,255,.3),0 40px 80px -20px rgba(139,126,255,.25)}
 html[data-theme="light"] .pricing-card.recommended .pricing-name{color:var(--accent)}
 html[data-theme="light"] .pricing-card.recommended .pricing-price{color:var(--text)}
 html[data-theme="light"] .pricing-card.recommended .price-mo{color:var(--text-muted)}
@@ -2412,54 +2412,29 @@ private fun HTML.dashboardApp() {
                 div { id = "wh-reject-banner" }
 
                 div("stats-grid") {
-                    div("stat-card card stat-card-green") {
-                        div("stat-card-top") {
-                            p("stat-label") { +"Strings Translated" }
-                            div("stat-icon-wrap stat-icon-green") {
-                                unsafe { +"<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></svg>" }
-                            }
-                        }
-                        p("stat-value stat-value-green loading") { id = "total-translated"; +"—" }
+                    div("stat-card card") {
+                        p("stat-label") { +"Strings Translated" }
+                        p("stat-value loading") { id = "total-translated"; +"—" }
                         p("stat-sub") { +"all time" }
                     }
-                    div("stat-card card stat-card-amber") {
-                        div("stat-card-top") {
-                            p("stat-label") { +"Pending Review" }
-                            div("stat-icon-wrap stat-icon-amber") {
-                                unsafe { +"<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>" }
-                            }
-                        }
-                        p("stat-value stat-value-amber loading") { id = "pending-review"; +"—" }
+                    div("stat-card card") {
+                        p("stat-label") { +"Pending Review" }
+                        p("stat-value loading") { id = "pending-review"; +"—" }
                         p("stat-sub") { +"awaiting approval" }
                     }
-                    div("stat-card card stat-card-red") {
-                        div("stat-card-top") {
-                            p("stat-label") { +"Blocked" }
-                            div("stat-icon-wrap stat-icon-red") {
-                                unsafe { +"<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='4.93' y1='4.93' x2='19.07' y2='19.07'/></svg>" }
-                            }
-                        }
-                        p("stat-value stat-value-red loading") { id = "blocked-count"; +"—" }
+                    div("stat-card card") {
+                        p("stat-label") { +"Blocked" }
+                        p("stat-value loading") { id = "blocked-count"; +"—" }
                         p("stat-sub") { +"rejected translations" }
                     }
-                    div("stat-card card stat-card-blue") {
-                        div("stat-card-top") {
-                            p("stat-label") { +"Languages" }
-                            div("stat-icon-wrap stat-icon-blue") {
-                                unsafe { +"<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='2' y1='12' x2='22' y2='12'/><path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/></svg>" }
-                            }
-                        }
-                        p("stat-value stat-value-blue loading") { id = "active-langs"; +"—" }
+                    div("stat-card card") {
+                        p("stat-label") { +"Languages" }
+                        p("stat-value loading") { id = "active-langs"; +"—" }
                         p("stat-sub") { +"active targets" }
                     }
-                    div("stat-card card stat-card-purple") {
-                        div("stat-card-top") {
-                            p("stat-label") { +"Projects" }
-                            div("stat-icon-wrap stat-icon-purple") {
-                                unsafe { +"<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>" }
-                            }
-                        }
-                        p("stat-value stat-value-purple loading") { id = "total-projects"; +"—" }
+                    div("stat-card card") {
+                        p("stat-label") { +"Projects" }
+                        p("stat-value loading") { id = "total-projects"; +"—" }
                         p("stat-sub") { +"connected repos" }
                     }
                 }
@@ -2609,36 +2584,14 @@ body{font-family:'DM Sans',system-ui,sans-serif}
 .stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
 @media(max-width:1180px){.stats-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
-.stat-card{padding:18px 20px;position:relative;overflow:hidden;transition:border-color .2s,box-shadow .2s}
-.stat-card-green{border-top:2px solid rgba(74,222,128,.35);background:linear-gradient(160deg,rgba(74,222,128,.04) 0%,var(--surface) 60%)}
-.stat-card-amber{border-top:2px solid rgba(251,191,36,.35);background:linear-gradient(160deg,rgba(251,191,36,.04) 0%,var(--surface) 60%)}
-.stat-card-red{border-top:2px solid rgba(248,113,113,.35);background:linear-gradient(160deg,rgba(248,113,113,.04) 0%,var(--surface) 60%)}
-.stat-card-blue{border-top:2px solid rgba(96,165,250,.35);background:linear-gradient(160deg,rgba(96,165,250,.04) 0%,var(--surface) 60%)}
-.stat-card-purple{border-top:2px solid rgba(139,126,255,.45);background:linear-gradient(160deg,rgba(139,126,255,.05) 0%,var(--surface) 60%)}
-.stat-card-green:hover{border-color:rgba(74,222,128,.5);box-shadow:0 4px 24px -8px rgba(74,222,128,.12)}
-.stat-card-amber:hover{border-color:rgba(251,191,36,.5);box-shadow:0 4px 24px -8px rgba(251,191,36,.12)}
-.stat-card-red:hover{border-color:rgba(248,113,113,.5);box-shadow:0 4px 24px -8px rgba(248,113,113,.12)}
-.stat-card-blue:hover{border-color:rgba(96,165,250,.5);box-shadow:0 4px 24px -8px rgba(96,165,250,.12)}
-.stat-card-purple:hover{border-color:rgba(139,126,255,.6);box-shadow:0 4px 24px -8px rgba(139,126,255,.15)}
-.stat-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
-.stat-label{font-size:11px;font-weight:600;letter-spacing:.4px;color:var(--text-muted);text-transform:uppercase}
-.stat-icon-wrap{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.stat-icon-green{background:rgba(74,222,128,.12);color:#4ade80;border:1px solid rgba(74,222,128,.2)}
-.stat-icon-amber{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.2)}
-.stat-icon-red{background:rgba(248,113,113,.12);color:#f87171;border:1px solid rgba(248,113,113,.2)}
-.stat-icon-blue{background:rgba(96,165,250,.12);color:#60a5fa;border:1px solid rgba(96,165,250,.2)}
-.stat-icon-purple{background:rgba(139,126,255,.12);color:var(--accent);border:1px solid rgba(139,126,255,.2)}
-.stat-value{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:30px;font-weight:700;line-height:1;letter-spacing:-1px;transition:opacity .2s}
+.stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;}
+.stat-label{font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+.stat-value{font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1;transition:opacity .2s}
 .stat-value.loading{opacity:.3;animation:pulse 1.4s infinite}
-.stat-value-green{color:#4ade80}
-.stat-value-amber{color:#fbbf24}
-.stat-value-red{color:#f87171}
-.stat-value-blue{color:#60a5fa}
-.stat-value-purple{color:var(--accent)}
 @keyframes pulse{0%{opacity:.15}50%{opacity:.5}100%{opacity:.15}}
 .stat-yellow{color:#fbbf24!important}
 .stat-plan{font-size:18px;font-weight:700;color:var(--accent)}
-.stat-sub{font-size:11px;color:var(--text-muted);margin-top:6px;letter-spacing:.1px}
+.stat-sub{font-size:11px;color:var(--text-muted);margin-top:4px;min-height:14px}
 /* ── Two-column dashboard body ───────────────────────────────────────────── */
 .dash-body{display:grid;grid-template-columns:1fr 296px;gap:20px;align-items:start}
 @media(max-width:1100px){.dash-body{grid-template-columns:1fr}}
@@ -3270,7 +3223,7 @@ function applySnapshot(snapshot){
   run.prUrl=snapshot.prUrl||null;run.error=snapshot.error||null;
   // Set default collapsed state only for newly-seen finished runs so we don't
   // override a collapse/expand choice the user already made this session.
-  if(!existing&&snapshot.finishedAt){run.collapsed=!snapshot.error;}
+  if(!existing&&snapshot.finishedAt){run.collapsed=true;}
   run.projectId=snapshot.projectId||null;run.retriedFromRunId=snapshot.retriedFromRunId||null;
   run.surfaceSkipped=snapshot.surfaceSkipped||0;
   (snapshot.steps||[]).forEach(function(s){
@@ -3379,8 +3332,8 @@ function handlePipelineEvent(evt){
     if(d.prUrl)run.prUrl=d.prUrl;if(d.error)run.error=d.error;
     if(d.surfaceSkipped)run.surfaceSkipped=d.surfaceSkipped;
     run.retryPending=false;
-    // Auto-collapse successful runs; keep error runs expanded so the reason is visible.
-    if(!d.error)run.collapsed=true;
+    // Auto-collapse all finished runs so only running ones are expanded by default
+    run.collapsed=true;
     scheduleRender(d.runId);scheduleWidgets();loadStats();
     if(!run.error)maybeShowConversionToast(run);
   }else if(d.type==='cdn_ready'){
@@ -3691,8 +3644,10 @@ function updateCdnWidget(publishes){
     const ver=esc((p.bundleVersion||'').substring(0,12));
     const ago=timeAgo(p.publishedAt||Date.now());
     const locales=p.locales||[];
-    const localeChips=locales.slice(0,8).map(function(l){return '<span class="cdnw-locale-chip">'+esc(l)+'</span>';}).join('');
-    const moreLocales=locales.length>8?'<span class="cdnw-locale-chip cdnw-locale-more">+'+(locales.length-8)+'</span>':'';
+    const localeChips=locales.slice(0,8).map(function(l){
+      return '<a href="/api/projects/'+esc(p.projectId)+'/bundle/'+esc(l)+'" target="_blank" class="cdnw-locale-chip" title="View bundle JSON">'+esc(l)+'</a>';
+    }).join('');
+    const moreLocales=locales.length>8?'<span class="cdnw-locale-chip cdnw-locale-more" title="More locales available">+'+(locales.length-8)+'</span>':'';
     body.innerHTML=''
       +(p.projectName?'<div class="cdnw-proj-name">'+esc(p.projectName)+'</div>':'')
       +'<div class="cdnw-stat-row">'

@@ -87,33 +87,5 @@ fun Application.configureRouting() {
         registrars.forEach { it.register(this) }
         notFoundRoute()
 
-        get("{...}") {
-            val path = call.request.path()
-            if (path !in excluded404Paths) {
-                logger.info("404 Not Found: GET request to non-existent endpoint: $path")
-                call.handleNotFound()
-            }
-        }
-        post("{...}") {
-            val path = call.request.path()
-            if (path !in excluded404Paths) {
-                logger.info("404 Not Found: POST request to non-existent endpoint: $path")
-                call.handleNotFound()
-            }
-        }
-        put("{...}") {
-            val path = call.request.path()
-            if (path !in excluded404Paths) {
-                logger.info("404 Not Found: PUT request to non-existent endpoint: $path")
-                call.handleNotFound()
-            }
-        }
-        delete("{...}") {
-            val path = call.request.path()
-            if (path !in excluded404Paths) {
-                logger.info("404 Not Found: DELETE request to non-existent endpoint: $path")
-                call.handleNotFound()
-            }
-        }
     }
 }
