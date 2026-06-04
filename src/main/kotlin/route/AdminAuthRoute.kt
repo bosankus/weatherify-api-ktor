@@ -1676,6 +1676,37 @@ fun Route.adminAuthRoute() {
             }
         }
 
+        // GET /admin/support/tickets/{id}  — fetch full thread
+        get("/tickets/{id}") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
+            val ticketId = call.parameters["id"]?.trim()
+            if (ticketId.isNullOrBlank()) {
+                call.respondError("Ticket ID is required", Unit, HttpStatusCode.BadRequest)
+                return@get
+            }
+            val repo = application.attributes.getOrNull(com.syncling.SupportTicketRepoKey)
+            if (repo == null) {
+                call.respondError("Support ticket repository not available", Unit, HttpStatusCode.ServiceUnavailable)
+                return@get
+            }
+            try {
+                val ticket = repo.findById(ticketId) ?: run {
+                    call.respondError("Ticket not found", Unit, HttpStatusCode.NotFound)
+                    return@get
+                }
+                val messages = repo.getMessages(ticketId)
+                @kotlinx.serialization.Serializable
+                data class TicketDetailResponse(
+                    val ticket: com.syncling.domain.SupportTicket,
+                    val messages: List<com.syncling.domain.SupportMessage>
+                )
+                call.respondSuccess("Ticket details retrieved", TicketDetailResponse(ticket, messages))
+            } catch (e: Exception) {
+                logger.error("Failed to retrieve ticket details: {}", e.message)
+                call.respondError("Failed to retrieve ticket details: ${e.message}", Unit, HttpStatusCode.InternalServerError)
+            }
+        }
+
         // PATCH /admin/support/tickets/{id}/reply  — visible to user
         patch("/tickets/{id}/reply") {
             val admin = call.getAuthenticatedAdminOrRespond() ?: return@patch
@@ -1688,8 +1719,8 @@ fun Route.adminAuthRoute() {
             data class ReplyBody(val reply: String)
             val body = runCatching { call.receive<ReplyBody>() }.getOrNull()
             val reply = body?.reply?.trim() ?: ""
-            if (reply.length > 3000) {
-                call.respondError("Reply must be 3000 characters or fewer", Unit, HttpStatusCode.BadRequest)
+            if (reply.length > 5000) {
+                call.respondError("Reply must be 5000 characters or fewer", Unit, HttpStatusCode.BadRequest)
                 return@patch
             }
             val repo = application.attributes.getOrNull(com.syncling.SupportTicketRepoKey)
@@ -1698,10 +1729,22 @@ fun Route.adminAuthRoute() {
                 return@patch
             }
             try {
+                val ticket = repo.findById(ticketId) ?: run {
+                    call.respondError("Ticket not found", Unit, HttpStatusCode.NotFound)
+                    return@patch
+                }
+                
+                // Keep the old updateReply for backwards compatibility on the Ticket model,
+                // but also insert a SupportMessage object.
+                val msg = repo.addMessage(ticketId, "admin", admin.email, reply)
                 val updated = repo.updateReply(ticketId, reply)
-                if (updated) {
+                
+                if (msg != null && updated) {
+                    if (ticket.status == "open") {
+                        repo.updateStatus(ticketId, "acknowledged")
+                    }
                     logger.info("Admin {} sent reply to ticket {}", admin.email, ticketId.take(8))
-                    call.respondSuccess("Reply sent", mapOf("id" to ticketId))
+                    call.respondSuccess("Reply sent", msg)
                 } else {
                     call.respondError("Ticket not found", Unit, HttpStatusCode.NotFound)
                 }
@@ -2585,29 +2628,26 @@ fun Route.adminAuthRoute() {
                                     flex: 1; overflow-y: auto; padding: 1.2rem 1.5rem;
                                     display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth;
                                 }
-                                .chat-msg-row { display: flex; flex-direction: column; }
-                                .chat-msg-row.user { align-items: flex-start; }
-                                .chat-msg-row.admin { align-items: flex-end; }
+                                .chat-msg-row { display: flex; flex-direction: column; max-width: 86%; }
+                                .chat-msg-row.user { align-self: flex-start; align-items: flex-start; }
+                                .chat-msg-row.admin { align-self: flex-end; align-items: flex-end; }
                                 .chat-bubble {
-                                    max-width: 78%; padding: 9px 13px; border-radius: 12px;
+                                    padding: 10px 13px; border-radius: 16px;
                                     font-size: 0.875rem; line-height: 1.55; word-break: break-word; white-space: pre-wrap;
                                 }
                                 .chat-bubble.user {
                                     background: var(--card-bg); border: 1px solid var(--card-border);
-                                    border-bottom-left-radius: 3px; color: var(--text-color);
+                                    border-bottom-left-radius: 4px; color: var(--text-color);
                                 }
                                 .chat-bubble.admin {
-                                    background: rgba(99,102,241,.13); border: 1px solid rgba(99,102,241,.28);
-                                    border-bottom-right-radius: 3px; color: var(--text-color);
+                                    background: linear-gradient(135deg,#5535dd,#7c3aed);
+                                    border-bottom-right-radius: 4px; color: #fff; border: none;
                                 }
-                                .chat-label {
-                                    font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
-                                    letter-spacing: .4px; margin-bottom: 3px; opacity: .5;
+                                .chat-meta {
+                                    font-size: 0.66rem; color: var(--text-secondary); margin-top: 4px; padding: 0 2px;
+                                    display: flex; gap: 6px; align-items: center; opacity: 0.7;
                                 }
-                                .chat-label.user { color: var(--text-secondary); }
-                                .chat-label.admin { color: #6366f1; text-align: right; }
-                                .chat-time { font-size: 0.66rem; opacity: .38; margin-top: 3px; }
-                                .chat-time.admin { text-align: right; }
+                                .chat-meta.admin { flex-direction: row-reverse; }
                                 .support-chat-note-strip {
                                     border-top: 1px solid rgba(234,179,8,.2);
                                     border-bottom: 1px solid rgba(234,179,8,.2);

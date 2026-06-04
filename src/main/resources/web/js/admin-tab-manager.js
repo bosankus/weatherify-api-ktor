@@ -602,27 +602,47 @@
         }).join('');
     }
 
+    function ago(ms){
+        if(!ms) return '';
+        const diff=Date.now()-ms, m=Math.floor(diff/60000), h=Math.floor(m/60), dy=Math.floor(h/24);
+        if(m<1)return 'just now';if(m<60)return m+'m ago';if(h<24)return h+'h ago';
+        if(dy<7)return dy+'d ago';
+        return new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    }
+
     function _renderChatMessages(t) {
         const area = document.getElementById('support-chat-messages');
         if (!area) return;
-        const msgs = [];
-        if (t.message) {
-            const age = ticketAge(t.createdAt);
-            msgs.push({ role: 'user', text: t.message, label: t.userEmail || t.userId, time: fmtDate(t.createdAt) });
+        
+        let msgs = t.messages || [];
+        if (!msgs.length) {
+            // fallback
+            if (t.message) {
+                msgs.push({ senderType: 'user', content: t.message, sentAt: t.createdAt });
+            }
+            if (t.adminReply) {
+                msgs.push({ senderType: 'admin', content: t.adminReply, sentAt: t.createdAt });
+            }
         }
-        if (t.adminReply) {
-            msgs.push({ role: 'admin', text: t.adminReply, label: 'Support', time: '' });
-        }
+        
         if (!msgs.length) {
             area.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-secondary);font-size:0.84rem;opacity:.6;"><span class="material-icons" style="font-size:32px;">forum</span>No messages yet</div>';
             return;
         }
-        area.innerHTML = msgs.map(m => `
-            <div class="chat-msg-row ${m.role}">
-                <div class="chat-label ${m.role}">${escHtml(m.label)}</div>
-                <div class="chat-bubble ${m.role}">${escHtml(m.text)}</div>
-                ${m.time ? `<div class="chat-time ${m.role}">${escHtml(m.time)}</div>` : ''}
-            </div>`).join('');
+        
+        area.innerHTML = msgs.map(m => {
+            const role = m.senderType === 'admin' ? 'admin' : 'user';
+            const label = role === 'admin' ? 'Support (You)' : (t.userEmail || t.userId);
+            const timeStr = m.sentAt ? ago(m.sentAt) : '';
+            return `
+            <div class="chat-msg-row ${role}">
+                <div class="chat-bubble ${role}">${escHtml(m.content)}</div>
+                <div class="chat-meta ${role}">
+                    <div style="font-weight:700;">${escHtml(label)}</div>
+                    <div>${escHtml(timeStr)}</div>
+                </div>
+            </div>`;
+        }).join('');
         area.scrollTop = area.scrollHeight;
     }
 
@@ -674,10 +694,18 @@
                 body: JSON.stringify({ reply }),
             });
             if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            const newMsg = data.data; // The returned SupportMessage object
+            
             const t = _supportTickets.find(x => x.id === id);
-            if (t) t.adminReply = reply;
+            if (t) {
+                if (!t.messages) t.messages = [];
+                t.messages.push(newMsg);
+                t.adminReply = reply;
+                if (t.status === 'open') t.status = 'acknowledged';
+            }
             ta.value = '';
-            _renderChatMessages(_supportTickets.find(x => x.id === id));
+            _renderChatMessages(t);
             renderSupportTable(_supportTickets);
             if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">send</span>Send'; }
         } catch (e) {
@@ -726,7 +754,7 @@
         window.closeSupportDetail();
     };
 
-    window.openSupportDetail = function (id) {
+    window.openSupportDetail = async function (id) {
         const t = _supportTickets.find(x => x.id === id);
         if (!t) return;
         _currentChatTicketId = id;
@@ -746,6 +774,28 @@
             const stStyle = ST_COLORS[t.status] || '';
             badges.innerHTML = `<span class="status-badge" style="${catStyle}">${escHtml(t.category)}</span><span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span>`;
         }
+        
+        const area = document.getElementById('support-chat-messages');
+        if (area) area.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);">Loading thread...</div>';
+        
+        if (backdrop) backdrop.style.display = 'block';
+        modal.style.display = 'flex';
+        requestAnimationFrame(() => {
+            modal.classList.add('open');
+            if (backdrop) backdrop.classList.add('open');
+        });
+        
+        try {
+            const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id), { headers: adminHeaders() });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            const detail = data.data;
+            t.messages = detail.messages;
+        } catch (e) {
+            console.error('Failed to load thread:', e);
+            if (area) area.innerHTML = '<div style="color:#ef4444;text-align:center;">Failed to load thread.</div>';
+            return;
+        }
 
         // Messages
         _renderChatMessages(t);
@@ -757,21 +807,13 @@
         const noteTa = document.getElementById('support-chat-note-ta');
         if (noteTa) noteTa.value = t.adminNote || '';
         const noteBody = document.getElementById('support-chat-note-body');
-        const noteChevron = document.getElementById('support-chat-note-chevron');
-        if (noteBody) { noteBody.classList.remove('open'); }
-        if (noteChevron) noteChevron.style.transform = '';
+        if (noteBody) noteBody.classList.remove('open');
+        const chevron = document.getElementById('support-chat-note-chevron');
+        if (chevron) chevron.style.transform = '';
 
         // Reply
         const replyTa = document.getElementById('support-chat-reply-ta');
         if (replyTa) replyTa.value = '';
-
-        // Show
-        modal.style.display = 'flex';
-        if (backdrop) { backdrop.style.display = 'block'; }
-        requestAnimationFrame(() => {
-            modal.classList.add('open');
-            if (backdrop) backdrop.classList.add('open');
-        });
     };
 
     window.closeSupportDetail = function () {
