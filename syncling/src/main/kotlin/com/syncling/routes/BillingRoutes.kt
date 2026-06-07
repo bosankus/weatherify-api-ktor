@@ -591,7 +591,7 @@ private fun buildInvoiceReceipt(
   </div>
 </div>
 <div class="footer">
-  Syncling by Androidplay &nbsp;·&nbsp; support@androidplay.in<br>
+  Syncling &nbsp;·&nbsp; support@syncling.space<br>
   <a href="$pdfUrl" style="display:inline-block;margin-top:12px;background:#8B7EFF;color:#0a0a0a;text-decoration:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:600">Download branded PDF</a>
   <button onclick="window.print()" style="margin-top:12px;margin-left:8px;background:transparent;color:#111;border:1px solid #d1d5db;border-radius:6px;padding:8px 20px;font-size:13px;cursor:pointer">Print this page</button>
 </div>

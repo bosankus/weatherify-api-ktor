@@ -98,13 +98,19 @@ internal fun HTML.checkoutPage(
                             unsafe { +ICON_LOCK_SOLID }
                             span { +"Authorize card · Start free trial" }
                         }
-                        p("co-pay-foot") { +"By continuing you agree to Syncling's Terms and acknowledge the Privacy Policy." }
+                        p("co-pay-foot") {
+                            +"By continuing you agree to Syncling's "
+                            a("/syncling/terms") { +"Terms of Service" }
+                            +" and acknowledge the "
+                            a("/syncling/privacy") { +"Privacy Policy" }
+                            +"."
+                        }
                     }
                 }
             }
             footer("co-footer") {
                 span { +"Need help? " }
-                a("mailto:support@androidplay.in") { +"support@androidplay.in" }
+                a("mailto:support@syncling.space") { +"support@syncling.space" }
             }
             div("co-overlay") { id = "co-overlay"; div("co-spinner") {}; p { +"Preparing secure checkout…" } }
             div("co-expired-overlay") {
@@ -138,7 +144,7 @@ internal fun HTML.checkoutPage(
 
 private fun planFeatureRows(plan: BillingPlan): List<String> = when (plan) {
     BillingPlan.SOLO -> listOf("5,000 strings / month", "3 projects", "All target languages", "Glossary enforcement", "Translation memory", "Review portal")
-    BillingPlan.TEAM -> listOf("Unlimited strings", "10 projects", "All target languages", "Everything in Solo", "Priority support")
+    BillingPlan.TEAM -> listOf("Unlimited strings", "10 projects", "All target languages", "Everything in PRO", "Priority support")
     else -> emptyList()
 }
 

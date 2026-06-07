@@ -99,7 +99,14 @@ private val FAVICON_PNG_180 by lazy { generateFaviconPng(180) }
 private val FAVICON_PNG_192 by lazy { generateFaviconPng(192) }
 private val FAVICON_PNG_512 by lazy { generateFaviconPng(512) }
 
-fun Route.configurePortalRoutes(jwtSecret: String) {
+fun Route.configurePortalRoutes(jwtSecret: String, statusService: com.syncling.services.StatusService) {
+    // Public JSON status endpoint — used by uptime monitors and the status page client.
+    get("/syncling/api/status") {
+        call.respond(statusService.report())
+    }
+    get("/api/status") {
+        call.respond(statusService.report())
+    }
     // Landing page — canonical URL stays at /syncling for SEO
     route("/syncling") {
         get {
@@ -120,13 +127,23 @@ fun Route.configurePortalRoutes(jwtSecret: String) {
             }
             call.respondHtml { docsPage() }
         }
+        get("/terms") { call.respondHtml { termsPage() } }
+        get("/privacy") { call.respondHtml { privacyPage() } }
+        get("/status") {
+            val report = statusService.report()
+            call.respondHtml { statusPage(report) }
+        }
         get("/favicon.svg") {
             call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
         }
     }
-    // Top-level docs and favicons for clean URLs on syncling.space
-    get("/docs") {
-        call.respondHtml { docsPage() }
+    // Top-level docs, legal and favicons for clean URLs on syncling.space
+    get("/docs") { call.respondHtml { docsPage() } }
+    get("/terms") { call.respondHtml { termsPage() } }
+    get("/privacy") { call.respondHtml { privacyPage() } }
+    get("/status") {
+        val report = statusService.report()
+        call.respondHtml { statusPage(report) }
     }
     get("/favicon.svg") {
         call.respondText(FAVICON_SVG, ContentType("image", "svg+xml"))
@@ -335,6 +352,13 @@ private val APP_SIDEBAR_BILLING  get() = appSidebar("billing")
 private val APP_SIDEBAR_REVIEW   get() = appSidebar("review")
 
 internal const val SHARED_CSS = """
+/* currency display — toggled via body[data-cur=...] */
+.cur-usd,.cur-eur{display:none}
+body[data-cur="usd"] .cur-inr,body[data-cur="usd"] .cur-eur{display:none}
+body[data-cur="usd"] .cur-usd{display:inline}
+body[data-cur="eur"] .cur-inr,body[data-cur="eur"] .cur-usd{display:none}
+body[data-cur="eur"] .cur-eur{display:inline}
+body[data-cur="inr"] .cur-inr{display:inline}
 :root {
   --bg:#080808;--surface:#111;--surface2:#161616;--border:#1f1f1f;
   --accent:#8B7EFF;--accent-dim:rgba(139,126,255,.12);--accent-dim2:rgba(139,126,255,.06);
@@ -476,52 +500,17 @@ private fun HTML.welcomePage() {
 
         section("pricing-section welcome-pricing") {
             div("section-inner") {
+                renderCurrencyToggle()
                 div("pricing-grid") {
-                    div("pricing-card") {
-                        p("pricing-name") { +"Free" }
-                        p("pricing-price") { +"₹0"; span("price-mo") { +"/mo" } }
-                        p("pricing-period") { +"Forever · No credit card needed" }
-                        ul("pricing-features") {
-                            li { +"500 strings / month" }
-                            li { +"1 project" }
-                            li { +"3 target languages" }
-                            li { +"GitHub webhook" }
-                            li { +"AI translation" }
-                        }
-                        a("/app") { classes = setOf("pricing-cta", "outline"); +"Continue free →" }
-                    }
-                    div("pricing-card recommended") {
-                        span("rec-badge") { +"Best for Solo Developers" }
-                        span("trial-badge") { +"7-day free trial" }
-                        p("pricing-name") { +"Solo" }
-                        p("pricing-price") { +"₹499"; span("price-mo") { +"/mo" } }
-                        p("pricing-period") { +"after trial · Cancel anytime" }
-                        ul("pricing-features") {
-                            li { +"5,000 strings / month" }
-                            li { +"3 projects" }
-                            li { +"All target languages" }
-                            li { +"Glossary enforcement" }
-                            li { +"Translation memory" }
-                            li { +"Review portal" }
-                        }
-                        a("/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
-                    }
-                    div("pricing-card") {
-                        span("trial-badge") { +"7-day free trial" }
-                        p("pricing-name") { +"Team" }
-                        p("pricing-price") { +"₹1,999"; span("price-mo") { +"/mo" } }
-                        p("pricing-period") { +"after trial · Cancel anytime" }
-                        ul("pricing-features") {
-                            li { +"Unlimited strings" }
-                            li { +"10 projects" }
-                            li { +"All target languages" }
-                            li { +"Everything in Solo" }
-                            li { +"Priority support" }
-                        }
-                        a("/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 7-day free trial" }
+                    // Welcome shows the same plans as landing — Free CTA links into
+                    // the app since the user is already signed in.
+                    PricingData.plans.forEach { plan ->
+                        val p = if (plan.id == "FREE") plan.copy(ctaHref = "/app", ctaLabel = "Continue free →") else plan
+                        renderPricingCard(p)
                     }
                 }
-                p("pricing-note") { +"All paid plans include a 7-day free trial. No charge until the trial ends — cancel any time." }
+                p("pricing-note") { +PricingData.trialNote }
+                p("pricing-note pricing-billing-note") { +PricingData.billingNote }
             }
         }
 
@@ -531,6 +520,7 @@ private fun HTML.welcomePage() {
             },{threshold:0.12,rootMargin:'0px 0px -40px 0px'});
             document.querySelectorAll('.fade-up').forEach(el=>io.observe(el));
         """ } }
+        script { unsafe { +CURRENCY_JS } }
     }
 }
 
@@ -758,6 +748,82 @@ private const val CDN_ARCH_SVG = """
 </svg>
 """
 
+// Currency toggle — included on landing, welcome, and docs.
+// Reads `syncling-currency` from localStorage. If unset, infers from
+// navigator.language: 'en-IN' / 'hi-IN' -> INR; common EU locales -> EUR;
+// everything else -> USD. Updates body[data-cur] which drives CSS visibility.
+internal const val CURRENCY_JS = """
+(function(){
+  function inferCur(){
+    try{
+      var lang=(navigator.language||'en-US').toLowerCase();
+      if(lang==='en-in'||lang==='hi-in'||lang.indexOf('-in')>0)return 'inr';
+      var euLocales=['de','fr','es','it','nl','pt','pl','el','fi','sv','da','sk','sl','et','lv','lt','hu','cs','ro','bg','hr','ga','mt'];
+      var base=lang.split('-')[0];
+      if(euLocales.indexOf(base)>=0)return 'eur';
+      return 'usd';
+    }catch(e){return 'usd';}
+  }
+  function apply(c){
+    document.body.setAttribute('data-cur',c);
+    document.querySelectorAll('.currency-toggle .cur-pill').forEach(function(b){
+      var sel=b.getAttribute('data-cur')===c;
+      b.setAttribute('aria-selected',sel?'true':'false');
+    });
+  }
+  var saved=localStorage.getItem('syncling-currency');
+  var cur=(saved==='inr'||saved==='usd'||saved==='eur')?saved:inferCur();
+  apply(cur);
+  document.querySelectorAll('.currency-toggle .cur-pill').forEach(function(b){
+    b.addEventListener('click',function(){
+      var next=b.getAttribute('data-cur');
+      localStorage.setItem('syncling-currency',next);
+      apply(next);
+    });
+  });
+})();
+"""
+
+private const val PARALLAX_JS = """
+(function(){
+  if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  var ticking=false,sy=window.scrollY;
+  var inner=document.querySelector('.hero-inner');
+  var grid=document.querySelector('.hero-grid');
+  var orb1=document.querySelector('.hero-orb1');
+  var orb2=document.querySelector('.hero-orb2');
+  var glow2=document.querySelector('.hero-glow2');
+  var blobData=[];
+  document.querySelectorAll('[data-plx]').forEach(function(b){
+    var sec=b.closest('section');
+    blobData.push({el:b,top:sec?sec.offsetTop:0,speed:parseFloat(b.getAttribute('data-plx')||'0.12')});
+  });
+  function update(){
+    ticking=false;
+    var y=sy;
+    if(inner)inner.style.transform='translateY('+(y*0.07)+'px)';
+    if(grid)grid.style.transform='translateY('+(y*0.03)+'px)';
+    blobData.forEach(function(b){b.el.style.transform='translateY('+((y-b.top)*b.speed)+'px)';});
+  }
+  window.addEventListener('scroll',function(){sy=window.scrollY;if(!ticking){ticking=true;requestAnimationFrame(update);}},{passive:true});
+  var hs=document.querySelector('.hero');
+  if(hs){
+    hs.addEventListener('mousemove',function(e){
+      var r=hs.getBoundingClientRect();
+      var mx=(e.clientX-r.left)/r.width-.5,my=(e.clientY-r.top)/r.height-.5;
+      if(orb1)orb1.style.translate=(mx*-30)+'px '+(my*-20)+'px';
+      if(orb2)orb2.style.translate=(mx*24)+'px '+(my*18)+'px';
+      if(glow2)glow2.style.translate=(mx*16)+'px '+(my*12)+'px';
+    });
+    hs.addEventListener('mouseleave',function(){
+      if(orb1)orb1.style.translate='';
+      if(orb2)orb2.style.translate='';
+      if(glow2)glow2.style.translate='';
+    });
+  }
+})();
+"""
+
 private const val LANDING_JS = """
 (function(){
   var themeBtn=document.getElementById('theme-toggle');
@@ -788,7 +854,7 @@ private const val LANDING_JS = """
     var sub=params.get('sub')||'';
     var banner=document.createElement('div');
     banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#3a1a1a;border-bottom:1px solid #ff4d4f;color:#ffb8b8;padding:14px 24px;text-align:center;font-size:14px;z-index:9999;line-height:1.5';
-    banner.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-3px;margin-right:6px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>We received your payment but couldn'+String.fromCharCode(39)+'t link it to your account. Please email <a href="mailto:support@androidplay.in?subject=Subscription%20'+sub+'" style="color:#fff;text-decoration:underline">support@androidplay.in</a> with reference: <code style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:3px">'+sub+'</code>';
+    banner.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-3px;margin-right:6px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>We received your payment but couldn'+String.fromCharCode(39)+'t link it to your account. Please email <a href="mailto:support@syncling.space?subject=Subscription%20'+sub+'" style="color:#fff;text-decoration:underline">support@syncling.space</a> with reference: <code style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:3px">'+sub+'</code>';
     document.body.prepend(banner);
     history.replaceState({},'','/syncling');
   } else {
@@ -859,18 +925,66 @@ private const val LANDING_JS = """
     hs.addEventListener('mouseleave',function(){cg.style.opacity='0';});
   }
 
-  // ── 3-D tilt on SDK and pricing cards ────────────────────────
-  document.querySelectorAll('.sdk-teaser-card,.pricing-card').forEach(function(card){
+  // ── magic-card spotlight (sets --mx/--my CSS vars on hover) ──
+  document.querySelectorAll('.feature-card,.sdk-teaser-card,.pricing-card,.faq-item').forEach(function(card){
     card.addEventListener('mousemove',function(e){
-      var r=card.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,cx=r.width/2,cy=r.height/2;
-      var rx=(y-cy)/cy*4.5,ry=(cx-x)/cx*4.5;
-      card.style.transform='perspective(880px) rotateX('+rx+'deg) rotateY('+ry+'deg) translateY(-4px)';
-      card.style.boxShadow='0 24px 72px -20px rgba(139,126,255,.32),0 8px 24px -8px rgba(0,0,0,.55)';
-    });
-    card.addEventListener('mouseleave',function(){
-      card.style.transform='';card.style.boxShadow='';
+      var r=card.getBoundingClientRect();
+      card.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');
+      card.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');
     });
   });
+
+  // ── magnetic pull on primary CTAs ────────────────────────────
+  document.querySelectorAll('.btn-primary,.pricing-cta.accent').forEach(function(btn){
+    btn.addEventListener('mousemove',function(e){
+      var r=btn.getBoundingClientRect();
+      var dx=(e.clientX-(r.left+r.width/2))/r.width;
+      var dy=(e.clientY-(r.top+r.height/2))/r.height;
+      btn.style.transform='translate('+(dx*6)+'px,'+(dy*6-1)+'px)';
+    });
+    btn.addEventListener('mouseleave',function(){btn.style.transform='';});
+  });
+
+  // ── number ticker on hero stats ──────────────────────────────
+  function tickerEase(t){return 1-Math.pow(1-t,3);}
+  function runTicker(el){
+    var raw=(el.textContent||'').trim();
+    var m=raw.match(/^(<?)(\d+(?:\.\d+)?)(\D*)$/);
+    if(!m)return;
+    var prefix=m[1]||'',target=parseFloat(m[2]),suffix=m[3]||'';
+    var decimals=(m[2].split('.')[1]||'').length;
+    var start=performance.now(),dur=1400;
+    function step(now){
+      var t=Math.min(1,(now-start)/dur);
+      var v=tickerEase(t)*target;
+      el.textContent=prefix+v.toFixed(decimals)+suffix;
+      if(t<1)requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  var statIo=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){runTicker(e.target);statIo.unobserve(e.target);}
+    });
+  },{threshold:0.4});
+  document.querySelectorAll('.hero-stat-val,.feature-metric-val').forEach(function(el){statIo.observe(el);});
+
+  // ── meteor spawner (CSS-only streaks across the hero) ────────
+  var heroEl=document.querySelector('.hero');
+  if(heroEl && !window.matchMedia('(prefers-reduced-motion:reduce)').matches){
+    function spawnMeteor(){
+      var m=document.createElement('span');
+      m.className='meteor run';
+      m.style.left=(Math.random()*100)+'%';
+      m.style.top=(Math.random()*30)+'%';
+      m.style.animationDuration=(3+Math.random()*4)+'s';
+      m.style.animationDelay=(Math.random()*0.6)+'s';
+      heroEl.appendChild(m);
+      setTimeout(function(){m.remove();},9000);
+    }
+    for(var k=0;k<4;k++)setTimeout(spawnMeteor,k*900);
+    setInterval(spawnMeteor,2400);
+  }
 })();
 """
 
@@ -884,17 +998,17 @@ private const val LANDING_JSON_LD = """{
       "name":"Syncling",
       "applicationCategory":"DeveloperApplication",
       "operatingSystem":"Android, iOS, Web",
-      "description":"AI-powered mobile app localization platform. Push a commit to GitHub and translations are automatically detected, translated into 10+ languages with Claude AI, and published to a global CDN in under 45 seconds — no app store release needed.",
+      "description":"AI-powered mobile app localization platform. Push a commit to GitHub and translations are automatically detected, translated into 10+ languages with Claude AI, and published to Cloudflare's global CDN — typically within a minute, no app store release needed.",
       "url":"https://syncling.space/syncling",
       "offers":[
         {"@type":"Offer","name":"Free","price":"0","priceCurrency":"INR","description":"500 strings per month, 1 project, 3 target languages, GitHub webhook, CDN delivery"},
-        {"@type":"Offer","name":"Solo","price":"499","priceCurrency":"INR","description":"5000 strings per month, 3 projects, all languages, glossary, translation memory, review portal"},
+        {"@type":"Offer","name":"PRO","price":"499","priceCurrency":"INR","description":"5000 strings per month, 3 projects, all languages, glossary, translation memory, review portal"},
         {"@type":"Offer","name":"Team","price":"1999","priceCurrency":"INR","description":"Unlimited strings, 10 projects, team collaboration, per-project quotas, priority support"}
       ],
       "featureList":[
         "AI-powered translation using Claude and Gemini Flash",
         "Automatic semantic change detection — skips surface rewrites",
-        "Global CDN delivery across 250+ Cloudflare PoPs",
+        "Global CDN delivery across Cloudflare's edge network",
         "Native Android SDK and iOS Swift SDK",
         "GitHub webhook integration — zero manual steps",
         "Translation memory for instant reuse of cached strings",
@@ -913,25 +1027,223 @@ private const val LANDING_JSON_LD = """{
     {
       "@type":"FAQPage",
       "mainEntity":[
-        {"@type":"Question","name":"What is Syncling?","acceptedAnswer":{"@type":"Answer","text":"Syncling is an automated mobile app localization platform for Android and iOS developers. It connects to your GitHub repository via webhook, detects which strings actually changed semantically, translates them using Claude AI into 10+ languages, and publishes signed translation bundles to a global Cloudflare CDN — all within about 45 seconds of a git push."}},
-        {"@type":"Question","name":"How does automated mobile app localization work with Syncling?","acceptedAnswer":{"@type":"Answer","text":"Syncling works in five steps: (1) A GitHub webhook fires on push. (2) An AI semantic diff classifier identifies only strings with real meaning changes. (3) Claude AI translates changed strings into every configured target language, enforcing your glossary and checking placeholders. (4) Translations are packaged into a signed bundle and published to Cloudflare R2. (5) Your Android or iOS SDK fetches from the nearest CDN node in under 20ms."}},
+        {"@type":"Question","name":"What is Syncling?","acceptedAnswer":{"@type":"Answer","text":"Syncling is an automated mobile app localization platform for Android and iOS developers. It connects to your GitHub repository via webhook, detects which strings actually changed semantically, translates them using Claude AI into 10+ languages, and publishes signed translation bundles to Cloudflare's global CDN — typically within a minute of a git push."}},
+        {"@type":"Question","name":"How does automated mobile app localization work with Syncling?","acceptedAnswer":{"@type":"Answer","text":"Syncling works in five steps: (1) A GitHub webhook fires on push. (2) An AI semantic diff classifier identifies only strings with real meaning changes. (3) Claude AI translates changed strings into every configured target language, enforcing your glossary and checking placeholders. (4) Translations are packaged into a signed bundle and published to Cloudflare R2. (5) Your Android or iOS SDK fetches from the nearest CDN PoP, typically returning in around 20ms."}},
         {"@type":"Question","name":"Does Syncling support both Android and iOS localization?","acceptedAnswer":{"@type":"Answer","text":"Yes. Syncling provides a native Android SDK compatible with Kotlin and Java that works with your existing strings.xml setup, and a Swift-native iOS SDK compatible with both SwiftUI and UIKit. Both SDKs are production-ready and handle offline caching automatically."}},
-        {"@type":"Question","name":"How quickly does Syncling publish translations after a commit?","acceptedAnswer":{"@type":"Answer","text":"End-to-end from git push to globally available CDN bundle takes approximately 45 seconds for a typical batch of changed strings — including webhook processing, semantic detection, AI translation, placeholder validation, bundle signing, and Cloudflare R2 replication."}},
-        {"@type":"Question","name":"What languages does Syncling support?","acceptedAnswer":{"@type":"Answer","text":"Syncling supports Spanish, French, German, Japanese, Korean, Chinese Simplified, Hindi, Portuguese Brazilian, Italian, and Arabic. The Free tier includes 3 target languages; Solo and Team plans include all available languages."}},
+        {"@type":"Question","name":"How quickly does Syncling publish translations after a commit?","acceptedAnswer":{"@type":"Answer","text":"End-to-end from git push to globally available CDN bundle typically takes around 45 seconds for a small batch of changed strings — including webhook processing, semantic detection, AI translation, placeholder validation, bundle signing, and Cloudflare R2 replication. Larger batches scale roughly linearly with the number of changed strings and target languages."}},
+        {"@type":"Question","name":"What languages does Syncling support?","acceptedAnswer":{"@type":"Answer","text":"Syncling supports Spanish, French, German, Japanese, Korean, Chinese Simplified, Hindi, Portuguese Brazilian, Italian, and Arabic. The Free tier includes 3 target languages; PRO and Team plans include all available languages."}},
         {"@type":"Question","name":"How is Syncling different from Phrase, Lokalise, or Crowdin?","acceptedAnswer":{"@type":"Answer","text":"Syncling is built for fully automated, git-native localization with no manual workflows. Key differences: semantic change detection avoids re-translating unchanged strings; CDN-first delivery enables OTA updates without app store releases; developer-friendly pricing starts free with no credit card required."}},
         {"@type":"Question","name":"Is there a free tier for Syncling?","acceptedAnswer":{"@type":"Answer","text":"Yes. The Free plan includes 500 strings per month, 1 project, 3 target languages, GitHub webhook, AI translation, and CDN delivery — no credit card required, free forever. Paid plans include a 7-day free trial with no charge until the trial ends."}},
-        {"@type":"Question","name":"Can I update app translations without a new app store release?","acceptedAnswer":{"@type":"Answer","text":"Yes. Translations are served over-the-air (OTA) from Cloudflare's global CDN via the Syncling Android and iOS SDKs. Fix a typo or add a language at any time — it goes live in under 45 seconds with no App Store or Play Store submission required."}}
+        {"@type":"Question","name":"Can I update app translations without a new app store release?","acceptedAnswer":{"@type":"Answer","text":"Yes. Translations are served over-the-air (OTA) from Cloudflare's global CDN via the Syncling Android and iOS SDKs. Fix a typo or add a language at any time — it typically goes live within a minute, with no App Store or Play Store submission required."}}
       ]
     }
   ]
 }"""
+
+// ── Single source of truth for pricing ─────────────────────────────────────
+// Any change to plan names, prices, limits, or features goes here. Landing,
+// post-login welcome, and docs all render from this object.
+
+internal data class PricingPlan(
+    val id: String,                       // FREE | SOLO | TEAM (server plan id)
+    val name: String,                     // display name
+    val tagline: String,                  // short description under name
+    val priceInr: String,                 // canonical billing price, e.g. "₹0", "₹499"
+    val priceUsd: String,                 // marketing display, e.g. "$0", "$6"
+    val priceEur: String,                 // marketing display, e.g. "€0", "€6"
+    val periodNote: String,               // sub-price note
+    val bullets: List<String>,            // card feature bullets
+    val ctaHref: String,
+    val ctaLabel: String,
+    val ctaAccent: Boolean,               // true=filled accent, false=outline
+    val recommended: Boolean = false,
+    val recommendedBadge: String? = null,
+    val trialBadge: Boolean = false,
+)
+
+internal data class PricingFeatureRow(
+    val label: String,
+    val free: String,
+    val solo: String,
+    val team: String,
+)
+
+internal object PricingData {
+    val plans: List<PricingPlan> = listOf(
+        PricingPlan(
+            id = "FREE",
+            name = "Free",
+            tagline = "For indie devs and side projects.",
+            priceInr = "₹0",
+            priceUsd = "$0",
+            priceEur = "€0",
+            periodNote = "Free forever · No credit card required",
+            bullets = listOf(
+                "500 AI strings / month",
+                "1 active repository",
+                "3 target languages",
+                "GitHub webhook + AI translation",
+                "Global CDN delivery",
+                "Community support",
+            ),
+            ctaHref = "/auth/github",
+            ctaLabel = "Start shipping free",
+            ctaAccent = false,
+        ),
+        PricingPlan(
+            id = "SOLO",
+            name = "Pro",
+            tagline = "Automate your entire localization pipeline.",
+            // ₹499 ≈ $6 ≈ €6 at typical mid-market rates as of 2026-06.
+            priceInr = "₹499",
+            priceUsd = "$6",
+            priceEur = "€6",
+            periodNote = "Billed monthly after trial ends",
+            bullets = listOf(
+                "5,000 AI strings / month",
+                "3 active repositories",
+                "Unlimited target languages",
+                "Glossary enforcement",
+                "Translation memory caching",
+                "Collaborative review portal",
+            ),
+            ctaHref = "/billing/start-subscription?plan=SOLO",
+            ctaLabel = "Start 7-day free trial",
+            ctaAccent = true,
+            recommended = true,
+            recommendedBadge = "Most Popular",
+            trialBadge = true,
+        ),
+        PricingPlan(
+            id = "TEAM",
+            name = "Team",
+            tagline = "For teams building global products.",
+            // ₹1,999 ≈ $24 ≈ €22 at typical mid-market rates as of 2026-06.
+            priceInr = "₹1,999",
+            priceUsd = "$24",
+            priceEur = "€22",
+            periodNote = "Billed monthly after trial ends",
+            bullets = listOf(
+                "Unlimited AI strings (fair use)",
+                "10 active repositories",
+                "Unlimited target languages",
+                "Everything in Pro",
+                "Role-based access control",
+                "Per-project quotas",
+                "Priority 24/7 support",
+            ),
+            ctaHref = "/billing/start-subscription?plan=TEAM",
+            ctaLabel = "Start 7-day free trial",
+            ctaAccent = false,
+            trialBadge = true,
+        ),
+    )
+
+    val featureRows: List<PricingFeatureRow> = listOf(
+        PricingFeatureRow("Monthly AI strings", "500", "5,000", "Unlimited"),
+        PricingFeatureRow("Active repositories", "1", "3", "10"),
+        PricingFeatureRow("Target languages", "3", "All (10+)", "All (10+)"),
+        PricingFeatureRow("GitHub webhook", "✓", "✓", "✓"),
+        PricingFeatureRow("AI translation", "✓", "✓", "✓"),
+        PricingFeatureRow("Global CDN delivery", "✓", "✓", "✓"),
+        PricingFeatureRow("Placeholder guard", "✓", "✓", "✓"),
+        PricingFeatureRow("Glossary enforcement", "—", "✓", "✓"),
+        PricingFeatureRow("Translation memory", "—", "✓", "✓"),
+        PricingFeatureRow("Human review portal", "—", "✓", "✓"),
+        PricingFeatureRow("Outbound webhooks", "—", "✓", "✓"),
+        PricingFeatureRow("Team members & RBAC", "—", "—", "✓"),
+        PricingFeatureRow("Per-project quotas", "—", "—", "✓"),
+        PricingFeatureRow("Priority CDN SLA", "—", "—", "✓"),
+        PricingFeatureRow("Priority support", "—", "—", "✓"),
+        PricingFeatureRow("7-day free trial", "—", "✓", "✓"),
+    )
+
+    const val trialNote: String =
+        "All paid plans include a 7-day fully featured free trial. No charge until the trial ends — cancel any time."
+
+    // Billing always happens in INR via Razorpay (which settles to Indian merchants
+    // in INR). USD/EUR figures shown across surfaces are approximate display
+    // conversions — the customer's card network handles the actual FX at checkout.
+    const val billingNote: String =
+        "Plans are billed in INR (₹). USD / EUR figures are approximate — your card network handles the FX conversion at checkout."
+}
+
+private fun FlowContent.renderPricingCard(plan: PricingPlan, extraCardClass: String = "") {
+    val cls = buildString {
+        append("pricing-card")
+        if (plan.recommended) append(" recommended")
+        if (extraCardClass.isNotEmpty()) append(' ').append(extraCardClass)
+    }
+    div(cls) {
+        plan.recommendedBadge?.let { span("rec-badge") { +it } }
+        if (plan.trialBadge) span("trial-badge") { +"7-day free trial" }
+        p("pricing-name") { +plan.name }
+        p("pricing-desc") { +plan.tagline }
+        p("pricing-price") {
+            span("price-amt cur-inr") { +plan.priceInr }
+            span("price-amt cur-usd") { +plan.priceUsd }
+            span("price-amt cur-eur") { +plan.priceEur }
+            span("price-mo") { +"/mo" }
+        }
+        p("pricing-period") { +plan.periodNote }
+        ul("pricing-features") {
+            plan.bullets.forEach { li { +it } }
+        }
+        val ctaCls = if (plan.ctaAccent) setOf("pricing-cta", "accent") else setOf("pricing-cta", "outline")
+        a(plan.ctaHref) { classes = ctaCls; +plan.ctaLabel }
+    }
+}
+
+private fun FlowContent.renderPricingComparisonTable() {
+    table("docs-table docs-pricing-table") {
+        thead {
+            tr {
+                th { +"Feature" }
+                PricingData.plans.forEach { p ->
+                    th {
+                        +p.name; +"  "
+                        span("cur-inr") { +"${p.priceInr}/mo" }
+                        span("cur-usd") { +"${p.priceUsd}/mo" }
+                        span("cur-eur") { +"${p.priceEur}/mo" }
+                    }
+                }
+            }
+        }
+        tbody {
+            PricingData.featureRows.forEach { row ->
+                tr {
+                    td { +row.label }
+                    td { +row.free }
+                    td { +row.solo }
+                    td { +row.team }
+                }
+            }
+        }
+    }
+}
+
+private fun FlowContent.renderCurrencyToggle(extraClass: String = "") {
+    val cls = "currency-toggle" + if (extraClass.isNotEmpty()) " $extraClass" else ""
+    div(cls) {
+        attributes["role"] = "tablist"
+        attributes["aria-label"] = "Display currency"
+        listOf("inr" to "₹ INR", "usd" to "$ USD", "eur" to "€ EUR").forEach { (code, label) ->
+            button(classes = "cur-pill") {
+                attributes["type"] = "button"
+                attributes["data-cur"] = code
+                attributes["role"] = "tab"
+                +label
+            }
+        }
+    }
+}
 
 internal fun HTML.landingPage() {
     head {
         title { +"Syncling — Automated App Localization & AI Translation for Android & iOS" }
         meta(charset = "UTF-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
-        meta(name = "description", content = "Syncling automates mobile app localization for Android and iOS. Push a commit — AI detects changes, translates into 10+ languages, and publishes to a global CDN in 45 seconds. OTA updates, no app release needed. Free to start.")
+        meta(name = "description", content = "Syncling automates mobile app localization for Android and iOS. Push a commit — AI detects changes, translates into 10+ languages, and publishes to Cloudflare's global CDN, typically within a minute. OTA updates, no app release needed. Free to start.")
         meta(name = "keywords", content = "app localization, mobile app translation, Android localization, iOS localization, automated localization, AI translation, continuous localization, OTA translation updates, strings.xml translation, app translation tool, Syncling")
         meta(name = "robots", content = "index, follow")
         meta(name = "author", content = "Syncling")
@@ -939,15 +1251,15 @@ internal fun HTML.landingPage() {
         meta { attributes["property"] = "og:type"; attributes["content"] = "website" }
         meta { attributes["property"] = "og:url"; attributes["content"] = "$CANONICAL_BASE/syncling" }
         meta { attributes["property"] = "og:title"; attributes["content"] = "Syncling — Automated App Localization & AI Translation for Android & iOS" }
-        meta { attributes["property"] = "og:description"; attributes["content"] = "Push a commit. AI detects changes, translates into 10+ languages, and publishes to a global CDN in 45 seconds. Native Android and iOS SDKs. Free to start." }
+        meta { attributes["property"] = "og:description"; attributes["content"] = "Push a commit. AI detects changes, translates into 10+ languages, and publishes to Cloudflare's global CDN, typically within a minute. Android and iOS SDKs. Free to start." }
         meta { attributes["property"] = "og:site_name"; attributes["content"] = "Syncling" }
         meta(name = "twitter:card", content = "summary_large_image")
         meta(name = "twitter:title", content = "Syncling — Automated App Localization & AI Translation")
-        meta(name = "twitter:description", content = "Push a commit. AI translates your mobile app strings into 10+ languages and publishes to a global CDN in 45 seconds. No app store release needed.")
+        meta(name = "twitter:description", content = "Push a commit. AI translates your mobile app strings into 10+ languages and publishes to Cloudflare's global CDN, typically within a minute. No app store release needed.")
         favicon()
         link(rel = "preconnect", href = "https://fonts.googleapis.com")
         link(rel = "preconnect", href = "https://fonts.gstatic.com") { attributes["crossorigin"] = "" }
-        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Jost:wght@700;800&family=JetBrains+Mono:wght@400;500;600&display=swap")
+        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&family=Jost:wght@700;800&display=swap")
         script { unsafe { +"(function(){var t=localStorage.getItem('syncling-theme');if(t)document.documentElement.setAttribute('data-theme',t);})()" } }
         style { unsafe { +"$SHARED_CSS$LANDING_CSS" } }
         script {
@@ -994,28 +1306,35 @@ internal fun HTML.landingPage() {
             div("hero-orb-extra hero-orb1") {}
             div("hero-orb-extra hero-orb2") {}
             div("hero-inner") {
-                span("badge fade-up") { +"Multiplatform SDK · 10+ Languages · Free to start" }
+                span("badge fade-up") { +"Git-native · AI-powered · Free to start" }
                 h1("hero-title") {
                     span("hero-word w1 accent") { +"Commit." }; +" "; span("hero-word w2") { +"Translate." }; +" "; span("hero-word w3") { +"Ship." }
                 }
-                p("hero-funny fade-up") {
-                    +"Your app speaks Japanese now. You still don't. That's okay."
-                }
                 p("hero-sub fade-up d2") {
-                    +"Push a commit. AI detects changed strings, translates into 10+ languages, and ships to a global CDN in 45 seconds — no manual work, no app release needed."
+                    +"AI detects changes, translates into 10+ languages, and ships to the CDN edge — typically within a minute."
                 }
                 div("hero-actions fade-up d3") {
                     a("/auth/github") { classes = setOf("btn", "btn-primary", "hero-btn"); +"Get started free" }
                     a("#how") { classes = setOf("btn", "btn-ghost"); +"See how it works →" }
                 }
                 div("hero-stats fade-up d4") {
-                    div("hero-stat") { span("hero-stat-val") { +"<20ms" }; span("hero-stat-label") { +"Edge delivery" } }
+                    div("hero-stat") { span("hero-stat-val") { +"~20ms" }; span("hero-stat-label") { +"Typical edge response" } }
                     div("hero-stat-div") {}
                     div("hero-stat") { span("hero-stat-val") { +"10+" }; span("hero-stat-label") { +"Languages" } }
                     div("hero-stat-div") {}
-                    div("hero-stat") { span("hero-stat-val") { +"~45s" }; span("hero-stat-label") { +"Commit to CDN" } }
+                    div("hero-stat") { span("hero-stat-val") { +"~45s" }; span("hero-stat-label") { +"Typical commit-to-CDN" } }
                     div("hero-stat-div") {}
-                    div("hero-stat") { span("hero-stat-val") { +"250+" }; span("hero-stat-label") { +"CDN PoPs" } }
+                    div("hero-stat") { span("hero-stat-val") { +"330+" }; span("hero-stat-label") { +"Cloudflare PoPs" } }
+                }
+                p("hero-stats-fineprint fade-up d4") {
+                    +"Edge response and pipeline timings reflect typical production runs — see live numbers on the "
+                    a("/syncling/status") { +"status page" }
+                    +". PoP count tracks "
+                    a("https://www.cloudflare.com/network/") {
+                        attributes["target"] = "_blank"; attributes["rel"] = "noopener noreferrer"
+                        +"Cloudflare's global network"
+                    }
+                    +"."
                 }
                 div("hero-lang-marquee fade-up") {
                     val langs = listOf("🇪🇸 ES","🇫🇷 FR","🇩🇪 DE","🇯🇵 JA","🇰🇷 KO","🇨🇳 ZH","🇮🇳 HI","🇧🇷 PT","🇮🇹 IT","🇸🇦 AR")
@@ -1028,9 +1347,11 @@ internal fun HTML.landingPage() {
 
         section("pipeline-section") {
             id = "how"
+            div("plx-blob plx-a") { attributes["data-plx"] = "0.16" }
+            div("plx-blob plx-b") { attributes["data-plx"] = "0.1" }
             div("section-inner") {
                 p("section-label fade-up") { +"HOW IT WORKS" }
-                h2("fade-up d1") { +"Commit. Translate. Ship." }
+                h2("fade-up d1") { +"Automated end to end, in under a minute." }
                 p("pipeline-lead fade-up d1") { +"Every git push triggers a fully automated pipeline. No dashboards to babysit, no export/import, no manual review unless you want it." }
                 div("pipeline-demo fade-up d2") {
                     div("term-window") {
@@ -1073,7 +1394,7 @@ internal fun HTML.landingPage() {
                             }
                             div("term-line l7 term-final") {
                                 span("term-arrow") { +"→" }
-                                span("term-text term-result") { +" Users served in "; span("term-accent") { +"<20ms" }; +" from the nearest PoP" }
+                                span("term-text term-result") { +" Users served in "; span("term-accent") { +"~20ms" }; +" from the nearest PoP" }
                             }
                         }
                     }
@@ -1084,7 +1405,7 @@ internal fun HTML.landingPage() {
                         PStep("01", "Git push", "Syncling's webhook fires within seconds of any push to your configured branch."),
                         PStep("02", "Semantic detection", "AI classifier skips surface rewrites — only real semantic changes consume API quota."),
                         PStep("03", "Translate + validate", "Claude translates into all targets. Placeholders, glossary, and cultural flags are all checked."),
-                        PStep("04", "Sign + publish", "Signed bundle written to Cloudflare R2 — replicated to 250+ PoPs globally in seconds."),
+                        PStep("04", "Sign + publish", "Signed bundle written to Cloudflare R2 — replicated to Cloudflare's global edge network in seconds."),
                         PStep("05", "SDK serves edge", "Android and iOS SDKs fetch from the nearest PoP, cached locally for instant subsequent loads.")
                     ).forEach { s ->
                         div("pstep") {
@@ -1136,6 +1457,7 @@ internal fun HTML.landingPage() {
 
         section("features-section") {
             id = "features"
+            div("plx-blob plx-c") { attributes["data-plx"] = "0.13" }
             div("section-inner") {
                 p("section-label fade-up") { +"FEATURES" }
                 h2("fade-up d1") { +"Everything you need to ship globally." }
@@ -1143,7 +1465,7 @@ internal fun HTML.landingPage() {
                     data class Feature(val icon: String, val title: String, val desc: String, val metrics: List<Pair<String,String>> = emptyList(), val accent: Boolean = false)
                     listOf(
                         Feature("""<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>""",
-                            "Global CDN delivery", "Translations published to Cloudflare R2 and served from 250+ PoPs worldwide. Strings reach users in under 20ms from the nearest edge node.", listOf("<20ms" to "P99 response", "250+" to "Global PoPs"), true),
+                            "Global CDN delivery", "Translations published to Cloudflare R2 and served from Cloudflare's global edge network. Strings typically reach users in around 20ms from the nearest PoP.", listOf("~20ms" to "Typical edge response", "330+" to "Cloudflare PoPs"), true),
                         Feature("""<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><polyline points="21 3 21 8 16 8"/></svg>""",
                             "Instant OTA updates", "Fix a typo or add a language without a new app release. Every CDN bundle is versioned — promote or roll back in one click from your dashboard."),
                         Feature("""<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1 3-2 4-5 5 3 1 4 2 5 5 1-3 2-4 5-5-3-1-4-2-5-5z"/><path d="M5.5 10.5c-.5 1.5-1 2-2.5 2.5 1.5.5 2 1 2.5 2.5.5-1.5 1-2 2.5-2.5-1.5-.5-2-1-2.5-2.5z"/></svg>""",
@@ -1183,59 +1505,15 @@ internal fun HTML.landingPage() {
                 p("section-label fade-up") { +"PRICING" }
                 h2("fade-up d1") { +"Scale globally. Pay predictably." }
                 p("pricing-subtitle fade-up d1") { +"Choose the plan that fits your pipeline. No surprise API overages." }
+                renderCurrencyToggle("fade-up d1")
                 div("pricing-grid") {
-                    div("pricing-card fade-up") {
-                        p("pricing-name") { +"Starter" }
-                        p("pricing-desc") { +"For indie devs and side projects." }
-                        p("pricing-price") { +"₹0"; span("price-mo") { +"/mo" } }
-                        p("pricing-period") { +"Free forever · No credit card required" }
-                        ul("pricing-features") {
-                            li { +"500 AI strings / month" }
-                            li { +"1 active repository" }
-                            li { +"3 target languages" }
-                            li { +"GitHub Actions integration" }
-                            li { +"Global CDN delivery" }
-                            li { +"Community support" }
-                        }
-                        a("/auth/github") { classes = setOf("pricing-cta", "outline"); +"Start shipping free" }
-                    }
-                    div("pricing-card recommended fade-up d1") {
-                        span("rec-badge") { +"Most Popular" }
-                        span("trial-badge") { +"7-day free trial" }
-                        p("pricing-name") { +"Pro" }
-                        p("pricing-desc") { +"Automate your entire localization pipeline." }
-                        p("pricing-price") { +"₹499"; span("price-mo") { +"/mo" } }
-                        p("pricing-period") { +"Billed monthly after trial ends" }
-                        ul("pricing-features") {
-                            li { +"5,000 AI strings / month" }
-                            li { +"3 active repositories" }
-                            li { +"Unlimited target languages" }
-                            li { +"Advanced Glossary enforcement" }
-                            li { +"Translation memory caching" }
-                            li { +"Collaborative review portal" }
-                            li { +"Multi-platform SDKs (Coming Soon)" }
-                        }
-                        a("/billing/start-subscription?plan=SOLO") { classes = setOf("pricing-cta", "accent"); +"Start 7-day free trial" }
-                    }
-                    div("pricing-card fade-up d2") {
-                        span("trial-badge") { +"7-day free trial" }
-                        p("pricing-name") { +"Team" }
-                        p("pricing-desc") { +"For teams building global products." }
-                        p("pricing-price") { +"₹1,999"; span("price-mo") { +"/mo" } }
-                        p("pricing-period") { +"Billed monthly after trial ends" }
-                        ul("pricing-features") {
-                            li { +"Unlimited AI strings" }
-                            li { +"10 active repositories" }
-                            li { +"Unlimited target languages" }
-                            li { +"Everything in Pro" }
-                            li { +"Role-based access control" }
-                            li { +"Priority 24/7 support" }
-                            li { +"99.99% CDN SLA" }
-                        }
-                        a("/billing/start-subscription?plan=TEAM") { classes = setOf("pricing-cta", "outline"); +"Start 7-day free trial" }
+                    PricingData.plans.forEachIndexed { i, plan ->
+                        val fade = when (i) { 0 -> "fade-up"; 1 -> "fade-up d1"; else -> "fade-up d2" }
+                        renderPricingCard(plan, extraCardClass = fade)
                     }
                 }
-                p("pricing-note") { +"All paid plans include a 7-day fully featured free trial. Cancel anytime." }
+                p("pricing-note") { +PricingData.trialNote }
+                p("pricing-note pricing-billing-note") { +PricingData.billingNote }
             }
         }
 
@@ -1249,7 +1527,7 @@ internal fun HTML.landingPage() {
                     listOf(
                         FaqItem(
                             "What exactly is Syncling?",
-                            "Syncling is an automated mobile app localization platform. Connect your GitHub repo — every push triggers AI translation into 10+ languages, published to a global CDN in ~45 seconds. No dashboards. No manual steps. No app release needed."
+                            "Syncling is an automated mobile app localization platform. Connect your GitHub repo — every push triggers AI translation into 10+ languages, published to Cloudflare's global CDN, typically within a minute. No dashboards. No manual steps. No app release needed."
                         ),
                         FaqItem(
                             "How is this different from Phrase, Lokalise, or Crowdin?",
@@ -1257,7 +1535,7 @@ internal fun HTML.landingPage() {
                         ),
                         FaqItem(
                             "Can I update translations without releasing a new app version?",
-                            "Yes — this is the whole point. Translations are served over-the-air from Cloudflare's global CDN. Fix a typo, add a language, ship in 45 seconds. Zero App Store or Play Store submission required."
+                            "Yes — this is the whole point. Translations are served over-the-air from Cloudflare's global CDN. Fix a typo, add a language, ship in about a minute. Zero App Store or Play Store submission required."
                         )
                     ).forEach { item ->
                         div("faq-item fade-up") {
@@ -1283,11 +1561,19 @@ internal fun HTML.landingPage() {
         footer {
             div("footer-inner footer-simple") {
                 div("brand") { unsafe { +LOGO_SVG }; span { unsafe { +"<span class=\"brand-sync\">Sync</span>ling" } } }
-                p("footer-copy") { +"© 2026 Syncling · "; a("/docs") { classes = setOf("footer-docs-link"); +"Docs" } }
+                nav("footer-nav") {
+                    a("/docs") { classes = setOf("footer-docs-link"); +"Docs" }
+                    a("/syncling/status") { classes = setOf("footer-docs-link"); +"Status" }
+                    a("/syncling/terms") { classes = setOf("footer-docs-link"); +"Terms" }
+                    a("/syncling/privacy") { classes = setOf("footer-docs-link"); +"Privacy" }
+                }
+                p("footer-copy") { +"© 2026 Syncling" }
             }
         }
 
+        script { unsafe { +PARALLAX_JS } }
         script { unsafe { +LANDING_JS } }
+        script { unsafe { +CURRENCY_JS } }
     }
 }
 
@@ -1365,6 +1651,7 @@ private fun HTML.docsPage() {
                     a(href = "#pricing", classes = "docs-nav-link") { +"Pricing" }
                     a(href = "#faq", classes = "docs-nav-link") { +"FAQ" }
                     a(href = "#support", classes = "docs-nav-link") { +"Support" }
+                    a(href = "/syncling/status", classes = "docs-nav-link") { +"Status" }
                 }
             }
             main("docs-main") {
@@ -1396,7 +1683,7 @@ private fun HTML.docsPage() {
                             div("step-number") { +"3" }
                             div("step-body") {
                                 h3 { +"Add the SDK and push" }
-                                p { +"Drop the Android or iOS SDK into your app (one-line init). Make any string change in your source file and push to the watched branch. Translations appear on the CDN in ~45 seconds." }
+                                p { +"Drop the Android or iOS SDK into your app (one-line init). Make any string change in your source file and push to the watched branch. Translations typically appear on the CDN within a minute." }
                             }
                         }
                     }
@@ -1470,7 +1757,7 @@ private fun HTML.docsPage() {
                     p { +"Go to "; a("/tokens") { +"syncling.space/tokens" }; +" in the dashboard and click "; strong { +"New Token" }; +". Give it a descriptive name (e.g. "; code { +"my-laptop" }; +"). Copy the token — it's shown only once." }
                     h4 { +"Step 2 — Login" }
                     div("docs-code-block") {
-                        pre("docs-code") { +"syncling login\n\nCreate an API token at: https://syncling.space/tokens\nPaste your token (sli_…): sli_xxxxxxxxxxxxxxxx\n\nLogged in. Plan: Solo · 3 project(s)" }
+                        pre("docs-code") { +"syncling login\n\nCreate an API token at: https://syncling.space/tokens\nPaste your token (sli_…): sli_xxxxxxxxxxxxxxxx\n\nLogged in. Plan: PRO · 3 project(s)" }
                     }
                     p { +"Credentials are stored in "; code { +"~/.syncling/config.json" }; +" on your machine. To remove them:" }
                     div("docs-code-block") {
@@ -1576,7 +1863,7 @@ private fun HTML.docsPage() {
                     div("docs-code-block") {
                         pre("docs-code") { +"""// build.gradle.kts (app module)
 dependencies {
-    implementation("com.syncling:android-sdk:1.0.0")
+    implementation("space.syncling:syncling-cdm:0.0.1")
 }""" }
                     }
                     h4 { +"2. Initialize in Application" }
@@ -1746,7 +2033,7 @@ struct ContentView: View {
                 section("docs-section") {
                     id = "cdn"
                     h2 { +"CDN & OTA Updates" }
-                    p { +"Translations are compiled into signed bundles and published to Cloudflare R2, then replicated to 250+ edge PoPs globally. The SDK fetches bundles from the nearest PoP, giving P99 response times under 20ms." }
+                    p { +"Translations are compiled into signed bundles and published to Cloudflare R2 and replicated across Cloudflare's global edge network. The SDK fetches bundles from the nearest PoP, typically returning in around 20ms." }
                     h4 { +"Bundle versioning" }
                     p { +"Every publish creates an immutable versioned bundle. The SDK checks for a new bundle version in the background (via an ETag header) and swaps to it silently — no app restart required." }
                     h4 { +"Rollback" }
@@ -1777,47 +2064,18 @@ struct ContentView: View {
                         h2 { +"Pricing" }
                         p("docs-lead") { +"All plans include a 7-day free trial. No charge until the trial ends — cancel any time." }
                     }
-                    table("docs-table docs-pricing-table") {
-                        thead {
-                            tr {
-                                th { +"Feature" }
-                                th { +"Free" }
-                                th { +"Solo  ₹499/mo" }
-                                th { +"Team  ₹1,999/mo" }
-                            }
-                        }
-                        tbody {
-                            data class PRow(val feature: String, val free: String, val solo: String, val team: String)
-                            listOf(
-                                PRow("Monthly strings", "500", "5,000", "Unlimited"),
-                                PRow("Projects", "1", "3", "10"),
-                                PRow("Target languages", "3", "All (10+)", "All (10+)"),
-                                PRow("GitHub webhook", "✓", "✓", "✓"),
-                                PRow("AI translation", "✓", "✓", "✓"),
-                                PRow("CDN delivery", "✓", "✓", "✓"),
-                                PRow("Glossary enforcement", "—", "✓", "✓"),
-                                PRow("Translation memory", "—", "✓", "✓"),
-                                PRow("Human review portal", "—", "✓", "✓"),
-                                PRow("Outbound webhooks", "—", "✓", "✓"),
-                                PRow("Team members", "—", "—", "✓"),
-                                PRow("Per-project quotas", "—", "—", "✓"),
-                                PRow("Priority CDN SLA", "—", "—", "✓"),
-                                PRow("Priority support", "—", "—", "✓"),
-                                PRow("7-day free trial", "—", "✓", "✓")
-                            ).forEach { r ->
-                                tr {
-                                    td { +r.feature }
-                                    td { +r.free }
-                                    td { +r.solo }
-                                    td { +r.team }
-                                }
-                            }
-                        }
-                    }
+                    renderCurrencyToggle()
+                    renderPricingComparisonTable()
+                    p("docs-billing-note") { +PricingData.billingNote }
                     div("docs-pricing-cta") {
-                        a("/auth/github") { classes = setOf("btn", "btn-ghost"); +"Start free →" }
-                        a("/billing/start-subscription?plan=SOLO") { classes = setOf("btn", "btn-primary"); +"Start Solo trial" }
-                        a("/billing/start-subscription?plan=TEAM") { classes = setOf("btn", "btn-primary"); +"Start Team trial" }
+                        PricingData.plans.forEach { plan ->
+                            val btnCls = if (plan.id == "FREE") setOf("btn", "btn-ghost") else setOf("btn", "btn-primary")
+                            val label = when (plan.id) {
+                                "FREE" -> "Start free →"
+                                else -> "Start ${plan.name} trial"
+                            }
+                            a(plan.ctaHref) { classes = btnCls; +label }
+                        }
                     }
                 }
 
@@ -1831,15 +2089,15 @@ struct ContentView: View {
                     data class DocFaq(val q: String, val a: String)
                     listOf(
                         DocFaq("What is Syncling?",
-                            "Syncling is an automated mobile app localization platform. It hooks into your GitHub repository, detects semantic string changes, translates them into 10+ languages with Claude AI, and publishes the result to a global Cloudflare CDN within ~45 seconds of a git push."),
+                            "Syncling is an automated mobile app localization platform. It hooks into your GitHub repository, detects semantic string changes, translates them into 10+ languages with Claude AI, and publishes the result to Cloudflare's global CDN, typically within a minute of a git push."),
                         DocFaq("Do I need to set up the webhook manually?",
                             "No. Syncling registers the GitHub webhook automatically when you create a project. You just need to authorise the GitHub App during sign-up."),
                         DocFaq("Can I update translations without releasing a new app version?",
-                            "Yes — this is a core feature. Translations are served over-the-air from Cloudflare's CDN via the SDK. Fix a typo or add a language at any time; changes go live in under 45 seconds with no App Store or Google Play submission required."),
+                            "Yes — this is a core feature. Translations are served over-the-air from Cloudflare's CDN via the SDK. Fix a typo or add a language at any time; changes typically go live within a minute, with no App Store or Google Play submission required."),
                         DocFaq("Does it work with my existing strings.xml or Localizable.strings?",
                             "Yes. You point Syncling at your existing source file and the SDK resolves strings at runtime — no changes to your string keys, no migration."),
                         DocFaq("What languages are supported?",
-                            "Spanish (ES), French (FR), German (DE), Japanese (JA), Korean (KO), Chinese Simplified (ZH), Hindi (HI), Brazilian Portuguese (PT), Italian (IT), and Arabic (AR). The Free plan includes 3; Solo and Team unlock all."),
+                            "Spanish (ES), French (FR), German (DE), Japanese (JA), Korean (KO), Chinese Simplified (ZH), Hindi (HI), Brazilian Portuguese (PT), Italian (IT), and Arabic (AR). The Free plan includes 3; PRO and Team unlock all."),
                         DocFaq("How accurate are the AI translations?",
                             "Translations are generated by Claude (Anthropic) with your glossary applied for brand consistency. A post-translation pass checks for placeholder integrity and cultural sensitivity. You can route any translation through the human review portal before it reaches the CDN."),
                         DocFaq("What happens if a translation breaks a placeholder like %1\$s?",
@@ -1875,7 +2133,7 @@ struct ContentView: View {
                                 unsafe { +"""<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>""" }
                             }
                             h4 { +"Email" }
-                            p { +"Send us a message at "; a("mailto:support@androidplay.in") { +"support@androidplay.in" }; +". Include your project ID and a description of the issue." }
+                            p { +"Send us a message at "; a("mailto:support@syncling.space") { +"support@syncling.space" }; +". Include your project ID and a description of the issue." }
                         }
                     }
                 }
@@ -1893,11 +2151,14 @@ struct ContentView: View {
                     }
                 }
                 nav("footer-nav") {
-                    a("/syncling") { +"Home" }
-                    a("/syncling#pricing") { +"Pricing" }
-                    a("/syncling/docs") { +"Docs" }
+                    a("/syncling/status") { classes = setOf("footer-docs-link"); +"Status" }
+                    a("/syncling/terms") { classes = setOf("footer-docs-link"); +"Terms" }
+                    a("/syncling/privacy") { classes = setOf("footer-docs-link"); +"Privacy" }
                 }
-                p("footer-copy") { +"© 2026 Syncling · Automated app localization for Android & iOS developers." }
+                p("footer-copy") {
+                    +"© 2026 Syncling · Automated app localization for Android & iOS developers · "
+                    a("/syncling/status") { style = "color:inherit;text-decoration:none;border-bottom:1px dashed currentColor"; +"Status" }
+                }
             }
         }
 
@@ -1970,6 +2231,440 @@ struct ContentView: View {
   });
 })();
 """ } }
+        script { unsafe { +CURRENCY_JS } }
+    }
+}
+
+private fun HTML.statusPage(report: com.syncling.services.PublicStatusReport) {
+    head {
+        title { +"Syncling — System Status" }
+        meta(charset = "UTF-8")
+        meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        meta(name = "description", content = "Live status and performance metrics for Syncling — pipeline latency, CDN publish rate, and component health from the last 24 hours.")
+        link(rel = "canonical", href = "$CANONICAL_BASE/syncling/status")
+        favicon()
+        style { unsafe { +"""
+$SHARED_CSS
+.status-wrap{max-width:880px;margin:64px auto;padding:0 24px 80px}
+.status-hero{text-align:center;margin-bottom:40px}
+.status-pill{display:inline-flex;align-items:center;gap:10px;padding:10px 22px;border-radius:100px;font-size:15px;font-weight:600;letter-spacing:-.01em;margin-bottom:20px;border:1px solid}
+.status-pill.ok{background:rgba(74,222,128,.08);border-color:rgba(74,222,128,.22);color:#4ade80}
+.status-pill.degraded{background:rgba(250,173,20,.08);border-color:rgba(250,173,20,.25);color:#facc15}
+.status-pill.outage{background:rgba(255,77,79,.08);border-color:rgba(255,77,79,.25);color:#ff6b6e}
+.status-dot{width:10px;height:10px;border-radius:50%;background:currentColor;box-shadow:0 0 0 4px currentColor;opacity:.85}
+.status-pill .status-dot{box-shadow:0 0 0 4px rgba(74,222,128,.18)}
+.status-pill.degraded .status-dot{box-shadow:0 0 0 4px rgba(250,173,20,.18)}
+.status-pill.outage .status-dot{box-shadow:0 0 0 4px rgba(255,77,79,.18)}
+.status-hero h1{font-size:30px;font-weight:700;margin:0 0 8px}
+.status-hero .sub{color:var(--text-muted);font-size:14px;margin:0}
+.metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0 0 32px}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+.metric-card .label{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+.metric-card .value{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1;margin:0 0 6px;font-variant-numeric:tabular-nums}
+.metric-card .sub{font-size:12px;color:var(--text-muted);margin:0}
+.metric-card .value .unit{font-size:14px;font-weight:600;color:var(--text-muted);margin-left:2px}
+.status-section-title{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin:32px 0 12px}
+.status-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px}
+.status-row{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)}
+.status-row:last-child{border-bottom:none}
+.status-row-label{font-size:14px;font-weight:500}
+.status-row-val{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.status-row-val.ok{color:#4ade80}
+.status-row-val.ok::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80}
+.status-row-val.degraded{color:#facc15}
+.status-row-val.degraded::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#facc15}
+.status-row-val.outage{color:#ff6b6e}
+.status-row-val.outage::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#ff6b6e}
+.status-window-pills{display:flex;gap:6px;margin-bottom:14px}
+.window-pill{font-size:11px;font-weight:600;padding:5px 12px;border-radius:100px;background:rgba(139,126,255,.08);color:var(--accent);border:1px solid rgba(139,126,255,.22)}
+.status-fineprint{font-size:12px;color:var(--text-muted);line-height:1.65;margin-top:18px}
+.status-footer{text-align:center;margin-top:32px;font-size:13px;color:var(--text-muted)}
+.status-footer a{color:var(--accent);text-decoration:none}
+.edge-probe-val{font-variant-numeric:tabular-nums}
+@media(max-width:720px){
+  .metrics-grid{grid-template-columns:repeat(2,1fr)}
+  .status-hero h1{font-size:24px}
+}
+""" } }
+    }
+    body {
+        nav {
+            div("nav-inner") {
+                div("brand") {
+                    a("/syncling") {
+                        style = "display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit"
+                        unsafe { +LOGO_SVG }
+                        span { unsafe { +"<span class=\"brand-sync\">Sync</span>ling" } }
+                    }
+                }
+                a("/auth/github") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
+            }
+        }
+        div("status-wrap") {
+            // ── Hero badge: derived from real component health ─────────
+            div("status-hero") {
+                val (pillClass, pillText) = when (report.overall) {
+                    "outage" -> "outage" to "Major Outage"
+                    "degraded" -> "degraded" to "Partial Degradation"
+                    else -> "ok" to "All Systems Operational"
+                }
+                div("status-pill $pillClass") {
+                    div("status-dot") {}
+                    +pillText
+                }
+                h1 { +"System Status" }
+                p("sub") {
+                    +"Live metrics from the production pipeline · Updated "
+                    span { id = "status-generated"; +formatRelativeTime(report.generatedAt) }
+                }
+            }
+
+            // ── Headline metrics row — backing the landing claims ─────────
+            p("status-section-title") { +"Performance — Last 24 hours" }
+            div("metrics-grid") {
+                // Commit-to-CDN p50 (backs the "~45s" claim)
+                val p50 = report.pipeline24h?.durationP50Ms
+                val p95 = report.pipeline24h?.durationP95Ms
+                div("metric-card") {
+                    p("label") { +"Commit → CDN (p50)" }
+                    p("value") {
+                        if (p50 != null) +formatDuration(p50) else +"—"
+                    }
+                    p("sub") {
+                        +"p95: "; +(p95?.let { formatDuration(it) } ?: "—")
+                    }
+                }
+                // Pipeline runs in last 24h
+                div("metric-card") {
+                    p("label") { +"Pipeline Runs" }
+                    p("value") { +(report.pipeline24h?.totalRuns?.toString() ?: "—") }
+                    p("sub") {
+                        val s = report.pipeline24h?.succeededRuns ?: 0
+                        val t = report.pipeline24h?.totalRuns ?: 0
+                        if (t == 0) +"No runs in window" else +"$s succeeded · ${t - s} failed"
+                    }
+                }
+                // CDN publishes in last 24h
+                div("metric-card") {
+                    p("label") { +"CDN Publishes" }
+                    p("value") { +report.publishes24h.totalPublishes.toString() }
+                    p("sub") { +"${report.publishes24h.succeededPublishes} bundles served at edge" }
+                }
+                // Edge response — populated by client probe to Cloudflare's edge
+                div("metric-card") {
+                    p("label") { +"Edge Response (your client)" }
+                    p("value") {
+                        span("edge-probe-val") { id = "edge-probe"; +"…" }
+                        span("unit") { id = "edge-probe-unit"; +"" }
+                    }
+                    p("sub") { id = "edge-probe-sub"; +"Measuring from your browser…" }
+                }
+            }
+
+            // ── 7-day rollup for credibility (longer window stabilises numbers) ──
+            p("status-section-title") { +"7-day Rollup" }
+            div("status-card") {
+                div("status-row") {
+                    span("status-row-label") { +"Total strings translated" }
+                    span("status-row-val ok") { +(report.pipeline7d?.totalStringsTranslated?.let { formatCount(it) } ?: "—") }
+                }
+                div("status-row") {
+                    span("status-row-label") { +"Pipeline success rate" }
+                    val rate = report.pipeline7d?.let {
+                        if (it.totalRuns == 0) null
+                        else (it.succeededRuns * 100.0 / it.totalRuns)
+                    }
+                    span("status-row-val ok") { +(rate?.let { "%.1f%%".format(it) } ?: "—") }
+                }
+                div("status-row") {
+                    span("status-row-label") { +"CDN bundles published" }
+                    span("status-row-val ok") { +report.publishes7d.totalPublishes.toString() }
+                }
+                if (report.pipeline7d?.durationP50Ms != null) {
+                    div("status-row") {
+                        span("status-row-label") { +"Commit → CDN (p50 · p95 · p99)" }
+                        span("status-row-val ok") {
+                            +listOfNotNull(
+                                report.pipeline7d.durationP50Ms?.let { formatDuration(it) },
+                                report.pipeline7d.durationP95Ms?.let { formatDuration(it) },
+                                report.pipeline7d.durationP99Ms?.let { formatDuration(it) },
+                            ).joinToString(" · ")
+                        }
+                    }
+                }
+            }
+
+            // ── Component health ─────────────────────────────────────────
+            p("status-section-title") { +"Components" }
+            div("status-card") {
+                report.components.forEach { (name, state) ->
+                    div("status-row") {
+                        span("status-row-label") { +name }
+                        span("status-row-val ${cssState(state)}") { +stateLabel(state) }
+                    }
+                }
+            }
+
+            // ── Honest fineprint ─────────────────────────────────────────
+            p("status-fineprint") {
+                +"Performance metrics aggregate every successful pipeline run in the window. "
+                +"\"Commit → CDN\" measures wall-clock time from webhook receipt to bundle publish; it scales with the number of changed strings and target languages. "
+                +"Edge response is measured live from your browser to Cloudflare's nearest edge node — Syncling-bundled assets travel the same path. "
+                +"PoP count tracks "
+                a("https://www.cloudflare.com/network/") {
+                    attributes["target"] = "_blank"; attributes["rel"] = "noopener noreferrer"
+                    +"Cloudflare's global network"
+                }
+                +"."
+            }
+            p("status-fineprint") {
+                +"Programmatic access: "
+                code { +"GET /syncling/api/status" }
+                +" returns the same data as JSON for uptime monitors."
+            }
+
+            div("status-footer") {
+                p { +"Spot an issue? Email "; a("mailto:support@syncling.space") { +"support@syncling.space" }; +" · "; a("/syncling") { +"Back to home" } }
+            }
+        }
+
+        // ── Live edge-latency probe — fetches Cloudflare's tiny trace endpoint
+        // and reports TTFB. Falls back to a textual "measure failed" if blocked.
+        script { unsafe { +"""
+(function(){
+  var el=document.getElementById('edge-probe');
+  var unit=document.getElementById('edge-probe-unit');
+  var sub=document.getElementById('edge-probe-sub');
+  if(!el)return;
+  function show(ms, ok){
+    el.textContent = Math.round(ms);
+    if(unit) unit.textContent = ' ms';
+    if(sub) sub.textContent = ok ? 'Measured to nearest Cloudflare PoP' : 'Estimated — cross-origin timing limited';
+  }
+  function fail(){ el.textContent='—'; if(unit) unit.textContent=''; if(sub) sub.textContent='Probe blocked by browser/network'; }
+  var start = performance.now();
+  fetch('https://www.cloudflare.com/cdn-cgi/trace', {cache:'no-store', mode:'cors'})
+    .then(function(r){ return r.text(); })
+    .then(function(){ show(performance.now() - start, true); })
+    .catch(function(){
+      // CORS may block; fall back to image-load timing (no CORS) for a coarser measure
+      var img = new Image();
+      var t0 = performance.now();
+      img.onload = function(){ show(performance.now()-t0, false); };
+      img.onerror = function(){ fail(); };
+      img.src = 'https://www.cloudflare.com/favicon.ico?_ts=' + Date.now();
+    });
+
+  // Refresh "Updated" relative time every 30s
+  var gen = document.getElementById('status-generated');
+  var generatedAt = ${report.generatedAt};
+  function fmt(){
+    if(!gen) return;
+    var s = Math.max(0, Math.floor((Date.now()-generatedAt)/1000));
+    if(s<60) gen.textContent = s+'s ago';
+    else if(s<3600) gen.textContent = Math.floor(s/60)+'m ago';
+    else gen.textContent = Math.floor(s/3600)+'h ago';
+  }
+  fmt(); setInterval(fmt, 30000);
+})();
+""" } }
+    }
+}
+
+private fun formatDuration(ms: Long): String = when {
+    ms < 1000 -> "${ms}ms"
+    ms < 60_000 -> "%.1fs".format(ms / 1000.0)
+    ms < 3_600_000 -> "%.1fm".format(ms / 60_000.0)
+    else -> "%.1fh".format(ms / 3_600_000.0)
+}
+
+private fun formatCount(n: Long): String = when {
+    n < 1_000 -> n.toString()
+    n < 1_000_000 -> "%.1fK".format(n / 1_000.0)
+    else -> "%.2fM".format(n / 1_000_000.0)
+}
+
+private fun formatRelativeTime(epochMillis: Long): String {
+    val s = ((System.currentTimeMillis() - epochMillis) / 1000).coerceAtLeast(0)
+    return when {
+        s < 60 -> "${s}s ago"
+        s < 3600 -> "${s / 60}m ago"
+        else -> "${s / 3600}h ago"
+    }
+}
+
+private fun cssState(s: String) = when (s) { "outage" -> "outage"; "degraded" -> "degraded"; else -> "ok" }
+private fun stateLabel(s: String) = when (s) { "outage" -> "Outage"; "degraded" -> "Degraded"; else -> "Operational" }
+
+private fun HTML.termsPage() {
+    head {
+        title { +"Syncling — Terms of Service" }
+        meta(charset = "UTF-8")
+        meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        link(rel = "canonical", href = "$CANONICAL_BASE/syncling/terms")
+        favicon()
+        style { unsafe { +"""
+$SHARED_CSS
+.legal-wrap{max-width:760px;margin:72px auto;padding:0 24px 80px}
+.legal-wrap h1{font-size:32px;font-weight:700;margin:0 0 8px}
+.legal-wrap .subtitle{color:var(--text-muted);font-size:15px;margin:0 0 48px}
+.legal-wrap h2{font-size:18px;font-weight:600;margin:36px 0 12px;padding-top:8px;border-top:1px solid var(--border)}
+.legal-wrap p,.legal-wrap li{font-size:15px;line-height:1.75;color:var(--text-muted);margin:0 0 12px}
+.legal-wrap ul{padding-left:24px;margin:0 0 16px}
+.legal-wrap a{color:var(--accent)}
+""" } }
+    }
+    body {
+        nav {
+            div("nav-inner") {
+                div("brand") {
+                    a("/syncling") {
+                        style = "display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit"
+                        unsafe { +LOGO_SVG }
+                        span { unsafe { +"<span class=\"brand-sync\">Sync</span>ling" } }
+                    }
+                }
+                a("/auth/github") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
+            }
+        }
+        div("legal-wrap") {
+            h1 { +"Terms of Service" }
+            p("subtitle") { +"Effective date: June 2025 · Last updated: June 2026" }
+
+            h2 { +"1. Acceptance" }
+            p { +"By accessing or using Syncling (\"Service\"), operated by Androidplay (\"we\", \"us\", \"our\"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service." }
+
+            h2 { +"2. Description of Service" }
+            p { +"Syncling is an AI-powered mobile app localisation platform. We automatically detect changed strings in your GitHub repositories, translate them using Claude (Anthropic), and publish the results to a global CDN. The Free plan includes 500 strings per month. Paid plans are billed monthly via Razorpay." }
+
+            h2 { +"3. Accounts & GitHub Integration" }
+            p { +"You must authenticate via GitHub. You are responsible for all activity under your account. We install a GitHub App webhook on repositories you authorise; you may revoke this at any time from GitHub's application settings." }
+
+            h2 { +"4. Acceptable Use" }
+            p { +"You may not use the Service to:" }
+            ul {
+                li { +"Translate content that is illegal, abusive, or infringes third-party rights." }
+                li { +"Attempt to reverse-engineer or exfiltrate our AI prompts or infrastructure." }
+                li { +"Resell or sublicence access to the Service without written permission." }
+            }
+
+            h2 { +"5. Payment & Refunds" }
+            p { +"Paid plans are billed monthly in advance via Razorpay. You can cancel at any time; cancellation takes effect at the end of the current billing period. We do not offer refunds for partial months except where required by applicable law." }
+
+            h2 { +"6. Intellectual Property" }
+            p { +"You retain ownership of your source strings and any translated output generated for you. We retain ownership of the platform, models, and infrastructure. You grant us a limited licence to process your content solely to deliver the Service." }
+
+            h2 { +"7. Disclaimers & Limitation of Liability" }
+            p { +"The Service is provided \"as is\". AI translations may contain errors; you are responsible for reviewing output before shipping to production. To the maximum extent permitted by law, our total liability to you shall not exceed the fees paid by you in the 12 months preceding the claim." }
+
+            h2 { +"8. Changes to Terms" }
+            p { +"We may update these Terms at any time. We will notify you by email or in-app banner at least 14 days before material changes take effect. Continued use after that date constitutes acceptance." }
+
+            h2 { +"9. Contact" }
+            p { +"Questions about these Terms? Email "; a("mailto:support@syncling.space") { +"support@syncling.space" }; +"." }
+        }
+    }
+}
+
+private fun HTML.privacyPage() {
+    head {
+        title { +"Syncling — Privacy Policy" }
+        meta(charset = "UTF-8")
+        meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        link(rel = "canonical", href = "$CANONICAL_BASE/syncling/privacy")
+        favicon()
+        style { unsafe { +"""
+$SHARED_CSS
+.legal-wrap{max-width:760px;margin:72px auto;padding:0 24px 80px}
+.legal-wrap h1{font-size:32px;font-weight:700;margin:0 0 8px}
+.legal-wrap .subtitle{color:var(--text-muted);font-size:15px;margin:0 0 48px}
+.legal-wrap h2{font-size:18px;font-weight:600;margin:36px 0 12px;padding-top:8px;border-top:1px solid var(--border)}
+.legal-wrap p,.legal-wrap li{font-size:15px;line-height:1.75;color:var(--text-muted);margin:0 0 12px}
+.legal-wrap ul{padding-left:24px;margin:0 0 16px}
+.legal-wrap a{color:var(--accent)}
+.data-table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0}
+.data-table th{text-align:left;padding:10px 12px;background:var(--surface);border:1px solid var(--border);font-weight:600;color:var(--text)}
+.data-table td{padding:10px 12px;border:1px solid var(--border);color:var(--text-muted);vertical-align:top}
+""" } }
+    }
+    body {
+        nav {
+            div("nav-inner") {
+                div("brand") {
+                    a("/syncling") {
+                        style = "display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit"
+                        unsafe { +LOGO_SVG }
+                        span { unsafe { +"<span class=\"brand-sync\">Sync</span>ling" } }
+                    }
+                }
+                a("/auth/github") { classes = setOf("btn", "btn-primary", "nav-cta"); +"Get started" }
+            }
+        }
+        div("legal-wrap") {
+            h1 { +"Privacy Policy" }
+            p("subtitle") { +"Effective date: June 2025 · Last updated: June 2026" }
+
+            h2 { +"1. Who We Are" }
+            p { +"Syncling is operated by Androidplay. We can be reached at "; a("mailto:support@syncling.space") { +"support@syncling.space" }; +"." }
+
+            h2 { +"2. What We Collect" }
+            unsafe { +"""
+<table class="data-table">
+  <tr><th>Category</th><th>Examples</th><th>Purpose</th></tr>
+  <tr><td>Account data</td><td>GitHub username, email, avatar URL</td><td>Authentication, billing, support</td></tr>
+  <tr><td>Repository metadata</td><td>Repo name, branch, commit SHA</td><td>Webhook routing, pipeline tracking</td></tr>
+  <tr><td>String content</td><td>Your app's localisation strings</td><td>AI translation via Claude API</td></tr>
+  <tr><td>Usage metrics</td><td>String counts, pipeline durations</td><td>Quota enforcement, analytics</td></tr>
+  <tr><td>Billing data</td><td>Razorpay subscription ID, plan</td><td>Payment processing (card data never reaches our servers)</td></tr>
+  <tr><td>Support messages</td><td>Ticket subject and content</td><td>Customer support</td></tr>
+</table>
+""" }
+
+            h2 { +"3. How We Use Your Data" }
+            ul {
+                li { +"Delivering translations and CDN publishing." }
+                li { +"Sending transactional emails (payment, pipeline alerts)." }
+                li { +"Detecting abuse and enforcing quotas." }
+                li { +"Improving the service in aggregate (no individual profiling for advertising)." }
+            }
+
+            h2 { +"4. AI Processing — Anthropic / Claude" }
+            p { +"Your localisation strings are sent to "; a("https://anthropic.com", target = "_blank") { +"Anthropic's Claude API" }; +" for translation. Key facts:" }
+            ul {
+                li { +"Anthropic does not train on your data by default under their API Terms of Service." }
+                li { +"String content is transmitted over TLS and not stored by Anthropic beyond the duration of the API request." }
+                li { +"Anthropic's infrastructure is primarily in the United States. If your strings contain PII (e.g. user-generated content), you are responsible for ensuring that cross-border transfer complies with your applicable data protection obligations." }
+                li { +"We recommend storing only developer-authored UI strings in your localisation files, not user-generated content." }
+            }
+
+            h2 { +"5. Data Residency & International Transfers" }
+            p { +"Our primary infrastructure is hosted in India and on Cloudflare's global edge. MongoDB Atlas stores repository and pipeline data. If you are in the EU/EEA:" }
+            ul {
+                li { +"We rely on Standard Contractual Clauses (SCCs) where applicable for transfers to third-country processors." }
+                li { +"We do not currently offer an EU-only data residency option. If this is a hard requirement for you, please contact us before subscribing." }
+                li { +"Your translated strings on our CDN are served from Cloudflare edge nodes globally; CDN caching is content-addressed and does not contain PII." }
+            }
+
+            h2 { +"6. Data Retention" }
+            ul {
+                li { +"Pipeline run history: retained for 90 days, then purged." }
+                li { +"Translation memory (source → translated strings): retained while your account is active." }
+                li { +"Account data: deleted within 30 days of account closure on request." }
+                li { +"Billing records: retained for 7 years as required by applicable tax law." }
+            }
+
+            h2 { +"7. Your Rights" }
+            p { +"Depending on your jurisdiction you may have rights to access, correct, delete, or port your data. To exercise these rights, email "; a("mailto:support@syncling.space") { +"support@syncling.space" }; +". EU/EEA users may also lodge a complaint with their local supervisory authority." }
+
+            h2 { +"8. Cookies & Tracking" }
+            p { +"We use a single first-party session cookie for authentication (HTTP-only, Secure). We do not use third-party advertising trackers or sell your data." }
+
+            h2 { +"9. Changes to This Policy" }
+            p { +"We will notify you via email or in-app banner at least 14 days before material changes. Continued use after that date constitutes acceptance." }
+
+            h2 { +"10. Contact" }
+            p { +"Privacy questions: "; a("mailto:support@syncling.space") { +"support@syncling.space" }; +"." }
+        }
     }
 }
 
@@ -2059,6 +2754,11 @@ html[data-theme="light"] .docs-code-header{background:#1a2035;border-color:rgba(
 .docs-pricing-table td:nth-child(n+2){text-align:center}
 .docs-pricing-table th:nth-child(n+2){text-align:center}
 .docs-pricing-cta{display:flex;gap:12px;margin-top:28px;flex-wrap:wrap}
+.docs-billing-note{font-size:12.5px;color:var(--text-muted);margin-top:14px;line-height:1.65}
+.docs-main .currency-toggle{display:inline-flex;gap:0;margin:6px 0 18px;border:1px solid var(--border);border-radius:999px;padding:3px;background:var(--surface)}
+.docs-main .currency-toggle .cur-pill{background:transparent;border:none;color:var(--text-muted);font-size:12px;font-weight:600;letter-spacing:.02em;padding:6px 14px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s;font-family:inherit}
+.docs-main .currency-toggle .cur-pill:hover{color:var(--text)}
+.docs-main .currency-toggle .cur-pill[aria-selected="true"]{background:rgba(139,126,255,.18);color:var(--text)}
 .docs-pricing-cta .btn{padding:10px 22px;font-size:14px;font-weight:600;border-radius:8px}
 .docs-faq-item{margin-bottom:28px;padding-bottom:28px;border-bottom:1px solid var(--border)}
 .docs-faq-item:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
@@ -2094,85 +2794,171 @@ footer{padding:28px 32px;border-top:1px solid var(--border)}
 """
 
 private const val LANDING_CSS = """
+/* ──────────────────────────────────────────────────────────────
+   syncling landing — "Aurora Compute" aesthetic
+   MagicUI-equivalent primitives in vanilla CSS/JS
+   ────────────────────────────────────────────────────────────── */
+
+/* ── design tokens (landing-scope override) ──────────────────── */
+.hero,.pipeline-section,.sdk-section,.features-section,.pricing-section,.faq-section,.cta-section,nav,footer{
+  --lp-bg:#06060a;--lp-bg-soft:#0a0a14;
+  --lp-violet:#8b7eff;--lp-violet-2:#b4a8ff;--lp-cyan:#22d3ee;--lp-pink:#f472b6;
+  --lp-grain:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
 /* ── typography ──────────────────────────────────────────────── */
-body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-feature-settings:'cv02','cv03','cv04','cv11';-webkit-font-smoothing:antialiased}
+body{font-family:'Geist','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-feature-settings:'ss01','cv11';-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .brand,.brand-text,.brand span{font-family:'Jost',sans-serif!important}
-code,pre,.term-body,.term-cmd,.term-ps1,.term-title{font-family:'JetBrains Mono','SF Mono',Menlo,Consolas,monospace}
+.hero-title,h2,.pricing-price,.hero-stat-val,.feature-metric-val,.cta-section h2,.faq-section h2{font-family:'Geist',-apple-system,sans-serif;font-feature-settings:'ss01','ss03'}
+code,pre,.term-body,.term-cmd,.term-ps1,.term-title,.pstep-num{font-family:'Geist Mono','JetBrains Mono','SF Mono',Menlo,Consolas,monospace}
 /* ── keyframes ───────────────────────────────────────────────── */
-@keyframes heroDrift{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) translateY(32px) scale(1.08)}}
-@keyframes termIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes auroraShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes auroraDrift{0%,100%{transform:translate(-50%,0) scale(1)}50%{transform:translate(-50%,18px) scale(1.04)}}
+@keyframes gridPan{from{background-position:0 0,0 0}to{background-position:64px 64px,64px 64px}}
+@keyframes meteorFall{0%{transform:rotate(215deg) translateX(0);opacity:0}10%{opacity:1}80%{opacity:1}100%{transform:rotate(215deg) translateX(-560px);opacity:0}}
+@keyframes shimmerSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes shimmerSlide{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes beamWipe{0%{background-position:-100% 0}100%{background-position:200% 0}}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(139,126,255,.55)}50%{box-shadow:0 0 0 8px rgba(139,126,255,0)}}
+@keyframes termIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-@keyframes gridReveal{from{opacity:0}to{opacity:1}}
-@keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 rgba(139,126,255,.45)}50%{box-shadow:0 0 0 6px rgba(139,126,255,0)}}
+@keyframes wordIn{0%{opacity:0;transform:translateY(28px);filter:blur(8px)}100%{opacity:1;transform:translateY(0);filter:blur(0)}}
+@keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 rgba(139,126,255,.5)}50%{box-shadow:0 0 0 10px rgba(139,126,255,0)}}
+@keyframes hueCycle{0%,100%{filter:hue-rotate(0)}50%{filter:hue-rotate(28deg)}}
+@keyframes orbDrift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(60px,-50px) scale(1.07)}66%{transform:translate(-40px,30px) scale(.95)}}
+@keyframes scanLine{0%{transform:translateY(-100%);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(200%);opacity:0}}
+
 /* ── nav ─────────────────────────────────────────────────────── */
-nav{position:sticky;top:0;z-index:100;background:var(--lp-nav-bg);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid var(--border)}
-.nav-inner{max-width:1200px;margin:0 auto;padding:13px 32px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-.nav-right{display:flex;align-items:center;gap:8px}
-.nav-links{display:flex;align-items:center;gap:28px}
-.nav-links a:not(.btn){color:var(--lp-text-soft);font-size:13.5px;font-weight:500;letter-spacing:.01em;transition:color .15s ease;font-family:'Inter',-apple-system,sans-serif}
-.nav-links a:not(.btn):hover{color:var(--text)}
-.nav-cta{padding:7px 18px!important;font-size:13px!important;font-weight:600!important;letter-spacing:.01em!important}
-.nav-hamburger{display:none;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:34px;height:34px;padding:0;flex-shrink:0;transition:border-color .2s,color .2s;cursor:pointer}
-.nav-hamburger:hover{border-color:var(--accent);color:var(--accent)}
-.nav-theme-toggle{display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);width:34px;height:34px;padding:0;flex-shrink:0;transition:border-color .2s,color .2s,background .2s;cursor:pointer}
-.nav-theme-toggle:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim2)}
+nav{position:sticky;top:0;z-index:100;background:linear-gradient(to bottom,rgba(6,6,10,.95),rgba(6,6,10,.72));backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border-bottom:1px solid rgba(255,255,255,.04)}
+html[data-theme="light"] nav{background:linear-gradient(to bottom,rgba(245,247,250,.95),rgba(245,247,250,.7));border-bottom-color:rgba(0,0,0,.06)}
+.nav-inner{max-width:1240px;margin:0 auto;padding:14px 32px;display:flex;align-items:center;justify-content:flex-start;gap:16px}
+.nav-right{display:flex;align-items:center;gap:10px}
+.nav-links{display:flex;align-items:center;gap:28px;margin-left:auto}
+.nav-links a:not(.btn){position:relative;color:rgba(255,255,255,.55);font-size:13.5px;font-weight:450;letter-spacing:-.005em;transition:color .2s ease;font-family:'Geist',sans-serif}
+.nav-links a:not(.btn)::after{content:'';position:absolute;left:0;right:0;bottom:-6px;height:1px;background:linear-gradient(90deg,transparent,var(--lp-violet),transparent);transform:scaleX(0);transition:transform .3s ease}
+.nav-links a:not(.btn):hover{color:#fff}
+.nav-links a:not(.btn):hover::after{transform:scaleX(1)}
+html[data-theme="light"] .nav-links a:not(.btn){color:rgba(15,23,42,.55)}
+html[data-theme="light"] .nav-links a:not(.btn):hover{color:#0f172a}
+.nav-cta{padding:8px 18px!important;font-size:13px!important;font-weight:600!important}
+.nav-hamburger,.nav-theme-toggle{display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:8px;color:rgba(255,255,255,.6);width:34px;height:34px;padding:0;flex-shrink:0;transition:all .2s;cursor:pointer}
+.nav-hamburger{display:none}
+.nav-hamburger:hover,.nav-theme-toggle:hover{border-color:rgba(139,126,255,.4);color:var(--lp-violet);background:rgba(139,126,255,.08)}
+html[data-theme="light"] .nav-hamburger,html[data-theme="light"] .nav-theme-toggle{background:rgba(15,23,42,.03);border-color:rgba(15,23,42,.1);color:rgba(15,23,42,.6)}
 .theme-sun{display:none}.theme-moon{display:block}
 html[data-theme="light"] .theme-sun{display:block}html[data-theme="light"] .theme-moon{display:none}
 @media(prefers-color-scheme:light){html:not([data-theme="dark"]) .theme-sun{display:block}html:not([data-theme="dark"]) .theme-moon{display:none}}
+
+/* ── shine button (BorderBeam + Shimmer) ─────────────────────── */
+.btn-primary{position:relative;overflow:hidden;background:linear-gradient(135deg,#9d8eff 0%,#7a6cf0 100%);color:#fff;border:1px solid rgba(255,255,255,.14);font-weight:600;letter-spacing:0;padding:10px 22px;box-shadow:0 4px 18px -6px rgba(139,126,255,.55),inset 0 1px 0 rgba(255,255,255,.18)}
+.btn-primary.cta-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);background-size:200% 100%;animation:shimmerSlide 3.2s ease-in-out infinite;pointer-events:none;mix-blend-mode:overlay}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 36px -8px rgba(139,126,255,.7),inset 0 1px 0 rgba(255,255,255,.25);background:linear-gradient(135deg,#b0a4ff 0%,#8a7cf6 100%);color:#fff;border-color:rgba(255,255,255,.18)}
+.btn-ghost{background:rgba(255,255,255,.02);color:rgba(255,255,255,.75);padding:10px 22px;border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(8px)}
+.btn-ghost:hover{border-color:rgba(139,126,255,.45);color:var(--lp-violet-2);background:rgba(139,126,255,.06);transform:translateY(-1px)}
+html[data-theme="light"] .btn-ghost{background:rgba(15,23,42,.02);color:#334155;border-color:rgba(15,23,42,.1)}
+
 /* ── hero ────────────────────────────────────────────────────── */
-.hero{position:relative;overflow:hidden;padding:144px 24px 120px;text-align:center}
-.hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(139,126,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(139,126,255,.045) 1px,transparent 1px);background-size:64px 64px;-webkit-mask-image:radial-gradient(ellipse 88% 62% at 50% 0%,#000 28%,transparent 100%);mask-image:radial-gradient(ellipse 88% 62% at 50% 0%,#000 28%,transparent 100%);pointer-events:none;animation:gridReveal 2s ease forwards}
-.hero-glow{position:absolute;top:-420px;left:50%;transform:translateX(-50%);width:1100px;height:1100px;background:radial-gradient(circle,rgba(139,126,255,.07) 0%,transparent 56%);pointer-events:none;animation:heroDrift 16s ease-in-out infinite}
-.hero-glow2{position:absolute;top:80px;right:-320px;width:680px;height:680px;background:radial-gradient(circle,rgba(34,211,238,.032) 0%,transparent 65%);pointer-events:none}
-.hero-inner{max-width:880px;margin:0 auto;position:relative}
-.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(139,126,255,.06);border:1px solid rgba(139,126,255,.16);border-radius:100px;padding:5px 18px 5px 8px;font-size:11px;font-weight:600;color:var(--lp-text-soft);letter-spacing:.06em;margin-bottom:36px;text-transform:uppercase;font-family:'Inter',-apple-system,sans-serif}
-.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);flex-shrink:0;animation:badgePulse 2.4s ease-in-out infinite}
-.hero-title{font-size:clamp(42px,7.8vw,92px);font-weight:800;line-height:.97;letter-spacing:-4.5px;margin:0 0 28px;color:var(--text);font-family:'Inter',-apple-system,sans-serif}
-.accent{background:linear-gradient(120deg,#c4b5fd 0%,#8B7EFF 50%,#22d3ee 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
-.hero-sub{color:var(--lp-text-soft);font-size:clamp(15px,2vw,17px);line-height:1.82;margin-bottom:44px;max-width:560px;margin-left:auto;margin-right:auto;font-weight:400;font-family:'Inter',-apple-system,sans-serif}
-.hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:56px}
-.hero-btn{padding:14px 32px;font-size:15px;font-weight:600;letter-spacing:-.02em;font-family:'Inter',-apple-system,sans-serif}
-.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 0 44px -12px rgba(139,126,255,.45)}
-.btn-primary:hover{background:#7d6ff5;color:#fff;border-color:#7d6ff5;box-shadow:0 0 56px -8px rgba(139,126,255,.65);transform:translateY(-1px)}
-.hero-stats{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin:0 auto 52px;background:rgba(255,255,255,.018);border:1px solid rgba(139,126,255,.1);border-radius:16px;padding:22px 40px;max-width:680px;backdrop-filter:blur(12px)}
-.hero-stat{display:flex;flex-direction:column;align-items:center;padding:0 28px}
-.hero-stat-val{font-size:26px;font-weight:800;color:var(--accent);line-height:1;letter-spacing:-1.5px;font-variant-numeric:tabular-nums;font-family:'Inter',-apple-system,sans-serif}
-.hero-stat-label{font-size:10px;font-weight:600;color:var(--lp-label-color);margin-top:6px;letter-spacing:.1em;text-transform:uppercase;font-family:'Inter',-apple-system,sans-serif}
-.hero-stat-div{width:1px;height:36px;background:rgba(139,126,255,.1);flex-shrink:0}
-.hero-lang-marquee{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 14%,#000 86%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0%,#000 14%,#000 86%,transparent 100%)}
-.hero-lang-strip{display:flex;flex-wrap:nowrap;gap:8px;width:max-content;animation:marquee 32s linear infinite}
+.hero{position:relative;overflow:hidden;padding:148px 24px 128px;text-align:center;background:radial-gradient(ellipse 90% 60% at 50% 0%,rgba(139,126,255,.12),transparent 70%),radial-gradient(ellipse 60% 40% at 80% 20%,rgba(34,211,238,.06),transparent 70%),radial-gradient(ellipse 60% 40% at 10% 80%,rgba(244,114,182,.05),transparent 70%),var(--bg)}
+.hero::before{content:'';position:absolute;inset:0;background:var(--lp-grain);opacity:.35;mix-blend-mode:overlay;pointer-events:none;z-index:1}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(139,126,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(139,126,255,.05) 1px,transparent 1px);background-size:64px 64px;-webkit-mask-image:radial-gradient(ellipse 90% 65% at 50% 0%,#000 25%,transparent 95%);mask-image:radial-gradient(ellipse 90% 65% at 50% 0%,#000 25%,transparent 95%);pointer-events:none;animation:gridPan 18s linear infinite}
+.hero-glow{position:absolute;top:-440px;left:50%;width:1200px;height:1200px;background:radial-gradient(circle,rgba(139,126,255,.14) 0%,transparent 56%);pointer-events:none;animation:auroraDrift 14s ease-in-out infinite;transform:translateX(-50%);filter:blur(20px)}
+.hero-glow2{position:absolute;top:120px;right:-320px;width:680px;height:680px;background:radial-gradient(circle,rgba(34,211,238,.07) 0%,transparent 65%);pointer-events:none;filter:blur(40px)}
+.hero-orb-extra{position:absolute;border-radius:50%;pointer-events:none;filter:blur(90px);z-index:0}
+.hero-orb1{width:540px;height:540px;top:-80px;left:2%;background:radial-gradient(circle,rgba(139,126,255,.16),transparent 65%);animation:orbDrift 30s ease-in-out infinite}
+.hero-orb2{width:420px;height:420px;bottom:-80px;right:2%;background:radial-gradient(circle,rgba(244,114,182,.09),transparent 65%);animation:orbDrift 26s ease-in-out infinite reverse}
+.hero-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.7}
+.hero-inner{max-width:920px;margin:0 auto;position:relative;z-index:5}
+
+.badge{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(180deg,rgba(139,126,255,.18),rgba(139,126,255,.06));border:1px solid rgba(139,126,255,.32);border-radius:100px;padding:5px 18px 5px 9px;font-size:10.5px;font-weight:600;color:rgba(200,190,255,.92);letter-spacing:.12em;margin-bottom:40px;text-transform:uppercase;font-family:'Geist Mono',monospace;backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 4px 24px -8px rgba(139,126,255,.3)}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--lp-violet);box-shadow:0 0 12px var(--lp-violet);flex-shrink:0;animation:badgePulse 2.4s ease-in-out infinite}
+html[data-theme="light"] .badge{color:#5b4eb8;background:linear-gradient(180deg,rgba(139,126,255,.1),rgba(139,126,255,.02))}
+
+.hero-title{font-size:clamp(46px,8.2vw,104px);font-weight:700;line-height:.96;letter-spacing:-.055em;margin:0 0 30px;color:#fff;font-family:'Geist',sans-serif}
+html[data-theme="light"] .hero-title{color:#0f172a}
+.hero-word{display:inline-block;opacity:0;animation:wordIn .9s cubic-bezier(.16,1,.3,1) forwards;will-change:transform,opacity,filter}
+.hero-word.w1{animation-delay:.06s}
+.hero-word.w2{animation-delay:.34s}
+.hero-word.w3{animation-delay:.62s}
+.accent{background:linear-gradient(110deg,#c4b5fd 0%,#8b7eff 30%,#22d3ee 60%,#f472b6 100%);background-size:220% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;display:inline-block;animation:auroraShift 9s ease-in-out infinite,hueCycle 12s linear infinite;font-family:'Geist',sans-serif;font-weight:700}
+.hero-word.accent{animation:wordIn .9s cubic-bezier(.16,1,.3,1) forwards}
+.hero-word.w1.accent{animation-delay:.06s}
+.hero-word.w2.accent{animation-delay:.34s}
+.hero-word.w3.accent{animation-delay:.62s}
+
+.hero-sub{color:rgba(255,255,255,.72);font-size:clamp(16px,2.1vw,19.5px);line-height:1.6;margin-bottom:46px;max-width:600px;margin-left:auto;margin-right:auto;font-weight:400;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .hero-sub{color:#475569}
+
+.hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:60px}
+.hero-btn{padding:14px 30px;font-size:14.5px;font-weight:600;letter-spacing:0;font-family:'Geist',sans-serif;border-radius:10px}
+
+.hero-stats{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin:0 auto 56px;background:linear-gradient(160deg,rgba(139,126,255,.08) 0%,rgba(255,255,255,.032) 40%,rgba(34,211,238,.04) 100%);border:1px solid rgba(255,255,255,.13);border-radius:18px;padding:22px 36px;max-width:720px;backdrop-filter:blur(32px) saturate(200%);-webkit-backdrop-filter:blur(32px) saturate(200%);position:relative;overflow:hidden;box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -1px 0 rgba(139,126,255,.08),0 8px 32px -12px rgba(0,0,0,.6),0 0 60px -30px rgba(139,126,255,.25)}
+.hero-stats::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),rgba(139,126,255,.55),rgba(255,255,255,.35),transparent)}
+.hero-stat{display:flex;flex-direction:column;align-items:center;padding:0 28px;position:relative}
+.hero-stat-val{font-size:28px;font-weight:700;background:linear-gradient(180deg,#fff,#c4b5fd);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1;letter-spacing:-.035em;font-variant-numeric:tabular-nums;font-family:'Geist',sans-serif}
+html[data-theme="light"] .hero-stat-val{background:linear-gradient(180deg,#0f172a,#6b5cd6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero-stat-label{font-size:10px;font-weight:500;color:rgba(255,255,255,.4);margin-top:8px;letter-spacing:.14em;text-transform:uppercase;font-family:'Geist Mono',monospace}
+html[data-theme="light"] .hero-stat-label{color:#94a3b8}
+.hero-stat-div{width:1px;height:38px;background:linear-gradient(180deg,transparent,rgba(139,126,255,.22),transparent);flex-shrink:0}
+.hero-stats-fineprint{margin-top:14px;font-size:11.5px;color:rgba(255,255,255,.4);text-align:center;max-width:520px;margin-left:auto;margin-right:auto;line-height:1.55}
+.hero-stats-fineprint a{color:rgba(180,168,255,.7);text-decoration:none;border-bottom:1px dashed rgba(180,168,255,.3)}
+.hero-stats-fineprint a:hover{color:#b4a8ff;border-bottom-color:#b4a8ff}
+html[data-theme="light"] .hero-stats-fineprint{color:#94a3b8}
+html[data-theme="light"] .hero-stats-fineprint a{color:#6b5cd6;border-bottom-color:rgba(107,92,214,.3)}
+
+.hero-lang-marquee{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 12%,#000 88%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0%,#000 12%,#000 88%,transparent 100%)}
+.hero-lang-strip{display:flex;flex-wrap:nowrap;gap:10px;width:max-content;animation:marquee 36s linear infinite}
 .hero-lang-strip:hover{animation-play-state:paused}
-.lang-chip{background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:100px;padding:5px 14px;font-size:12.5px;color:var(--lp-chip-text);white-space:nowrap;font-weight:500;transition:border-color .2s,color .2s,background .2s;cursor:default;letter-spacing:.01em;font-family:'Inter',-apple-system,sans-serif}
-.lang-chip:hover{border-color:rgba(139,126,255,.3);color:var(--accent);background:rgba(139,126,255,.05)}
-/* ── sections shared ─────────────────────────────────────────── */
-section{padding:120px 24px}
-.section-inner{max-width:1200px;margin:0 auto}
-.section-label{font-size:10.5px;font-weight:700;letter-spacing:.18em;color:var(--accent);margin-bottom:20px;display:flex;align-items:center;gap:12px;text-transform:uppercase;font-family:'Inter',-apple-system,sans-serif}
-.section-label::before{content:'';width:20px;height:1px;background:currentColor;opacity:.5;flex-shrink:0}
-h2{font-size:clamp(26px,4.2vw,52px);font-weight:800;letter-spacing:-2.5px;margin-bottom:64px;line-height:1.04;font-family:'Inter',-apple-system,sans-serif}
+.lang-chip{background:linear-gradient(135deg,rgba(139,126,255,.07),rgba(255,255,255,.025));border:1px solid rgba(255,255,255,.1);border-radius:100px;padding:6px 14px;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;font-weight:500;transition:all .22s;cursor:default;letter-spacing:.01em;font-family:'Geist Mono',monospace;backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.lang-chip:hover{border-color:rgba(139,126,255,.4);color:#fff;background:rgba(139,126,255,.1);transform:translateY(-2px)}
+html[data-theme="light"] .lang-chip{background:rgba(15,23,42,.02);border-color:rgba(15,23,42,.08);color:#64748b}
+
+/* ── meteors (JS-spawned spans inside .hero) ─────────────────── */
+.meteor{position:absolute;top:-20px;width:1px;height:1px;background:#fff;border-radius:50%;box-shadow:0 0 5px 1px rgba(255,255,255,.85);transform:rotate(215deg);pointer-events:none;z-index:1}
+.meteor::before{content:'';position:absolute;top:50%;width:70px;height:1px;background:linear-gradient(90deg,rgba(139,126,255,.85),transparent);transform:translateY(-50%)}
+.meteor.run{animation:meteorFall linear forwards}
+
+/* ── shared sections ─────────────────────────────────────────── */
+section{padding:128px 24px;position:relative}
+.section-inner{max-width:1240px;margin:0 auto;position:relative}
+.section-label{font-size:10px;font-weight:600;letter-spacing:.22em;color:var(--lp-violet);margin-bottom:22px;display:flex;align-items:center;gap:14px;text-transform:uppercase;font-family:'Geist Mono',monospace}
+.section-label::before{content:'';width:24px;height:1px;background:linear-gradient(90deg,transparent,var(--lp-violet));flex-shrink:0}
+h2{font-size:clamp(30px,4.4vw,56px);font-weight:700;letter-spacing:-.04em;margin-bottom:72px;line-height:1.04;font-family:'Geist',sans-serif;color:#fff}
+html[data-theme="light"] h2{color:#0f172a}
+
+/* ── parallax blobs (absolutely-positioned in sections) ────── */
+.plx-blob{position:absolute;border-radius:50%;filter:blur(110px);pointer-events:none;will-change:transform;z-index:0;opacity:1}
+.plx-a{width:720px;height:720px;top:-80px;left:-180px;background:radial-gradient(circle,rgba(139,126,255,.13),transparent 58%)}
+.plx-b{width:620px;height:620px;top:10%;right:-200px;background:radial-gradient(circle,rgba(34,211,238,.08),transparent 58%)}
+.plx-c{width:640px;height:640px;top:5%;right:-160px;background:radial-gradient(circle,rgba(244,114,182,.07),transparent 58%)}
+
 /* ── pipeline ────────────────────────────────────────────────── */
-.pipeline-section{padding:120px 24px 136px;background:var(--bg);border-top:1px solid var(--border);position:relative;overflow:hidden}
-.pipeline-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 52% 38% at 50% 0%,rgba(139,126,255,.035),transparent);pointer-events:none}
-.pipeline-lead{color:var(--lp-text-soft);font-size:16.5px;line-height:1.78;max-width:520px;margin-top:-48px;margin-bottom:68px;font-weight:400;font-family:'Inter',-apple-system,sans-serif}
-.term-window{max-width:780px;margin:0 auto 72px;background:var(--lp-term-bg);border:1px solid var(--lp-term-border);border-radius:16px;overflow:hidden;box-shadow:0 0 0 1px rgba(139,126,255,.04),0 64px 128px -44px rgba(0,0,0,.9),0 0 80px -40px rgba(139,126,255,.07)}
-.term-header{display:flex;align-items:center;gap:12px;padding:12px 18px;background:var(--lp-term-header);border-bottom:1px solid var(--lp-term-border)}
+.pipeline-section{background:var(--bg);border-top:1px solid rgba(255,255,255,.04);overflow:hidden}
+html[data-theme="light"] .pipeline-section{border-top-color:rgba(15,23,42,.06)}
+.pipeline-section::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(139,126,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(139,126,255,.03) 1px,transparent 1px);background-size:48px 48px;-webkit-mask-image:radial-gradient(ellipse 60% 50% at 50% 0%,#000,transparent 80%);mask-image:radial-gradient(ellipse 60% 50% at 50% 0%,#000,transparent 80%);pointer-events:none}
+.pipeline-section::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:600px;height:600px;background:radial-gradient(circle,rgba(139,126,255,.07),transparent 65%);pointer-events:none;filter:blur(40px)}
+.pipeline-lead{color:rgba(255,255,255,.58);font-size:17px;line-height:1.7;max-width:560px;margin-top:-60px;margin-bottom:80px;font-weight:400;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .pipeline-lead{color:#475569}
+
+.term-window{max-width:820px;margin:0 auto 80px;background:linear-gradient(160deg,rgba(14,12,28,.72) 0%,rgba(6,4,16,.78) 100%);border:1px solid rgba(139,126,255,.22);border-radius:16px;overflow:hidden;position:relative;backdrop-filter:blur(32px) saturate(180%);-webkit-backdrop-filter:blur(32px) saturate(180%);box-shadow:0 0 0 1px rgba(139,126,255,.08),inset 0 1px 0 rgba(200,180,255,.1),0 80px 160px -50px rgba(0,0,0,.95),0 0 120px -50px rgba(139,126,255,.3)}
+html[data-theme="light"] .term-window{background:linear-gradient(180deg,#1e293b 0%,#0f172a 100%);border-color:rgba(139,126,255,.25)}
+.term-header{display:flex;align-items:center;gap:12px;padding:12px 18px;background:rgba(0,0,0,.4);border-bottom:1px solid rgba(255,255,255,.05);position:relative}
 .term-dots{display:flex;gap:7px}
-.term-dot{width:12px;height:12px;border-radius:50%}
+.term-dot{width:11px;height:11px;border-radius:50%;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
 .term-red{background:#ff5f57}.term-yellow{background:#febc2e}.term-green{background:#28c840}
-.term-title{flex:1;text-align:center;font-size:11px;color:var(--lp-term-title);letter-spacing:.08em}
-.term-body{padding:24px 30px 30px;font-size:13px;line-height:2.05;display:flex;flex-direction:column;color:var(--lp-term-text)}
+.term-title{flex:1;text-align:center;font-size:11px;color:rgba(255,255,255,.35);letter-spacing:.08em}
+.term-body{padding:26px 32px 32px;font-size:13px;line-height:2.05;display:flex;flex-direction:column;color:rgba(255,255,255,.85)}
 .term-prompt{display:flex;gap:0;margin-bottom:14px}
-.term-ps1{color:#6366f1;font-weight:600}
-.term-cmd{color:var(--lp-term-cmd)}
+.term-ps1{color:#7c8eff;font-weight:600}
+.term-cmd{color:#f0f4ff}
 .term-line{opacity:0;display:flex;gap:10px;align-items:baseline}
-.term-check{color:#34d399;font-weight:700;flex-shrink:0;width:16px}
-.term-arrow{color:var(--accent);flex-shrink:0;width:16px}
-.term-text{color:var(--lp-term-text)}
-.term-result{color:var(--lp-term-cmd);font-weight:600}
-.term-accent{color:var(--accent);font-weight:600}
+.term-check{color:#4ade80;font-weight:700;flex-shrink:0;width:16px}
+.term-arrow{color:var(--lp-violet);flex-shrink:0;width:16px}
+.term-text{color:rgba(255,255,255,.78)}
+.term-result{color:#fff;font-weight:600}
+.term-accent{background:linear-gradient(90deg,#8b7eff,#22d3ee);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;font-weight:600}
 .term-ok{color:#4ade80;font-weight:600}
-.term-dim{color:var(--lp-term-dim)}
-.term-final{margin-top:16px;padding-top:16px;border-top:1px solid var(--lp-term-final)}
+.term-dim{color:rgba(255,255,255,.3)}
+.term-final{margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)}
 .pipeline-demo.in-view .term-line{animation:termIn .35s cubic-bezier(.2,.7,.2,1) forwards}
 .pipeline-demo.in-view .l1{animation-delay:.6s}
 .pipeline-demo.in-view .l2{animation-delay:1.4s}
@@ -2181,206 +2967,275 @@ h2{font-size:clamp(26px,4.2vw,52px);font-weight:800;letter-spacing:-2.5px;margin
 .pipeline-demo.in-view .l5{animation-delay:3.6s}
 .pipeline-demo.in-view .l6{animation-delay:4.8s}
 .pipeline-demo.in-view .l7{animation-delay:5.6s}
-.pipeline-steps{display:grid;grid-template-columns:repeat(5,1fr);position:relative;padding-top:8px;gap:0}
-.pipeline-steps::before{content:'';position:absolute;top:29px;left:calc(10% + 24px);right:calc(10% + 24px);height:1px;background:linear-gradient(90deg,transparent,rgba(139,126,255,.25) 15%,rgba(139,126,255,.25) 85%,transparent);pointer-events:none}
-.pstep{padding:0 12px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}
-.pstep-num{display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:var(--bg);border:1px solid rgba(139,126,255,.15);font-size:11.5px;font-weight:700;color:var(--accent);letter-spacing:.04em;margin:0 auto 24px;position:relative;z-index:1;transition:border-color .25s,background .25s,box-shadow .25s;flex-shrink:0;font-family:'JetBrains Mono',monospace}
-.pstep:hover .pstep-num{border-color:rgba(139,126,255,.5);background:rgba(139,126,255,.05);box-shadow:0 0 32px -8px rgba(139,126,255,.35)}
-.pstep-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;letter-spacing:-.01em;font-family:'Inter',-apple-system,sans-serif}
-.pstep-desc{font-size:12px;color:var(--lp-text-muted2);line-height:1.68;font-family:'Inter',-apple-system,sans-serif}
-/* ── features ────────────────────────────────────────────────── */
-.features-section{background:var(--surface2);border-top:1px solid var(--border);padding:120px 24px}
-.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:20px;overflow:hidden}
-.feature-card{background:var(--surface);border:none;border-radius:0;padding:36px;display:flex;flex-direction:column;gap:0;transition:background .22s;position:relative;overflow:hidden}
-.feature-card::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 25% 25%,rgba(139,126,255,.045),transparent 68%);opacity:0;transition:opacity .28s;pointer-events:none}
-.feature-card:hover{background:rgba(139,126,255,.018)}
-.feature-card:hover::after{opacity:1}
-.feature-card-icon{color:var(--text-muted);line-height:0;flex-shrink:0;width:44px;height:44px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;margin-bottom:24px;transition:background .2s,border-color .2s,color .2s}
-.feature-card:hover .feature-card-icon{background:rgba(139,126,255,.07);border-color:rgba(139,126,255,.16);color:var(--accent)}
-.feature-card-icon.accent-icon{color:var(--accent);background:rgba(139,126,255,.07);border-color:rgba(139,126,255,.16)}
-.feature-title{font-size:14.5px;font-weight:700;color:var(--text);letter-spacing:-.02em;line-height:1.35;margin-bottom:10px;font-family:'Inter',-apple-system,sans-serif}
-.feature-desc{font-size:13px;color:var(--lp-text-muted2);line-height:1.76;flex:1;font-family:'Inter',-apple-system,sans-serif}
-.feature-metrics{display:flex;gap:28px;margin-top:28px;padding-top:22px;border-top:1px solid rgba(255,255,255,.05)}
-.feature-metric-val{font-size:22px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-1px;font-family:'Inter',-apple-system,sans-serif}
-.feature-metric-label{font-size:10.5px;color:var(--lp-label-color);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-top:6px;font-family:'Inter',-apple-system,sans-serif}
+
+.pipeline-steps{display:grid;grid-template-columns:repeat(5,1fr);position:relative;padding-top:12px;gap:0}
+.pipeline-steps::before{content:'';position:absolute;top:35px;left:calc(10% + 30px);right:calc(10% + 30px);height:2px;background:linear-gradient(90deg,transparent,rgba(139,126,255,.2) 12%,rgba(139,126,255,.35) 50%,rgba(34,211,238,.25) 88%,transparent);pointer-events:none;border-radius:2px}
+.pstep{padding:0 14px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;z-index:1}
+.pstep-num{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:linear-gradient(145deg,rgba(139,126,255,.1) 0%,rgba(14,12,26,.55) 100%);border:1px solid rgba(139,126,255,.28);font-size:12px;font-weight:600;color:var(--lp-violet);letter-spacing:.04em;margin:0 auto 28px;position:relative;z-index:1;transition:all .3s;flex-shrink:0;font-family:'Geist Mono',monospace;backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 4px var(--bg),0 4px 16px -4px rgba(139,126,255,.2)}
+.pstep:hover .pstep-num{border-color:rgba(139,126,255,.65);background:linear-gradient(145deg,rgba(139,126,255,.2) 0%,rgba(34,211,238,.08) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 0 0 4px var(--bg),0 0 36px -4px rgba(139,126,255,.55);transform:translateY(-2px)}
+html[data-theme="light"] .pstep-num{background:linear-gradient(145deg,rgba(139,126,255,.07) 0%,rgba(255,255,255,.85) 100%);border-color:rgba(139,126,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 0 0 4px var(--bg)}
+.pstep-title{font-size:13px;font-weight:600;color:#fff;margin-bottom:10px;letter-spacing:-.015em;font-family:'Geist',sans-serif}
+html[data-theme="light"] .pstep-title{color:#0f172a}
+.pstep-desc{font-size:12.5px;color:rgba(255,255,255,.52);line-height:1.62;font-family:'Geist',sans-serif}
+html[data-theme="light"] .pstep-desc{color:#64748b}
+
+/* ── magic-card spotlight (driven by --mx/--my from JS) ──────── */
+.feature-card,.sdk-teaser-card,.pricing-card,.faq-item{--mx:50%;--my:50%}
+.feature-card::before,.sdk-teaser-card::before,.pricing-card::before,.faq-item::before{content:'';position:absolute;inset:0;border-radius:inherit;background:radial-gradient(420px circle at var(--mx) var(--my),rgba(139,126,255,.13),transparent 40%);opacity:0;transition:opacity .35s;pointer-events:none;z-index:0}
+.feature-card:hover::before,.sdk-teaser-card:hover::before,.pricing-card:hover::before,.faq-item:hover::before{opacity:1}
+.feature-card>*,.sdk-teaser-card>*,.pricing-card>*,.faq-item>*{position:relative;z-index:1}
+
+/* ── features (bento) ────────────────────────────────────────── */
+.features-section{background:linear-gradient(180deg,var(--bg) 0%,#08080e 100%);border-top:1px solid rgba(255,255,255,.04);padding:128px 24px;overflow:hidden}
+html[data-theme="light"] .features-section{background:linear-gradient(180deg,var(--bg) 0%,#eef2f7 100%);border-top-color:rgba(15,23,42,.06)}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:linear-gradient(135deg,rgba(139,126,255,.14),rgba(34,211,238,.06));border:1px solid rgba(139,126,255,.18);border-radius:24px;overflow:hidden;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 80px -30px rgba(139,126,255,.2)}
+.feature-card{background:linear-gradient(145deg,rgba(139,126,255,.07) 0%,rgba(22,22,38,.38) 45%,rgba(8,8,18,.42) 100%);border:none;border-radius:0;padding:40px 36px;display:flex;flex-direction:column;gap:0;transition:background .3s,transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s;position:relative;overflow:hidden;backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);min-height:280px;will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+html[data-theme="light"] .feature-card{background:linear-gradient(145deg,rgba(139,126,255,.05) 0%,rgba(255,255,255,.68) 45%,rgba(248,250,253,.72) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.feature-card:hover{transform:translateY(-3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 20px 56px -22px rgba(139,126,255,.4),0 0 40px -20px rgba(139,126,255,.15)}
+.feature-card-icon{color:rgba(255,255,255,.7);line-height:0;flex-shrink:0;width:48px;height:48px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;margin-bottom:28px;transition:all .3s;position:relative;overflow:hidden}
+.feature-card-icon::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(139,126,255,.22),transparent 50%);opacity:0;transition:opacity .3s}
+.feature-card:hover .feature-card-icon{border-color:rgba(139,126,255,.3);color:var(--lp-violet-2);box-shadow:0 0 24px -4px rgba(139,126,255,.45)}
+.feature-card:hover .feature-card-icon::before{opacity:1}
+.feature-card-icon.accent-icon{color:var(--lp-violet-2);background:linear-gradient(135deg,rgba(139,126,255,.16),rgba(34,211,238,.06));border-color:rgba(139,126,255,.32);box-shadow:0 0 36px -8px rgba(139,126,255,.5),inset 0 1px 0 rgba(255,255,255,.1)}
+.feature-title{font-size:15.5px;font-weight:600;color:#fff;letter-spacing:-.015em;line-height:1.35;margin-bottom:12px;font-family:'Geist',sans-serif}
+html[data-theme="light"] .feature-title{color:#0f172a}
+.feature-desc{font-size:13.5px;color:rgba(255,255,255,.56);line-height:1.72;flex:1;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .feature-desc{color:#64748b}
+.feature-metrics{display:flex;gap:32px;margin-top:32px;padding-top:22px;border-top:1px solid rgba(255,255,255,.05)}
+.feature-metric-val{font-size:24px;font-weight:700;background:linear-gradient(180deg,#fff,#a5b4fc);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.035em;font-family:'Geist',sans-serif}
+html[data-theme="light"] .feature-metric-val{background:linear-gradient(180deg,#0f172a,#5b4eb8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.feature-metric-label{font-size:10px;color:rgba(255,255,255,.4);font-weight:500;letter-spacing:.14em;text-transform:uppercase;margin-top:8px;font-family:'Geist Mono',monospace}
+html[data-theme="light"] .feature-metric-label{color:#94a3b8}
+
 /* ── sdk ─────────────────────────────────────────────────────── */
-.sdk-section{padding:120px 24px;background:var(--bg);border-top:1px solid var(--border);position:relative}
-.sdk-section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(139,126,255,.15) 35%,rgba(34,211,238,.1) 65%,transparent)}
-.sdk-intro{color:var(--lp-text-soft);font-size:16.5px;line-height:1.78;max-width:520px;margin-top:-48px;margin-bottom:64px;font-weight:400;font-family:'Inter',-apple-system,sans-serif}
-.sdk-teaser-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:20px;overflow:hidden;max-width:840px}
-.sdk-teaser-card{background:var(--surface);border:none;border-radius:0;padding:40px;display:flex;flex-direction:column;gap:24px;transition:background .22s;position:relative}
-.sdk-teaser-card:hover{background:rgba(139,126,255,.018)}
-.sdk-teaser-top{display:flex;align-items:center;gap:16px}
-.sdk-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.sdk-android{background:rgba(139,126,255,.07);color:var(--accent);border:1px solid rgba(139,126,255,.15)}
-.sdk-ios-icon{background:rgba(139,126,255,.07);color:var(--accent);border:1px solid rgba(139,126,255,.15)}
-.sdk-name{font-size:19px;font-weight:800;color:var(--text);margin-bottom:6px;letter-spacing:-.03em;font-family:'Inter',-apple-system,sans-serif}
-.sdk-status{display:inline-block;padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(74,222,128,.06);color:#4ade80;border:1px solid rgba(74,222,128,.15);font-family:'Inter',-apple-system,sans-serif}
-.sdk-teaser-desc{font-size:14px;color:var(--lp-text-muted2);line-height:1.76;flex:1;font-family:'Inter',-apple-system,sans-serif}
-.sdk-teaser-link{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--accent);transition:gap .18s;letter-spacing:.01em;font-family:'Inter',-apple-system,sans-serif}
-.sdk-teaser-link:hover{gap:10px}
+.sdk-section{padding:128px 24px;background:var(--bg);border-top:1px solid rgba(255,255,255,.04);position:relative;overflow:hidden}
+html[data-theme="light"] .sdk-section{border-top-color:rgba(15,23,42,.06)}
+.sdk-section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(139,126,255,.3) 30%,rgba(34,211,238,.2) 70%,transparent)}
+.sdk-section::after{content:'';position:absolute;top:-200px;right:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(34,211,238,.07),transparent 65%);pointer-events:none;filter:blur(40px)}
+.sdk-intro{color:rgba(255,255,255,.58);font-size:17px;line-height:1.7;max-width:560px;margin-top:-60px;margin-bottom:72px;font-weight:400;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .sdk-intro{color:#475569}
+.sdk-teaser-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:linear-gradient(135deg,rgba(139,126,255,.14),rgba(34,211,238,.06));border:1px solid rgba(139,126,255,.18);border-radius:24px;overflow:hidden;max-width:900px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 80px -30px rgba(139,126,255,.2)}
+.sdk-teaser-card{background:linear-gradient(145deg,rgba(139,126,255,.08) 0%,rgba(22,22,38,.38) 45%,rgba(8,8,18,.42) 100%);border:none;border-radius:0;padding:44px;display:flex;flex-direction:column;gap:24px;transition:background .3s,transform .4s cubic-bezier(.2,.8,.2,1),box-shadow .4s;position:relative;overflow:hidden;backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+html[data-theme="light"] .sdk-teaser-card{background:linear-gradient(145deg,rgba(139,126,255,.05) 0%,rgba(255,255,255,.68) 45%,rgba(248,250,253,.72) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.sdk-teaser-card:hover{box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 28px 72px -22px rgba(139,126,255,.44),0 0 50px -25px rgba(139,126,255,.15)}
+.sdk-teaser-top{display:flex;align-items:center;gap:18px}
+.sdk-icon{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(139,126,255,.14),rgba(34,211,238,.06));border:1px solid rgba(139,126,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.sdk-icon::before{content:'';position:absolute;inset:-1px;border-radius:inherit;background:conic-gradient(from 0deg,transparent 0%,rgba(139,126,255,.45) 25%,transparent 50%);animation:shimmerSpin 6s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;padding:1px;opacity:0;transition:opacity .3s}
+.sdk-teaser-card:hover .sdk-icon::before{opacity:1}
+.sdk-android,.sdk-ios-icon{color:var(--lp-violet-2)}
+.sdk-name{font-size:20px;font-weight:600;color:#fff;margin-bottom:6px;letter-spacing:-.025em;font-family:'Geist',sans-serif}
+html[data-theme="light"] .sdk-name{color:#0f172a}
+.sdk-status{display:inline-block;padding:3px 11px;border-radius:100px;font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;background:rgba(74,222,128,.08);color:#4ade80;border:1px solid rgba(74,222,128,.2);font-family:'Geist Mono',monospace}
+.sdk-teaser-desc{font-size:14px;color:rgba(255,255,255,.6);line-height:1.72;flex:1;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .sdk-teaser-desc{color:#64748b}
+.sdk-teaser-link{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--lp-violet-2);transition:gap .22s;font-family:'Geist',sans-serif}
+.sdk-teaser-link:hover{gap:11px}
+
 /* ── pricing ─────────────────────────────────────────────────── */
-.pricing-section{background:var(--surface2);border-top:1px solid var(--border);position:relative;overflow:hidden;padding:120px 24px}
-.pricing-section::before{content:'';position:absolute;bottom:-200px;left:50%;transform:translateX(-50%);width:800px;height:400px;background:radial-gradient(circle,rgba(139,126,255,.038),transparent 68%);pointer-events:none}
-.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:20px;padding-top:4px}
-.pricing-card{background:var(--surface);border:1px solid var(--lp-pricing-border);border-radius:20px;padding:36px;display:flex;flex-direction:column;position:relative;transition:border-color .25s,transform .28s,box-shadow .28s}
-.pricing-card:hover{transform:translateY(-8px);border-color:rgba(255,255,255,.2);box-shadow:0 24px 64px -16px rgba(0,0,0,.8)}
-.pricing-card.recommended{border-color:rgba(139,126,255,.3);background:linear-gradient(160deg,rgba(14,10,32,.98) 0%,rgba(11,11,20,.98) 60%);box-shadow:0 0 0 1px rgba(139,126,255,.1),0 0 100px -40px rgba(139,126,255,.2)}
-.pricing-card.recommended:hover{border-color:var(--accent);transform:translateY(-8px);box-shadow:0 0 0 1px var(--accent),0 32px 72px -16px rgba(139,126,255,.4)}
-.rec-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:9.5px;font-weight:800;letter-spacing:.12em;padding:4px 18px;border-radius:100px;white-space:nowrap;text-transform:uppercase;font-family:'Inter',-apple-system,sans-serif}
-.trial-badge{display:inline-block;background:rgba(34,211,238,.05);color:#22d3ee;border:1px solid rgba(34,211,238,.15);border-radius:100px;padding:3px 12px;font-size:10.5px;font-weight:600;margin-bottom:16px;letter-spacing:.04em;font-family:'Inter',-apple-system,sans-serif}
-.pricing-subtitle{font-size:15px;color:var(--lp-text-muted2);text-align:center;margin-top:-36px;margin-bottom:52px;font-family:'Inter',-apple-system,sans-serif}
-.pricing-name{font-size:10.5px;font-weight:700;letter-spacing:.14em;color:var(--lp-text-faint);text-transform:uppercase;margin-bottom:4px;font-family:'Inter',-apple-system,sans-serif}
-.pricing-desc{font-size:12px;color:var(--lp-text-muted2);line-height:1.5;margin-bottom:12px;font-family:'Inter',-apple-system,sans-serif;height:36px}
-.pricing-price{font-size:52px;font-weight:800;letter-spacing:-3.5px;line-height:1;color:var(--text);margin-bottom:6px;font-variant-numeric:tabular-nums;font-family:'Inter',-apple-system,sans-serif}
-.price-mo{font-size:15px;font-weight:400;letter-spacing:0;color:var(--lp-text-faint)}
-.pricing-period{font-size:12px;color:var(--lp-text-faint);margin-bottom:28px;min-height:16px;font-weight:400;font-family:'Inter',-apple-system,sans-serif}
+.pricing-section{background:linear-gradient(180deg,var(--bg),#07070d);border-top:1px solid rgba(255,255,255,.04);position:relative;overflow:hidden;padding:128px 24px}
+html[data-theme="light"] .pricing-section{background:linear-gradient(180deg,var(--bg),#eef2f7);border-top-color:rgba(15,23,42,.06)}
+.pricing-section::before{content:'';position:absolute;bottom:-240px;left:50%;transform:translateX(-50%);width:900px;height:480px;background:radial-gradient(circle,rgba(139,126,255,.1),transparent 65%);pointer-events:none;filter:blur(30px)}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px;padding-top:20px;align-items:center}
+
+/* ── base card ── */
+.pricing-card{background:radial-gradient(ellipse 200% 80% at 95% 0%,rgba(139,126,255,.06),transparent 55%),linear-gradient(160deg,rgba(22,22,38,.52) 0%,rgba(10,10,20,.58) 100%);border:1px solid rgba(255,255,255,.11);border-radius:22px;padding:36px 32px 32px;display:flex;flex-direction:column;position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1),border-color .3s,box-shadow .35s;backdrop-filter:blur(32px) saturate(200%);-webkit-backdrop-filter:blur(32px) saturate(200%);overflow:hidden;will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 8px 32px -12px rgba(0,0,0,.5)}
+html[data-theme="light"] .pricing-card{background:radial-gradient(ellipse 200% 80% at 95% 0%,rgba(139,126,255,.06),transparent 55%),linear-gradient(160deg,rgba(255,255,255,.78),rgba(248,250,253,.72));border-color:rgba(15,23,42,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 8px 32px -12px rgba(15,23,42,.1)}
+.pricing-card:hover{transform:translateY(-5px);border-color:rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 28px 56px -20px rgba(0,0,0,.7),0 0 50px -22px rgba(139,126,255,.28)}
+
+/* ── Pro — crystal centrepiece ── */
+.pricing-card.recommended{background:radial-gradient(ellipse 320px 180px at 50% 0%,rgba(139,126,255,.22),transparent 62%),radial-gradient(ellipse 180px 140px at 88% 94%,rgba(34,211,238,.1),transparent 65%),linear-gradient(155deg,rgba(28,14,60,.62) 0%,rgba(14,8,34,.68) 60%,rgba(8,4,20,.72) 100%);border:1px solid rgba(139,126,255,.48);backdrop-filter:blur(40px) saturate(220%);-webkit-backdrop-filter:blur(40px) saturate(220%);box-shadow:0 0 0 1px rgba(139,126,255,.14),0 0 90px -20px rgba(139,126,255,.55),0 32px 64px -16px rgba(0,0,0,.88),inset 0 1px 0 rgba(210,190,255,.22),inset 0 -1px 0 rgba(139,126,255,.1);transform:translateY(-10px) scale(1.015);z-index:2;padding-top:44px}
+.pricing-card.recommended::after{display:none}
+.pricing-card.recommended:hover{transform:translateY(-16px) scale(1.022);border-color:rgba(139,126,255,.65);box-shadow:0 0 0 1px rgba(139,126,255,.24),0 0 130px -15px rgba(139,126,255,.68),0 48px 80px -16px rgba(0,0,0,.92),inset 0 1px 0 rgba(210,190,255,.28),inset 0 -1px 0 rgba(139,126,255,.12)}
+html[data-theme="light"] .pricing-card.recommended{background:radial-gradient(ellipse 300px 160px at 50% 0%,rgba(139,126,255,.12),transparent 65%),linear-gradient(155deg,rgba(255,255,255,.78),rgba(248,245,255,.72));box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 0 60px -20px rgba(139,126,255,.35),0 8px 32px -12px rgba(139,126,255,.12)}
+html[data-theme="light"] .pricing-card.recommended .pricing-name{color:#6d5bd0}
+html[data-theme="light"] .pricing-card.recommended .pricing-features li{color:#1e293b}
+html[data-theme="light"] .pricing-card.recommended .trial-badge{color:#5b4eb8;background:rgba(139,126,255,.09);border-color:rgba(139,126,255,.22)}
+html[data-theme="light"] .rec-badge{color:#5b4eb8;background:linear-gradient(90deg,rgba(139,126,255,.12),rgba(34,211,238,.08));border-color:rgba(139,126,255,.2)}
+
+/* ── Team — teal enterprise ── */
+.pricing-card.pc-team{background:radial-gradient(ellipse 200% 80% at 92% 0%,rgba(34,211,238,.08),transparent 52%),linear-gradient(160deg,rgba(7,16,26,.52) 0%,rgba(5,12,20,.58) 100%);border:1px solid rgba(34,211,238,.2);box-shadow:inset 0 1px 0 rgba(103,232,249,.12),0 0 80px -32px rgba(34,211,238,.22)}
+.pricing-card.pc-team:hover{border-color:rgba(34,211,238,.34);box-shadow:inset 0 1px 0 rgba(103,232,249,.18),0 28px 56px -20px rgba(0,0,0,.7),0 0 70px -18px rgba(34,211,238,.35)}
+html[data-theme="light"] .pricing-card.pc-team{background:radial-gradient(ellipse 200% 80% at 92% 0%,rgba(34,211,238,.06),transparent 52%),linear-gradient(160deg,rgba(255,255,255,.78),rgba(247,251,254,.72));border-color:rgba(34,211,238,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 8px 32px -12px rgba(34,211,238,.1)}
+
+/* ── badges ── */
+.rec-badge{position:absolute;top:0;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,rgba(139,126,255,.18),rgba(34,211,238,.14));color:#c4b5fd;font-size:9px;font-weight:700;letter-spacing:.2em;padding:6px 28px;border-radius:0 0 14px 14px;white-space:nowrap;text-transform:uppercase;font-family:'Geist Mono',monospace;z-index:3;border:1px solid rgba(139,126,255,.28);border-top:none;backdrop-filter:blur(8px)}
+.trial-badge{display:inline-block;background:rgba(34,211,238,.07);color:#67e8f9;border:1px solid rgba(34,211,238,.18);border-radius:100px;padding:3px 12px;font-size:10px;font-weight:600;margin-bottom:18px;letter-spacing:.1em;text-transform:uppercase;font-family:'Geist Mono',monospace}
+.pricing-card.recommended .trial-badge{background:rgba(139,126,255,.1);color:#c4b5fd;border-color:rgba(139,126,255,.25)}
+
+/* ── typography ── */
+.pricing-subtitle{font-size:15.5px;color:rgba(255,255,255,.55);text-align:center;margin-top:-44px;margin-bottom:56px;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .pricing-subtitle{color:#64748b}
+.pricing-name{font-size:11px;font-weight:700;letter-spacing:.22em;color:rgba(255,255,255,.36);text-transform:uppercase;margin-bottom:4px;font-family:'Geist Mono',monospace}
+html[data-theme="light"] .pricing-name{color:#94a3b8}
+.pricing-card.recommended .pricing-name{color:rgba(196,181,253,.55);letter-spacing:.24em}
+.pricing-card.pc-team .pricing-name{color:rgba(103,232,249,.48)}
+.pricing-desc{font-size:12.5px;color:rgba(255,255,255,.46);line-height:1.55;margin-bottom:18px;font-family:'Geist',sans-serif;min-height:36px}
+html[data-theme="light"] .pricing-desc{color:#64748b}
+.pricing-price{font-size:58px;font-weight:700;letter-spacing:-.05em;line-height:1;margin-bottom:6px;font-variant-numeric:tabular-nums;font-family:'Geist',sans-serif;background:linear-gradient(160deg,#fff 20%,rgba(255,255,255,.65));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+html[data-theme="light"] .pricing-price{background:linear-gradient(160deg,#0f172a,#374151);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.pricing-card.recommended .pricing-price{background:linear-gradient(145deg,#fff 0%,#e0d9ff 35%,#a78bfa 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+html[data-theme="light"] .pricing-card.recommended .pricing-price{background:linear-gradient(145deg,#0f172a,#4c1d95,#7c3aed);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.pricing-card.pc-team .pricing-price{background:linear-gradient(145deg,#fff 0%,#cff4fb 40%,#22d3ee 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+html[data-theme="light"] .pricing-card.pc-team .pricing-price{background:linear-gradient(145deg,#0f172a,#0e7490);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.price-mo{font-size:15px;font-weight:400;letter-spacing:0;color:rgba(255,255,255,.35);-webkit-text-fill-color:rgba(255,255,255,.35);font-family:'Geist',sans-serif}
+html[data-theme="light"] .price-mo{color:#94a3b8;-webkit-text-fill-color:#94a3b8}
+.pricing-period{font-size:12px;color:rgba(255,255,255,.36);margin-bottom:28px;font-weight:400;font-family:'Geist',sans-serif;letter-spacing:.01em}
+html[data-theme="light"] .pricing-period{color:#94a3b8}
 .pricing-features{list-style:none;display:flex;flex-direction:column;gap:11px;flex:1;margin-bottom:32px}
-.pricing-features li{font-size:13px;color:var(--lp-text-soft);display:flex;align-items:center;gap:10px;font-weight:400;font-family:'Inter',-apple-system,sans-serif}
-.pricing-features li::before{content:'';width:15px;height:15px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238B7EFF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");background-size:contain;background-repeat:no-repeat;background-position:center;flex-shrink:0;opacity:.65}
-.pricing-card.recommended .pricing-name{color:rgba(200,190,255,.45)}
-.pricing-card.recommended .pricing-price,.pricing-card.recommended .pricing-price .price-mo{color:#f0eeff}
-.pricing-card.recommended .price-mo{color:rgba(200,190,255,.5)}
-.pricing-card.recommended .pricing-period{color:rgba(200,190,255,.4)}
-.pricing-card.recommended .pricing-features li{color:rgba(232,228,255,.7)}
-/* ── pricing CTAs ────────────────────────────────────────────── */
-.pricing-cta{display:block;text-align:center;padding:13px 20px;border-radius:10px;font-size:13.5px;font-weight:600;transition:all .18s;cursor:pointer;text-decoration:none;letter-spacing:.01em;font-family:'Inter',-apple-system,sans-serif}
-.pricing-cta.accent{background:var(--accent);color:#ffffff!important;box-shadow:0 4px 24px -6px rgba(139,126,255,.45)}
-.pricing-cta.accent:hover{background:#7d6ff5;color:#fff!important;transform:translateY(-1px);box-shadow:0 10px 32px -4px rgba(139,126,255,.6)}
-.pricing-cta.outline{background:rgba(255,255,255,.055);color:var(--text);border:1px solid rgba(255,255,255,.12)}
-.pricing-cta.outline:hover{border-color:rgba(139,126,255,.45);color:var(--accent);background:rgba(139,126,255,.06);transform:translateY(-1px)}
-/* ── light theme: recommended card ──────────────────────────── */
-html[data-theme="light"] .pricing-card.recommended{background:linear-gradient(160deg,rgba(139,126,255,.06) 0%,var(--surface) 55%);border-color:rgba(139,126,255,.35);box-shadow:0 0 0 1px rgba(139,126,255,.15),0 20px 60px -30px rgba(139,126,255,.12)}
-html[data-theme="light"] .pricing-card.recommended:hover{border-color:rgba(139,126,255,.6);transform:scale(1.02) translateY(-6px);box-shadow:0 0 0 1px rgba(139,126,255,.3),0 40px 80px -20px rgba(139,126,255,.25)}
-html[data-theme="light"] .pricing-card.recommended .pricing-name{color:var(--accent)}
-html[data-theme="light"] .pricing-card.recommended .pricing-price{color:var(--text)}
-html[data-theme="light"] .pricing-card.recommended .price-mo{color:var(--text-muted)}
-html[data-theme="light"] .pricing-card.recommended .pricing-period{color:var(--text-muted)}
-html[data-theme="light"] .pricing-card.recommended .pricing-features li{color:var(--text-dim)}
-html[data-theme="light"] .pricing-cta.outline{background:rgba(0,0,0,.04);color:var(--text);border:1px solid rgba(0,0,0,.12)}
-html[data-theme="light"] .pricing-cta.outline:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
-@media(prefers-color-scheme:light){html:not([data-theme="dark"]) .pricing-card.recommended{background:linear-gradient(160deg,rgba(139,126,255,.06) 0%,var(--surface) 55%);border-color:rgba(139,126,255,.35);box-shadow:0 0 0 1px rgba(139,126,255,.15)}html:not([data-theme="dark"]) .pricing-card.recommended .pricing-name{color:var(--accent)}html:not([data-theme="dark"]) .pricing-card.recommended .pricing-price{color:var(--text)}html:not([data-theme="dark"]) .pricing-card.recommended .price-mo{color:var(--text-muted)}html:not([data-theme="dark"]) .pricing-card.recommended .pricing-period{color:var(--text-muted)}html:not([data-theme="dark"]) .pricing-card.recommended .pricing-features li{color:var(--text-dim)}html:not([data-theme="dark"]) .pricing-cta.outline{background:rgba(0,0,0,.04);color:var(--text);border:1px solid rgba(0,0,0,.12)}}
-.pricing-note{text-align:center;margin-top:36px;font-size:12px;color:var(--lp-text-faint);font-weight:400;font-family:'Inter',-apple-system,sans-serif}
-/* ── cta section ─────────────────────────────────────────────── */
-.cta-section{background:var(--bg);border-top:1px solid rgba(139,126,255,.08);border-bottom:1px solid rgba(139,126,255,.08);text-align:center;position:relative;overflow:hidden;padding:120px 24px}
-.cta-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 58% 78% at 50% 50%,rgba(139,126,255,.055),transparent 68%);pointer-events:none}
-.cta-section::after{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(139,126,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(139,126,255,.03) 1px,transparent 1px);background-size:48px 48px;-webkit-mask-image:radial-gradient(ellipse 75% 75% at 50% 50%,#000,transparent);mask-image:radial-gradient(ellipse 75% 75% at 50% 50%,#000,transparent);pointer-events:none}
-.cta-inner{max-width:520px;margin:0 auto;position:relative;z-index:1}
-.cta-section h2{margin-bottom:18px;font-size:clamp(28px,4.5vw,56px);letter-spacing:-3px}
-.cta-section p{color:var(--lp-text-muted2);margin-bottom:44px;font-size:16px;font-weight:400;line-height:1.68;font-family:'Inter',-apple-system,sans-serif}
-.cta-btn{padding:15px 36px;font-size:15.5px;font-weight:700;letter-spacing:-.02em}
-/* ── footer ──────────────────────────────────────────────────── */
-footer{padding:40px 32px;border-top:1px solid var(--border)}
-.footer-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-muted);gap:16px;flex-wrap:wrap}
-.footer-nav{display:flex;gap:28px;flex-wrap:wrap}
-.footer-nav a{color:var(--lp-text-faint);font-size:13px;font-weight:500;letter-spacing:.01em;transition:color .15s;font-family:'Inter',-apple-system,sans-serif}.footer-nav a:hover{color:var(--text)}
-.footer-copy{font-size:12px;color:var(--lp-text-faintest);font-weight:400;font-family:'Inter',-apple-system,sans-serif}
-.text-muted{color:var(--text-muted)}
+.pricing-features li{font-size:13.5px;color:rgba(255,255,255,.68);display:flex;align-items:center;gap:10px;font-weight:400;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .pricing-features li{color:#475569}
+.pricing-features li::before{content:'';width:16px;height:16px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238B7EFF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");background-size:contain;background-repeat:no-repeat;background-position:center;flex-shrink:0;opacity:.75}
+.pricing-card.recommended .pricing-features li{color:rgba(255,255,255,.8)}
+.pricing-card.recommended .pricing-features li::before{opacity:1}
+.pricing-card.pc-team .pricing-features li::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322d3ee' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");opacity:.9}
+
+/* ── CTAs ── */
+.pricing-cta{display:block;text-align:center;padding:13px 22px;border-radius:11px;font-size:13.5px;font-weight:600;transition:all .24s cubic-bezier(.2,.8,.2,1);cursor:pointer;text-decoration:none;letter-spacing:0;font-family:'Geist',sans-serif;position:relative;overflow:hidden}
+.pricing-cta.accent{background:linear-gradient(135deg,#9d8eff,#7a6cf0);color:#fff!important;-webkit-text-fill-color:#fff!important;-webkit-background-clip:unset!important;background-clip:unset!important;box-shadow:0 6px 28px -6px rgba(139,126,255,.55),inset 0 1px 0 rgba(255,255,255,.18)}
+.pricing-cta.accent::after{display:none}
+.pricing-cta.accent:hover{transform:translateY(-2px);box-shadow:0 14px 40px -6px rgba(139,126,255,.78),inset 0 1px 0 rgba(255,255,255,.25);background:linear-gradient(135deg,#b0a4ff,#8a7cf6)}
+.pricing-cta.outline{background:rgba(255,255,255,.04);color:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.11);backdrop-filter:blur(8px)}
+.pricing-cta.outline:hover{border-color:rgba(139,126,255,.42);color:var(--lp-violet-2);background:rgba(139,126,255,.07);transform:translateY(-2px)}
+.pricing-card.pc-team .pricing-cta.outline{background:rgba(34,211,238,.04);color:rgba(103,232,249,.82);border-color:rgba(34,211,238,.17)}
+.pricing-card.pc-team .pricing-cta.outline:hover{background:rgba(34,211,238,.09);border-color:rgba(34,211,238,.36);color:#67e8f9;transform:translateY(-2px)}
+html[data-theme="light"] .pricing-cta.outline{background:rgba(15,23,42,.03);color:#374151;border:1px solid rgba(15,23,42,.11)}
+html[data-theme="light"] .pricing-cta.outline:hover{border-color:var(--lp-violet);color:var(--lp-violet);background:rgba(139,126,255,.06)}
+html[data-theme="light"] .pricing-card.pc-team .pricing-cta.outline{color:#0e7490;border-color:rgba(34,211,238,.22)}
+html[data-theme="light"] .pricing-card.pc-team .pricing-cta.outline:hover{border-color:rgba(34,211,238,.45);color:#0e7490;background:rgba(34,211,238,.06)}
+.pricing-note{text-align:center;margin-top:48px;font-size:12.5px;color:rgba(255,255,255,.36);font-weight:400;font-family:'Geist',sans-serif}
+html[data-theme="light"] .pricing-note{color:#94a3b8}
+.pricing-billing-note{margin-top:8px;opacity:.85}
+
+/* currency toggle pills */
+.currency-toggle{display:inline-flex;gap:0;margin:18px auto 4px;border:1px solid rgba(139,126,255,.22);border-radius:999px;padding:3px;background:rgba(139,126,255,.04);align-self:center}
+.section-inner > .currency-toggle{display:flex;width:max-content;margin-left:auto;margin-right:auto}
+.currency-toggle .cur-pill{background:transparent;border:none;color:rgba(255,255,255,.55);font-size:12px;font-weight:600;letter-spacing:.02em;padding:6px 14px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s;font-family:'Geist',sans-serif}
+.currency-toggle .cur-pill:hover{color:#fff}
+.currency-toggle .cur-pill[aria-selected="true"]{background:rgba(139,126,255,.18);color:#fff;box-shadow:0 1px 6px -2px rgba(139,126,255,.45)}
+html[data-theme="light"] .currency-toggle{background:rgba(139,126,255,.06);border-color:rgba(139,126,255,.25)}
+html[data-theme="light"] .currency-toggle .cur-pill{color:#64748b}
+html[data-theme="light"] .currency-toggle .cur-pill:hover{color:#0f172a}
+html[data-theme="light"] .currency-toggle .cur-pill[aria-selected="true"]{background:rgba(139,126,255,.16);color:#0f172a}
+
+/* currency visibility rules live in SHARED_CSS so docs/welcome share them */
+
 /* ── faq ─────────────────────────────────────────────────────── */
-.faq-section{background:var(--bg);border-top:1px solid var(--border);padding:120px 24px}
-.faq-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:20px;overflow:hidden}
-.faq-item{background:var(--surface);border:none;padding:32px;transition:background .2s}
-.faq-item:hover{background:rgba(139,126,255,.018)}
-.faq-q{font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px;line-height:1.5;letter-spacing:-.015em;font-family:'Inter',-apple-system,sans-serif}
-.faq-a{font-size:13px;color:var(--lp-text-muted2);line-height:1.82;font-weight:400;font-family:'Inter',-apple-system,sans-serif}
+.faq-section{background:var(--bg);border-top:1px solid rgba(255,255,255,.04);padding:128px 24px}
+html[data-theme="light"] .faq-section{border-top-color:rgba(15,23,42,.06)}
+.faq-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:linear-gradient(135deg,rgba(139,126,255,.14),rgba(34,211,238,.06));border:1px solid rgba(139,126,255,.18);border-radius:24px;overflow:hidden;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 80px -30px rgba(139,126,255,.2)}
+.faq-item{background:linear-gradient(145deg,rgba(139,126,255,.06) 0%,rgba(22,22,38,.36) 45%,rgba(8,8,18,.42) 100%);border:none;padding:36px;transition:background .3s;position:relative;overflow:hidden;backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+html[data-theme="light"] .faq-item{background:linear-gradient(145deg,rgba(139,126,255,.04) 0%,rgba(255,255,255,.7) 45%,rgba(248,250,253,.72) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.faq-q{font-size:15px;font-weight:600;color:#fff;margin-bottom:14px;line-height:1.45;letter-spacing:-.015em;font-family:'Geist',sans-serif}
+html[data-theme="light"] .faq-q{color:#0f172a}
+.faq-a{font-size:13.5px;color:rgba(255,255,255,.56);line-height:1.75;font-weight:400;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .faq-a{color:#64748b}
+.faq-docs-link{text-align:center;margin-top:48px;font-size:14px;color:rgba(255,255,255,.5);font-family:'Geist',sans-serif}
+html[data-theme="light"] .faq-docs-link{color:#64748b}
+.faq-docs-link a{color:var(--lp-violet-2);font-weight:600;transition:opacity .22s}
+.faq-docs-link a:hover{opacity:.75}
+
+/* ── cta ─────────────────────────────────────────────────────── */
+.cta-section{background:var(--bg);border-top:1px solid rgba(139,126,255,.1);border-bottom:1px solid rgba(139,126,255,.1);text-align:center;position:relative;overflow:hidden;padding:128px 24px}
+.cta-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 50% 50%,rgba(139,126,255,.1),transparent 65%);pointer-events:none}
+.cta-section::after{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(139,126,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(139,126,255,.04) 1px,transparent 1px);background-size:48px 48px;-webkit-mask-image:radial-gradient(ellipse 75% 75% at 50% 50%,#000,transparent);mask-image:radial-gradient(ellipse 75% 75% at 50% 50%,#000,transparent);pointer-events:none;animation:gridPan 22s linear infinite}
+.cta-inner{max-width:560px;margin:0 auto;position:relative;z-index:1}
+.cta-section h2{margin-bottom:20px;font-size:clamp(32px,5vw,64px);letter-spacing:-.05em;background:linear-gradient(180deg,#fff,#c4b5fd);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+html[data-theme="light"] .cta-section h2{background:linear-gradient(180deg,#0f172a,#5b4eb8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.cta-section p{color:rgba(255,255,255,.58);margin-bottom:46px;font-size:16.5px;font-weight:400;line-height:1.62;font-family:'Geist',sans-serif;letter-spacing:-.005em}
+html[data-theme="light"] .cta-section p{color:#475569}
+.cta-btn{padding:16px 38px;font-size:15.5px;font-weight:600;letter-spacing:0;border-radius:12px}
+
+/* ── footer ──────────────────────────────────────────────────── */
+footer{padding:48px 32px;border-top:1px solid rgba(255,255,255,.04);background:var(--bg)}
+html[data-theme="light"] footer{border-top-color:rgba(15,23,42,.06)}
+.footer-inner{max-width:1240px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:rgba(255,255,255,.45);gap:18px;flex-wrap:wrap}
+.footer-copy{font-size:12.5px;color:rgba(255,255,255,.35);font-weight:400;font-family:'Geist',sans-serif}
+html[data-theme="light"] .footer-copy{color:#94a3b8}
+.footer-nav{gap:0!important}
+.footer-nav a{padding:0 14px;font-size:13px;font-weight:500;transition:color .18s}
+.footer-nav a+a{border-left:1px solid rgba(255,255,255,.1)}
+html[data-theme="light"] .footer-nav a+a{border-left-color:rgba(15,23,42,.12)}
+.footer-docs-link{color:rgba(255,255,255,.5)!important;font-weight:500;transition:color .18s}
+.footer-docs-link:hover{color:var(--lp-violet-2)!important;opacity:1}
+html[data-theme="light"] .footer-docs-link{color:rgba(15,23,42,.45)!important}
+html[data-theme="light"] .footer-docs-link:hover{color:var(--lp-violet)!important}
+.footer-simple{justify-content:space-between;align-items:center}
+.text-muted{color:rgba(255,255,255,.45)}
+
+/* ── misc ────────────────────────────────────────────────────── */
+.sdk-coming-soon{background:rgba(251,191,36,.08)!important;color:#fbbf24!important;border:1px solid rgba(251,191,36,.22)!important}
+.sdk-teaser-link-disabled{display:inline-block;font-size:13.5px;font-weight:500;color:rgba(255,255,255,.36);letter-spacing:-.005em;opacity:.55;cursor:default;font-family:'Geist',sans-serif;font-style:italic}
+.hero-cursor-glow{position:absolute;width:420px;height:420px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);z-index:1;background:radial-gradient(circle,rgba(139,126,255,.1),transparent 65%);opacity:0;transition:opacity .4s ease,left .1s ease-out,top .1s ease-out;mix-blend-mode:plus-lighter}
+.term-window::after{content:'';position:absolute;left:0;right:0;height:80px;background:linear-gradient(180deg,transparent,rgba(139,126,255,.08),transparent);pointer-events:none;transform:translateY(-100%);opacity:0;z-index:1}
+.term-window:hover::after{animation:scanLine 2.4s ease-in-out}
+
 /* ── responsive ──────────────────────────────────────────────── */
-@media(max-width:640px){.footer-inner{flex-direction:column;text-align:center}.footer-nav{justify-content:center}}
 @media(max-width:1024px){
   .features-grid{grid-template-columns:repeat(2,1fr)}
   .pipeline-steps{grid-template-columns:repeat(3,1fr)}
-  .pipeline-steps::before{left:calc(16.66% + 24px);right:calc(16.66% + 24px)}
+  .pipeline-steps::before{left:calc(16.66% + 32px);right:calc(16.66% + 32px)}
+  .pricing-grid{grid-template-columns:1fr;max-width:440px;margin-left:auto;margin-right:auto}
+  .pricing-card.recommended{transform:none;scale:none;padding-top:44px}
+  .pricing-card.recommended:hover{transform:translateY(-5px);scale:none}
 }
 @media(max-width:768px){
   .nav-hamburger{display:flex}
-  .nav-links{position:absolute;top:calc(100% + 1px);left:0;right:0;flex-direction:column;align-items:stretch;background:var(--lp-nav-mobile);border-bottom:1px solid var(--border);padding:8px 0 16px;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);display:none;gap:0;z-index:200}
+  .nav-links{position:absolute;top:calc(100% + 1px);left:0;right:0;flex-direction:column;align-items:stretch;background:rgba(6,6,10,.97);border-bottom:1px solid rgba(255,255,255,.06);padding:8px 0 16px;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);display:none;gap:0;z-index:200}
+  html[data-theme="light"] .nav-links{background:rgba(245,247,250,.98);border-bottom-color:rgba(15,23,42,.08)}
   .nav-links.open{display:flex}
-  .nav-links a:not(.btn){padding:13px 24px;font-size:14.5px;width:100%;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,.04)}
-  .nav-links .nav-cta{margin:8px 16px 0;width:calc(100% - 32px)!important;text-align:center;display:block;padding:11px 16px!important;font-size:14px!important;box-sizing:border-box}
+  .nav-links a:not(.btn){padding:14px 24px;font-size:14.5px;width:100%;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,.04)}
+  .nav-links .nav-cta{margin:8px 16px 0;width:calc(100% - 32px)!important;text-align:center;display:block;padding:12px 16px!important;font-size:14px!important;box-sizing:border-box}
   .nav-inner{position:relative;flex-wrap:nowrap}
-  .hero{padding:108px 20px 80px}
-  section{padding:88px 20px}
-  h2{margin-bottom:48px}
-  .pipeline-section{padding:88px 20px 104px}
-  .sdk-teaser-grid{grid-template-columns:1fr;max-width:100%;background:transparent;border:none;gap:8px}
-  .sdk-teaser-card{border:1px solid var(--lp-card-border);border-radius:16px}
+  .hero{padding:112px 20px 84px}
+  section{padding:92px 20px}
+  h2{margin-bottom:52px}
+  .pipeline-section{padding:92px 20px 108px}
+  .sdk-teaser-grid{grid-template-columns:1fr;max-width:100%;background:transparent;border:none;gap:10px}
+  .sdk-teaser-card{border:1px solid rgba(255,255,255,.08);border-radius:18px}
+  html[data-theme="light"] .sdk-teaser-card{border-color:rgba(15,23,42,.08)}
   .pipeline-steps{grid-template-columns:repeat(2,1fr)}
-  .pipeline-steps::before{display:none}
-  .faq-grid{grid-template-columns:1fr;background:transparent;border:none;gap:8px}
-  .faq-item{border:1px solid var(--lp-card-border);border-radius:16px}
-  .features-grid{background:transparent;border:none;gap:8px}
-  .feature-card{border:1px solid var(--lp-card-border);border-radius:16px}
+  .pipeline-steps::before,.pipeline-steps::after{display:none}
+  .faq-grid{grid-template-columns:1fr;background:transparent;border:none;gap:10px}
+  .faq-item{border:1px solid rgba(255,255,255,.08);border-radius:18px}
+  html[data-theme="light"] .faq-item{border-color:rgba(15,23,42,.08)}
+  .features-grid{background:transparent;border:none;gap:10px}
+  .feature-card{border:1px solid rgba(255,255,255,.08);border-radius:18px}
+  html[data-theme="light"] .feature-card{border-color:rgba(15,23,42,.08)}
 }
 @media(max-width:640px){
-  .hero{padding:84px 16px 64px}
+  .hero{padding:88px 16px 68px}
   .hero-inner{padding:0}
   .hero-stats{flex-wrap:wrap;padding:14px 16px;gap:2px}
-  .hero-stat{padding:10px 18px;min-width:calc(50% - 32px)}
+  .hero-stat{padding:12px 18px;min-width:calc(50% - 32px)}
   .hero-stat-div{display:none}
-  .hero-stat-val{font-size:22px}
+  .hero-stat-val{font-size:26px}
   .hero-actions{flex-direction:column;align-items:stretch;padding:0 8px}
   .hero-actions .btn{text-align:center;width:100%}
   .features-grid{grid-template-columns:1fr}
   .pipeline-steps{grid-template-columns:1fr}
   .term-body{padding:18px 20px 20px;font-size:12px}
-  section{padding:72px 16px}
-  .pipeline-section,.sdk-section{padding:72px 16px 88px}
-  .pricing-section,.faq-section,.cta-section{padding:72px 16px}
+  section{padding:76px 16px}
+  .pipeline-section,.sdk-section{padding:76px 16px 92px}
+  .pricing-section,.faq-section,.cta-section{padding:76px 16px}
+  .footer-inner{flex-direction:column;text-align:center}
 }
 @media(max-width:400px){
-  .hero-title{font-size:36px;letter-spacing:-2.5px}
+  .hero-title{font-size:44px;letter-spacing:-.04em}
   .hero-sub{font-size:14.5px}
-  .hero-btn{font-size:14px;padding:12px 24px}
-  .pricing-price{font-size:44px}
+  .hero-btn{font-size:14px;padding:13px 24px}
+  .pricing-price{font-size:48px}
   .nav-inner{padding:11px 16px}
 }
-/* ── abstract animations & techy effects ────────────────── */
-@keyframes wordIn{0%{opacity:0;transform:translateY(22px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes orbDrift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(56px,-44px) scale(1.06)}66%{transform:translate(-36px,28px) scale(.96)}}
-@keyframes orbDrift2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-48px,36px) scale(1.04)}70%{transform:translate(32px,-22px) scale(.97)}}
-@keyframes scanLine{0%{transform:translateY(-100%);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(200%);opacity:0}}
-/* canvas backdrop */
-.hero-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.55}
-/* hero word stagger */
-.hero-word{display:inline-block;opacity:0;animation:wordIn .72s cubic-bezier(.16,1,.3,1) forwards}
-.hero-word.w1{animation-delay:.06s}
-.hero-word.w2{animation-delay:.28s;color:var(--text)}
-.hero-word.w3{animation-delay:.50s;color:var(--text)}
-/* funny tagline */
-.hero-funny{font-size:clamp(13px,1.6vw,15px);color:var(--lp-text-faint);margin:0 0 28px;font-style:italic;font-weight:400;letter-spacing:.01em;line-height:1.5;font-family:'Inter',-apple-system,sans-serif}
-/* floating abstract orbs */
-.hero-orb-extra{position:absolute;border-radius:50%;pointer-events:none;filter:blur(80px);z-index:0}
-.hero-orb1{width:520px;height:520px;top:-80px;left:3%;background:radial-gradient(circle,rgba(139,126,255,.1),transparent 68%);animation:orbDrift 30s ease-in-out infinite}
-.hero-orb2{width:400px;height:400px;bottom:-60px;right:3%;background:radial-gradient(circle,rgba(34,211,238,.07),transparent 68%);animation:orbDrift2 22s ease-in-out infinite}
-/* cursor glow (injected by JS) */
-.hero-cursor-glow{position:absolute;width:360px;height:360px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);z-index:0;background:radial-gradient(circle,rgba(139,126,255,.065),transparent 68%);opacity:0;transition:opacity .35s ease,left .08s ease-out,top .08s ease-out}
-/* SDK coming-soon badge */
-.sdk-coming-soon{background:rgba(251,191,36,.07)!important;color:#fbbf24!important;border:1px solid rgba(251,191,36,.22)!important}
-/* disabled link */
-.sdk-teaser-link-disabled{display:inline-block;font-size:13px;font-weight:500;color:var(--lp-text-faint);letter-spacing:.01em;opacity:.4;cursor:default;font-family:'Inter',-apple-system,sans-serif;font-style:italic}
-/* FAQ docs link */
-.faq-docs-link{text-align:center;margin-top:44px;font-size:14px;color:var(--lp-text-muted2);font-family:'Inter',-apple-system,sans-serif}
-.faq-docs-link a{color:var(--accent);font-weight:600;transition:opacity .18s}
-.faq-docs-link a:hover{opacity:.7}
-/* footer simple layout */
-.footer-simple{justify-content:space-between;align-items:center}
-.footer-docs-link{color:var(--accent)!important;font-weight:500;transition:opacity .18s}
-.footer-docs-link:hover{opacity:.72}
-/* enhanced card hovers with lift + glow */
-.sdk-teaser-card{transition:background .22s,transform .38s cubic-bezier(.2,.8,.2,1),box-shadow .38s cubic-bezier(.2,.8,.2,1);will-change:transform}
-.sdk-teaser-card:hover{background:rgba(139,126,255,.026);box-shadow:0 24px 68px -20px rgba(139,126,255,.32),0 8px 24px -8px rgba(0,0,0,.55)}
-.feature-card{transition:background .22s,transform .32s cubic-bezier(.2,.8,.2,1),box-shadow .32s;will-change:transform}
-.feature-card:hover{background:rgba(139,126,255,.02);transform:translateY(-3px);box-shadow:0 16px 48px -18px rgba(139,126,255,.22),0 4px 16px -6px rgba(0,0,0,.4)}
-.pricing-card{will-change:transform}
-.pricing-card:hover{box-shadow:0 36px 80px -28px rgba(0,0,0,.8),0 0 56px -28px rgba(139,126,255,.24)}
-/* scan-line shimmer on term-window hover */
-.term-window{position:relative;overflow:hidden}
-.term-window::after{content:'';position:absolute;left:0;right:0;height:60px;background:linear-gradient(180deg,transparent,rgba(139,126,255,.04),transparent);pointer-events:none;transform:translateY(-100%);opacity:0}
-.term-window:hover::after{animation:scanLine 2.2s ease-in-out}
-/* light theme coming soon */
-html[data-theme="light"] .sdk-coming-soon{background:rgba(245,158,11,.08)!important;color:#d97706!important;border:1px solid rgba(245,158,11,.25)!important}
+
+/* ── reduced motion ──────────────────────────────────────────── */
+@media(prefers-reduced-motion:reduce){
+  .accent,.hero-glow,.hero-orb1,.hero-orb2,.hero-grid,.cta-section::after,.pricing-card.recommended::after,.sdk-icon::before,.badge::before,.btn-primary.cta-btn::before,.pricing-cta.accent::after,.hero-lang-strip,.meteor.run{animation:none!important}
+  .feature-card:hover,.sdk-teaser-card:hover,.pricing-card:hover{transform:none!important}
+  .pricing-card.recommended{transform:none!important}
+}
 """
 
-private fun HTML.dashboardApp() {
+internal fun HTML.dashboardApp() {
     head {
         title { +"Syncling — Dashboard" }
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
@@ -3690,7 +4545,7 @@ function maybeShowConversionToast(run){
         var sec=Math.round((run.finishedAt-run.startedAt)/1000);
         durTxt='This run took <strong>'+(sec<60?sec+'s':Math.floor(sec/60)+'m '+(sec%60)+'s')+'</strong> on Free. ';
       }
-      showConvBanner(durTxt+'Solo translates every locale in parallel — typically <strong>3–5× faster</strong>.');
+      showConvBanner(durTxt+'PRO translates every locale in parallel — typically <strong>3–5× faster</strong>.');
     });
   }catch(_){}
 }
@@ -3743,4 +4598,4 @@ internal const val ONBOARDING_CSS = """
 @media (prefers-reduced-motion:reduce){.ob-spot,.ob-pop{transition:none}}
 """
 
-internal val ONBOARDING_JS = """(function(){if(window.Onboarding)return;var BASE='/api/onboarding',state=null,page='dashboard',steps=[],idx=0,prevFocus=null;function authHeaders(){var t=localStorage.getItem('syncling_token');return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'}}function fetchState(){return fetch(BASE+'/state',{headers:authHeaders()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}function postSkip(){return fetch(BASE+'/skip',{method:'POST',headers:authHeaders()}).catch(function(){})}function postResume(){return fetch(BASE+'/resume',{method:'POST',headers:authHeaders()}).catch(function(){})}function host(){var h=document.getElementById('ob-host');if(!h){h=document.createElement('div');h.id='ob-host';document.body.appendChild(h)}return h}function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML}function planLabel(p){return p==='SOLO'?'Solo':p==='TEAM'?'Team':p==='ENTERPRISE'?'Enterprise':'Free'}function buildSteps(){var planChip='<span class="ob-chip">Plan: <strong style="margin-left:4px">'+esc(planLabel(state.plan))+'</strong></span>',trialChip=state.inTrial?'<span class="ob-chip warn">Trial</span>':'',meta=planChip+trialChip;if(page==='dashboard'){return[{eyebrow:'Welcome',title:'Welcome to Syncling',body:'You\'re all set on the <strong>'+esc(planLabel(state.plan))+'</strong> plan. In the next two steps we\'ll connect your GitHub repo and watch your first translation run.',meta:meta,anchor:null,primary:{label:'Get started',action:'next'},secondary:{label:'Skip',action:'skip'}},{eyebrow:'Step 1 of 2',title:'Connect your first repository',body:'Click <strong>+ New project</strong> to point Syncling at your GitHub repo. We\'ll auto-install the webhook so every push triggers translation.',anchor:'#qa-new-project',primary:{label:'Open projects',action:'navigate',href:'/projects?ob=connect'},secondary:{label:'Skip',action:'skip'}}]}if(page==='projects'){return[{eyebrow:'Step 2 of 2',title:'Create your project',body:'Fill in your GitHub repo URL (e.g. <strong>owner/repo</strong>), pick a branch and target languages. We\'ll handle the webhook.',anchor:'#new-proj-btn',primary:{label:'Open form',action:'click-anchor'},secondary:{label:'Skip',action:'skip'}}]}return[]}function getAnchorRect(sel){if(!sel)return null;var el=document.querySelector(sel);if(!el)return null;el.scrollIntoView({block:'center',behavior:'smooth'});return el.getBoundingClientRect()}function positionPop(pop,rect){var pad=12,vw=window.innerWidth,vh=window.innerHeight,pw=pop.offsetWidth,ph=pop.offsetHeight;if(!rect){pop.style.left=Math.max(16,(vw-pw)/2)+'px';pop.style.top=Math.max(16,(vh-ph)/2)+'px';return}var preferBelow=(rect.bottom+pad+ph)<=vh-8,top=preferBelow?(rect.bottom+pad):Math.max(16,rect.top-pad-ph),left=Math.min(Math.max(16,rect.left+(rect.width-pw)/2),vw-pw-16);pop.style.left=left+'px';pop.style.top=top+'px'}function render(){cleanup();var step=steps[idx];if(!step)return;var overlay=document.createElement('div');overlay.className='ob-overlay active';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-live','polite');var shade=document.createElement('div');shade.className='ob-shade';shade.style.inset='0';overlay.appendChild(shade);var spot=document.createElement('div');spot.className='ob-spot';overlay.appendChild(spot);var pop=document.createElement('div');pop.className='ob-pop';var meta=step.meta?'<div class="ob-pop-meta">'+step.meta+'</div>':'',progress=steps.length>1?(idx+1)+' / '+steps.length:'';pop.innerHTML='<div class="ob-pop-eyebrow">'+esc(step.eyebrow||'')+'</div>'+'<div class="ob-pop-title">'+esc(step.title)+'</div>'+'<div class="ob-pop-body">'+step.body+'</div>'+meta+'<div class="ob-pop-actions">'+'<span class="ob-pop-progress">'+esc(progress)+'</span>'+'<div class="ob-pop-buttons">'+(step.secondary?'<button type="button" class="ob-pop-btn" data-act="'+esc(step.secondary.action)+'">'+esc(step.secondary.label)+'</button>':'')+(step.primary?'<button type="button" class="ob-pop-btn primary" data-act="'+esc(step.primary.action)+'">'+esc(step.primary.label)+'</button>':'')+'</div></div>';overlay.appendChild(pop);host().appendChild(overlay);var rect=getAnchorRect(step.anchor);if(rect){var pad=8;spot.style.left=(rect.left-pad)+'px';spot.style.top=(rect.top-pad)+'px';spot.style.width=(rect.width+pad*2)+'px';spot.style.height=(rect.height+pad*2)+'px';spot.classList.add('visible')}requestAnimationFrame(function(){positionPop(pop,rect);pop.classList.add('visible')});var btns=pop.querySelectorAll('button[data-act]');btns.forEach(function(b){b.addEventListener('click',function(){handleAction(b.getAttribute('data-act'),step)})});var first=pop.querySelector('button.primary')||btns[0];if(first){prevFocus=document.activeElement;first.focus()}overlay._onKey=function(e){if(e.key==='Escape'){e.preventDefault();skip()}else if(e.key==='Tab'){var nodes=Array.prototype.slice.call(btns);if(!nodes.length)return;var i=nodes.indexOf(document.activeElement);if(e.shiftKey){if(i<=0){e.preventDefault();nodes[nodes.length-1].focus()}}else{if(i===nodes.length-1){e.preventDefault();nodes[0].focus()}}}};document.addEventListener('keydown',overlay._onKey);overlay._onResize=function(){positionPop(pop,getAnchorRect(step.anchor))};window.addEventListener('resize',overlay._onResize);window.addEventListener('scroll',overlay._onResize,!0)}function cleanup(){var h=document.getElementById('ob-host');if(!h)return;Array.prototype.slice.call(h.querySelectorAll('.ob-overlay')).forEach(function(o){if(o._onKey)document.removeEventListener('keydown',o._onKey);if(o._onResize){window.removeEventListener('resize',o._onResize);window.removeEventListener('scroll',o._onResize,!0)}o.remove()});if(prevFocus&&prevFocus.focus){try{prevFocus.focus()}catch(_){}prevFocus=null}}function handleAction(act,step){if(act==='next'){idx++;if(idx>=steps.length){finish()}else{render()}}else if(act==='skip'){skip()}else if(act==='navigate'){postSkip();window.location.href=step.primary.href}else if(act==='click-anchor'){var el=step.anchor&&document.querySelector(step.anchor);cleanup();if(el)el.click()}}function finish(){cleanup();renderResumePill(!1)}function skip(){postSkip();cleanup();renderResumePill(!0)}function renderResumePill(show){var existing=document.getElementById('ob-resume-pill');if(!show){if(existing)existing.classList.remove('visible');return}if(existing){existing.classList.add('visible');return}var pill=document.createElement('div');pill.id='ob-resume-pill';pill.className='ob-resume-pill';pill.setAttribute('role','button');pill.setAttribute('tabindex','0');pill.setAttribute('aria-label','Resume setup');pill.innerHTML='<span class="ob-resume-dot"></span><span>Resume setup</span>';function resume(){postResume().then(function(){pill.classList.remove('visible');state.dismissed=!1;steps=buildSteps();idx=0;render()})}pill.addEventListener('click',resume);pill.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();resume()}});document.body.appendChild(pill);requestAnimationFrame(function(){pill.classList.add('visible')})}function shouldRun(){if(!state)return!1;if(state.completed)return!1;if(page==='dashboard')return state.step==='SIGNED_UP';if(page==='projects'){var fromDash=new URLSearchParams(window.location.search).get('ob')==='connect';return(state.step==='SIGNED_UP'&&!state.hasProject)||fromDash}return!1}var Onboarding={boot:function(pageName){page=pageName||'dashboard';fetchState().then(function(s){if(!s)return;state=s;if(state.dismissed&&!state.completed){renderResumePill(!0);return}if(!shouldRun())return;steps=buildSteps();idx=0;render()})},refresh:function(){fetchState().then(function(s){if(!s)return;state=s;if(state.completed){cleanup();renderResumePill(!1);return}if(state.step!=='SIGNED_UP'){cleanup()}})},cleanup:cleanup};window.Onboarding=Onboarding})();"""
+internal val ONBOARDING_JS = """(function(){if(window.Onboarding)return;var BASE='/api/onboarding',state=null,page='dashboard',steps=[],idx=0,prevFocus=null;function authHeaders(){var t=localStorage.getItem('syncling_token');return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'}}function fetchState(){return fetch(BASE+'/state',{headers:authHeaders()}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}function postSkip(){return fetch(BASE+'/skip',{method:'POST',headers:authHeaders()}).catch(function(){})}function postResume(){return fetch(BASE+'/resume',{method:'POST',headers:authHeaders()}).catch(function(){})}function host(){var h=document.getElementById('ob-host');if(!h){h=document.createElement('div');h.id='ob-host';document.body.appendChild(h)}return h}function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML}function planLabel(p){return p==='SOLO'?'PRO':p==='TEAM'?'Team':p==='ENTERPRISE'?'Enterprise':'Free'}function buildSteps(){var planChip='<span class="ob-chip">Plan: <strong style="margin-left:4px">'+esc(planLabel(state.plan))+'</strong></span>',trialChip=state.inTrial?'<span class="ob-chip warn">Trial</span>':'',meta=planChip+trialChip;if(page==='dashboard'){return[{eyebrow:'Welcome',title:'Welcome to Syncling',body:'You\'re all set on the <strong>'+esc(planLabel(state.plan))+'</strong> plan. In the next two steps we\'ll connect your GitHub repo and watch your first translation run.',meta:meta,anchor:null,primary:{label:'Get started',action:'next'},secondary:{label:'Skip',action:'skip'}},{eyebrow:'Step 1 of 2',title:'Connect your first repository',body:'Click <strong>+ New project</strong> to point Syncling at your GitHub repo. We\'ll auto-install the webhook so every push triggers translation.',anchor:'#qa-new-project',primary:{label:'Open projects',action:'navigate',href:'/projects?ob=connect'},secondary:{label:'Skip',action:'skip'}}]}if(page==='projects'){return[{eyebrow:'Step 2 of 2',title:'Create your project',body:'Fill in your GitHub repo URL (e.g. <strong>owner/repo</strong>), pick a branch and target languages. We\'ll handle the webhook.',anchor:'#new-proj-btn',primary:{label:'Open form',action:'click-anchor'},secondary:{label:'Skip',action:'skip'}}]}return[]}function getAnchorRect(sel){if(!sel)return null;var el=document.querySelector(sel);if(!el)return null;el.scrollIntoView({block:'center',behavior:'smooth'});return el.getBoundingClientRect()}function positionPop(pop,rect){var pad=12,vw=window.innerWidth,vh=window.innerHeight,pw=pop.offsetWidth,ph=pop.offsetHeight;if(!rect){pop.style.left=Math.max(16,(vw-pw)/2)+'px';pop.style.top=Math.max(16,(vh-ph)/2)+'px';return}var preferBelow=(rect.bottom+pad+ph)<=vh-8,top=preferBelow?(rect.bottom+pad):Math.max(16,rect.top-pad-ph),left=Math.min(Math.max(16,rect.left+(rect.width-pw)/2),vw-pw-16);pop.style.left=left+'px';pop.style.top=top+'px'}function render(){cleanup();var step=steps[idx];if(!step)return;var overlay=document.createElement('div');overlay.className='ob-overlay active';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-live','polite');var shade=document.createElement('div');shade.className='ob-shade';shade.style.inset='0';overlay.appendChild(shade);var spot=document.createElement('div');spot.className='ob-spot';overlay.appendChild(spot);var pop=document.createElement('div');pop.className='ob-pop';var meta=step.meta?'<div class="ob-pop-meta">'+step.meta+'</div>':'',progress=steps.length>1?(idx+1)+' / '+steps.length:'';pop.innerHTML='<div class="ob-pop-eyebrow">'+esc(step.eyebrow||'')+'</div>'+'<div class="ob-pop-title">'+esc(step.title)+'</div>'+'<div class="ob-pop-body">'+step.body+'</div>'+meta+'<div class="ob-pop-actions">'+'<span class="ob-pop-progress">'+esc(progress)+'</span>'+'<div class="ob-pop-buttons">'+(step.secondary?'<button type="button" class="ob-pop-btn" data-act="'+esc(step.secondary.action)+'">'+esc(step.secondary.label)+'</button>':'')+(step.primary?'<button type="button" class="ob-pop-btn primary" data-act="'+esc(step.primary.action)+'">'+esc(step.primary.label)+'</button>':'')+'</div></div>';overlay.appendChild(pop);host().appendChild(overlay);var rect=getAnchorRect(step.anchor);if(rect){var pad=8;spot.style.left=(rect.left-pad)+'px';spot.style.top=(rect.top-pad)+'px';spot.style.width=(rect.width+pad*2)+'px';spot.style.height=(rect.height+pad*2)+'px';spot.classList.add('visible')}requestAnimationFrame(function(){positionPop(pop,rect);pop.classList.add('visible')});var btns=pop.querySelectorAll('button[data-act]');btns.forEach(function(b){b.addEventListener('click',function(){handleAction(b.getAttribute('data-act'),step)})});var first=pop.querySelector('button.primary')||btns[0];if(first){prevFocus=document.activeElement;first.focus()}overlay._onKey=function(e){if(e.key==='Escape'){e.preventDefault();skip()}else if(e.key==='Tab'){var nodes=Array.prototype.slice.call(btns);if(!nodes.length)return;var i=nodes.indexOf(document.activeElement);if(e.shiftKey){if(i<=0){e.preventDefault();nodes[nodes.length-1].focus()}}else{if(i===nodes.length-1){e.preventDefault();nodes[0].focus()}}}};document.addEventListener('keydown',overlay._onKey);overlay._onResize=function(){positionPop(pop,getAnchorRect(step.anchor))};window.addEventListener('resize',overlay._onResize);window.addEventListener('scroll',overlay._onResize,!0)}function cleanup(){var h=document.getElementById('ob-host');if(!h)return;Array.prototype.slice.call(h.querySelectorAll('.ob-overlay')).forEach(function(o){if(o._onKey)document.removeEventListener('keydown',o._onKey);if(o._onResize){window.removeEventListener('resize',o._onResize);window.removeEventListener('scroll',o._onResize,!0)}o.remove()});if(prevFocus&&prevFocus.focus){try{prevFocus.focus()}catch(_){}prevFocus=null}}function handleAction(act,step){if(act==='next'){idx++;if(idx>=steps.length){finish()}else{render()}}else if(act==='skip'){skip()}else if(act==='navigate'){postSkip();window.location.href=step.primary.href}else if(act==='click-anchor'){var el=step.anchor&&document.querySelector(step.anchor);cleanup();if(el)el.click()}}function finish(){cleanup();renderResumePill(!1)}function skip(){postSkip();cleanup();renderResumePill(!0)}function renderResumePill(show){var existing=document.getElementById('ob-resume-pill');if(!show){if(existing)existing.classList.remove('visible');return}if(existing){existing.classList.add('visible');return}var pill=document.createElement('div');pill.id='ob-resume-pill';pill.className='ob-resume-pill';pill.setAttribute('role','button');pill.setAttribute('tabindex','0');pill.setAttribute('aria-label','Resume setup');pill.innerHTML='<span class="ob-resume-dot"></span><span>Resume setup</span>';function resume(){postResume().then(function(){pill.classList.remove('visible');state.dismissed=!1;steps=buildSteps();idx=0;render()})}pill.addEventListener('click',resume);pill.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();resume()}});document.body.appendChild(pill);requestAnimationFrame(function(){pill.classList.add('visible')})}function shouldRun(){if(!state)return!1;if(state.completed)return!1;if(page==='dashboard')return state.step==='SIGNED_UP';if(page==='projects'){var fromDash=new URLSearchParams(window.location.search).get('ob')==='connect';return(state.step==='SIGNED_UP'&&!state.hasProject)||fromDash}return!1}var Onboarding={boot:function(pageName){page=pageName||'dashboard';fetchState().then(function(s){if(!s)return;state=s;if(state.dismissed&&!state.completed){renderResumePill(!0);return}if(!shouldRun())return;steps=buildSteps();idx=0;render()})},refresh:function(){fetchState().then(function(s){if(!s)return;state=s;if(state.completed){cleanup();renderResumePill(!1);return}if(state.step!=='SIGNED_UP'){cleanup()}})},cleanup:cleanup};window.Onboarding=Onboarding})();"""

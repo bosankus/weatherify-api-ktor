@@ -324,7 +324,7 @@ internal val SIDEBAR_QUOTA_JS = """
       html+='<div class="sb-quota-num">₹0<span class="sb-quota-unit">/ string</span></div>';
       if(strings>0){
         var soloRate=PRICE.SOLO/Math.max(1,strings);
-        html+='<div class="sb-quota-sub">On Solo: ₹'+fmt(soloRate)+' / string at your pace</div>';
+        html+='<div class="sb-quota-sub">On PRO: ₹'+fmt(soloRate)+' / string at your pace</div>';
       } else {
         html+='<div class="sb-quota-sub">Translate something to see your rate</div>';
       }
@@ -541,7 +541,7 @@ internal const val SUPPORT_CHAT_CSS = """
 internal val SUPPORT_CHAT_JS = """(function(){
   var BASE='/api/support';
   var _open=false,_view='home',_convId=null,_convs=null,_thread=null,_loaded=false,_isAdmin=false,_submitting=false,_lastSent=null;
-  var _unread={},_sseCtrl=null,_pollTimer=null;
+  var _unread={},_sseCtrl=null,_pollTimer=null,_sseDelay=1000,_sseStop=false,_audioCtx=null;
   var CAT_LABELS={'bug':'Bug report','question':'Question','feature':'Feature request','billing':'Billing'};
   var CAT_EMOJIS={'bug':'🐛','question':'💬','feature':'✨','billing':'💳'};
 
@@ -558,9 +558,14 @@ internal val SUPPORT_CHAT_JS = """(function(){
   }
 
   // ── Ting sound ──────────────────────────────────────────────────────────────
+  // Reuse a single AudioContext — browsers cap concurrent contexts (~6) and
+  // creating one per ting throws on bursts of rapid messages.
   function playTing(){
     try{
-      var ctx=new(window.AudioContext||window.webkitAudioContext)();
+      var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+      if(!_audioCtx)_audioCtx=new AC();
+      var ctx=_audioCtx;
+      if(ctx.state==='suspended'){try{ctx.resume();}catch(_){}}
       var osc=ctx.createOscillator(),gain=ctx.createGain();
       osc.connect(gain);gain.connect(ctx.destination);
       osc.type='sine';
@@ -569,48 +574,78 @@ internal val SUPPORT_CHAT_JS = """(function(){
       gain.gain.setValueAtTime(0.25,ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.6);
       osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.6);
-      setTimeout(function(){try{ctx.close();}catch(_){}},1000);
     }catch(_){}
   }
 
-  // ── SSE (user-side real-time: admin→user notifications) ────────────────────
+  // ── SSE real-time channel (both user↔admin) ────────────────────────────────
+  function scheduleReconnect(){
+    _sseCtrl=null;
+    if(_sseStop)return;
+    var delay=_sseDelay;
+    _sseDelay=Math.min(_sseDelay*2,30000);
+    setTimeout(startSse,delay);
+  }
+
   function startSse(){
-    if(_sseCtrl)return;
+    if(_sseCtrl||_sseStop)return;
     var token=localStorage.getItem('syncling_token');if(!token)return;
     _sseCtrl=new AbortController();
     fetch('/api/pipeline/events',{headers:{'Authorization':'Bearer '+token},signal:_sseCtrl.signal})
       .then(function(res){
-        var reader=res.body.getReader(),decoder=new TextDecoder(),buf='';
+        // Auth failures are not retryable — stop the reconnect loop entirely so a
+        // logged-out tab doesn't hammer the endpoint every 30s. Other 4xx/5xx fall
+        // through to scheduleReconnect with backoff.
+        if(res.status===401||res.status===403){_sseStop=true;_sseCtrl=null;return;}
+        if(!res.ok){throw new Error('SSE status '+res.status);}
+        // Don't reset backoff on headers alone — a server that 200s then immediately
+        // closes would pin the delay at 1s. Reset only after the first real frame.
+        var reader=res.body.getReader(),decoder=new TextDecoder(),buf='',gotFrame=false;
         function pump(){
           reader.read().then(function(r){
-            if(r.done){_sseCtrl=null;return;}
+            if(r.done){scheduleReconnect();return;}
             buf+=decoder.decode(r.value,{stream:true});
             var parts=buf.split('\n\n');buf=parts.pop();
             parts.forEach(function(chunk){
               var line=chunk.trim();if(!line.startsWith('data:'))return;
+              if(!gotFrame){gotFrame=true;_sseDelay=1000;}
               try{var evt=JSON.parse(line.slice(5).trim());if(evt.type==='support_message')onSseMessage(evt);}catch(_){}
             });
             pump();
-          }).catch(function(){_sseCtrl=null;});
+          }).catch(function(){scheduleReconnect();});
         }
         pump();
-      }).catch(function(){_sseCtrl=null;});
+      }).catch(function(){scheduleReconnect();});
   }
 
   function onSseMessage(evt){
     var tid=evt.supportTicketId;if(!tid)return;
-    if (_isAdmin && evt.supportSenderType === 'admin') return;
-    if (!_isAdmin && evt.supportSenderType !== 'admin') return;
+    // Skip own-echo only when role is confirmed; unknown role always processes (harmless extra fetch).
+    if(_loaded && _isAdmin && evt.supportSenderType==='admin') return;
+    if(_loaded && !_isAdmin && evt.supportSenderType==='user') return;
+
+    if(evt.supportTicketStatus&&_convs)
+      _convs.forEach(function(t){if(t.id===tid)t.status=evt.supportTicketStatus;});
+
     if(_view==='thread'&&_convId===tid){
-      silentRefreshThread(true);
+      // Inline-append when the event carries the full message — zero extra HTTP call.
+      if(evt.supportMessageId&&evt.supportMessageContent&&_thread){
+        var msgs=_thread.messages=_thread.messages||[];
+        var already=msgs.some(function(m){return m.id===evt.supportMessageId;});
+        if(!already){
+          msgs.push({id:evt.supportMessageId,senderType:evt.supportSenderType,
+                     content:evt.supportMessageContent,sentAt:evt.supportMessageSentAt||Date.now()});
+          if(evt.supportTicketStatus)_thread.status=evt.supportTicketStatus;
+          renderThread(true);renderHeader();
+        }
+      } else {
+        silentRefreshThread(true);
+      }
     } else {
       _unread[tid]=true;updateFabDot();
       if(_view==='home'&&_convs)renderBody();
     }
     playTing();
   }
-
-  // Polling removed (now fully real-time via SSE)
 
   function silentRefreshThread(isAdminPoll){
     var id=_convId;if(!id)return;

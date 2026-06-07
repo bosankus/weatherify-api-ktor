@@ -85,6 +85,10 @@ fun Application.configureSyncling(refundService: RefundService) {
         membershipRepository = membershipRepository,
         userRepository = userRepository
     )
+    val statusService = com.syncling.services.StatusService(
+        pipelineRunRepository = pipelineRunRepository,
+        cdnPublishRepository = cdnPublishRepository,
+    )
     // Idempotent OWNER backfill for legacy projects — runs in background, doesn't gate startup.
     launch {
         runCatching { backfillProjectMemberships(projectRepository, userRepository, membershipRepository) }
@@ -173,6 +177,7 @@ fun Application.configureSyncling(refundService: RefundService) {
             cdnPublishService = cdnPublishService,
             translationService = translationService,
             analyticsService = analyticsService,
+            statusService = statusService,
             supportTicketRepository = supportTicketRepository,
             apiTokenRepository = apiTokenRepository,
         )

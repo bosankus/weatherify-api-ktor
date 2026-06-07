@@ -121,7 +121,7 @@ fun Route.configureCdnBundleRoutes(
                 put("_meta", buildJsonObject {
                     put("version", JsonPrimitive(version))
                     put("locale", JsonPrimitive(locale))
-                    put("publishedAt", JsonPrimitive(publishedAt))
+                    put("published_at", JsonPrimitive(publishedAt))
                 })
                 putAll(bundleObj)
             })

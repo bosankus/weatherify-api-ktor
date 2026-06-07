@@ -6,7 +6,9 @@ import com.mongodb.client.model.Filters.gte
 import com.mongodb.client.model.FindOneAndReplaceOptions
 import com.mongodb.client.model.Sorts
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
+import com.mongodb.client.model.Projections
 import com.syncling.domain.PipelineRunSummary
+import com.syncling.domain.PlatformPipelineStats
 import com.syncling.repository.PipelineRunRepository
 import kotlinx.coroutines.flow.toList
 import org.bson.Document
@@ -57,6 +59,59 @@ class MongoPipelineRunRepository(db: MongoDatabase) : PipelineRunRepository {
             .limit(limit)
             .toList()
             .map { it.toSummary() }
+
+    override suspend fun platformStats(sinceMillis: Long): PlatformPipelineStats {
+        // Two cheap queries: counts by status, then bounded durations for percentiles.
+        // Percentiles are computed in-memory off a bounded list to keep this fast
+        // and avoid requiring MongoDB 7.0+ ($percentile operator).
+        val window = System.currentTimeMillis() - sinceMillis
+
+        val statusDocs = col.find(gte("startedAt", sinceMillis))
+            .projection(Projections.include("status", "stringsTranslated"))
+            .toList()
+
+        var succeeded = 0
+        var failed = 0
+        var totalStrings = 0L
+        for (d in statusDocs) {
+            when (d.getString("status")) {
+                "succeeded" -> succeeded++
+                "failed", "errored", "error" -> failed++
+            }
+            totalStrings += (d.get("stringsTranslated") as? Number)?.toLong() ?: 0L
+        }
+
+        // Bounded sample for percentiles. 5000 is plenty for any realistic window.
+        val durations = col.find(
+            and(
+                gte("startedAt", sinceMillis),
+                eq("status", "succeeded"),
+            )
+        )
+            .projection(Projections.include("durationMs"))
+            .limit(5000)
+            .toList()
+            .mapNotNull { (it.get("durationMs") as? Number)?.toLong() }
+            .filter { it > 0 }
+            .sorted()
+
+        fun pct(p: Double): Long? {
+            if (durations.isEmpty()) return null
+            val idx = ((p / 100.0) * (durations.size - 1)).toInt().coerceIn(0, durations.size - 1)
+            return durations[idx]
+        }
+
+        return PlatformPipelineStats(
+            windowMillis = window,
+            totalRuns = statusDocs.size,
+            succeededRuns = succeeded,
+            failedRuns = failed,
+            durationP50Ms = pct(50.0),
+            durationP95Ms = pct(95.0),
+            durationP99Ms = pct(99.0),
+            totalStringsTranslated = totalStrings,
+        )
+    }
 
     override suspend fun earliestStartedAtForOwner(ownerId: String): Long? {
         val doc = col.find(eq("ownerId", ownerId))

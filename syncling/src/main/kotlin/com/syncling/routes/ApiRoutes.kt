@@ -238,7 +238,7 @@ fun Route.configureApiRoutes(
                 if (!body.prBranchPattern.isNullOrBlank() && plan == com.syncling.domain.BillingPlan.FREE) {
                     return@post call.respond(
                         HttpStatusCode.Forbidden,
-                        ApiError("Custom PR branch patterns require a Solo or Team plan.")
+                        ApiError("Custom PR branch patterns require a PRO or Team plan.")
                     )
                 }
                 val validatedBranchPattern = body.prBranchPattern?.takeIf { it.isNotBlank() }?.also { pat ->
@@ -353,7 +353,7 @@ fun Route.configureApiRoutes(
                         val pat = body.prBranchPattern
                         val plan = billingService.getPlan(userId)
                         if (plan == com.syncling.domain.BillingPlan.FREE) {
-                            return@put call.respond(HttpStatusCode.Forbidden, ApiError("Custom PR branch patterns require a Solo or Team plan."))
+                            return@put call.respond(HttpStatusCode.Forbidden, ApiError("Custom PR branch patterns require a PRO or Team plan."))
                         }
                         if (pat.length > 120 || pat.contains("..") || pat.any { c -> c == ' ' || c == '~' || c == '^' || c == ':' || c == '?' || c == '*' || c == '[' }) {
                             return@put call.respond(HttpStatusCode.BadRequest, ApiError("Invalid PR branch pattern. Avoid spaces and special characters (~ ^ : ? * [ ..)"))
@@ -384,13 +384,13 @@ fun Route.configureApiRoutes(
                 val isPaidPlan = currentPlan != com.syncling.domain.BillingPlan.FREE
 
                 if (!body.outboundWebhookUrl.isNullOrBlank() && !isPaidPlan) {
-                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Outbound webhooks require a Solo or Team plan."))
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Outbound webhooks require a PRO or Team plan."))
                 }
                 if (body.monthlyStringQuota != null && !isPaidPlan) {
-                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Per-project string quotas require a Solo or Team plan."))
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Per-project string quotas require a PRO or Team plan."))
                 }
                 if (body.rolloutPercent != null && !isPaidPlan) {
-                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("CDN canary rollout requires a Solo or Team plan."))
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("CDN canary rollout requires a PRO or Team plan."))
                 }
                 val validatedRollout = body.rolloutPercent?.coerceIn(0, 100)
 

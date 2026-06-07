@@ -2,6 +2,8 @@ package com.syncling.repository.mongo
 
 import com.mongodb.client.model.Filters.and
 import com.mongodb.client.model.Filters.eq
+import com.mongodb.client.model.Filters.gte
+import com.mongodb.client.model.Projections
 import com.mongodb.client.model.Sorts
 import com.mongodb.client.model.Updates
 import com.mongodb.client.model.FindOneAndUpdateOptions
@@ -9,6 +11,7 @@ import com.mongodb.client.model.ReturnDocument
 import com.mongodb.client.model.UpdateOptions
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import com.syncling.domain.CdnPublishLog
+import com.syncling.domain.PlatformPublishStats
 import com.syncling.repository.CdnPublishRepository
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
@@ -83,6 +86,19 @@ class MongoCdnPublishRepository(db: MongoDatabase) : CdnPublishRepository {
                 Updates.set("updatedAt", System.currentTimeMillis())
             ),
             UpdateOptions().upsert(true)
+        )
+    }
+
+    override suspend fun platformPublishStats(sinceMillis: Long): PlatformPublishStats {
+        val window = System.currentTimeMillis() - sinceMillis
+        val docs = col.find(gte("publishedAt", sinceMillis))
+            .projection(Projections.include("status"))
+            .toList()
+        val succeeded = docs.count { it.getString("status") == "succeeded" || it.getString("status") == "published" }
+        return PlatformPublishStats(
+            windowMillis = window,
+            totalPublishes = docs.size,
+            succeededPublishes = succeeded,
         )
     }
 

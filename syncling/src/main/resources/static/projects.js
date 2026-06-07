@@ -265,13 +265,13 @@
 
             <div class="pr-form-row" id="pr-branch-pattern-row" style="${isPaid ? '' : 'opacity:0.55'}">
               <label for="pr-branch-pattern">PR branch name pattern
-                ${isPaid ? '' : '<span class="pr-locked-badge" style="vertical-align:middle">Solo+</span>'}
+                ${isPaid ? '' : '<span class="pr-locked-badge" style="vertical-align:middle">PRO+</span>'}
               </label>
               <input type="text" id="pr-branch-pattern" maxlength="120"
                 placeholder="syncling/translations-{timestamp}"
                 ${isPaid ? '' : 'disabled'}>
               <div class="pr-form-hint">Tokens: <code>{timestamp}</code>, <code>{date}</code>, <code>{branch}</code>.
-                ${isPaid ? 'Leave blank for the default.' : '<a href="/billing" style="color:var(--accent)">Upgrade to Solo</a> to customise.'}
+                ${isPaid ? 'Leave blank for the default.' : '<a href="/billing" style="color:var(--accent)">Upgrade to PRO</a> to customise.'}
               </div>
             </div>
 
@@ -421,7 +421,7 @@
                 : '<span class="pr-webhook-pill disconnected">● Not verified</span> <button type="button" class="bl-btn" style="margin-left:8px;padding:4px 10px;font-size:11px" data-drawer-act="reinstall-webhook">Reinstall</button>'}</dd>
             </dl>
             <div class="pr-form-row" id="pr-branch-pattern-section" style="margin-top:12px">
-              <label for="pr-edit-branch-pattern">PR branch pattern <span class="pr-locked-badge" id="pr-branch-pattern-badge" style="display:none">Solo+</span></label>
+              <label for="pr-edit-branch-pattern">PR branch pattern <span class="pr-locked-badge" id="pr-branch-pattern-badge" style="display:none">PRO+</span></label>
               <div style="display:flex;gap:8px;align-items:center">
                 <input type="text" id="pr-edit-branch-pattern" maxlength="120"
                   value="${esc(p.prBranchPattern || '')}"
@@ -498,7 +498,7 @@
           </section>
 
           <section class="pr-section pr-locked-section" id="pr-locked-features" style="display:none">
-            <h3 class="pr-section-title">Unlock more on Solo &amp; Team</h3>
+            <h3 class="pr-section-title">Unlock more on PRO &amp; Team</h3>
           </section>
 
           <section class="pr-section">
@@ -552,12 +552,12 @@
             if (!host) return;
             const rows = [
                 {
-                    plan: 'Solo',
+                    plan: 'PRO',
                     title: 'Parallel locale translation',
-                    hint: 'Translate every target language in parallel instead of sequentially. Typical Solo run is 3–5× faster.',
+                    hint: 'Translate every target language in parallel instead of sequentially. Typical PRO run is 3–5× faster.',
                 },
                 {
-                    plan: 'Solo',
+                    plan: 'PRO',
                     title: 'Semantic change detection',
                     hint: 'AI skips re-translation when a source string is rewritten without changing meaning. Saves quota and review time.',
                 },
@@ -567,9 +567,9 @@
                     hint: 'Share this project with up to 15 teammates. Each member sees the review queue, can approve/edit translations, and gets notified on blocks.',
                 },
                 {
-                    plan: 'Solo',
+                    plan: 'PRO',
                     title: 'Unlimited projects & languages',
-                    hint: 'Free is capped at 1 project / 3 languages. Solo unlocks 3 projects and all locales.',
+                    hint: 'Free is capped at 1 project / 3 languages. PRO unlocks 3 projects and all locales.',
                 },
             ];
             host.insertAdjacentHTML('beforeend', rows.map(r => `
@@ -696,7 +696,7 @@
                     input.style.opacity = '0.55';
                     saveBtn.disabled = true;
                     badge.style.display = '';
-                    hint.innerHTML = 'Custom branch patterns require Solo or Team. <a href="/billing" style="color:var(--accent)">Upgrade</a>';
+                    hint.innerHTML = 'Custom branch patterns require PRO or Team. <a href="/billing" style="color:var(--accent)">Upgrade</a>';
                 }
             }).catch(() => {});
         }

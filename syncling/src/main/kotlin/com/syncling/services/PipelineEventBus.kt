@@ -9,6 +9,7 @@ import com.syncling.repository.PipelineRunRepository
 import io.lettuce.core.RedisClient
 import io.lettuce.core.pubsub.RedisPubSubAdapter
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -68,10 +70,13 @@ data class PipelineEvent(
     val rejectedRepo: String? = null,
     val rejectedBranch: String? = null,
     val rejectedProjectId: String? = null,
-    // Support chat — type = "support_message". Delivered to user's SSE channel when admin replies.
+    // Support chat — type = "support_message". Delivered to both parties' SSE channels on every new message.
     val supportTicketId: String? = null,
     val supportSenderType: String? = null,   // "user" | "admin"
     val supportTicketStatus: String? = null, // ticket status after the event
+    val supportMessageId: String? = null,    // id of the new message (for dedup)
+    val supportMessageContent: String? = null, // full message body (avoids extra HTTP fetch)
+    val supportMessageSentAt: Long? = null,  // epoch-ms
 )
 
 /**
@@ -132,6 +137,11 @@ class PipelineEventBus(
     }
 
     private val inRedis = pool != null
+    // Pub/sub fan-out requires BOTH a working publisher (Jedis pool) and subscriber
+    // (Lettuce conn). If either is missing, emit/subscribe must use the in-memory
+    // flow together — otherwise publishes go to Redis while subscribers listen to
+    // the mem flow and events are silently lost.
+    private val pubSubReady = pool != null && pubSubConn != null
 
     // Dedicated scope for fire-and-forget Redis writes (store + publish)
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -158,34 +168,50 @@ class PipelineEventBus(
     // ── Public API ─────────────────────────────────────────────────────────────
 
     fun eventsFor(userId: String): Flow<String> {
-        // Fall back to in-memory if Redis is unavailable or Lettuce failed to connect.
-        if (!inRedis || pubSubConn == null) return memFlowFor(userId).asSharedFlow()
+        // Fall back to in-memory if either side of the Redis pub/sub pair is unavailable.
+        if (!pubSubReady) return memFlowFor(userId).asSharedFlow()
 
         // Get-or-create a shared flow for this user. All concurrent SSE connections for
         // the same user share one flow and one Redis channel subscription (ref-counted).
         val flow = subFlows.getOrPut(userId) { MutableSharedFlow(replay = 0, extraBufferCapacity = 64) }
         val count = subCounts.getOrPut(userId) { AtomicInteger(0) }
-        if (count.getAndIncrement() == 0) {
-            // First subscriber — open the Redis channel subscription. Non-blocking.
-            // Guard against a degraded Lettuce connection; fall back to in-memory rather than
-            // letting the exception escape into the SSE respondBytesWriter and crashing the stream.
-            runCatching { pubSubConn?.async()?.subscribe(channelKey(userId)) }
-                .onFailure {
-                    log.warn("Lettuce subscribe failed for userId={} — falling back to in-memory flow: {}", userId, it.message)
-                    count.decrementAndGet()
-                    return memFlowFor(userId).asSharedFlow()
-                }
-        }
 
         return callbackFlow {
-            val job = ioScope.launch { flow.collect { trySend(it) } }
+            // Attach the collector BEFORE opening the Redis subscription so an event
+            // arriving between subscribe() and the first collect() can't be dropped.
+            // onSubscription fires once the inner collect is registered.
+            val ready = CompletableDeferred<Unit>()
+            val job = ioScope.launch {
+                flow.onSubscription { ready.complete(Unit) }.collect { trySend(it) }
+            }
+            ready.await()
+
+            var subscribed = false
+            if (count.getAndIncrement() == 0) {
+                // First subscriber for this userId — open the Redis channel subscription.
+                runCatching { pubSubConn?.async()?.subscribe(channelKey(userId)) }
+                    .onSuccess { subscribed = true }
+                    .onFailure {
+                        log.warn("Lettuce subscribe failed for userId={}: {}", userId, it.message)
+                        if (count.decrementAndGet() == 0) {
+                            subFlows.remove(userId)
+                            subCounts.remove(userId)
+                        }
+                        job.cancel()
+                        close(it)
+                        return@callbackFlow
+                    }
+            } else {
+                subscribed = true
+            }
+
             awaitClose {
                 job.cancel()
-                if (count.decrementAndGet() == 0) {
+                if (subscribed && count.decrementAndGet() == 0) {
                     // Last subscriber disconnected — release the Redis channel subscription.
                     subFlows.remove(userId)
                     subCounts.remove(userId)
-                    runCatching { pubSubConn.async().unsubscribe(channelKey(userId)) }
+                    runCatching { pubSubConn?.async()?.unsubscribe(channelKey(userId)) }
                 }
             }
         }
@@ -271,12 +297,23 @@ class PipelineEventBus(
         ))
     }
 
-    fun emitSupportMessage(userId: String, ticketId: String, senderType: String, ticketStatus: String) {
+    fun emitSupportMessage(
+        userId: String,
+        ticketId: String,
+        senderType: String,
+        ticketStatus: String,
+        messageId: String? = null,
+        messageContent: String? = null,
+        messageSentAt: Long? = null,
+    ) {
         emit(userId, PipelineEvent(
             type = "support_message",
             supportTicketId = ticketId,
             supportSenderType = senderType,
             supportTicketStatus = ticketStatus,
+            supportMessageId = messageId,
+            supportMessageContent = messageContent,
+            supportMessageSentAt = messageSentAt,
         ))
     }
 
@@ -324,7 +361,9 @@ class PipelineEventBus(
             .maxByOrNull { it.startedAt } ?: return
         val runId = target.runId
 
-        mutateRun(ownerId, runId) { current ->
+        // Await so a dashboard reload between this mutation and the SSE emit below
+        // sees the new prUrl / step states instead of the stale snapshot.
+        mutateRunAwait(ownerId, runId) { current ->
             val newSteps = current.steps.map { step ->
                 when {
                     step.id == "CREATING_PR" && prUrl != null ->
@@ -425,39 +464,49 @@ class PipelineEventBus(
         error: String?, stringsTranslated: Int, stringsPerLocale: Map<String, Int>,
         cacheHits: Int = 0
     ) {
-        val repo = runRepository ?: return
-        // Read back the snapshot we just mutated so the summary includes the
-        // trigger metadata that startRun captured. Done off the request thread.
+        if (runRepository == null) return
+        // Fire-and-forget for the hot path. Cleanup uses [persistRunSummaryAwait].
         ioScope.launch {
-            runCatching {
-                val snap = loadRun(userId, runId) ?: return@launch
-                val status = when {
-                    error != null -> "failed"
-                    snap.steps.any { it.status == "error" } -> "failed"
-                    snap.steps.any { it.status == "skipped" } && stringsTranslated == 0 -> "succeeded"
-                    else -> "succeeded"
-                }
-                val summary = PipelineRunSummary(
-                    runId = runId,
-                    projectId = snap.projectId ?: "",
-                    ownerId = snap.ownerId ?: userId,
-                    triggeredByUserId = snap.triggeredByUserId,
-                    triggeredByLabel = snap.triggeredByLabel,
-                    repo = snap.repo,
-                    branch = snap.branch,
-                    commitShort = snap.commitShort,
-                    startedAt = snap.startedAt,
-                    finishedAt = finishedAt,
-                    durationMs = finishedAt - snap.startedAt,
-                    status = status,
-                    stringsTranslated = stringsTranslated,
-                    stringsPerLocale = stringsPerLocale,
-                    error = error,
-                    cacheHits = cacheHits
-                )
-                repo.persist(summary)
-            }.onFailure { log.warn("persistRunSummary failed runId={}: {}", runId, it.message) }
+            persistRunSummaryAwait(userId, runId, finishedAt, error, stringsTranslated, stringsPerLocale, cacheHits)
         }
+    }
+
+    private suspend fun persistRunSummaryAwait(
+        userId: String, runId: String, finishedAt: Long,
+        error: String?, stringsTranslated: Int, stringsPerLocale: Map<String, Int>,
+        cacheHits: Int = 0
+    ) {
+        val repo = runRepository ?: return
+        runCatching {
+            // Read back the snapshot we just mutated so the summary includes the
+            // trigger metadata that startRun captured.
+            val snap = loadRun(userId, runId) ?: return
+            val status = when {
+                error != null -> "failed"
+                snap.steps.any { it.status == "error" } -> "failed"
+                snap.steps.any { it.status == "skipped" } && stringsTranslated == 0 -> "succeeded"
+                else -> "succeeded"
+            }
+            val summary = PipelineRunSummary(
+                runId = runId,
+                projectId = snap.projectId ?: "",
+                ownerId = snap.ownerId ?: userId,
+                triggeredByUserId = snap.triggeredByUserId,
+                triggeredByLabel = snap.triggeredByLabel,
+                repo = snap.repo,
+                branch = snap.branch,
+                commitShort = snap.commitShort,
+                startedAt = snap.startedAt,
+                finishedAt = finishedAt,
+                durationMs = finishedAt - snap.startedAt,
+                status = status,
+                stringsTranslated = stringsTranslated,
+                stringsPerLocale = stringsPerLocale,
+                error = error,
+                cacheHits = cacheHits
+            )
+            repo.persist(summary)
+        }.onFailure { log.warn("persistRunSummary failed runId={}: {}", runId, it.message) }
     }
 
     private suspend fun loadRun(userId: String, runId: String): PipelineRunState? {
@@ -528,12 +577,20 @@ class PipelineEventBus(
                         }
                     } while (cursor != "0")
                 }
-                // Phase 2: force-finish each stuck run. Uses finishRun so the snapshot is
-                // updated, the SSE event is broadcast, and the Mongo summary is persisted.
+                // Phase 2: force-finish each stuck run. Awaits the snapshot mutation
+                // and Mongo persistence so the returned count reflects work actually done —
+                // important for the cron caller's metrics and so server shutdown right after
+                // cleanup doesn't strand in-flight writes scheduled on [ioScope].
                 for (sr in stuck) {
                     runCatching {
                         log.warn("stuckRunCleanup: force-finishing runId={} userId={}", sr.runId, sr.userId)
-                        finishRun(sr.userId, sr.runId, error = stuckError)
+                        val finishedAt = System.currentTimeMillis()
+                        mutateRunAwait(sr.userId, sr.runId) {
+                            it.copy(finishedAt = finishedAt, error = stuckError)
+                        }
+                        activeSteps.remove(sr.runId)
+                        emit(sr.userId, PipelineEvent(type = "finish", runId = sr.runId, error = stuckError))
+                        persistRunSummaryAwait(sr.userId, sr.runId, finishedAt, stuckError, 0, emptyMap(), 0)
                     }.onFailure { log.warn("stuckRunCleanup: failed to finish runId={}: {}", sr.runId, it.message) }
                 }
                 stuck.size
@@ -584,6 +641,45 @@ class PipelineEventBus(
         }
     }
 
+    /**
+     * Suspending variant of [mutateRun] that completes only once the snapshot has
+     * been persisted (Redis SET or mem-flow update). Use this when a subsequent
+     * SSE [emit] depends on the new state being visible to refreshes — fire-and-forget
+     * mutations let the event reach the client before the snapshot lands.
+     */
+    private suspend fun mutateRunAwait(
+        userId: String,
+        runId: String,
+        transform: (PipelineRunState) -> PipelineRunState
+    ): PipelineRunState? {
+        if (inRedis) {
+            return getMutex(runId).withLock {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        pool!!.resource.use { jedis ->
+                            val current = jedis.get(runStateKey(runId))
+                                ?.let { runCatching { json.decodeFromString<PipelineRunState>(it) }.getOrNull() }
+                                ?: return@use null
+                            val updated = transform(current)
+                            jedis.setex(runStateKey(runId), RUN_TTL, json.encodeToString(updated))
+                            updated
+                        }
+                    }.onFailure { log.warn("Redis mutateRunAwait failed runId={}: {}", runId, it.message) }
+                        .getOrNull()
+                }
+            }
+        }
+        val deque = memRuns[userId] ?: return null
+        return synchronized(deque) {
+            val idx = deque.indexOfFirst { it.runId == runId }
+            if (idx >= 0) {
+                val updated = transform(deque[idx])
+                deque[idx] = updated
+                updated
+            } else null
+        }
+    }
+
     private fun mutateRun(userId: String, runId: String, transform: (PipelineRunState) -> PipelineRunState) {
         if (inRedis) {
             ioScope.launch {
@@ -609,7 +705,9 @@ class PipelineEventBus(
 
     private fun emit(userId: String, event: PipelineEvent) {
         val encoded = json.encodeToString(event)
-        if (inRedis) {
+        // Must mirror eventsFor's decision: if pub/sub isn't fully ready, subscribers
+        // are on the mem flow, so publish there too — never split the channels.
+        if (pubSubReady) {
             ioScope.launch {
                 runCatching {
                     pool!!.resource.use { jedis -> jedis.publish(channelKey(userId), encoded) }

@@ -19,7 +19,7 @@
     //    server-side, append it here too. The server enforces validity.
     const PLANS = {
         SOLO: {
-            displayName: 'Solo',
+            displayName: 'PRO',
             monthlyPaise: 49900,
             stringLimit: 5000,
             maxProjects: 3,

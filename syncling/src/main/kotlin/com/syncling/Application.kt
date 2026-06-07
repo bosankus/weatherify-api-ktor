@@ -222,6 +222,7 @@ fun Application.module() {
     val apiTokenRepository: com.syncling.repository.ApiTokenRepository by inject()
     val memberUsageService: MemberUsageService by inject()
     val analyticsService: AnalyticsService by inject()
+    val statusService: com.syncling.services.StatusService by inject()
     // Materialize OWNER membership rows for legacy projects so the new permission
     // helper has a single code path. Idempotent — safe across restarts.
     launch {
@@ -464,6 +465,7 @@ fun Application.module() {
         cdnPublishService = cdnPublishService,
         translationService = translationService,
         analyticsService = analyticsService,
+        statusService = statusService,
         notificationService = notificationService,
         inAppNotificationService = inAppNotificationService,
         pipelineRunRepository = pipelineRunRepository,

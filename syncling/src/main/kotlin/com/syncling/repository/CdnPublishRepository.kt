@@ -1,6 +1,7 @@
 package com.syncling.repository
 
 import com.syncling.domain.CdnPublishLog
+import com.syncling.domain.PlatformPublishStats
 
 interface CdnPublishRepository {
     suspend fun log(
@@ -23,4 +24,7 @@ interface CdnPublishRepository {
 
     /** Sets the active (promoted) bundle version for a project. */
     suspend fun setActiveVersion(projectId: String, bundleVersion: String)
+
+    /** Aggregate publish counts since [sinceMillis] for the public status page. */
+    suspend fun platformPublishStats(sinceMillis: Long): PlatformPublishStats
 }

@@ -133,7 +133,7 @@ internal fun HTML.billingApp() {
                     div("bl-payment-sub") {
                         +"Cards, UPI, and net-banking are stored securely with Razorpay. "
                         +"To change a payment method, contact "
-                        a(href = "mailto:support@androidplay.in") { +"support@androidplay.in" }
+                        a(href = "mailto:support@syncling.space") { +"support@syncling.space" }
                         +"."
                     }
                 }

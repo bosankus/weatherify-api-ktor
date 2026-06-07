@@ -66,7 +66,7 @@ internal fun HTML.billingAnalyticsApp() {
             attributes["aria-live"] = "polite"
             style = "display:none"
             div("bla-plan-gate-text") {
-                strong { +"Analytics is part of Solo and Team plans." }
+                strong { +"Analytics is part of PRO and Team plans." }
                 +" Upgrade to see cost-per-string trends, per-project breakdowns, and team activity."
             }
             a("/billing") { classes = setOf("bla-plan-gate-cta"); +"Compare plans →" }

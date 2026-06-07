@@ -96,11 +96,12 @@ class SynclingDeps(
     val cdnPublishService: CdnPublishService,
     val translationService: TranslationService,
     val analyticsService: AnalyticsService,
+    val statusService: com.syncling.services.StatusService,
     val notificationService: NotificationService? = null,
     val inAppNotificationService: InAppNotificationService? = null,
     val pipelineRunRepository: PipelineRunRepository? = null,
     val supportTicketRepository: SupportTicketRepository? = null,
-    val supportAdminEmail: String = "support@androidplay.in",
+    val supportAdminEmail: String = "support@syncling.space",
     val apiTokenRepository: ApiTokenRepository? = null,
 )
 
@@ -207,7 +208,7 @@ Sitemap: https://syncling.space/sitemap.xml
         // Serve portal CSS/JS bundles from src/main/resources/static at /transloom/static/*.
         // Cached aggressively in prod via the etag plugin (default Ktor behavior).
         staticResources("/transloom/static", "static")
-        configurePortalRoutes(d.jwtSecret)
+        configurePortalRoutes(d.jwtSecret, d.statusService)
         rateLimit(RateLimitName("github_webhook")) {
             configureWebhookRoutes(d.jobQueue, d.projectRepository, d.billingRepository, d.pipelineEventBus)
         }

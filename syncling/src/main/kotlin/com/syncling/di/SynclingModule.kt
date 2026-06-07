@@ -35,6 +35,12 @@ fun synclingModule(encryptionKey: String) = module {
     single<MemberUsageRepository> { MongoMemberUsageRepository(get()) }
     single { com.syncling.services.MemberUsageService(get()) }
     single {
+        com.syncling.services.StatusService(
+            pipelineRunRepository = get(),
+            cdnPublishRepository = get(),
+        )
+    }
+    single {
         com.syncling.services.AnalyticsService(
             pipelineRunRepository = get(),
             memberUsageRepository = get(),

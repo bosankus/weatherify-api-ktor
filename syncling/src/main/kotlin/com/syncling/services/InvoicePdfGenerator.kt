@@ -277,7 +277,7 @@ object InvoicePdfGenerator {
             .setTextAlignment(TextAlignment.CENTER)
             .setFontColor(TEXT_MUTED).setFontSize(8.5f).setFont(regular)
             .add(Text("Thank you for building with Syncling.\n"))
-            .add(Text("Syncling by Androidplay  ·  support@androidplay.in").setFont(bold).setFontColor(TEXT_PRIMARY))
+            .add(Text("Syncling  ·  support@syncling.space").setFont(bold).setFontColor(TEXT_PRIMARY))
             .add(Text("\nGST-compliant invoices are also available from your Razorpay customer portal."))
     }
 

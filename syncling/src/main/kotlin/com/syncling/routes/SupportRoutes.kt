@@ -288,24 +288,30 @@ fun Route.configureSupportRoutes(
                     runCatching { supportTicketRepository.updateStatus(ticketId, "acknowledged") }
                 }
 
-                // SSE: notify the other party in real-time
+                // SSE: push the new message to both parties in real-time
                 if (eventBus != null) {
                     val newStatus = when {
                         isAdmin && ticket.status == "open" -> "acknowledged"
                         else -> ticket.status
                     }
-                    if (isAdmin) {
-                        // Push event to the ticket owner
-                        eventBus.emitSupportMessage(ticket.userId, ticketId, "admin", newStatus)
-                    } else {
-                        // Push event to the admin
-                        val adminUser = runCatching { userRepository.findByEmail(adminEmail) }.getOrNull()
-                        if (adminUser != null) {
-                            eventBus.emitSupportMessage(adminUser.id, ticketId, "user", newStatus)
-                        }
+                    val emit = { recipientId: String, st: String ->
+                        eventBus.emitSupportMessage(
+                            userId = recipientId,
+                            ticketId = ticketId,
+                            senderType = senderType,
+                            ticketStatus = st,
+                            messageId = msg.id,
+                            messageContent = msg.content,
+                            messageSentAt = msg.sentAt,
+                        )
                     }
-                    // Always emit to the sender too (other tabs / optimistic refresh)
-                    eventBus.emitSupportMessage(userId, ticketId, senderType, newStatus)
+                    if (isAdmin) {
+                        emit(ticket.userId, newStatus)  // user receives admin's message
+                    } else {
+                        val adminUser = runCatching { userRepository.findByEmail(adminEmail) }.getOrNull()
+                        if (adminUser != null) emit(adminUser.id, newStatus)  // admin receives user's message
+                    }
+                    emit(userId, newStatus)  // sender's own other tabs
                 }
 
                 call.respond(HttpStatusCode.Created, SupportMessageResponse(

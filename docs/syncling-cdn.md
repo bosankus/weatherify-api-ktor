@@ -137,7 +137,7 @@ disk caching, ETag handling, and fallback to bundled strings transparently.
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("com.syncling:android-sdk:1.0.0")
+    implementation("space.syncling:syncling-cdm:0.0.1")
 }
 ```
 

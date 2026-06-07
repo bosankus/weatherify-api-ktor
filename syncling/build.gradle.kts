@@ -64,5 +64,43 @@ dependencies {
     // SMTP email delivery — Jakarta Mail 2.x implementation (Eclipse Angus).
     // No third-party SaaS required; works with any SMTP relay (Google Workspace,
     // self-hosted Postfix, AWS SES SMTP endpoint, etc.).
-    implementation("org.eclipse.angus:angus-mail:2.0.3")
+    implementation("org.eclipse.angus:angus-mail:2.0.4")
+}
+
+tasks.register<JavaExec>("previewLanding") {
+    group = "application"
+    description = "Boot a tiny preview server for the syncling landing page (no DB/Redis required)."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.syncling.LandingPreviewKt")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("previewDashboard") {
+    group = "application"
+    description = "Boot a local preview server for the syncling dashboard (no DB/Redis/auth required). Visit http://localhost:8083/app."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.syncling.DashboardPreviewKt")
+    standardInput = System.`in`
+}
+
+tasks.register<Exec>("stopPreviewDashboard") {
+    group = "application"
+    description = "Stop the local syncling dashboard preview server started by previewDashboard."
+    commandLine("pkill", "-f", "com.syncling.DashboardPreviewKt")
+    isIgnoreExitValue = true
+    doLast {
+        if (executionResult.get().exitValue == 0) logger.lifecycle("→ stopped dashboard preview server")
+        else logger.lifecycle("→ no dashboard preview server was running")
+    }
+}
+
+tasks.register<Exec>("stopPreviewLanding") {
+    group = "application"
+    description = "Stop the local syncling landing preview server started by previewLanding."
+    commandLine("pkill", "-f", "com.syncling.LandingPreviewKt")
+    isIgnoreExitValue = true
+    doLast {
+        if (executionResult.get().exitValue == 0) logger.lifecycle("→ stopped preview server")
+        else logger.lifecycle("→ no preview server was running")
+    }
 }

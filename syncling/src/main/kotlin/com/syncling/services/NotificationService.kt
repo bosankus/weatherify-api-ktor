@@ -143,7 +143,7 @@ class NotificationService(private val config: SmtpConfig?) {
                         Please update your payment method to resume automatic translations.
                     </p>
                     ${ctaButton("Update payment method", "https://syncling.space/billing")}
-                    <p style="$HINT">If you believe this is a mistake, please contact support@androidplay.in.</p>
+                    <p style="$HINT">If you believe this is a mistake, please contact support@syncling.space.</p>
                 """.trimIndent()
             )
         )
