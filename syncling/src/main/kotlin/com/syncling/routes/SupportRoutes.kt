@@ -76,8 +76,26 @@ fun Route.configureSupportRoutes(
     userRepository: UserRepository,
     notificationService: NotificationService?,
     adminEmail: String,
+    adminEmailDomain: String,
     eventBus: PipelineEventBus? = null,
 ) {
+    val adminSuffix = "@" + adminEmailDomain.trimStart('@').lowercase()
+    fun isAdminEmail(email: String?): Boolean =
+        email?.lowercase()?.endsWith(adminSuffix) == true
+
+    // Cache of admin userIds, refreshed lazily. Cheap to look up against a small
+    // domain-restricted set; refresh every 60s so newly-onboarded admins appear.
+    val adminIdsCache = java.util.concurrent.atomic.AtomicReference<Pair<Long, Set<String>>>(0L to emptySet())
+    suspend fun adminIds(): Set<String> {
+        val (at, cached) = adminIdsCache.get()
+        val now = System.currentTimeMillis()
+        if (now - at < 60_000 && cached.isNotEmpty()) return cached
+        val ids = runCatching { userRepository.findByEmailDomain(adminEmailDomain).map { it.id }.toSet() }
+            .getOrElse { return cached }
+        adminIdsCache.set(now to ids)
+        return ids
+    }
+
     route("/api/support") {
 
         // ── Create new ticket ────────────────────────────────────────────────
@@ -172,7 +190,7 @@ fun Route.configureSupportRoutes(
                 return@get
             }
             val user = runCatching { userRepository.findById(userId) }.getOrElse { null }
-            val isAdmin = user?.email?.equals(adminEmail, ignoreCase = true) == true
+            val isAdmin = isAdminEmail(user?.email)
 
             val tickets = if (isAdmin) {
                 supportTicketRepository.listAll()
@@ -197,6 +215,16 @@ fun Route.configureSupportRoutes(
             call.respond(TicketListPayload(summaries, isAdmin))
         }
 
+        // ── Admin presence ───────────────────────────────────────────────────
+        // True if any admin currently has an open SSE connection (per-JVM check;
+        // multi-instance deployments would need Redis-backed presence).
+        get("presence") {
+            call.userId() ?: return@get call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))
+            val online = if (eventBus == null) false
+                else adminIds().any { eventBus.isUserSubscribed(it) }
+            call.respond(mapOf("adminOnline" to online))
+        }
+
         // ── Ticket detail + messages ─────────────────────────────────────────
         route("{id}") {
 
@@ -214,7 +242,7 @@ fun Route.configureSupportRoutes(
                     return@get
                 }
                 val user = runCatching { userRepository.findById(userId) }.getOrElse { null }
-                val isAdmin = user?.email?.equals(adminEmail, ignoreCase = true) == true
+                val isAdmin = isAdminEmail(user?.email)
                 if (!isAdmin && ticket.userId != userId) {
                     call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Forbidden"))
                     return@get
@@ -259,7 +287,7 @@ fun Route.configureSupportRoutes(
                     return@post
                 }
                 val user = runCatching { userRepository.findById(userId) }.getOrElse { null }
-                val isAdmin = user?.email?.equals(adminEmail, ignoreCase = true) == true
+                val isAdmin = isAdminEmail(user?.email)
                 val isOwner = ticket.userId == userId
 
                 if (!isAdmin && !isOwner) {
@@ -308,8 +336,9 @@ fun Route.configureSupportRoutes(
                     if (isAdmin) {
                         emit(ticket.userId, newStatus)  // user receives admin's message
                     } else {
-                        val adminUser = runCatching { userRepository.findByEmail(adminEmail) }.getOrNull()
-                        if (adminUser != null) emit(adminUser.id, newStatus)  // admin receives user's message
+                        // Fan out to every admin (any user with an @adminEmailDomain email)
+                        val admins = runCatching { userRepository.findByEmailDomain(adminEmailDomain) }.getOrElse { emptyList() }
+                        admins.forEach { if (it.id != userId) emit(it.id, newStatus) }
                     }
                     emit(userId, newStatus)  // sender's own other tabs
                 }
@@ -337,7 +366,7 @@ fun Route.configureSupportRoutes(
                     return@post
                 }
                 val user = runCatching { userRepository.findById(userId) }.getOrElse { null }
-                val isAdmin = user?.email?.equals(adminEmail, ignoreCase = true) == true
+                val isAdmin = isAdminEmail(user?.email)
                 val isOwner = ticket.userId == userId
 
                 if (!isAdmin && !isOwner) {
@@ -356,10 +385,8 @@ fun Route.configureSupportRoutes(
                     if (isAdmin) {
                         eventBus.emitSupportMessage(ticket.userId, ticketId, "admin", "resolved")
                     } else {
-                        val adminUser = runCatching { userRepository.findByEmail(adminEmail) }.getOrNull()
-                        if (adminUser != null) {
-                            eventBus.emitSupportMessage(adminUser.id, ticketId, "user", "resolved")
-                        }
+                        val admins = runCatching { userRepository.findByEmailDomain(adminEmailDomain) }.getOrElse { emptyList() }
+                        admins.forEach { if (it.id != userId) eventBus.emitSupportMessage(it.id, ticketId, "user", "resolved") }
                     }
                     eventBus.emitSupportMessage(userId, ticketId, senderType = if (isAdmin) "admin" else "user", ticketStatus = "resolved")
                 }

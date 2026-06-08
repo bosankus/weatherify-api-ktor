@@ -40,6 +40,8 @@ dependencies {
     implementation(libs.logback.classic)
     implementation("net.logstash.logback:logstash-logback-encoder:8.0")
     implementation(libs.ktor.server.default.headers)
+    implementation(libs.ktor.server.metrics.micrometer)
+    implementation(libs.micrometer.registry.prometheus)
 
     // Client
     implementation(libs.ktor.client.core)

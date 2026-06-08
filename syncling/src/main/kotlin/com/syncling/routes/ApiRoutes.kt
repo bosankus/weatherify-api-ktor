@@ -1,5 +1,6 @@
 package com.syncling.routes
 
+import com.syncling.pipeline.IcuPlaceholderValidator
 import com.syncling.domain.CreateProjectInput
 import com.syncling.domain.PipelineRunState
 import com.syncling.domain.ProjectRole
@@ -107,8 +108,12 @@ fun Route.configureApiRoutes(
     memberships: ProjectMembershipRepository,
     cdnPublishService: CdnPublishService? = null,
     translationService: TranslationService,
-    pipelineRunRepository: PipelineRunRepository? = null
+    pipelineRunRepository: PipelineRunRepository? = null,
+    /** Reviewer correction log — when reviewers edit during approve/hotfix we record (source, modelOutput, edit). */
+    reviewerFeedbackRepository: com.syncling.repository.ReviewerFeedbackRepository? = null,
+    supportAdminEmailDomain: String = "androidplay.in",
 ) {
+    val adminSuffix = "@" + supportAdminEmailDomain.trimStart('@').lowercase()
 
     route("/api") {
 
@@ -668,7 +673,34 @@ fun Route.configureApiRoutes(
 
                 val body = runCatching { call.receive<ApproveBody>() }.getOrElse { ApproveBody() }
                 val editedText = body.editedText?.takeIf { it.isNotBlank() }
+
+                // Gate: a reviewer edit must keep the same printf/HTML/ICU placeholder shape as the source.
+                // Without this, "approve" can ship a translation that breaks Android string formatting or
+                // CDN-side ICU rendering — far worse than the original review flag.
+                if (editedText != null) {
+                    val check = IcuPlaceholderValidator.validate(translation.sourceText, editedText)
+                    if (check is IcuPlaceholderValidator.Result.Reject) {
+                        return@post call.respond(
+                            HttpStatusCode.UnprocessableEntity,
+                            ApiError("Placeholder validation failed: ${check.message}")
+                        )
+                    }
+                }
+
                 translationRepository.approve(translationId, editedText)
+
+                // Record reviewer correction as a learning signal — only when text actually changed.
+                if (editedText != null && reviewerFeedbackRepository != null) {
+                    runCatching {
+                        reviewerFeedbackRepository.record(
+                            projectId = translation.projectId,
+                            targetLanguage = translation.targetLanguage,
+                            sourceText = translation.sourceText,
+                            modelOutput = translation.translatedText,
+                            reviewerEdit = editedText
+                        )
+                    }.onFailure { apiLog.warn("Reviewer feedback record failed: {}", it.message) }
+                }
 
                 launchFollowUpPr(call.application, githubService, projectRepository, userRepository, translationRepository, translation.projectId, cdnPublishService, eventBus = pipelineEventBus)
 
@@ -777,9 +809,33 @@ fun Route.configureApiRoutes(
                 val publishSvc = cdnPublishService
                     ?: return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiError("CDN publish service not available"))
 
+                // Same placeholder/ICU gate as approve — but here it's even more critical, since
+                // hotfix bypasses review and lands directly on the CDN.
+                run {
+                    val check = IcuPlaceholderValidator.validate(translation.sourceText, body.newText)
+                    if (check is IcuPlaceholderValidator.Result.Reject) {
+                        return@post call.respond(
+                            HttpStatusCode.UnprocessableEntity,
+                            ApiError("Placeholder validation failed: ${check.message}")
+                        )
+                    }
+                }
+
                 val updated = translationRepository.hotfix(translationId, body.newText)
                 if (!updated) {
                     return@post call.respond(HttpStatusCode.InternalServerError, ApiError("Hotfix update failed"))
+                }
+
+                if (reviewerFeedbackRepository != null) {
+                    runCatching {
+                        reviewerFeedbackRepository.record(
+                            projectId = translation.projectId,
+                            targetLanguage = translation.targetLanguage,
+                            sourceText = translation.sourceText,
+                            modelOutput = translation.translatedText,
+                            reviewerEdit = body.newText
+                        )
+                    }.onFailure { apiLog.warn("Reviewer feedback record failed: {}", it.message) }
                 }
 
                 val receipt = runCatching { publishSvc.publish(project.id, promote = project.autoPromote) }
@@ -1003,6 +1059,12 @@ fun Route.configureApiRoutes(
             val userId = call.userId()
                 ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
 
+            // Determine admin role once up front so the bus can track presence transitions
+            // and so we can push the initial presence snapshot to non-admin subscribers.
+            val isAdmin = runCatching {
+                userRepository.findById(userId)?.email?.lowercase()?.endsWith(adminSuffix) == true
+            }.getOrDefault(false)
+
             // Suppress gzip — the Compression plugin would otherwise buffer the entire stream
             // waiting to compress it, preventing events from reaching the client.
             // Content-Encoding is an unsafe header in Ktor 3.x and cannot be set manually.
@@ -1010,10 +1072,24 @@ fun Route.configureApiRoutes(
             call.response.header(HttpHeaders.CacheControl, "no-cache, no-transform")
             call.response.header(HttpHeaders.Connection, "keep-alive")
             call.response.header("X-Accel-Buffering", "no")
+            // Last-Event-ID replay: bring a reconnecting client back in sync with events
+            // it missed during the gap. Parsed as Long; missing or malformed = no replay.
+            val lastEventId = call.request.headers["Last-Event-ID"]?.toLongOrNull() ?: 0L
+
             call.respondBytesWriter(contentType = ContentType.parse("text/event-stream; charset=utf-8")) {
                 // Flush an initial comment so Cloud Run / GFE see upstream bytes immediately.
                 // Without this, headers stay buffered until the first event/heartbeat and GFE 503s the connection.
                 writeStringUtf8(": connected\n\n")
+                // Customer snapshot: tell them whether an admin is currently online
+                if (!isAdmin) {
+                    writeStringUtf8("data: {\"type\":\"support_presence\",\"supportAdminOnline\":${pipelineEventBus.isAnyAdminOnline()}}\n\n")
+                }
+                // Replay buffered events newer than the client's last-seen id
+                if (lastEventId > 0) {
+                    runCatching { pipelineEventBus.replayFramesSince(userId, lastEventId) }
+                        .getOrNull()
+                        ?.forEach { frame -> writeStringUtf8(frame) }
+                }
                 flush()
                 coroutineScope {
                     val heartbeat = launch {
@@ -1030,9 +1106,10 @@ fun Route.configureApiRoutes(
                         }
                     }
                     try {
-                        pipelineEventBus.eventsFor(userId).collect { json ->
+                        pipelineEventBus.eventsFor(userId, isAdmin).collect { frame ->
                             try {
-                                writeStringUtf8("data: $json\n\n")
+                                // Bus now yields full SSE frames (id: + data: + blank line)
+                                writeStringUtf8(frame)
                                 flush()
                             } catch (_: Exception) {
                                 cancel()

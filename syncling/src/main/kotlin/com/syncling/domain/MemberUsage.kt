@@ -48,5 +48,11 @@ data class PipelineRunSummary(
     val stringsPerLocale: Map<String, Int>,
     val error: String?,
     /** Number of strings served from translation memory cache (not billed, not Gemini calls). */
-    val cacheHits: Int = 0
+    val cacheHits: Int = 0,
+    /** Gemini prompt tokens consumed across all translate/plural calls in this run. */
+    val tokensIn: Long = 0,
+    /** Gemini candidate tokens emitted across all calls in this run. */
+    val tokensOut: Long = 0,
+    /** Estimated USD cost for this run's Gemini calls — surfaced on the dashboard cost line. */
+    val estimatedCostUsd: Double = 0.0
 )

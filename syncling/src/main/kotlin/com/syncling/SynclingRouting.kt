@@ -54,6 +54,7 @@ import io.ktor.server.auth.authenticate
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import com.syncling.routes.landingPage
+import com.syncling.routes.sessionUserId
 import io.ktor.server.html.respondHtml
 import io.ktor.server.request.host
 import io.ktor.server.response.respond
@@ -101,8 +102,13 @@ class SynclingDeps(
     val inAppNotificationService: InAppNotificationService? = null,
     val pipelineRunRepository: PipelineRunRepository? = null,
     val supportTicketRepository: SupportTicketRepository? = null,
+    /** Email address that receives ticket-created notifications (a real mailbox). */
     val supportAdminEmail: String = "support@syncling.space",
+    /** Any logged-in user whose email ends with @[supportAdminEmailDomain] is treated as a support admin. */
+    val supportAdminEmailDomain: String = "androidplay.in",
     val apiTokenRepository: ApiTokenRepository? = null,
+    val reviewerFeedbackRepository: com.syncling.repository.ReviewerFeedbackRepository? = null,
+    val meterRegistry: io.micrometer.prometheusmetrics.PrometheusMeterRegistry? = null,
 )
 
 /**
@@ -118,6 +124,10 @@ fun Application.installSynclingRoutes(d: SynclingDeps) {
         get("/") {
             val host = call.request.host()
             if (host == "syncling.space" || host == "www.syncling.space") {
+                if (call.sessionUserId(d.jwtSecret) != null) {
+                    call.respondRedirect("/app")
+                    return@get
+                }
                 call.respondHtml { landingPage() }
             } else {
                 call.respondRedirect("/login", permanent = false)
@@ -126,6 +136,12 @@ fun Application.installSynclingRoutes(d: SynclingDeps) {
 
         // Liveness probe — always 200 if the JVM is running.
         get("/health") { call.respond(HealthStatus("ok")) }
+
+        // Prometheus scrape endpoint. Unauthenticated by design — scraped by the metrics
+        // collector inside the cluster; restrict at the load-balancer if exposed publicly.
+        d.meterRegistry?.let { reg ->
+            get("/metrics") { call.respondText(reg.scrape(), io.ktor.http.ContentType.parse("text/plain; version=0.0.4")) }
+        }
 
         // Readiness probe — checks DB and Redis reachability.
         // Returns 503 if any dependency is unhealthy so the load balancer stops routing traffic.
@@ -230,9 +246,14 @@ Sitemap: https://syncling.space/sitemap.xml
                 d.billingService, d.billingRepository, d.githubService, d.projectRepository,
                 d.userRepository, d.translationRepository, d.pipelineEventBus, d.jobQueue,
                 d.glossaryRepository, d.userActivityService, d.membershipRepository,
-                d.cdnPublishService, d.translationService, d.pipelineRunRepository
+                d.cdnPublishService, d.translationService, d.pipelineRunRepository,
+                d.reviewerFeedbackRepository,
+                d.supportAdminEmailDomain
             )
-            configureDashboardRoutes(d.projectRepository, d.translationRepository, d.billingRepository, d.cdnPublishRepository)
+            configureDashboardRoutes(
+                d.projectRepository, d.translationRepository, d.billingRepository, d.cdnPublishRepository,
+                d.pipelineRunRepository, d.reviewerFeedbackRepository
+            )
             configureBillingRoutes(d.razorpayService, d.billingRepository, d.userRepository, d.jwtSecret, d.userActivityService)
             configureAnalyticsRoutes(d.analyticsService, d.billingRepository)
             configureInsightsRoutes(d.userActivityService)
@@ -245,7 +266,7 @@ Sitemap: https://syncling.space/sitemap.xml
                 d.billingService, d.notificationService, d.inAppNotificationService
             )
             d.supportTicketRepository?.let { repo ->
-                configureSupportRoutes(repo, d.userRepository, d.notificationService, d.supportAdminEmail, d.pipelineEventBus)
+                configureSupportRoutes(repo, d.userRepository, d.notificationService, d.supportAdminEmail, d.supportAdminEmailDomain, d.pipelineEventBus)
             }
         }
     }

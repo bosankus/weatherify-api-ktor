@@ -154,6 +154,17 @@ class MongoUserRepository(
             .toList()
             .map { it.toUser() }
 
+    override suspend fun findByEmailDomain(domain: String): List<User> {
+        val suffix = "@" + domain.trimStart('@').lowercase()
+        val pattern = java.util.regex.Pattern.compile(
+            java.util.regex.Pattern.quote(suffix) + "$",
+            java.util.regex.Pattern.CASE_INSENSITIVE
+        )
+        return collection.find(com.mongodb.client.model.Filters.regex("email", pattern))
+            .toList()
+            .map { it.toUser() }
+    }
+
     override suspend fun findStuckOnboarding(signedUpBefore: Instant): List<User> =
         collection.find(
             and(

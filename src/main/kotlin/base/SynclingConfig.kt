@@ -28,6 +28,23 @@ import org.slf4j.LoggerFactory
 fun Application.configureSyncling(refundService: RefundService) {
     val log = LoggerFactory.getLogger("Syncling")
 
+    // Prometheus registry + Micrometer plugin. Mirrors what the syncling-only entrypoint
+    // does in `com.syncling.Application`. Exposed at `/metrics` via SynclingDeps.meterRegistry.
+    val meterRegistry = io.micrometer.prometheusmetrics.PrometheusMeterRegistry(
+        io.micrometer.prometheusmetrics.PrometheusConfig.DEFAULT
+    )
+    install(io.ktor.server.metrics.micrometer.MicrometerMetrics) {
+        this.registry = meterRegistry
+        meterBinders = listOf(
+            io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics(),
+            io.micrometer.core.instrument.binder.jvm.JvmGcMetrics(),
+            io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics(),
+            io.micrometer.core.instrument.binder.system.ProcessorMetrics(),
+            io.micrometer.core.instrument.binder.system.UptimeMetrics()
+        )
+    }
+    val pipelineMetrics = PipelineMetrics(meterRegistry)
+
     val jwtSecret = getSecretValue("jwt-secret")
     // "mongo-uri" is the Syncling/transloom Atlas cluster; "db-connection-string" is the
     // separate weatherify cluster and does NOT have transloom credentials — using it here
@@ -104,7 +121,8 @@ fun Application.configureSyncling(refundService: RefundService) {
     val pipeline = TranslationPipeline(
         githubService, translationService, billingService, projectRepository, translationRepository,
         pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService,
-        sharedMemoryRepository = null, memberUsageService = memberUsageService
+        sharedMemoryRepository = null, memberUsageService = memberUsageService,
+        metrics = pipelineMetrics
     )
 
     // Central webhook dispatcher — register all Razorpay event handlers here.
@@ -180,6 +198,7 @@ fun Application.configureSyncling(refundService: RefundService) {
             statusService = statusService,
             supportTicketRepository = supportTicketRepository,
             apiTokenRepository = apiTokenRepository,
+            meterRegistry = meterRegistry,
         )
     )
 }

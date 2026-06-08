@@ -35,6 +35,9 @@ class MongoPipelineRunRepository(db: MongoDatabase) : PipelineRunRepository {
             put("stringsPerLocale", Document(summary.stringsPerLocale))
             put("error", summary.error)
             put("cacheHits", summary.cacheHits)
+            put("tokensIn", summary.tokensIn)
+            put("tokensOut", summary.tokensOut)
+            put("estimatedCostUsd", summary.estimatedCostUsd)
         }
         col.findOneAndReplace(eq("_id", summary.runId), doc, FindOneAndReplaceOptions().upsert(true))
     }
@@ -143,7 +146,10 @@ class MongoPipelineRunRepository(db: MongoDatabase) : PipelineRunRepository {
             stringsTranslated = (get("stringsTranslated") as? Number)?.toInt() ?: 0,
             stringsPerLocale = perLocale,
             error = getString("error"),
-            cacheHits = (get("cacheHits") as? Number)?.toInt() ?: 0
+            cacheHits = (get("cacheHits") as? Number)?.toInt() ?: 0,
+            tokensIn = (get("tokensIn") as? Number)?.toLong() ?: 0L,
+            tokensOut = (get("tokensOut") as? Number)?.toLong() ?: 0L,
+            estimatedCostUsd = (get("estimatedCostUsd") as? Number)?.toDouble() ?: 0.0
         )
     }
 }

@@ -4,6 +4,7 @@ import com.androidplay.core.secrets.getSecretValue
 import com.syncling.repository.TranslationMemoryRepository
 import com.syncling.repository.SharedTranslationMemoryRepository
 import com.syncling.pipeline.ExtractionResult
+import com.syncling.pipeline.IcuPlaceholderValidator
 import com.syncling.pipeline.PlaceholderGuard
 import com.syncling.pipeline.TokenExtractor
 import io.ktor.client.*
@@ -56,10 +57,27 @@ data class GeminiContent(val parts: List<GeminiPart>)
 data class GeminiPart(val text: String)
 
 @Serializable
-data class GeminiResponse(val candidates: List<GeminiCandidate>? = null)
+data class GeminiResponse(
+    val candidates: List<GeminiCandidate>? = null,
+    val usageMetadata: GeminiUsageMetadata? = null
+)
 
 @Serializable
 data class GeminiCandidate(val content: GeminiContent)
+
+@Serializable
+data class GeminiUsageMetadata(
+    val promptTokenCount: Int = 0,
+    val candidatesTokenCount: Int = 0,
+    val totalTokenCount: Int = 0
+)
+
+/** Per-batch token + cache accounting returned alongside translation results. */
+data class TokenUsage(val inputTokens: Long, val outputTokens: Long) {
+    operator fun plus(other: TokenUsage) =
+        TokenUsage(inputTokens + other.inputTokens, outputTokens + other.outputTokens)
+    companion object { val ZERO = TokenUsage(0, 0) }
+}
 
 data class TranslationContext(
     val appId: String,
@@ -69,7 +87,18 @@ data class TranslationContext(
     val glossary: Map<String, String>? = null,
     val sourceText: String,
     val targetLanguage: String,
-    val targetRegion: String? = null
+    val targetRegion: String? = null,
+    /**
+     * Approved (source → translation) pairs from this project's fuzzy TM whose source is
+     * semantically close to one of the batch inputs. Injected as few-shot examples so the
+     * model adopts repeated phrasings without us having to memorize them in glossaries.
+     */
+    val fuzzyExamples: List<Pair<String, String>> = emptyList(),
+    /**
+     * Recent (source → reviewerEdit) pairs — what a human shipped after correcting the model.
+     * Strongest signal we have for project tone/voice; presented before fuzzy examples.
+     */
+    val reviewerExamples: List<Pair<String, String>> = emptyList()
 )
 
 // CLDR plural form requirements per language name. Languages not listed use the default two-form
@@ -108,7 +137,9 @@ private val GEMINI_RETRYABLE_CODES = setOf(429, 500, 502, 503, 504)
 
 class TranslationService(
     private val memoryStore: TranslationMemoryRepository,
-    private val sharedMemoryStore: SharedTranslationMemoryRepository? = null
+    private val sharedMemoryStore: SharedTranslationMemoryRepository? = null,
+    /** Optional metrics sink — emits per-call token & cost counters. Null in tests/previews. */
+    private val metrics: PipelineMetrics? = null
 ) {
     private val log = LoggerFactory.getLogger(TranslationService::class.java)
 
@@ -132,7 +163,8 @@ class TranslationService(
     /** Wraps translateBatch results together with cache accounting for dashboard display. */
     data class BatchOutcome(
         val results: Map<String, Result<TranslationResult>>,
-        val cacheHits: Int
+        val cacheHits: Int,
+        val tokenUsage: TokenUsage = TokenUsage.ZERO
     )
 
     suspend fun translate(context: TranslationContext): String = translateWithFlags(context).text
@@ -157,7 +189,7 @@ class TranslationService(
     /** Like [translateBatch] but also returns the number of strings served from cache. */
     suspend fun translateBatchTracked(keyedContexts: Map<String, TranslationContext>): BatchOutcome {
         val outcome = translateBatchInternal(keyedContexts)
-        return BatchOutcome(outcome.first, outcome.second)
+        return BatchOutcome(outcome.first, outcome.second, outcome.third)
     }
 
     // Translates a batch of strings in a single Gemini call.
@@ -169,12 +201,13 @@ class TranslationService(
 
     private suspend fun translateBatchInternal(
         keyedContexts: Map<String, TranslationContext>
-    ): Pair<Map<String, Result<TranslationResult>>, Int> {
-        if (keyedContexts.isEmpty()) return emptyMap<String, Result<TranslationResult>>() to 0
+    ): Triple<Map<String, Result<TranslationResult>>, Int, TokenUsage> {
+        if (keyedContexts.isEmpty()) return Triple(emptyMap(), 0, TokenUsage.ZERO)
 
         val results = mutableMapOf<String, Result<TranslationResult>>()
         val toTranslate = mutableMapOf<String, Pair<TranslationContext, ExtractionResult>>()
         var cacheHits = 0
+        var tokenUsage = TokenUsage.ZERO
 
         for ((key, ctx) in keyedContexts) {
             val hashKey = cacheKey(ctx)
@@ -194,26 +227,28 @@ class TranslationService(
             }
         }
 
-        if (toTranslate.isEmpty()) return results to cacheHits
+        if (toTranslate.isEmpty()) return Triple(results, cacheHits, tokenUsage)
 
         val firstCtx = keyedContexts.values.first()
         val batchInput = toTranslate.mapValues { (_, pair) -> pair.second.cleanText }
         val inputJson = json.encodeToString(mapSerializer, batchInput)
 
-        val llmOutput = try {
+        val (llmOutput, usage) = try {
             callGeminiApiJson(buildBatchSystemPrompt(firstCtx), inputJson)
         } catch (e: Exception) {
             log.warn("Batch Gemini call failed for {} strings: {}", toTranslate.size, e.message)
             toTranslate.keys.forEach { key -> results[key] = Result.failure(e) }
-            return results to cacheHits
+            return Triple(results, cacheHits, tokenUsage)
         }
+        tokenUsage += usage
+        recordCallMetrics("batch", usage)
 
         val parsed: Map<String, String> = try {
             json.decodeFromString(mapSerializer, llmOutput.trim())
         } catch (e: Exception) {
             log.warn("Batch JSON parse failed for {} strings: {}", toTranslate.size, e.message)
             toTranslate.keys.forEach { key -> results[key] = Result.failure(e) }
-            return results to cacheHits
+            return Triple(results, cacheHits, tokenUsage)
         }
 
         for ((key, pair) in toTranslate) {
@@ -230,7 +265,14 @@ class TranslationService(
             }
         }
 
-        return results to cacheHits
+        return Triple(results, cacheHits, tokenUsage)
+    }
+
+    private fun recordCallMetrics(endpoint: String, usage: TokenUsage) {
+        val m = metrics ?: return
+        m.addTokens("in", endpoint, usage.inputTokens)
+        m.addTokens("out", endpoint, usage.outputTokens)
+        m.addCostUsd(endpoint, GeminiCostEstimator.estimateTranslation(usage.inputTokens, usage.outputTokens))
     }
 
     private suspend fun processAndStore(
@@ -238,6 +280,12 @@ class TranslationService(
     ): TranslationResult {
         return when (val guardResult = PlaceholderGuard.validateAndRestore(sourceText, llmOutput, extraction)) {
             is PlaceholderGuard.GuardResult.Success -> {
+                // ICU validation on raw (restored) text — PlaceholderGuard checks tokenized printf/HTML,
+                // but doesn't see ICU {name, plural, ...} placeholders.
+                val icu = IcuPlaceholderValidator.validate(sourceText, guardResult.restoredText)
+                if (icu is IcuPlaceholderValidator.Result.Reject) {
+                    throw IllegalStateException("ICU validation rejected: ${icu.message}")
+                }
                 memoryStore.storeTranslation(hashKey, guardResult.restoredText)
                 TranslationResult(guardResult.restoredText, guardResult.flags)
             }
@@ -275,7 +323,9 @@ class TranslationService(
 
         val systemPrompt = buildPluralSystemPrompt(context, requiredForms)
         val llmOutput = try {
-            callGeminiApiJson(systemPrompt, inputJson)
+            val (text, usage) = callGeminiApiJson(systemPrompt, inputJson)
+            recordCallMetrics("plural", usage)
+            text
         } catch (e: Exception) {
             log.warn("Plural batch Gemini call failed: {}", e.message)
             return emptyMap()
@@ -330,14 +380,31 @@ class TranslationService(
     private fun buildBatchSystemPrompt(ctx: TranslationContext): String {
         val glossaryLine = ctx.glossary?.entries?.joinToString(", ") { (k, v) -> "[$k -> $v]" }
             ?.let { "Apply the following glossary exactly: $it" } ?: ""
+        val reviewerBlock = if (ctx.reviewerExamples.isEmpty()) "" else buildString {
+            appendLine("Reviewer corrections — strongly prefer these phrasings, capitalization, and tone:")
+            ctx.reviewerExamples.take(8).forEach { (src, edit) ->
+                appendLine("  EN: ${src.replace("\n", " ")}")
+                appendLine("  ${ctx.targetLanguage}: ${edit.replace("\n", " ")}")
+            }
+        }.trim()
+        val fuzzyBlock = if (ctx.fuzzyExamples.isEmpty()) "" else buildString {
+            appendLine("Previously approved translations in this project for similar source strings:")
+            ctx.fuzzyExamples.take(8).forEach { (src, tgt) ->
+                appendLine("  EN: ${src.replace("\n", " ")}")
+                appendLine("  ${ctx.targetLanguage}: ${tgt.replace("\n", " ")}")
+            }
+        }.trim()
         return """
             You are a professional mobile app translator for ${ctx.category} apps.
             Translate English to ${ctx.targetLanguage}${ctx.targetRegion?.let { " ($it)" } ?: ""}.
             Tone: ${ctx.tone}.
             Rules: preserve ALL __PH_X__ and __ENT_X__ tokens exactly. Never translate tokens.
+            Preserve ICU placeholders like {count} or {name, plural, ...} unchanged in name and structure.
             Input: a JSON object mapping string keys to English source text.
             Output: a JSON object mapping the SAME keys to their translations. No extra text.
             $glossaryLine
+            $reviewerBlock
+            $fuzzyBlock
         """.trimIndent()
     }
 
@@ -347,10 +414,12 @@ class TranslationService(
             contents = listOf(GeminiContent(listOf(GeminiPart(userPrompt)))),
             generationConfig = GenerationConfig(thinkingConfig = ThinkingConfig(0), temperature = 0.1)
         )
-        return postToGemini(payload)
+        val (text, usage) = postToGemini(payload)
+        recordCallMetrics("single", usage)
+        return text
     }
 
-    private suspend fun callGeminiApiJson(systemPrompt: String, userPrompt: String): String {
+    private suspend fun callGeminiApiJson(systemPrompt: String, userPrompt: String): Pair<String, TokenUsage> {
         val payload = GeminiRequest(
             systemInstruction = GeminiSystemInstruction(listOf(GeminiPart(systemPrompt))),
             contents = listOf(GeminiContent(listOf(GeminiPart(userPrompt)))),
@@ -363,7 +432,7 @@ class TranslationService(
         return postToGemini(payload)
     }
 
-    private suspend fun postToGemini(payload: GeminiRequest): String {
+    private suspend fun postToGemini(payload: GeminiRequest): Pair<String, TokenUsage> {
         var lastException: Exception? = null
         repeat(GEMINI_MAX_RETRIES) { attempt ->
             val response = client.post("$GEMINI_ENDPOINT?key=$geminiApiKey") {
@@ -373,8 +442,12 @@ class TranslationService(
             when {
                 response.status.isSuccess() -> {
                     val geminiResponse: GeminiResponse = response.body()
-                    return geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                    val text = geminiResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
                         ?: throw Exception("Empty response from Gemini API")
+                    val usage = geminiResponse.usageMetadata?.let {
+                        TokenUsage(it.promptTokenCount.toLong(), it.candidatesTokenCount.toLong())
+                    } ?: TokenUsage.ZERO
+                    return text to usage
                 }
                 response.status.value in GEMINI_RETRYABLE_CODES -> {
                     lastException = Exception("Gemini API transient error: ${response.status}")

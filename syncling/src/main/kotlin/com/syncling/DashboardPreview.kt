@@ -112,6 +112,14 @@ fun main() {
                 )
             }
 
+            // Pipeline insights tile
+            get("/api/dashboard/insights") {
+                call.respondText(
+                    """{"windowDays":30,"runs":42,"memoryHitRate":0.63,"geminiSpendUsd":4.18,"costSavedUsd":7.12,"avgRunSeconds":48.5,"reviewerEdits":6}""",
+                    ContentType.Application.Json
+                )
+            }
+
             // CDN status for dashboard widget
             get("/api/dashboard/cdn-status") {
                 call.respondText(

@@ -14,6 +14,7 @@ kotlinx-datetime-version = "0.6.0"
 kotlinx-serialization-version = "1.7.3"
 auth0-jwt-version = "4.4.0"
 stripe-version = "25.3.0"
+micrometer-version = "1.13.6"
 
 [libraries]
 ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor-version" }
@@ -51,6 +52,8 @@ koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref =
 firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebase-admin-version" }
 yamlkt = { module = "net.mamoe.yamlkt:yamlkt", version.ref = "yamlkt-version" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime-version" }
+ktor-server-metrics-micrometer = { module = "io.ktor:ktor-server-metrics-micrometer", version.ref = "ktor-version" }
+micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer-version" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin-version" }

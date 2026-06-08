@@ -45,6 +45,9 @@ interface UserRepository {
     /** All users — only used by the background monitor; bounded by [limit] for safety. */
     suspend fun listAll(limit: Int = 5_000): List<User>
 
+    /** Returns users whose email ends with @[domain]. Used to fan out support events to all admins. */
+    suspend fun findByEmailDomain(domain: String): List<User>
+
     /**
      * Returns users at SIGNED_UP or PROJECT_CREATED whose signupAt is older
      * than [signedUpBefore]. Replaces a full listAll scan for stuck-user detection.

@@ -77,6 +77,9 @@ data class PipelineEvent(
     val supportMessageId: String? = null,    // id of the new message (for dedup)
     val supportMessageContent: String? = null, // full message body (avoids extra HTTP fetch)
     val supportMessageSentAt: Long? = null,  // epoch-ms
+    // Support presence — type = "support_presence". Pushed to customer SSE channels
+    // the instant an admin's SSE connection opens (true) or the last admin disconnects (false).
+    val supportAdminOnline: Boolean? = null,
 )
 
 /**
@@ -156,25 +159,50 @@ class PipelineEventBus(
     // In-memory fallback structures (used only when Redis is unavailable)
     private val memRuns = ConcurrentHashMap<String, ArrayDeque<PipelineRunState>>()
     private val memFlows = ConcurrentHashMap<String, MutableSharedFlow<String>>()
+    private val memCounts = ConcurrentHashMap<String, AtomicInteger>()
+
+    // Admin presence: tracks which admin userIds currently have ≥1 SSE connection on
+    // this JVM. Transitions from empty↔non-empty drive the support_presence broadcast.
+    // Note: per-JVM only — multi-instance presence would need a Redis-backed registry.
+    private val onlineAdmins = ConcurrentHashMap.newKeySet<String>()
+
+    // ── Last-Event-ID replay buffer ────────────────────────────────────────────
+    // Each emitted frame gets a JVM-monotonic Long id; the last N frames per user
+    // are kept in Redis (or memory) so a reconnecting client with Last-Event-ID
+    // can be brought back in sync without manual refresh.
+    private val eventIdGen = java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis())
+    private fun nextEventId(): Long {
+        while (true) {
+            val cur = eventIdGen.get()
+            val next = maxOf(cur + 1, System.currentTimeMillis())
+            if (eventIdGen.compareAndSet(cur, next)) return next
+        }
+    }
+    private val memReplay = ConcurrentHashMap<String, ArrayDeque<Pair<Long, String>>>()
 
     companion object {
         private const val RUN_TTL = 86_400L  // 24 h in seconds
         private const val MAX_RUNS = 20L
+        private const val REPLAY_MAX = 100
+        private const val REPLAY_TTL = 3600L  // 1 h
         fun channelKey(userId: String) = "tl:events:$userId"
         fun runStateKey(runId: String) = "tl:run:$runId"
         fun runsListKey(userId: String) = "tl:runs:$userId"
+        fun replayKey(userId: String) = "tl:replay:$userId"
     }
 
     // ── Public API ─────────────────────────────────────────────────────────────
 
-    fun eventsFor(userId: String): Flow<String> {
-        // Fall back to in-memory if either side of the Redis pub/sub pair is unavailable.
-        if (!pubSubReady) return memFlowFor(userId).asSharedFlow()
-
-        // Get-or-create a shared flow for this user. All concurrent SSE connections for
-        // the same user share one flow and one Redis channel subscription (ref-counted).
-        val flow = subFlows.getOrPut(userId) { MutableSharedFlow(replay = 0, extraBufferCapacity = 64) }
-        val count = subCounts.getOrPut(userId) { AtomicInteger(0) }
+    fun eventsFor(userId: String, isAdmin: Boolean = false): Flow<String> {
+        // Get-or-create a shared flow + refcount. The Redis path uses subFlows/subCounts;
+        // the in-memory fallback also goes through here so admin presence transitions fire
+        // in both modes.
+        val (flow, count) = if (pubSubReady) {
+            subFlows.getOrPut(userId) { MutableSharedFlow(replay = 0, extraBufferCapacity = 64) } to
+                subCounts.getOrPut(userId) { AtomicInteger(0) }
+        } else {
+            memFlowFor(userId) to memCounts.getOrPut(userId) { AtomicInteger(0) }
+        }
 
         return callbackFlow {
             // Attach the collector BEFORE opening the Redis subscription so an event
@@ -188,19 +216,24 @@ class PipelineEventBus(
 
             var subscribed = false
             if (count.getAndIncrement() == 0) {
-                // First subscriber for this userId — open the Redis channel subscription.
-                runCatching { pubSubConn?.async()?.subscribe(channelKey(userId)) }
-                    .onSuccess { subscribed = true }
-                    .onFailure {
-                        log.warn("Lettuce subscribe failed for userId={}: {}", userId, it.message)
-                        if (count.decrementAndGet() == 0) {
-                            subFlows.remove(userId)
-                            subCounts.remove(userId)
+                // First subscriber for this userId — open the Redis channel subscription (no-op in memFlow mode).
+                if (pubSubReady) {
+                    runCatching { pubSubConn?.async()?.subscribe(channelKey(userId)) }
+                        .onSuccess { subscribed = true }
+                        .onFailure {
+                            log.warn("Lettuce subscribe failed for userId={}: {}", userId, it.message)
+                            if (count.decrementAndGet() == 0) {
+                                subFlows.remove(userId)
+                                subCounts.remove(userId)
+                            }
+                            job.cancel()
+                            close(it)
+                            return@callbackFlow
                         }
-                        job.cancel()
-                        close(it)
-                        return@callbackFlow
-                    }
+                } else {
+                    subscribed = true
+                }
+                if (isAdmin) onAdminConnected(userId)
             } else {
                 subscribed = true
             }
@@ -208,13 +241,57 @@ class PipelineEventBus(
             awaitClose {
                 job.cancel()
                 if (subscribed && count.decrementAndGet() == 0) {
-                    // Last subscriber disconnected — release the Redis channel subscription.
-                    subFlows.remove(userId)
-                    subCounts.remove(userId)
-                    runCatching { pubSubConn?.async()?.unsubscribe(channelKey(userId)) }
+                    // Last subscriber disconnected — release the Redis channel subscription / refcount.
+                    if (pubSubReady) {
+                        subFlows.remove(userId)
+                        subCounts.remove(userId)
+                        runCatching { pubSubConn?.async()?.unsubscribe(channelKey(userId)) }
+                    } else {
+                        memCounts.remove(userId)
+                    }
+                    if (isAdmin) onAdminDisconnected(userId)
                 }
             }
         }
+    }
+
+    // ── Admin presence ─────────────────────────────────────────────────────────
+    /** True if any admin currently has an open SSE connection on this JVM. */
+    fun isAnyAdminOnline(): Boolean = onlineAdmins.isNotEmpty()
+
+    private fun onAdminConnected(userId: String) {
+        val wasEmpty = onlineAdmins.isEmpty()
+        onlineAdmins.add(userId)
+        if (wasEmpty) broadcastPresence(true)
+    }
+
+    private fun onAdminDisconnected(userId: String) {
+        if (onlineAdmins.remove(userId) && onlineAdmins.isEmpty()) {
+            broadcastPresence(false)
+        }
+    }
+
+    /** Push a support_presence event to every NON-admin subscriber on this JVM. */
+    private fun broadcastPresence(online: Boolean) {
+        val encoded = runCatching {
+            json.encodeToString(PipelineEvent(type = "support_presence", supportAdminOnline = online))
+        }.getOrNull() ?: return
+        val id = nextEventId()
+        val frame = "id: $id\ndata: $encoded\n\n"
+        val targets = (if (pubSubReady) subFlows.keys else memFlows.keys).filter { it !in onlineAdmins }
+        targets.forEach { uid ->
+            (if (pubSubReady) subFlows[uid] else memFlows[uid])?.tryEmit(frame)
+        }
+    }
+
+    /**
+     * True if [userId] currently has at least one open SSE subscription on this JVM.
+     * Used by the support widget to render "admin online" presence. Per-instance only —
+     * in a multi-Ktor deployment, an admin connected to another instance looks offline.
+     */
+    fun isUserSubscribed(userId: String): Boolean {
+        val counts = if (pubSubReady) subCounts else memCounts
+        return (counts[userId]?.get() ?: 0) > 0
     }
 
     suspend fun recentRuns(userId: String): List<PipelineRunState> {
@@ -445,7 +522,10 @@ class PipelineEventBus(
         surfaceSkipped: Int = 0,
         stringsTranslated: Int = 0,
         stringsPerLocale: Map<String, Int> = emptyMap(),
-        cacheHits: Int = 0
+        cacheHits: Int = 0,
+        tokensIn: Long = 0L,
+        tokensOut: Long = 0L,
+        estimatedCostUsd: Double = 0.0
     ) {
         val finishedAt = System.currentTimeMillis()
         mutateRun(userId, runId) {
@@ -456,25 +536,27 @@ class PipelineEventBus(
             type = "finish", runId = runId, prUrl = prUrl, error = error,
             surfaceSkipped = surfaceSkipped.takeIf { it > 0 }
         ))
-        persistRunSummary(userId, runId, finishedAt, error, stringsTranslated, stringsPerLocale, cacheHits)
+        persistRunSummary(userId, runId, finishedAt, error, stringsTranslated, stringsPerLocale, cacheHits, tokensIn, tokensOut, estimatedCostUsd)
     }
 
     private fun persistRunSummary(
         userId: String, runId: String, finishedAt: Long,
         error: String?, stringsTranslated: Int, stringsPerLocale: Map<String, Int>,
-        cacheHits: Int = 0
+        cacheHits: Int = 0,
+        tokensIn: Long = 0L, tokensOut: Long = 0L, estimatedCostUsd: Double = 0.0
     ) {
         if (runRepository == null) return
         // Fire-and-forget for the hot path. Cleanup uses [persistRunSummaryAwait].
         ioScope.launch {
-            persistRunSummaryAwait(userId, runId, finishedAt, error, stringsTranslated, stringsPerLocale, cacheHits)
+            persistRunSummaryAwait(userId, runId, finishedAt, error, stringsTranslated, stringsPerLocale, cacheHits, tokensIn, tokensOut, estimatedCostUsd)
         }
     }
 
     private suspend fun persistRunSummaryAwait(
         userId: String, runId: String, finishedAt: Long,
         error: String?, stringsTranslated: Int, stringsPerLocale: Map<String, Int>,
-        cacheHits: Int = 0
+        cacheHits: Int = 0,
+        tokensIn: Long = 0L, tokensOut: Long = 0L, estimatedCostUsd: Double = 0.0
     ) {
         val repo = runRepository ?: return
         runCatching {
@@ -503,7 +585,10 @@ class PipelineEventBus(
                 stringsTranslated = stringsTranslated,
                 stringsPerLocale = stringsPerLocale,
                 error = error,
-                cacheHits = cacheHits
+                cacheHits = cacheHits,
+                tokensIn = tokensIn,
+                tokensOut = tokensOut,
+                estimatedCostUsd = estimatedCostUsd
             )
             repo.persist(summary)
         }.onFailure { log.warn("persistRunSummary failed runId={}: {}", runId, it.message) }
@@ -705,17 +790,70 @@ class PipelineEventBus(
 
     private fun emit(userId: String, event: PipelineEvent) {
         val encoded = json.encodeToString(event)
+        val id = nextEventId()
+        val frame = "id: $id\ndata: $encoded\n\n"
+        // Persist for Last-Event-ID replay (skip transient presence — the SSE handler
+        // sends a fresh snapshot on every connect, so replaying it would be misleading).
+        if (event.type != "support_presence") storeReplayFrame(userId, id, frame)
         // Must mirror eventsFor's decision: if pub/sub isn't fully ready, subscribers
         // are on the mem flow, so publish there too — never split the channels.
         if (pubSubReady) {
             ioScope.launch {
                 runCatching {
-                    pool!!.resource.use { jedis -> jedis.publish(channelKey(userId), encoded) }
+                    pool!!.resource.use { jedis -> jedis.publish(channelKey(userId), frame) }
                 }.onFailure { log.warn("Redis publish failed userId={}: {}", userId, it.message) }
             }
         } else {
-            memFlowFor(userId).tryEmit(encoded)
+            memFlowFor(userId).tryEmit(frame)
         }
+    }
+
+    private fun storeReplayFrame(userId: String, id: Long, frame: String) {
+        val entry = "$id|$frame"
+        if (pubSubReady) {
+            ioScope.launch {
+                runCatching {
+                    pool!!.resource.use { jedis ->
+                        jedis.lpush(replayKey(userId), entry)
+                        jedis.ltrim(replayKey(userId), 0, REPLAY_MAX - 1L)
+                        jedis.expire(replayKey(userId), REPLAY_TTL)
+                    }
+                }.onFailure { log.warn("Replay store failed userId={}: {}", userId, it.message) }
+            }
+        } else {
+            val deque = memReplay.getOrPut(userId) { ArrayDeque() }
+            synchronized(deque) {
+                deque.addFirst(id to frame)
+                while (deque.size > REPLAY_MAX) deque.removeLast()
+            }
+        }
+    }
+
+    /**
+     * Returns SSE frames newer than [sinceId], oldest first, ready to write verbatim.
+     * Bounded by the buffer cap (last [REPLAY_MAX] frames per user) and 1h TTL —
+     * a client offline longer than that will silently miss events.
+     */
+    suspend fun replayFramesSince(userId: String, sinceId: Long): List<String> {
+        if (sinceId <= 0) return emptyList()
+        val raw: List<String> = if (pubSubReady) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    pool!!.resource.use { jedis ->
+                        jedis.lrange(replayKey(userId), 0, REPLAY_MAX - 1L)
+                    }
+                }.getOrElse { emptyList() }
+            }
+        } else {
+            memReplay[userId]?.let { d -> synchronized(d) { d.map { "${it.first}|${it.second}" } } } ?: emptyList()
+        }
+        // List is newest-first (LPUSH / addFirst); decode and filter, then reverse to oldest-first.
+        return raw.mapNotNull { entry ->
+            val sep = entry.indexOf('|')
+            if (sep < 0) return@mapNotNull null
+            val eid = entry.substring(0, sep).toLongOrNull() ?: return@mapNotNull null
+            if (eid <= sinceId) null else entry.substring(sep + 1)
+        }.asReversed()
     }
 
     private fun memFlowFor(userId: String) =

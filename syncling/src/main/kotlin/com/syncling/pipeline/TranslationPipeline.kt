@@ -70,6 +70,12 @@ class TranslationPipeline(
     private val memberUsageService: MemberUsageService? = null,
     /** Outbound webhook notifications after each run. Optional — feature degrades gracefully when null. */
     private val outboundWebhookService: com.syncling.services.OutboundWebhookService? = null,
+    /** Fuzzy translation memory — embeds new sources, surfaces nearest-neighbor approved pairs. Optional. */
+    private val fuzzyMemoryService: com.syncling.services.FuzzyMemoryService? = null,
+    /** Reviewer-correction feed; pipeline reads recent corrections as few-shot prompt examples. Optional. */
+    private val reviewerFeedbackRepository: com.syncling.repository.ReviewerFeedbackRepository? = null,
+    /** Per-stage timing + outcome counters + run-level totals. Optional so tests/previews can omit. */
+    private val metrics: com.syncling.services.PipelineMetrics? = null,
     /** Max concurrent Gemini batch calls per translation run. */
     private val translationConcurrency: Int = 8
 ) {
@@ -116,6 +122,7 @@ class TranslationPipeline(
             log.warn("No source file configured for project={} — skipping pipeline", project.id)
             return
         }
+        val fetchStartNs = System.nanoTime()
         eventBus.stepRunning(userId, runId, "FETCHING_STRINGS")
         val sourceContentByPath: Map<String, String> = try {
             coroutineScope {
@@ -130,11 +137,13 @@ class TranslationPipeline(
             }
         } catch (e: Exception) {
             eventBus.stepError(userId, runId, "FETCHING_STRINGS", e.message)
+            metrics?.recordStage("FETCHING_STRINGS", System.nanoTime() - fetchStartNs, "error")
             eventBus.finishRun(userId, runId, error = "Could not read source file: ${e.message}")
             log.warn("Failed to fetch source file for repo={}: {}", payload.repositoryFullName, e.message)
             return
         }
         eventBus.stepDone(userId, runId, "FETCHING_STRINGS")
+        metrics?.recordStage("FETCHING_STRINGS", System.nanoTime() - fetchStartNs, "ok")
 
         // Hash-based fast skip: hash is computed over all source files combined (sorted by path for
         // determinism). If byte-for-byte identical to the last successfully processed version, skip.
@@ -150,6 +159,7 @@ class TranslationPipeline(
         }
 
         // ── Step: Detect changes ───────────────────────────────────────────────
+        val detectStartNs = System.nanoTime()
         eventBus.stepRunning(userId, runId, "DETECTING_CHANGES")
         // Merge strings from all source files; if keys collide across files the last file wins.
         val allSourceStrings: Map<String, String> = sourceContentByPath.entries
@@ -189,6 +199,7 @@ class TranslationPipeline(
 
         if (effectiveChangedStrings.isEmpty()) {
             eventBus.stepDone(userId, runId, "DETECTING_CHANGES", "No changes")
+            metrics?.recordStage("DETECTING_CHANGES", System.nanoTime() - detectStartNs, "ok")
             listOf("BILLING_CHECK", "TRANSLATING", "CREATING_PR").forEach {
                 eventBus.stepSkipped(userId, runId, it)
             }
@@ -239,6 +250,7 @@ class TranslationPipeline(
         if (addedStrings.isEmpty()) {
             val msg = "All ${surfaceKeys.size} change${if (surfaceKeys.size != 1) "s" else ""} were surface-level — retranslation skipped"
             eventBus.stepDone(userId, runId, "DETECTING_CHANGES", msg)
+            metrics?.recordStage("DETECTING_CHANGES", System.nanoTime() - detectStartNs, "ok")
             listOf("BILLING_CHECK", "TRANSLATING", "CREATING_PR").forEach {
                 eventBus.stepSkipped(userId, runId, it)
             }
@@ -255,10 +267,12 @@ class TranslationPipeline(
             append(parts.joinToString(", "))
         }
         eventBus.stepDone(userId, runId, "DETECTING_CHANGES", detectionSummary)
+        metrics?.recordStage("DETECTING_CHANGES", System.nanoTime() - detectStartNs, "ok")
         log.info("{} string(s) to translate × {} language(s) ({} surface skipped)",
             addedStrings.size, config.targets.size, surfaceKeys.size)
 
         // ── Step: Billing check (plan quota + optional per-project cap) ───────
+        val billingStartNs = System.nanoTime()
         eventBus.stepRunning(userId, runId, "BILLING_CHECK")
         try {
             // Per-project monthly cap check (independent of plan quota).
@@ -277,11 +291,14 @@ class TranslationPipeline(
         } catch (e: Exception) {
             val friendlyMsg = e.message?.let { humanizeBillingError(it) } ?: "Plan limit reached"
             eventBus.stepError(userId, runId, "BILLING_CHECK", friendlyMsg)
+            metrics?.recordStage("BILLING_CHECK", System.nanoTime() - billingStartNs, "error")
+            metrics?.incrementRun("quota_exceeded")
             eventBus.finishRun(userId, runId, error = friendlyMsg, surfaceSkipped = surfaceKeys.size)
             log.warn("Billing limit reached for {}: {}", payload.repositoryFullName, e.message)
             return
         }
         eventBus.stepDone(userId, runId, "BILLING_CHECK")
+        metrics?.recordStage("BILLING_CHECK", System.nanoTime() - billingStartNs, "ok")
 
         // ── Step: Translate ────────────────────────────────────────────────────
         val totalLangs = config.targets.size
@@ -303,6 +320,10 @@ class TranslationPipeline(
         val stringIdByKey = translationRepository.bulkUpsertStrings(project.id, addedStrings)
 
         val totalCacheHits = AtomicInteger(0)
+        val totalTokensIn = java.util.concurrent.atomic.AtomicLong(0)
+        val totalTokensOut = java.util.concurrent.atomic.AtomicLong(0)
+        val totalBlocked = AtomicInteger(0)
+        val translatingStartedNs = System.nanoTime()
         coroutineScope {
             config.targets.map { target ->
                 async {
@@ -313,6 +334,9 @@ class TranslationPipeline(
                     val outcome = processTarget(payload, project, config, target, addedStrings, stringIdByKey, runId = runId, commitShort = payload.commitHash.take(7), userId = userId)
                     translatedCounts[target.code] = outcome.count
                     totalCacheHits.addAndGet(outcome.cacheHits)
+                    totalTokensIn.addAndGet(outcome.tokensIn)
+                    totalTokensOut.addAndGet(outcome.tokensOut)
+                    totalBlocked.addAndGet(outcome.blocked)
                     val done = completedLangs.incrementAndGet()
                     eventBus.stepRunning(userId, runId, "TRANSLATING", "$done / $totalLangs languages")
                     eventBus.emitLocaleProgress(userId, runId, LocaleProgressState(
@@ -339,6 +363,7 @@ class TranslationPipeline(
         }
         eventBus.stepDone(userId, runId, "TRANSLATING",
             "$totalLangs language${if (totalLangs != 1) "s" else ""} done")
+        metrics?.recordStage("TRANSLATING", System.nanoTime() - translatingStartedNs, "ok")
 
         // Compute totals BEFORE finishRun so the persisted run summary and the
         // member-usage rollup share the same numbers as billing.
@@ -368,8 +393,19 @@ class TranslationPipeline(
 
         // ── Step: Create PR ────────────────────────────────────────────────────
         val cacheHitsTotal = totalCacheHits.get()
+        val tokensInTotal = totalTokensIn.get()
+        val tokensOutTotal = totalTokensOut.get()
+        val blockedTotal = totalBlocked.get()
+        val costTotal = com.syncling.services.GeminiCostEstimator.estimateTranslation(tokensInTotal, tokensOutTotal)
+        // Push per-string and per-run counters at the moment we have the final tallies — keeps
+        // the Prometheus snapshot consistent with what we persist on PipelineRunSummary.
+        metrics?.addStrings("translated", (total - cacheHitsTotal).toLong().coerceAtLeast(0))
+        metrics?.addStrings("cache_hit", cacheHitsTotal.toLong())
+        metrics?.addStrings("surface_skipped", surfaceKeys.size.toLong())
+        metrics?.addStrings("blocked", blockedTotal.toLong())
 
         if (updatedFiles.isNotEmpty()) {
+            val prStartNs = System.nanoTime()
             eventBus.stepRunning(userId, runId, "CREATING_PR")
             val pr = try {
                 gitHubService.createBranchAndPr(
@@ -384,25 +420,33 @@ class TranslationPipeline(
                 )
             } catch (e: Exception) {
                 eventBus.stepError(userId, runId, "CREATING_PR", e.message)
+                metrics?.recordStage("CREATING_PR", System.nanoTime() - prStartNs, "error")
                 eventBus.finishRun(userId, runId, error = "PR creation failed: ${e.message}", surfaceSkipped = surfaceKeys.size,
-                    stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal)
+                    stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal,
+                    tokensIn = tokensInTotal, tokensOut = tokensOutTotal, estimatedCostUsd = costTotal)
+                metrics?.incrementRun("failed")
                 log.warn("PR creation failed for {}: {}", payload.repositoryFullName, e.message)
                 fireOutboundWebhook(project, runId, prUrl = null, total, cacheHitsTotal, surfaceKeys.size, config, status = "failed")
                 return
             }
             eventBus.stepDone(userId, runId, "CREATING_PR", pr.prUrl)
+            metrics?.recordStage("CREATING_PR", System.nanoTime() - prStartNs, "ok")
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             log.info("Translation PR created: {}", pr.prUrl)
             maybePublishCdn(project, userId, runId)
             eventBus.finishRun(userId, runId, prUrl = pr.prUrl, prBranch = pr.branchName, surfaceSkipped = surfaceKeys.size,
-                stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal)
+                stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal,
+                tokensIn = tokensInTotal, tokensOut = tokensOutTotal, estimatedCostUsd = costTotal)
+            metrics?.incrementRun("succeeded")
             fireOutboundWebhook(project, runId, pr.prUrl, total, cacheHitsTotal, surfaceKeys.size, config, status = "succeeded")
         } else {
             eventBus.stepSkipped(userId, runId, "CREATING_PR", "No translatable strings approved")
             projectRepository.updateSourceFileHash(project.id, incomingHash)
             maybePublishCdn(project, userId, runId)
             eventBus.finishRun(userId, runId, surfaceSkipped = surfaceKeys.size,
-                stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal)
+                stringsTranslated = total, stringsPerLocale = perLocaleCounts, cacheHits = cacheHitsTotal,
+                tokensIn = tokensInTotal, tokensOut = tokensOutTotal, estimatedCostUsd = costTotal)
+            metrics?.incrementRun("succeeded")
             fireOutboundWebhook(project, runId, prUrl = null, total, cacheHitsTotal, surfaceKeys.size, config, status = "succeeded")
         }
         } catch (e: Exception) {
@@ -456,10 +500,15 @@ class TranslationPipeline(
             eventBus.stepSkipped(userId, runId, "CDN_PUBLISH", "OTA disabled for project")
             return
         }
+        val cdnStartNs = System.nanoTime()
         runCatching { runCdnPublish(userId, runId, project.id, project.autoPromote, project.rolloutPercent) }
+            .onSuccess {
+                metrics?.recordStage("CDN_PUBLISH", System.nanoTime() - cdnStartNs, "ok")
+            }
             .onFailure { e ->
                 log.error("CDN publish failed for project={}: {}", project.id, e.message, e)
                 eventBus.stepError(userId, runId, "CDN_PUBLISH", e.message ?: e.javaClass.simpleName)
+                metrics?.recordStage("CDN_PUBLISH", System.nanoTime() - cdnStartNs, "error")
             }
     }
 
@@ -495,7 +544,10 @@ class TranslationPipeline(
     private data class TargetOutcome(
         val approved: Map<String, String>,
         val count: Int,
-        val cacheHits: Int
+        val cacheHits: Int,
+        val tokensIn: Long = 0L,
+        val tokensOut: Long = 0L,
+        val blocked: Int = 0
     )
 
     private suspend fun processTarget(
@@ -512,6 +564,8 @@ class TranslationPipeline(
         val laneTotal = addedStrings.size
         val laneDone = AtomicInteger(0)
         val localeCacheHits = AtomicInteger(0)
+        val localeTokensIn = java.util.concurrent.atomic.AtomicLong(0)
+        val localeTokensOut = java.util.concurrent.atomic.AtomicLong(0)
         fun bumpLane(delta: Int) {
             if (delta <= 0) return
             val d = laneDone.addAndGet(delta).coerceAtMost(laneTotal)
@@ -629,6 +683,21 @@ class TranslationPipeline(
         }
 
         // ── Phase 1c: Translate simple strings ────────────────────────────────
+        // Fetch the two prompt-augmentation signals once per locale:
+        //   • reviewer corrections — newest first, project + locale specific
+        //   • fuzzy TM hits — embedding nearest-neighbors over the project's approved pool
+        // Both degrade silently to empty lists if the optional service is missing.
+        val reviewerExamples: List<Pair<String, String>> = reviewerFeedbackRepository
+            ?.runCatching { recentExamples(project.id, target.code, limit = 8) }
+            ?.getOrNull()
+            ?.map { it.sourceText to it.reviewerEdit }
+            ?: emptyList()
+        val fuzzyExamples: List<Pair<String, String>> = fuzzyMemoryService
+            ?.runCatching { lookupExamples(project.id, target.code, simpleStrings.values.toList()) }
+            ?.getOrNull()
+            ?.map { it.source to it.translation }
+            ?: emptyList()
+
         val semaphore = Semaphore(translationConcurrency)
         val batches = simpleStrings.entries.chunked(BATCH_SIZE).map { chunk -> chunk.associate { it.key to it.value } }
 
@@ -645,12 +714,16 @@ class TranslationPipeline(
                                 appId = payload.repositoryFullName, appName = config.app.name,
                                 category = config.app.category, tone = config.app.tone,
                                 glossary = config.glossary?.get(target.code),
-                                sourceText = sourceText, targetLanguage = target.name, targetRegion = target.region
+                                sourceText = sourceText, targetLanguage = target.name, targetRegion = target.region,
+                                fuzzyExamples = fuzzyExamples,
+                                reviewerExamples = reviewerExamples
                             )
                         }
                         val batchOutcome = translationService.translateBatchTracked(keyedContexts)
                         val batchResults = batchOutcome.results
                         localeCacheHits.addAndGet(batchOutcome.cacheHits)
+                        localeTokensIn.addAndGet(batchOutcome.tokenUsage.inputTokens)
+                        localeTokensOut.addAndGet(batchOutcome.tokenUsage.outputTokens)
                         bumpLane(batch.size)
                         val queuedHere = mutableListOf<TranslationUpsert>()
                         val results = batch.keys.map { key ->
@@ -736,8 +809,28 @@ class TranslationPipeline(
         val approved = finalResults.filterNotNull()
             .filter { it.status == "auto" }
             .associate { it.key to it.text }
+
+        // Contribute approved (source → translation) pairs to the fuzzy TM.
+        // Best-effort — the lookup half degrades gracefully if this never lands.
+        val fuzzy = fuzzyMemoryService
+        if (approved.isNotEmpty() && fuzzy != null) {
+            val pairs = approved.mapNotNull { (key, translation) ->
+                val src = sourceTextByKey[key] ?: addedStrings[key] ?: return@mapNotNull null
+                src to translation
+            }
+            runCatching { fuzzy.contribute(project.id, target.code, pairs) }
+                .onFailure { log.warn("Fuzzy TM contribution failed for locale={}: {}", target.code, it.message) }
+        }
         val count = finalResults.count { it != null }
-        return TargetOutcome(approved, count, localeCacheHits.get())
+        val blocked = pendingUpserts.values.count { it.status == "blocked" }
+        return TargetOutcome(
+            approved = approved,
+            count = count,
+            cacheHits = localeCacheHits.get(),
+            tokensIn = localeTokensIn.get(),
+            tokensOut = localeTokensOut.get(),
+            blocked = blocked
+        )
     }
 
     private suspend fun classifyModifiedStrings(

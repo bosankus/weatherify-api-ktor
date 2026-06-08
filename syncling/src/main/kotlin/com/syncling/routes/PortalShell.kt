@@ -418,6 +418,10 @@ internal const val SUPPORT_CHAT_CSS = """
 /* Panel */
 .sc-panel{position:fixed;bottom:88px;right:24px;z-index:8901;width:400px;max-width:calc(100vw - 24px);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 60px -10px rgba(0,0,0,.6),0 4px 20px -4px rgba(0,0,0,.3);display:flex;flex-direction:column;height:580px;max-height:calc(100vh - 120px);opacity:0;transform:translateY(24px) scale(.95);pointer-events:none;transition:opacity .22s cubic-bezier(.4,0,.2,1),transform .22s cubic-bezier(.4,0,.2,1);overflow:hidden}
 .sc-panel.open{opacity:1;transform:none;pointer-events:auto}
+/* Admin variant — full-height right-side slide-out, mirrors .pr-drawer */
+.sc-panel.sc-admin{top:0;right:0;bottom:0;width:480px;max-width:100vw;height:100vh;max-height:100vh;border-radius:0;border:none;border-left:1px solid var(--border);box-shadow:-16px 0 48px rgba(0,0,0,.5);opacity:1;transform:translateX(100%);transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.sc-panel.sc-admin.open{transform:translateX(0)}
+.sc-panel.sc-admin .sc-header{border-radius:0}
 /* Header */
 .sc-header{flex-shrink:0;background:linear-gradient(135deg,#5535dd 0%,#7c3aed 60%,#a855f7 100%);padding:14px 16px 12px;display:flex;align-items:center;gap:10px}
 .sc-header-back{background:rgba(255,255,255,.15);border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center;color:#fff;flex-shrink:0;transition:background .12s;font-size:16px;line-height:1}
@@ -542,6 +546,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
   var BASE='/api/support';
   var _open=false,_view='home',_convId=null,_convs=null,_thread=null,_loaded=false,_isAdmin=false,_submitting=false,_lastSent=null;
   var _unread={},_sseCtrl=null,_pollTimer=null,_sseDelay=1000,_sseStop=false,_audioCtx=null;
+  var _adminOnline=null,_presenceTimer=null,_lastEventId='';
   var CAT_LABELS={'bug':'Bug report','question':'Question','feature':'Feature request','billing':'Billing'};
   var CAT_EMOJIS={'bug':'🐛','question':'💬','feature':'✨','billing':'💳'};
 
@@ -590,7 +595,9 @@ internal val SUPPORT_CHAT_JS = """(function(){
     if(_sseCtrl||_sseStop)return;
     var token=localStorage.getItem('syncling_token');if(!token)return;
     _sseCtrl=new AbortController();
-    fetch('/api/pipeline/events',{headers:{'Authorization':'Bearer '+token},signal:_sseCtrl.signal})
+    var headers={'Authorization':'Bearer '+token};
+    if(_lastEventId)headers['Last-Event-ID']=_lastEventId;
+    fetch('/api/pipeline/events',{headers:headers,signal:_sseCtrl.signal})
       .then(function(res){
         // Auth failures are not retryable — stop the reconnect loop entirely so a
         // logged-out tab doesn't hammer the endpoint every 30s. Other 4xx/5xx fall
@@ -606,9 +613,23 @@ internal val SUPPORT_CHAT_JS = """(function(){
             buf+=decoder.decode(r.value,{stream:true});
             var parts=buf.split('\n\n');buf=parts.pop();
             parts.forEach(function(chunk){
-              var line=chunk.trim();if(!line.startsWith('data:'))return;
+              // Each SSE event can have id: and data: lines. Parse both — the id is
+              // stashed in _lastEventId so the next reconnect sends Last-Event-ID and
+              // gets a replay of anything missed in between.
+              var lines=chunk.split('\n'),dataPayload=null,idPayload=null;
+              for(var i=0;i<lines.length;i++){
+                var L=lines[i];
+                if(L.indexOf('data:')===0)dataPayload=L.slice(5).trim();
+                else if(L.indexOf('id:')===0)idPayload=L.slice(3).trim();
+              }
+              if(idPayload)_lastEventId=idPayload;
+              if(!dataPayload)return;
               if(!gotFrame){gotFrame=true;_sseDelay=1000;}
-              try{var evt=JSON.parse(line.slice(5).trim());if(evt.type==='support_message')onSseMessage(evt);}catch(_){}
+              try{
+                var evt=JSON.parse(dataPayload);
+                if(evt.type==='support_message')onSseMessage(evt);
+                else if(evt.type==='support_presence')onSsePresence(evt);
+              }catch(_){}
             });
             pump();
           }).catch(function(){scheduleReconnect();});
@@ -658,6 +679,34 @@ internal val SUPPORT_CHAT_JS = """(function(){
         if(_convs)_convs.forEach(function(t){if(t.id===id)t.status=data.status;});
         if(_view==='thread'&&_convId===id){renderThread(false);if(gotNew&&isAdminPoll)playTing();}
       }).catch(function(){});
+  }
+
+  // ── Admin presence (SSE-driven, with a slow polling fallback) ──────────────
+  // The server pushes support_presence over SSE the instant an admin connects or
+  // the last admin disconnects, so the indicator updates in real-time. The poll
+  // below only catches stale connections (e.g. a tab that slept past the SSE
+  // backoff) — 5 min is plenty.
+  function onSsePresence(evt){
+    if(_isAdmin)return;
+    var next=!!evt.supportAdminOnline;
+    if(_adminOnline!==next){_adminOnline=next;renderHeader();}
+  }
+  function fetchPresence(){
+    if(_isAdmin)return;
+    fetch(BASE+'/presence',{headers:H()})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){
+        if(!d)return;
+        var next=!!d.adminOnline;
+        if(_adminOnline!==next){_adminOnline=next;renderHeader();}
+      }).catch(function(){});
+  }
+  function startPresencePoll(){
+    if(_presenceTimer||_isAdmin)return;
+    _presenceTimer=setInterval(fetchPresence,300000);  // 5min reconciliation only
+  }
+  function stopPresencePoll(){
+    if(_presenceTimer){clearInterval(_presenceTimer);_presenceTimer=null;}
   }
 
   // ── Home view ───────────────────────────────────────────────────────────────
@@ -858,8 +907,16 @@ internal val SUPPORT_CHAT_JS = """(function(){
       else nameEl.textContent=_isAdmin?'🛠 Support Inbox':'Syncling Support';
     }
     if(statusEl){
-      if(_view==='thread'&&_thread)statusEl.innerHTML='<span class="sc-status st-'+esc(_thread.status)+'" style="font-size:10px">'+statusLabel(_thread.status)+'</span>';
-      else statusEl.innerHTML='<div class="sc-header-dot"></div>'+(_isAdmin?'Admin view':'Usually reply within 24h');
+      if(_view==='thread'&&_thread){
+        statusEl.innerHTML='<span class="sc-status st-'+esc(_thread.status)+'" style="font-size:10px">'+statusLabel(_thread.status)+'</span>';
+      } else if(_isAdmin){
+        statusEl.innerHTML='<div class="sc-header-dot"></div>Admin view';
+      } else {
+        var online=_adminOnline===true, offline=_adminOnline===false;
+        var dotStyle=online?'':(offline?'background:#71717a;animation:none':'');
+        var label=online?'Support is online':(offline?"Offline — we'll reply within 24h":'Usually reply within 24h');
+        statusEl.innerHTML='<div class="sc-header-dot" style="'+dotStyle+'"></div>'+label;
+      }
     }
   }
 
@@ -955,7 +1012,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
     _loaded=false;if(_view==='home')renderBody();
     fetch(BASE,{headers:H()})
       .then(function(r){return r.ok?r.json():Promise.reject('HTTP '+r.status);})
-      .then(function(d){_loaded=true;_convs=d.tickets||[];_isAdmin=!!d.isAdmin;if(_view==='home')renderBody();renderHeader();updateFabDot();})
+      .then(function(d){_loaded=true;_convs=d.tickets||[];_isAdmin=!!d.isAdmin;var p=document.getElementById('sc-panel');if(p)p.classList.toggle('sc-admin',_isAdmin);if(_view==='home')renderBody();renderHeader();updateFabDot();if(!_isAdmin)startPresencePoll();})
       .catch(function(){_loaded=true;_convs=[];if(_view==='home')renderBody();});
   }
 
@@ -984,6 +1041,8 @@ internal val SUPPORT_CHAT_JS = """(function(){
     document.body.appendChild(panel);
     renderBody();
     startSse();
+    // Preload tickets so admin status (and drawer variant) is applied before first open.
+    loadConvs();
   }
 
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&_open)window._scClose();});

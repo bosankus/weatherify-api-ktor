@@ -86,6 +86,20 @@ fun Application.module() {
 
     install(com.syncling.plugins.RequestContextPlugin)
 
+    // Micrometer + Prometheus. The plugin exposes JVM/HTTP metrics; PipelineMetrics owns the
+    // app-specific counters on top of the same registry. /metrics is mounted in SynclingRouting.
+    val meterRegistry: io.micrometer.prometheusmetrics.PrometheusMeterRegistry by inject()
+    install(io.ktor.server.metrics.micrometer.MicrometerMetrics) {
+        this.registry = meterRegistry
+        meterBinders = listOf(
+            io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics(),
+            io.micrometer.core.instrument.binder.jvm.JvmGcMetrics(),
+            io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics(),
+            io.micrometer.core.instrument.binder.system.ProcessorMetrics(),
+            io.micrometer.core.instrument.binder.system.UptimeMetrics()
+        )
+    }
+
     install(ContentNegotiation) {
         // encodeDefaults = true: otherwise response fields whose value equals
         // their Kotlin default (e.g. ProjectDetailResponse.autoPromote = true)
@@ -216,6 +230,8 @@ fun Application.module() {
     val cdnPublishRepository: CdnPublishRepository by inject()
     val notificationRepository: NotificationRepository by inject()
     val sharedMemoryRepository: SharedTranslationMemoryRepository by inject()
+    val reviewerFeedbackRepository: com.syncling.repository.ReviewerFeedbackRepository by inject()
+    val fuzzyMemoryService: com.syncling.services.FuzzyMemoryService by inject()
     val membershipRepository: ProjectMembershipRepository by inject()
     val pipelineRunRepository: PipelineRunRepository by inject()
     val supportTicketRepository: com.syncling.repository.SupportTicketRepository by inject()
@@ -278,11 +294,19 @@ fun Application.module() {
         handlers = listOf(razorpayService)
     )
     val githubService = GitHubService()
-    val translationService = TranslationService(memoryRepository, sharedMemoryRepository)
+    val pipelineMetrics: com.syncling.services.PipelineMetrics by inject()
+    val translationService = TranslationService(memoryRepository, sharedMemoryRepository, pipelineMetrics)
     val outboundWebhookService = OutboundWebhookService()
     val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
     val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
-    val pipeline = TranslationPipeline(githubService, translationService, billingService, projectRepository, translationRepository, pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService, sharedMemoryRepository, memberUsageService, outboundWebhookService)
+    val pipeline = TranslationPipeline(
+        githubService, translationService, billingService, projectRepository, translationRepository,
+        pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService,
+        sharedMemoryRepository, memberUsageService, outboundWebhookService,
+        fuzzyMemoryService = fuzzyMemoryService,
+        reviewerFeedbackRepository = reviewerFeedbackRepository,
+        metrics = pipelineMetrics
+    )
 
     jobQueue.startWorker { payload ->
         val projectUuid = runCatching { java.util.UUID.fromString(payload.projectId) }.getOrElse {
@@ -471,5 +495,7 @@ fun Application.module() {
         pipelineRunRepository = pipelineRunRepository,
         supportTicketRepository = supportTicketRepository,
         apiTokenRepository = apiTokenRepository,
+        reviewerFeedbackRepository = reviewerFeedbackRepository,
+        meterRegistry = meterRegistry,
     ))
 }

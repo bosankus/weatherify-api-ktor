@@ -55,6 +55,8 @@ dependencies {
     implementation(libs.ktor.server.rate.limit)
     implementation(libs.bcrypt)
     implementation(libs.ktor.server.html)
+    implementation(libs.ktor.server.metrics.micrometer)
+    implementation(libs.micrometer.registry.prometheus)
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)

@@ -109,19 +109,12 @@ fun Route.configureWebhookRoutes(
                 return@post
             }
 
-            if (branchName != project.watchBranch) {
-                log.info("Ignored webhook: push to branch '{}' (watching '{}')", branchName, project.watchBranch)
-                eventBus.emitWebhookRejected(
-                    ownerId = project.ownerId, repo = repo, branch = branchName,
-                    projectId = project.id, reason = "branch_mismatch",
-                    detail = "Push to '$branchName' ignored — this project watches '${project.watchBranch}'. Update the watch branch in project settings if you want to track this branch."
-                )
-                call.respond(HttpStatusCode.Accepted, "Ignored: branch not watched")
-                return@post
-            }
-
             val commits = json["commits"]?.jsonArray
 
+            // Bot-loop guard runs BEFORE the watch-branch check: when Syncling pushes its own
+            // translation branch (e.g. 'syncling/translations-…'), GitHub fires a push webhook
+            // we must silently drop — otherwise the user sees a misleading "WRONG BRANCH" alert
+            // for our own bot's push.
             if (commits != null && commits.isNotEmpty()) {
                 val allFromBot = commits.all { commit ->
                     val msg = commit.jsonObject["message"]?.jsonPrimitive?.content ?: ""
@@ -132,6 +125,17 @@ fun Route.configureWebhookRoutes(
                     call.respond(HttpStatusCode.Accepted, "Ignored: Syncling bot commits")
                     return@post
                 }
+            }
+
+            if (branchName != project.watchBranch) {
+                log.info("Ignored webhook: push to branch '{}' (watching '{}')", branchName, project.watchBranch)
+                eventBus.emitWebhookRejected(
+                    ownerId = project.ownerId, repo = repo, branch = branchName,
+                    projectId = project.id, reason = "branch_mismatch",
+                    detail = "Push to '$branchName' ignored — this project watches '${project.watchBranch}'. Update the watch branch in project settings if you want to track this branch."
+                )
+                call.respond(HttpStatusCode.Accepted, "Ignored: branch not watched")
+                return@post
             }
 
             val headCommit = json["head_commit"]?.jsonObject

@@ -28,6 +28,15 @@ fun synclingModule(encryptionKey: String) = module {
     single<CdnPublishRepository> { MongoCdnPublishRepository(get()) }
     single<NotificationRepository> { MongoNotificationRepository(get()) }
     single<SharedTranslationMemoryRepository> { MongoSharedTranslationMemoryRepository(get()) }
+    single<ReviewerFeedbackRepository> { com.syncling.repository.mongo.MongoReviewerFeedbackRepository(get()) }
+    single<TranslationEmbeddingRepository> { com.syncling.repository.mongo.MongoTranslationEmbeddingRepository(get()) }
+    single { com.syncling.services.EmbeddingService() }
+    single { com.syncling.services.FuzzyMemoryService(get(), get()) }
+    single<io.micrometer.prometheusmetrics.PrometheusMeterRegistry> {
+        io.micrometer.prometheusmetrics.PrometheusMeterRegistry(io.micrometer.prometheusmetrics.PrometheusConfig.DEFAULT)
+    }
+    single<io.micrometer.core.instrument.MeterRegistry> { get<io.micrometer.prometheusmetrics.PrometheusMeterRegistry>() }
+    single { com.syncling.services.PipelineMetrics(get()) }
     single<ProjectMembershipRepository> { MongoProjectMembershipRepository(get()) }
     single<PipelineRunRepository> { MongoPipelineRunRepository(get()) }
     single<com.syncling.repository.SupportTicketRepository> { com.syncling.repository.mongo.MongoSupportTicketRepository(get()) }
@@ -103,6 +112,11 @@ fun synclingIndexes(): List<IndexSpec> {
         IndexSpec("notifications", Document("createdAt", 1), IndexOptions().expireAfter(30, TimeUnit.DAYS)),
         // Shared translation memory: hashKey is the primary lookup key
         IndexSpec("shared_translation_memory", Document("hashKey", 1), IndexOptions().unique(true)),
+        // Reviewer feedback: per (projectId, targetLanguage) descending recency for prompt few-shot.
+        IndexSpec("reviewer_feedback", Document(mapOf("projectId" to 1, "targetLanguage" to 1, "createdAt" to -1))),
+        // Translation embeddings: unique per (projectId, sourceText) via hashKey; project-scoped scan for fuzzy lookup.
+        IndexSpec("translation_embeddings", Document("hashKey", 1), IndexOptions().unique(true)),
+        IndexSpec("translation_embeddings", Document("projectId", 1)),
         // Translation history: query by project + stringKey, sorted by time
         IndexSpec("translation_history", Document(mapOf("projectId" to 1, "stringKey" to 1, "changedAt" to -1))),
         IndexSpec("translation_history", Document("translationId", 1)),
