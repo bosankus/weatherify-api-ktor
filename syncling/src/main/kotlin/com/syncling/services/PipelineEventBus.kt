@@ -181,6 +181,13 @@ class PipelineEventBus(
     private val memReplay = ConcurrentHashMap<String, ArrayDeque<Pair<Long, String>>>()
 
     companion object {
+        /**
+         * Synthetic channel id for the admin dashboard's support inbox. Every user-side
+         * support event (new ticket, new message, resolve) is mirrored here so any open
+         * admin dashboard receives it without a per-admin-userId subscription. Subscribers
+         * pass isAdmin=true so customer-facing presence flips while a dashboard is open.
+         */
+        const val SUPPORT_ADMIN_CHANNEL = "support-admin-feed"
         private const val RUN_TTL = 86_400L  // 24 h in seconds
         private const val MAX_RUNS = 20L
         private const val REPLAY_MAX = 100

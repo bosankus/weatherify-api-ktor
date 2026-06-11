@@ -11,13 +11,23 @@ import config.Environment
 import config.JwtConfig
 import com.androidplay.core.common.Result
 import domain.service.AuthService
+import com.syncling.PipelineEventBusKey
+import com.syncling.services.PipelineEventBus
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.html.*
+import io.ktor.server.http.content.suppressCompression
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.writeStringUtf8
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.html.*
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
@@ -1631,6 +1641,13 @@ fun Route.adminAuthRoute() {
                 val updated = repo.updateStatus(ticketId, newStatus)
                 if (updated) {
                     logger.info("Admin {} updated ticket {} to {}", admin.email, ticketId.take(8), newStatus)
+                    // Push the status change to the customer's open chat widget and other dashboards
+                    application.attributes.getOrNull(PipelineEventBusKey)?.let { bus ->
+                        runCatching { repo.findById(ticketId) }.getOrNull()?.let { t ->
+                            bus.emitSupportMessage(t.userId, ticketId, "admin", newStatus)
+                            bus.emitSupportMessage(PipelineEventBus.SUPPORT_ADMIN_CHANNEL, ticketId, "admin", newStatus)
+                        }
+                    }
                     call.respondSuccess("Ticket status updated", mapOf("id" to ticketId, "status" to newStatus))
                 } else {
                     call.respondError("Ticket not found", Unit, HttpStatusCode.NotFound)
@@ -1744,6 +1761,13 @@ fun Route.adminAuthRoute() {
                         repo.updateStatus(ticketId, "acknowledged")
                     }
                     logger.info("Admin {} sent reply to ticket {}", admin.email, ticketId.take(8))
+                    // Real-time push: deliver the reply to the customer's open chat widget
+                    // and mirror it to other admin dashboards (dedup by message id client-side).
+                    application.attributes.getOrNull(PipelineEventBusKey)?.let { bus ->
+                        val newStatus = if (ticket.status == "open") "acknowledged" else ticket.status
+                        bus.emitSupportMessage(ticket.userId, ticketId, "admin", newStatus, msg.id, msg.content, msg.sentAt)
+                        bus.emitSupportMessage(PipelineEventBus.SUPPORT_ADMIN_CHANNEL, ticketId, "admin", newStatus, msg.id, msg.content, msg.sentAt)
+                    }
                     call.respondSuccess("Reply sent", msg)
                 } else {
                     call.respondError("Ticket not found", Unit, HttpStatusCode.NotFound)
@@ -1751,6 +1775,69 @@ fun Route.adminAuthRoute() {
             } catch (e: Exception) {
                 logger.error("Failed to send reply: {}", e.message)
                 call.respondError("Failed to send reply: ${e.message}", Unit, HttpStatusCode.InternalServerError)
+            }
+        }
+
+        // GET /admin/support/events — SSE stream of live support events (new tickets,
+        // customer messages, status changes). EventSource can't send Authorization
+        // headers, so the dashboard JS consumes this via fetch() streaming.
+        get("/events") {
+            val admin = call.getAuthenticatedAdminOrRespond() ?: return@get
+            val bus = application.attributes.getOrNull(PipelineEventBusKey)
+            if (bus == null) {
+                call.respondError("Event bus not available", Unit, HttpStatusCode.ServiceUnavailable)
+                return@get
+            }
+            logger.info("Admin {} connected to support SSE stream", admin.email)
+
+            // Suppress gzip — the Compression plugin would buffer the whole stream otherwise.
+            call.suppressCompression()
+            call.response.header(HttpHeaders.CacheControl, "no-cache, no-transform")
+            call.response.header(HttpHeaders.Connection, "keep-alive")
+            call.response.header("X-Accel-Buffering", "no")
+            val lastEventId = call.request.headers["Last-Event-ID"]?.toLongOrNull() ?: 0L
+
+            call.respondBytesWriter(contentType = ContentType.parse("text/event-stream; charset=utf-8")) {
+                writeStringUtf8(": connected\n\n")
+                // Replay events missed while disconnected (bounded buffer, 1h TTL)
+                if (lastEventId > 0) {
+                    runCatching { bus.replayFramesSince(PipelineEventBus.SUPPORT_ADMIN_CHANNEL, lastEventId) }
+                        .getOrNull()?.forEach { frame -> writeStringUtf8(frame) }
+                }
+                flush()
+                coroutineScope {
+                    val heartbeat = launch {
+                        while (isActive) {
+                            delay(25_000)
+                            try {
+                                writeStringUtf8(": ping\n\n")
+                                flush()
+                            } catch (_: Exception) {
+                                cancel()
+                                break
+                            }
+                        }
+                    }
+                    try {
+                        // isAdmin=true flips customer-facing "Support is online" presence
+                        // while at least one dashboard holds this stream open.
+                        bus.eventsFor(PipelineEventBus.SUPPORT_ADMIN_CHANNEL, isAdmin = true).collect { frame ->
+                            try {
+                                writeStringUtf8(frame)
+                                flush()
+                            } catch (_: Exception) {
+                                cancel()
+                                return@collect
+                            }
+                        }
+                    } catch (_: CancellationException) {
+                        // Normal shutdown when heartbeat detected disconnect
+                    } catch (e: Exception) {
+                        logger.warn("Admin support SSE stream error: {}", e.message)
+                    } finally {
+                        heartbeat.cancel()
+                    }
+                }
             }
         }
     }
@@ -2579,127 +2666,195 @@ fun Route.adminAuthRoute() {
                                     }
                                 }
 
-                                /* ── Support Chat Modal ──────────────────────────── */
-                                .support-chat-backdrop {
-                                    display: none !important;
+                                /* ── Support Chat Drawer ─────────────────────────────
+                                   The drawer + backdrop are MOVED TO document.body by JS
+                                   before first open: ancestors here use backdrop-filter,
+                                   which creates a containing block and breaks
+                                   position:fixed (the old modal rendered pinned to the
+                                   top of the card instead of the viewport). */
+                                .scx-backdrop {
+                                    position: fixed; inset: 0;
+                                    background: rgba(10,8,20,0.55); backdrop-filter: blur(3px); z-index: 24000;
+                                    opacity: 0; visibility: hidden; transition: opacity .25s ease, visibility .25s ease;
                                 }
-                                .support-chat-backdrop.open { opacity: 1; visibility: visible; }
-                                .support-chat-modal {
-                                    position: fixed; bottom: 0; right: 32px;
-                                    transform: translateY(100%);
-                                    width: min(440px, 92vw); height: min(620px, 85vh);
-                                    background: var(--bg-gradient-1, #2a2438);
-                                    border: 1px solid var(--card-border);
-                                    border-bottom: none;
-                                    border-radius: 12px 12px 0 0;
-                                    box-shadow: 0 -8px 24px rgba(0,0,0,.45), 0 0 0 1px rgba(99,102,241,.08);
-                                    z-index: 20001; display: flex; flex-direction: column;
-                                    opacity: 0; visibility: hidden;
-                                    transition: transform .3s cubic-bezier(.2,0,0,1), opacity .2s, visibility .2s;
+                                .scx-backdrop.open { opacity: 1; visibility: visible; }
+                                .scx-drawer {
+                                    position: fixed; top: 0; right: 0; bottom: 0;
+                                    width: min(460px, 100vw); height: 100dvh;
+                                    background: var(--content-bg, #1d1830);
+                                    border-left: 1px solid var(--card-border);
+                                    box-shadow: -24px 0 64px -12px rgba(0,0,0,.6);
+                                    z-index: 24001; display: flex; flex-direction: column;
+                                    transform: translateX(105%);
+                                    transition: transform .32s cubic-bezier(.22,1,.36,1);
                                     overflow: hidden;
-                                    top: auto; left: auto;
                                 }
-                                .support-chat-modal.open {
-                                    transform: translateY(0);
-                                    opacity: 1; visibility: visible;
+                                .scx-drawer.open { transform: translateX(0); }
+                                /* Header */
+                                .scx-header {
+                                    flex-shrink: 0; display: flex; align-items: center; gap: 12px;
+                                    padding: 14px 16px;
+                                    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #9333ea 100%);
                                 }
-                                .support-chat-header {
-                                    padding: 1rem 1.4rem 0.85rem;
-                                    border-bottom: 1px solid var(--card-border);
-                                    background: var(--card-bg); flex-shrink: 0; position: relative;
+                                .scx-avatar {
+                                    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+                                    background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3);
+                                    color: #fff; font-weight: 700; font-size: 15px; text-transform: uppercase;
+                                    display: flex; align-items: center; justify-content: center;
                                 }
-                                .support-chat-title-row {
-                                    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-right: 2.4rem;
+                                .scx-head-info { flex: 1; min-width: 0; }
+                                .scx-user {
+                                    font-size: 0.9rem; font-weight: 700; color: #fff; line-height: 1.25;
+                                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
                                 }
-                                .support-chat-title { font-size: 0.95rem; font-weight: 700; color: var(--heading-color); margin: 0; }
-                                .support-chat-subject {
-                                    font-size: 0.8rem; color: var(--text-secondary); margin-top: 3px;
-                                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%;
+                                .scx-subline {
+                                    font-size: 0.72rem; color: rgba(255,255,255,.75); margin-top: 1px;
+                                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
                                 }
-                                .support-chat-close-btn {
-                                    position: absolute; top: 0.85rem; right: 1rem;
-                                    background: none; border: none; cursor: pointer;
-                                    color: var(--text-secondary); padding: 4px; border-radius: 6px;
-                                    display: flex; align-items: center; transition: background .14s, color .14s;
+                                .scx-live {
+                                    display: none; align-items: center; gap: 5px;
+                                    font-size: 0.68rem; font-weight: 700; letter-spacing: .4px; color: #fff;
+                                    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.25);
+                                    border-radius: 20px; padding: 3px 10px; flex-shrink: 0;
                                 }
-                                .support-chat-close-btn:hover { background: var(--card-hover-bg); color: var(--text-color); }
-                                .support-chat-messages {
-                                    flex: 1; overflow-y: auto; padding: 1.2rem 1.5rem;
+                                .scx-live.on { display: inline-flex; }
+                                .scx-live-dot {
+                                    width: 7px; height: 7px; border-radius: 50%; background: #4ade80;
+                                    animation: scx-pulse 2s infinite;
+                                }
+                                @keyframes scx-pulse {
+                                    0%,100% { box-shadow: 0 0 0 0 rgba(74,222,128,.55); }
+                                    50% { box-shadow: 0 0 0 5px rgba(74,222,128,0); }
+                                }
+                                .scx-icon-btn {
+                                    flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+                                    background: rgba(255,255,255,.15); border: none; cursor: pointer; color: #fff;
+                                    display: flex; align-items: center; justify-content: center; transition: background .14s;
+                                }
+                                .scx-icon-btn:hover { background: rgba(255,255,255,.3); }
+                                .scx-icon-btn .material-icons { font-size: 18px; }
+                                /* Subject / meta bar */
+                                .scx-meta {
+                                    flex-shrink: 0; padding: 10px 16px;
+                                    border-bottom: 1px solid var(--card-border); background: var(--card-bg);
+                                }
+                                .scx-subject {
+                                    font-size: 0.86rem; font-weight: 600; color: var(--heading-color);
+                                    line-height: 1.35; margin-bottom: 7px;
+                                    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+                                }
+                                .scx-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+                                .scx-chip {
+                                    font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+                                    border-radius: 20px; padding: 2px 9px;
+                                }
+                                .scx-resolve {
+                                    margin-left: auto; display: inline-flex; align-items: center; gap: 4px;
+                                    font-size: 0.72rem; font-weight: 700; color: #10b981;
+                                    background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.35);
+                                    border-radius: 6px; padding: 3px 10px; cursor: pointer; transition: background .14s;
+                                }
+                                .scx-resolve:hover { background: rgba(16,185,129,.22); }
+                                .scx-resolve .material-icons { font-size: 13px; }
+                                /* Messages */
+                                .scx-messages {
+                                    flex: 1; overflow-y: auto; padding: 16px;
                                     display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth;
                                 }
-                                .chat-msg-row { display: flex; flex-direction: column; max-width: 86%; }
-                                .chat-msg-row.user { align-self: flex-start; align-items: flex-start; }
-                                .chat-msg-row.admin { align-self: flex-end; align-items: flex-end; }
-                                .chat-bubble {
-                                    padding: 10px 13px; border-radius: 16px;
-                                    font-size: 0.875rem; line-height: 1.55; word-break: break-word; white-space: pre-wrap;
+                                .scx-row { display: flex; flex-direction: column; max-width: 85%; }
+                                .scx-row.user { align-self: flex-start; align-items: flex-start; }
+                                .scx-row.admin { align-self: flex-end; align-items: flex-end; }
+                                .scx-bubble {
+                                    padding: 9px 13px; border-radius: 14px;
+                                    font-size: 0.85rem; line-height: 1.55; word-break: break-word; white-space: pre-wrap;
                                 }
-                                .chat-bubble.user {
+                                .scx-row.user .scx-bubble {
                                     background: var(--card-bg); border: 1px solid var(--card-border);
-                                    border-bottom-left-radius: 4px; color: var(--text-color);
+                                    color: var(--text-color); border-bottom-left-radius: 4px;
                                 }
-                                .chat-bubble.admin {
-                                    background: linear-gradient(135deg,#5535dd,#7c3aed);
-                                    border-bottom-right-radius: 4px; color: #fff; border: none;
+                                .scx-row.admin .scx-bubble {
+                                    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+                                    color: #fff; border-bottom-right-radius: 4px;
                                 }
-                                .chat-meta {
-                                    font-size: 0.66rem; color: var(--text-secondary); margin-top: 4px; padding: 0 2px;
-                                    display: flex; gap: 6px; align-items: center; opacity: 0.7;
+                                .scx-msg-meta {
+                                    font-size: 0.64rem; color: var(--text-secondary); margin-top: 3px;
+                                    padding: 0 3px; opacity: .75;
                                 }
-                                .chat-meta.admin { flex-direction: row-reverse; }
-                                .support-chat-note-strip {
-                                    border-top: 1px solid rgba(234,179,8,.2);
-                                    border-bottom: 1px solid rgba(234,179,8,.2);
-                                    background: rgba(234,179,8,.04); flex-shrink: 0;
+                                .scx-row.scx-new .scx-bubble { animation: scx-in .25s cubic-bezier(.2,.9,.3,1.2); }
+                                @keyframes scx-in {
+                                    from { transform: translateY(8px) scale(.97); opacity: 0; }
+                                    to { transform: none; opacity: 1; }
                                 }
-                                .support-chat-note-toggle {
-                                    padding: 6px 1.4rem;
-                                    display: flex; align-items: center; gap: 6px;
-                                    font-size: 0.73rem; font-weight: 600; color: #ca8a04;
+                                .scx-empty {
+                                    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                                    gap: 8px; color: var(--text-secondary); font-size: 0.84rem; opacity: .65;
+                                }
+                                /* Internal note */
+                                .scx-note { flex-shrink: 0; background: rgba(234,179,8,.05); border-top: 1px solid rgba(234,179,8,.22); }
+                                .scx-note-toggle {
+                                    padding: 6px 16px; display: flex; align-items: center; gap: 6px;
+                                    font-size: 0.7rem; font-weight: 700; color: #d3a317;
                                     cursor: pointer; user-select: none; transition: background .14s;
                                 }
-                                .support-chat-note-toggle:hover { background: rgba(234,179,8,.1); }
-                                .support-chat-note-body { padding: 0.6rem 1.4rem 0.75rem; display: none; }
-                                .support-chat-note-body.open { display: block; }
-                                .support-chat-note-ta {
+                                .scx-note-toggle:hover { background: rgba(234,179,8,.1); }
+                                .scx-note-toggle .material-icons { font-size: 13px; }
+                                .scx-note-body { padding: 4px 16px 10px; display: none; }
+                                .scx-note-body.open { display: block; }
+                                .scx-note-ta {
                                     width: 100%; box-sizing: border-box;
                                     background: var(--card-bg); border: 1px solid rgba(234,179,8,.35);
-                                    border-radius: 8px; color: var(--text-color); font-size: 0.84rem;
-                                    padding: 8px 11px; font-family: inherit; resize: none; min-height: 65px;
+                                    border-radius: 8px; color: var(--text-color); font-size: 0.8rem;
+                                    padding: 8px 11px; font-family: inherit; resize: none; min-height: 56px;
                                     line-height: 1.5; outline: none; transition: border-color .12s;
                                 }
-                                .support-chat-note-ta:focus { border-color: #ca8a04; }
-                                .support-chat-compose {
-                                    padding: 0.8rem 1.4rem 0.9rem;
-                                    border-top: 1px solid var(--card-border);
-                                    background: var(--card-bg); flex-shrink: 0;
+                                .scx-note-ta:focus { border-color: #d3a317; }
+                                .scx-note-save {
+                                    margin-top: 5px; float: right;
+                                    font-size: 0.72rem; font-weight: 700; color: #1c1505;
+                                    background: #eab308; border: none; border-radius: 6px; padding: 5px 13px;
+                                    cursor: pointer; transition: filter .12s;
                                 }
-                                .support-chat-reply-ta {
-                                    width: 100%; box-sizing: border-box;
-                                    background: var(--bg-gradient-1, #2a2438); border: 1px solid var(--card-border);
-                                    border-radius: 8px; color: var(--text-color); font-size: 0.875rem;
-                                    padding: 9px 12px; font-family: inherit; resize: none; min-height: 68px;
-                                    line-height: 1.5; outline: none; transition: border-color .12s, box-shadow .12s; margin-bottom: 8px;
+                                .scx-note-save:hover { filter: brightness(1.08); }
+                                /* Composer */
+                                .scx-compose {
+                                    flex-shrink: 0; border-top: 1px solid var(--card-border);
+                                    background: var(--card-bg); padding: 10px 14px 12px;
                                 }
-                                .support-chat-reply-ta:focus {
-                                    border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.1);
-                                }
-                                .support-chat-actions {
-                                    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
-                                }
-                                .support-chat-status-pills { display: flex; gap: 5px; flex-wrap: wrap; }
-                                .support-chat-right-btns { display: flex; gap: 7px; align-items: center; }
-                                .support-chat-pill {
-                                    font-size: 0.78rem; padding: 5px 13px; border-radius: 20px;
+                                .scx-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+                                .scx-pill {
+                                    font-size: 0.7rem; font-weight: 600; padding: 4px 12px; border-radius: 20px;
                                     cursor: pointer; transition: all .14s; font-family: inherit;
+                                    background: transparent; border: 1px solid var(--card-border); color: var(--text-secondary);
+                                }
+                                .scx-pill:hover { border-color: #6366f1; color: var(--text-color); }
+                                .scx-pill.active {
+                                    background: #6366f1; border-color: transparent; color: #fff; font-weight: 700;
+                                }
+                                .scx-compose-row { display: flex; align-items: flex-end; gap: 8px; }
+                                .scx-reply-ta {
+                                    flex: 1; box-sizing: border-box;
+                                    background: var(--content-bg, #1d1830); border: 1px solid var(--card-border);
+                                    border-radius: 12px; color: var(--text-color); font-size: 0.85rem;
+                                    padding: 10px 13px; font-family: inherit; resize: none;
+                                    min-height: 42px; max-height: 120px; line-height: 1.5; outline: none;
+                                    transition: border-color .12s, box-shadow .12s; overflow-y: auto;
+                                }
+                                .scx-reply-ta:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+                                .scx-send {
+                                    flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%;
+                                    background: linear-gradient(135deg, #4f46e5, #7c3aed); border: none; color: #fff;
+                                    cursor: pointer; display: flex; align-items: center; justify-content: center;
+                                    transition: filter .12s, opacity .12s; padding: 0;
+                                }
+                                .scx-send:hover:not(:disabled) { filter: brightness(1.12); }
+                                .scx-send:disabled { opacity: .45; cursor: default; }
+                                .scx-send .material-icons { font-size: 19px; }
+                                .scx-resolved-note {
+                                    flex-shrink: 0; border-top: 1px solid var(--card-border); background: var(--card-bg);
+                                    padding: 12px 16px; text-align: center; font-size: 0.78rem; color: var(--text-secondary);
                                 }
                                 @media (max-width: 600px) {
-                                    .support-chat-modal {
-                                        width: 100%; height: 100%; max-height: 100%;
-                                        border-radius: 0; bottom: 0; right: 0;
-                                        transform: translateY(100%);
-                                    }
-                                    .support-chat-modal.open { transform: translateY(0); }
+                                    .scx-drawer { width: 100vw; }
                                 }
                                 """
                                 )
@@ -3451,47 +3606,48 @@ fun Route.adminAuthRoute() {
 </table>
 </div>
 
-<!-- Support Chat Modal -->
-<div id="support-chat-backdrop" class="support-chat-backdrop" onclick="window.closeSupportDetail()"></div>
-<div id="support-chat-modal" class="support-chat-modal" role="dialog" aria-modal="true" aria-labelledby="support-chat-title" style="display:none;">
-  <div class="support-chat-header">
-    <div class="support-chat-title-row">
-      <span id="support-chat-title" class="support-chat-title">Ticket</span>
-      <span id="support-chat-badges" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;"></span>
+<!-- Support Chat Drawer — relocated to <body> by admin-tab-manager.js before first
+     open so ancestor backdrop-filter containers can't hijack position:fixed -->
+<div id="support-chat-backdrop" class="scx-backdrop" onclick="window.closeSupportDetail()"></div>
+<div id="support-chat-modal" class="scx-drawer" role="dialog" aria-modal="true" aria-labelledby="scx-user">
+  <div class="scx-header">
+    <div class="scx-avatar" id="scx-avatar">?</div>
+    <div class="scx-head-info">
+      <div class="scx-user" id="scx-user">Conversation</div>
+      <div class="scx-subline" id="scx-subline"></div>
     </div>
-    <div id="support-chat-subject" class="support-chat-subject"></div>
-    <button class="support-chat-close-btn" onclick="window.closeSupportDetail()" aria-label="Close">
-      <span class="material-icons" style="font-size:20px;">close</span>
+    <span class="scx-live" id="scx-live" title="Real-time connection active"><span class="scx-live-dot"></span>LIVE</span>
+    <button class="scx-icon-btn" onclick="window.closeSupportDetail()" aria-label="Close">
+      <span class="material-icons">close</span>
     </button>
   </div>
-  <div class="support-chat-messages" id="support-chat-messages"></div>
-  <div class="support-chat-note-strip">
-    <div class="support-chat-note-toggle" id="support-chat-note-toggle" onclick="window.toggleSupportChatNote()">
-      <span class="material-icons" style="font-size:13px;flex-shrink:0;">sticky_note_2</span>
+  <div class="scx-meta">
+    <div class="scx-subject" id="scx-subject"></div>
+    <div class="scx-chips" id="scx-chips"></div>
+  </div>
+  <div class="scx-messages" id="support-chat-messages"></div>
+  <div class="scx-note">
+    <div class="scx-note-toggle" id="support-chat-note-toggle" onclick="window.toggleSupportChatNote()">
+      <span class="material-icons">sticky_note_2</span>
       <span id="support-chat-note-label">Internal note</span>
-      <span class="material-icons" id="support-chat-note-chevron" style="font-size:13px;margin-left:auto;transition:transform .18s;">expand_more</span>
+      <span class="material-icons" id="support-chat-note-chevron" style="margin-left:auto;transition:transform .18s;">expand_more</span>
     </div>
-    <div class="support-chat-note-body" id="support-chat-note-body">
-      <textarea id="support-chat-note-ta" class="support-chat-note-ta" maxlength="2000" placeholder="Internal note (not visible to user)…"></textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:5px;">
-        <button id="support-chat-note-save-btn" onclick="window.saveSupportChatNote()" class="btn btn-primary" style="font-size:0.78rem;padding:5px 13px;">Save note</button>
-      </div>
-    </div>
-  </div>
-  <div class="support-chat-compose">
-    <textarea id="support-chat-reply-ta" class="support-chat-reply-ta" maxlength="3000" placeholder="Write a reply to the user…"></textarea>
-    <div class="support-chat-actions">
-      <div class="support-chat-status-pills" id="support-chat-status-pills"></div>
-      <div class="support-chat-right-btns">
-        <button id="support-chat-resolve-btn" onclick="window.resolveSupportChat()" class="btn" style="background:#10b981;border-color:#10b981;color:#fff;font-size:0.8rem;padding:6px 14px;">
-          <span class="material-icons" style="font-size:14px;">check_circle</span>Resolve &amp; Close
-        </button>
-        <button id="support-chat-send-btn" onclick="window.sendSupportChatReply()" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;">
-          <span class="material-icons" style="font-size:14px;">send</span>Send
-        </button>
-      </div>
+    <div class="scx-note-body" id="support-chat-note-body">
+      <textarea id="support-chat-note-ta" class="scx-note-ta" maxlength="2000" placeholder="Internal note (not visible to user)…"></textarea>
+      <button id="support-chat-note-save-btn" onclick="window.saveSupportChatNote()" class="scx-note-save">Save note</button>
+      <div style="clear:both;"></div>
     </div>
   </div>
+  <div class="scx-compose" id="scx-compose">
+    <div class="scx-pills" id="support-chat-status-pills"></div>
+    <div class="scx-compose-row">
+      <textarea id="support-chat-reply-ta" class="scx-reply-ta" rows="1" maxlength="3000" placeholder="Reply to the user… (Ctrl+Enter to send)"></textarea>
+      <button id="support-chat-send-btn" class="scx-send" onclick="window.sendSupportChatReply()" title="Send" aria-label="Send reply">
+        <span class="material-icons">send</span>
+      </button>
+    </div>
+  </div>
+  <div class="scx-resolved-note" id="scx-resolved-note" style="display:none;">This conversation is resolved.</div>
 </div>
 """)
                                                         }

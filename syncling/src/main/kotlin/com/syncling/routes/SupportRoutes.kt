@@ -146,8 +146,20 @@ fun Route.configureSupportRoutes(
             log.info("Support ticket created id={} userId={} category={}", ticket.id.take(8), userId, category)
 
             // Seed the first message in the chat thread
-            runCatching { supportTicketRepository.addMessage(ticket.id, "user", userId, message) }
+            val firstMsg = runCatching { supportTicketRepository.addMessage(ticket.id, "user", userId, message) }
                 .onFailure { log.warn("Failed to seed initial message for ticket {}: {}", ticket.id.take(8), it.message) }
+                .getOrNull()
+
+            // Surface the new ticket on any open admin dashboard immediately
+            eventBus?.emitSupportMessage(
+                userId = PipelineEventBus.SUPPORT_ADMIN_CHANNEL,
+                ticketId = ticket.id,
+                senderType = "user",
+                ticketStatus = ticket.status,
+                messageId = firstMsg?.id,
+                messageContent = firstMsg?.content,
+                messageSentAt = firstMsg?.sentAt,
+            )
 
             if (notificationService != null) {
                 call.application.launch {
@@ -221,7 +233,7 @@ fun Route.configureSupportRoutes(
         get("presence") {
             call.userId() ?: return@get call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))
             val online = if (eventBus == null) false
-                else adminIds().any { eventBus.isUserSubscribed(it) }
+                else eventBus.isAnyAdminOnline() || adminIds().any { eventBus.isUserSubscribed(it) }
             call.respond(mapOf("adminOnline" to online))
         }
 
@@ -341,6 +353,7 @@ fun Route.configureSupportRoutes(
                         admins.forEach { if (it.id != userId) emit(it.id, newStatus) }
                     }
                     emit(userId, newStatus)  // sender's own other tabs
+                    emit(PipelineEventBus.SUPPORT_ADMIN_CHANNEL, newStatus)  // admin dashboard inbox
                 }
 
                 call.respond(HttpStatusCode.Created, SupportMessageResponse(
@@ -389,6 +402,7 @@ fun Route.configureSupportRoutes(
                         admins.forEach { if (it.id != userId) eventBus.emitSupportMessage(it.id, ticketId, "user", "resolved") }
                     }
                     eventBus.emitSupportMessage(userId, ticketId, senderType = if (isAdmin) "admin" else "user", ticketStatus = "resolved")
+                    eventBus.emitSupportMessage(PipelineEventBus.SUPPORT_ADMIN_CHANNEL, ticketId, senderType = if (isAdmin) "admin" else "user", ticketStatus = "resolved")
                 }
 
                 call.respond(HttpStatusCode.OK, mapOf("status" to "resolved"))

@@ -69,6 +69,9 @@ import org.bson.Document
 /** Application-level attribute so admin routes (in the main src module) can access the repo. */
 val SupportTicketRepoKey = AttributeKey<SupportTicketRepository>("SupportTicketRepository")
 
+/** Application-level attribute so admin routes can emit/stream support SSE events. */
+val PipelineEventBusKey = AttributeKey<PipelineEventBus>("PipelineEventBus")
+
 @Serializable
 data class HealthStatus(val status: String)
 
@@ -120,6 +123,7 @@ class SynclingDeps(
 fun Application.installSynclingRoutes(d: SynclingDeps) {
     d.supportTicketRepository?.let { attributes.put(SupportTicketRepoKey, it) }
     d.apiTokenRepository?.let { attributes.put(ApiTokenRepoAttr, it) }
+    attributes.put(PipelineEventBusKey, d.pipelineEventBus)
     routing {
         get("/") {
             val host = call.request.host()

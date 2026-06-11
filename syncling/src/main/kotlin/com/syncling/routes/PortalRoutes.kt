@@ -892,8 +892,15 @@ private const val LANDING_JS = """
     function rsz(){hc.width=hc.offsetWidth;hc.height=hc.offsetHeight;}
     rsz();
     window.addEventListener('resize',rsz);
-    var pts=Array.from({length:60},function(){return{x:Math.random()*hc.width,y:Math.random()*hc.height,r:Math.random()*.9+.25,vx:(Math.random()-.5)*.22,vy:(Math.random()-.5)*.22,o:Math.random()*.3+.07};});
+    var pts=Array.from({length:40},function(){return{x:Math.random()*hc.width,y:Math.random()*hc.height,r:Math.random()*.9+.25,vx:(Math.random()-.5)*.22,vy:(Math.random()-.5)*.22,o:Math.random()*.3+.07};});
+    // _canRun=false skips the draw but keeps rAF alive so we can resume cheaply.
+    var _canRun=true,_D2=130*130;
+    document.addEventListener('visibilitychange',function(){_canRun=!document.hidden;});
+    var _cIo=new IntersectionObserver(function(e){_canRun=e[0].isIntersecting&&!document.hidden;},{threshold:0});
+    _cIo.observe(hc);
     (function loop(){
+      requestAnimationFrame(loop);
+      if(!_canRun)return;
       hx.clearRect(0,0,hc.width,hc.height);
       for(var i=0;i<pts.length;i++){
         var p=pts[i];
@@ -903,14 +910,13 @@ private const val LANDING_JS = """
         hx.beginPath();hx.arc(p.x,p.y,p.r,0,6.283);
         hx.fillStyle='rgba(139,126,255,'+p.o+')';hx.fill();
         for(var j=i+1;j<pts.length;j++){
-          var dx=p.x-pts[j].x,dy=p.y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
-          if(d<130){
+          var dx=p.x-pts[j].x,dy=p.y-pts[j].y,d2=dx*dx+dy*dy;
+          if(d2<_D2){
             hx.beginPath();hx.moveTo(p.x,p.y);hx.lineTo(pts[j].x,pts[j].y);
-            hx.strokeStyle='rgba(139,126,255,'+(.11*(1-d/130))+')';hx.lineWidth=.45;hx.stroke();
+            hx.strokeStyle='rgba(139,126,255,'+(.11*(1-Math.sqrt(d2)/130))+')';hx.lineWidth=.45;hx.stroke();
           }
         }
       }
-      requestAnimationFrame(loop);
     })();
   }
 
@@ -949,7 +955,7 @@ private const val LANDING_JS = """
   function tickerEase(t){return 1-Math.pow(1-t,3);}
   function runTicker(el){
     var raw=(el.textContent||'').trim();
-    var m=raw.match(/^(<?)(\d+(?:\.\d+)?)(\D*)$/);
+    var m=raw.match(/^([<~]?)(\d+(?:\.\d+)?)(\D*)$/);
     if(!m)return;
     var prefix=m[1]||'',target=parseFloat(m[2]),suffix=m[3]||'';
     var decimals=(m[2].split('.')[1]||'').length;
@@ -982,15 +988,120 @@ private const val LANDING_JS = """
       heroEl.appendChild(m);
       setTimeout(function(){m.remove();},9000);
     }
-    for(var k=0;k<4;k++)setTimeout(spawnMeteor,k*900);
-    setInterval(spawnMeteor,2400);
+    var _mtTimer=null;
+    var _mIo=new IntersectionObserver(function(e){
+      if(e[0].isIntersecting){
+        if(!_mtTimer){for(var k=0;k<4;k++)setTimeout(spawnMeteor,k*900);_mtTimer=setInterval(spawnMeteor,2400);}
+      } else {
+        if(_mtTimer){clearInterval(_mtTimer);_mtTimer=null;}
+      }
+    },{threshold:0});
+    _mIo.observe(heroEl);
+  }
+
+  var reduceMotion=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // ── scroll progress bar ──────────────────────────────────────
+  var spBar=document.getElementById('scroll-progress');
+  if(spBar){
+    var spTick=false;
+    function spUpdate(){
+      spTick=false;
+      var h=document.documentElement;
+      var max=h.scrollHeight-h.clientHeight;
+      spBar.style.transform='scaleX('+(max>0?Math.min(1,(window.scrollY||h.scrollTop)/max):0)+')';
+    }
+    window.addEventListener('scroll',function(){if(!spTick){spTick=true;requestAnimationFrame(spUpdate);}},{passive:true});
+    spUpdate();
+  }
+
+  // ── rotating hero word: "Translate." in every target language ─
+  var rw=document.getElementById('rotate-word');
+  if(rw&&!reduceMotion){
+    var rwWords=['Translate.','Traduce.','Traduis.','Übersetze.','Traduz.','Traduci.','翻訳。','번역.','अनुवाद.','ترجم.'];
+    var rwIdx=0,rwRun=true;
+    document.addEventListener('visibilitychange',function(){rwRun=!document.hidden;});
+    var rwHero=document.querySelector('.hero');
+    if(rwHero){
+      var rwIo=new IntersectionObserver(function(e){rwRun=e[0].isIntersecting&&!document.hidden;},{threshold:0});
+      rwIo.observe(rwHero);
+    }
+    setTimeout(function(){
+      setInterval(function(){
+        if(!rwRun)return;
+        rwIdx=(rwIdx+1)%rwWords.length;
+        rw.classList.add('swap');
+        setTimeout(function(){rw.textContent=rwWords[rwIdx];rw.classList.remove('swap');},380);
+      },3000);
+    },2200);
+  }
+
+  // ── terminal: typewriter on the git push command ─────────────
+  var tDemo=document.querySelector('.pipeline-demo');
+  var tCmd=document.querySelector('.term-cmd');
+  if(tDemo&&tCmd&&!reduceMotion){
+    var tDone=false;
+    var tIo=new IntersectionObserver(function(e){
+      if(e[0].isIntersecting&&!tDone){
+        tDone=true;
+        tIo.disconnect();
+        var full=tCmd.textContent;
+        tCmd.textContent='';
+        var caret=document.createElement('span');
+        caret.className='term-caret';
+        tCmd.parentNode.appendChild(caret);
+        var ci=0;
+        var tInt=setInterval(function(){
+          ci++;
+          tCmd.textContent=full.slice(0,ci);
+          if(ci>=full.length){
+            clearInterval(tInt);
+            setTimeout(function(){caret.remove();},900);
+          }
+        },42);
+      }
+    },{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
+    tIo.observe(tDemo);
+  }
+
+  // ── nav scrollspy ────────────────────────────────────────────
+  var spyLinks={};
+  document.querySelectorAll('.nav-links a').forEach(function(a){
+    var h=a.getAttribute('href')||'';
+    if(h.charAt(0)==='#')spyLinks[h.slice(1)]=a;
+  });
+  var spyIo=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(en.isIntersecting){
+        var id=en.target.id;
+        Object.keys(spyLinks).forEach(function(k){spyLinks[k].classList.toggle('active',k===id);});
+      }
+    });
+  },{rootMargin:'-35% 0px -55% 0px'});
+  Object.keys(spyLinks).forEach(function(k){
+    var sec=document.getElementById(k);
+    if(sec)spyIo.observe(sec);
+  });
+
+  // ── subtle 3D tilt on feature + SDK cards ────────────────────
+  if(!reduceMotion&&window.matchMedia('(hover:hover)').matches){
+    document.querySelectorAll('.feature-card,.sdk-teaser-card').forEach(function(card){
+      card.addEventListener('mouseenter',function(){card.style.transition='transform .15s ease-out';});
+      card.addEventListener('mousemove',function(e){
+        var r=card.getBoundingClientRect();
+        var px=(e.clientX-r.left)/r.width-.5;
+        var py=(e.clientY-r.top)/r.height-.5;
+        card.style.transform='perspective(900px) rotateX('+(py*-3)+'deg) rotateY('+(px*4)+'deg) translateY(-2px)';
+      });
+      card.addEventListener('mouseleave',function(){card.style.transition='';card.style.transform='';});
+    });
   }
 })();
 """
 
 private const val CANONICAL_BASE = "https://syncling.space"
 
-private const val LANDING_JSON_LD = """{
+private val LANDING_JSON_LD = """{
   "@context":"https://schema.org",
   "@graph":[
     {
@@ -1015,7 +1126,7 @@ private const val LANDING_JSON_LD = """{
         "Glossary enforcement for brand-consistent terminology",
         "Human review portal with approve and rollback controls",
         "OTA translation updates without any app store release",
-        "Placeholder guard for %1s, %d, %@ format strings"
+        "Placeholder guard for %1${'$'}s, %d, %@ format strings"
       ]
     },
     {
@@ -1029,7 +1140,7 @@ private const val LANDING_JSON_LD = """{
       "mainEntity":[
         {"@type":"Question","name":"What is Syncling?","acceptedAnswer":{"@type":"Answer","text":"Syncling is an automated mobile app localization platform for Android and iOS developers. It connects to your GitHub repository via webhook, detects which strings actually changed semantically, translates them using Claude AI into 10+ languages, and publishes signed translation bundles to Cloudflare's global CDN — typically within a minute of a git push."}},
         {"@type":"Question","name":"How does automated mobile app localization work with Syncling?","acceptedAnswer":{"@type":"Answer","text":"Syncling works in five steps: (1) A GitHub webhook fires on push. (2) An AI semantic diff classifier identifies only strings with real meaning changes. (3) Claude AI translates changed strings into every configured target language, enforcing your glossary and checking placeholders. (4) Translations are packaged into a signed bundle and published to Cloudflare R2. (5) Your Android or iOS SDK fetches from the nearest CDN PoP, typically returning in around 20ms."}},
-        {"@type":"Question","name":"Does Syncling support both Android and iOS localization?","acceptedAnswer":{"@type":"Answer","text":"Yes. Syncling provides a native Android SDK compatible with Kotlin and Java that works with your existing strings.xml setup, and a Swift-native iOS SDK compatible with both SwiftUI and UIKit. Both SDKs are production-ready and handle offline caching automatically."}},
+        {"@type":"Question","name":"Does Syncling support both Android and iOS localization?","acceptedAnswer":{"@type":"Answer","text":"Yes. Syncling is building native SDKs for Android (Kotlin/Java, strings.xml compatible) and iOS (Swift, SwiftUI and UIKit ready). Both SDKs handle offline caching automatically and are launching soon — sign up now to get early access."}},
         {"@type":"Question","name":"How quickly does Syncling publish translations after a commit?","acceptedAnswer":{"@type":"Answer","text":"End-to-end from git push to globally available CDN bundle typically takes around 45 seconds for a small batch of changed strings — including webhook processing, semantic detection, AI translation, placeholder validation, bundle signing, and Cloudflare R2 replication. Larger batches scale roughly linearly with the number of changed strings and target languages."}},
         {"@type":"Question","name":"What languages does Syncling support?","acceptedAnswer":{"@type":"Answer","text":"Syncling supports Spanish, French, German, Japanese, Korean, Chinese Simplified, Hindi, Portuguese Brazilian, Italian, and Arabic. The Free tier includes 3 target languages; PRO and Team plans include all available languages."}},
         {"@type":"Question","name":"How is Syncling different from Phrase, Lokalise, or Crowdin?","acceptedAnswer":{"@type":"Answer","text":"Syncling is built for fully automated, git-native localization with no manual workflows. Key differences: semantic change detection avoids re-translating unchanged strings; CDN-first delivery enables OTA updates without app store releases; developer-friendly pricing starts free with no credit card required."}},
@@ -1059,13 +1170,6 @@ internal data class PricingPlan(
     val recommended: Boolean = false,
     val recommendedBadge: String? = null,
     val trialBadge: Boolean = false,
-)
-
-internal data class PricingFeatureRow(
-    val label: String,
-    val free: String,
-    val solo: String,
-    val team: String,
 )
 
 internal object PricingData {
@@ -1139,25 +1243,6 @@ internal object PricingData {
         ),
     )
 
-    val featureRows: List<PricingFeatureRow> = listOf(
-        PricingFeatureRow("Monthly AI strings", "500", "5,000", "Unlimited"),
-        PricingFeatureRow("Active repositories", "1", "3", "10"),
-        PricingFeatureRow("Target languages", "3", "All (10+)", "All (10+)"),
-        PricingFeatureRow("GitHub webhook", "✓", "✓", "✓"),
-        PricingFeatureRow("AI translation", "✓", "✓", "✓"),
-        PricingFeatureRow("Global CDN delivery", "✓", "✓", "✓"),
-        PricingFeatureRow("Placeholder guard", "✓", "✓", "✓"),
-        PricingFeatureRow("Glossary enforcement", "—", "✓", "✓"),
-        PricingFeatureRow("Translation memory", "—", "✓", "✓"),
-        PricingFeatureRow("Human review portal", "—", "✓", "✓"),
-        PricingFeatureRow("Outbound webhooks", "—", "✓", "✓"),
-        PricingFeatureRow("Team members & RBAC", "—", "—", "✓"),
-        PricingFeatureRow("Per-project quotas", "—", "—", "✓"),
-        PricingFeatureRow("Priority CDN SLA", "—", "—", "✓"),
-        PricingFeatureRow("Priority support", "—", "—", "✓"),
-        PricingFeatureRow("7-day free trial", "—", "✓", "✓"),
-    )
-
     const val trialNote: String =
         "All paid plans include a 7-day fully featured free trial. No charge until the trial ends — cancel any time."
 
@@ -1191,34 +1276,6 @@ private fun FlowContent.renderPricingCard(plan: PricingPlan, extraCardClass: Str
         }
         val ctaCls = if (plan.ctaAccent) setOf("pricing-cta", "accent") else setOf("pricing-cta", "outline")
         a(plan.ctaHref) { classes = ctaCls; +plan.ctaLabel }
-    }
-}
-
-private fun FlowContent.renderPricingComparisonTable() {
-    table("docs-table docs-pricing-table") {
-        thead {
-            tr {
-                th { +"Feature" }
-                PricingData.plans.forEach { p ->
-                    th {
-                        +p.name; +"  "
-                        span("cur-inr") { +"${p.priceInr}/mo" }
-                        span("cur-usd") { +"${p.priceUsd}/mo" }
-                        span("cur-eur") { +"${p.priceEur}/mo" }
-                    }
-                }
-            }
-        }
-        tbody {
-            PricingData.featureRows.forEach { row ->
-                tr {
-                    td { +row.label }
-                    td { +row.free }
-                    td { +row.solo }
-                    td { +row.team }
-                }
-            }
-        }
     }
 }
 
@@ -1259,7 +1316,12 @@ internal fun HTML.landingPage() {
         favicon()
         link(rel = "preconnect", href = "https://fonts.googleapis.com")
         link(rel = "preconnect", href = "https://fonts.gstatic.com") { attributes["crossorigin"] = "" }
-        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&family=Jost:wght@700;800&display=swap")
+        // Non-blocking font load: media="print" lets the browser fetch without blocking render;
+        // onload swaps to "all" once loaded. Weights trimmed to those actually used (300/800/900 dropped).
+        link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Jost:wght@700&display=swap") {
+            attributes["media"] = "print"
+            attributes["onload"] = "this.media='all'"
+        }
         script { unsafe { +"(function(){var t=localStorage.getItem('syncling-theme');if(t)document.documentElement.setAttribute('data-theme',t);})()" } }
         style { unsafe { +"$SHARED_CSS$LANDING_CSS" } }
         script {
@@ -1268,6 +1330,7 @@ internal fun HTML.landingPage() {
         }
     }
     body {
+        div("scroll-progress") { id = "scroll-progress" }
         nav {
             div("nav-inner") {
                 div("brand") { unsafe { +LOGO_SVG }; span { unsafe { +"<span class=\"brand-sync\">Sync</span>ling" } } }
@@ -1275,6 +1338,7 @@ internal fun HTML.landingPage() {
                     id = "nav-menu"
                     a("#how") { +"How it works" }
                     a("#features") { +"Features" }
+                    a("#sdk") { +"SDK" }
                     a("#pricing") { +"Pricing" }
                     a("#faq") { +"FAQ" }
                     a("/docs") { +"Docs" }
@@ -1308,7 +1372,9 @@ internal fun HTML.landingPage() {
             div("hero-inner") {
                 span("badge fade-up") { +"Git-native · AI-powered · Free to start" }
                 h1("hero-title") {
-                    span("hero-word w1 accent") { +"Commit." }; +" "; span("hero-word w2") { +"Translate." }; +" "; span("hero-word w3") { +"Ship." }
+                    span("hero-word w1 accent") { +"Commit." }; +" "
+                    span("hero-word w2") { span { id = "rotate-word"; +"Translate." } }; +" "
+                    span("hero-word w3") { +"Ship." }
                 }
                 p("hero-sub fade-up d2") {
                     +"AI detects changes, translates into 10+ languages, and ships to the CDN edge — typically within a minute."
@@ -1406,7 +1472,7 @@ internal fun HTML.landingPage() {
                         PStep("02", "Semantic detection", "AI classifier skips surface rewrites — only real semantic changes consume API quota."),
                         PStep("03", "Translate + validate", "Claude translates into all targets. Placeholders, glossary, and cultural flags are all checked."),
                         PStep("04", "Sign + publish", "Signed bundle written to Cloudflare R2 — replicated to Cloudflare's global edge network in seconds."),
-                        PStep("05", "SDK serves edge", "Android and iOS SDKs fetch from the nearest PoP, cached locally for instant subsequent loads.")
+                        PStep("05", "SDK serves edge", "The Syncling SDK fetches the bundle from the nearest CDN PoP and caches it locally for instant subsequent loads.")
                     ).forEach { s ->
                         div("pstep") {
                             span("pstep-num") { +s.n }
@@ -1536,6 +1602,10 @@ internal fun HTML.landingPage() {
                         FaqItem(
                             "Can I update translations without releasing a new app version?",
                             "Yes — this is the whole point. Translations are served over-the-air from Cloudflare's global CDN. Fix a typo, add a language, ship in about a minute. Zero App Store or Play Store submission required."
+                        ),
+                        FaqItem(
+                            "What languages does Syncling support?",
+                            "Spanish, French, German, Japanese, Korean, Chinese Simplified, Hindi, Brazilian Portuguese, Italian, and Arabic — 10 languages in total. The Free plan includes 3 target languages; Pro and Team unlock all of them."
                         )
                     ).forEach { item ->
                         div("faq-item fade-up") {
@@ -1668,7 +1738,6 @@ private fun HTML.docsPage() {
                 }
                 div("docs-nav-group") {
                     span("docs-nav-label") { +"Billing & Help" }
-                    a(href = "#pricing", classes = "docs-nav-link") { +"Pricing" }
                     a(href = "#faq", classes = "docs-nav-link") { +"FAQ" }
                     a(href = "#support", classes = "docs-nav-link") { +"Support" }
                     a(href = "/syncling/status", classes = "docs-nav-link") { +"Status" }
@@ -2073,29 +2142,6 @@ struct ContentView: View {
                         li { +"Typical savings of 40–70% of translatable strings per commit in mature projects." }
                         li { +"Quota is tracked per string change, not per pipeline run." }
                         li { +"Skipped strings still get their existing translations refreshed in the published bundle." }
-                    }
-                }
-
-                // ── Pricing ─────────────────────────────────────────────────────────────
-                section("docs-section") {
-                    id = "pricing"
-                    div("docs-section-header") {
-                        span("docs-badge") { +"Plans & Billing" }
-                        h2 { +"Pricing" }
-                        p("docs-lead") { +"All plans include a 7-day free trial. No charge until the trial ends — cancel any time." }
-                    }
-                    renderCurrencyToggle()
-                    renderPricingComparisonTable()
-                    p("docs-billing-note") { +PricingData.billingNote }
-                    div("docs-pricing-cta") {
-                        PricingData.plans.forEach { plan ->
-                            val btnCls = if (plan.id == "FREE") setOf("btn", "btn-ghost") else setOf("btn", "btn-primary")
-                            val label = when (plan.id) {
-                                "FREE" -> "Start free →"
-                                else -> "Start ${plan.name} trial"
-                            }
-                            a(plan.ctaHref) { classes = btnCls; +label }
-                        }
                     }
                 }
 
@@ -2854,20 +2900,6 @@ html[data-theme="light"] .docs-table th{background:rgba(139,126,255,.05);color:#
 html[data-theme="light"] .docs-table td{color:#475569;border-bottom-color:rgba(15,23,42,.07)}
 .docs-table tr:last-child td{border-bottom:none}
 .docs-table tr:hover td{background:rgba(139,126,255,.03)}
-.docs-pricing-table td:nth-child(n+2){text-align:center}
-.docs-pricing-table th:nth-child(n+2){text-align:center}
-
-/* ── pricing in docs ─────────────────────────────────────────────── */
-.docs-pricing-cta{display:flex;gap:12px;margin-top:28px;flex-wrap:wrap}
-.docs-billing-note{font-size:12.5px;color:rgba(255,255,255,.4);margin-top:14px;line-height:1.65;font-family:'Geist',sans-serif}
-html[data-theme="light"] .docs-billing-note{color:#94a3b8}
-.docs-main .currency-toggle{display:inline-flex;gap:0;margin:6px 0 18px;border:1px solid rgba(139,126,255,.2);border-radius:999px;padding:3px;background:rgba(139,126,255,.04)}
-.docs-main .currency-toggle .cur-pill{background:transparent;border:none;color:rgba(255,255,255,.5);font-size:12px;font-weight:600;letter-spacing:.02em;padding:6px 14px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s;font-family:'Geist',sans-serif}
-.docs-main .currency-toggle .cur-pill:hover{color:#fff}
-.docs-main .currency-toggle .cur-pill[aria-selected="true"]{background:rgba(139,126,255,.18);color:#fff;box-shadow:0 1px 6px -2px rgba(139,126,255,.4)}
-html[data-theme="light"] .docs-main .currency-toggle .cur-pill{color:#64748b}
-html[data-theme="light"] .docs-main .currency-toggle .cur-pill[aria-selected="true"]{color:#0f172a}
-.docs-pricing-cta .btn{padding:10px 22px;font-size:14px;font-weight:600;border-radius:9px}
 
 /* ── accordion FAQ ───────────────────────────────────────────────── */
 .docs-accordion{display:flex;flex-direction:column;gap:0}
@@ -2925,8 +2957,6 @@ html[data-theme="light"] .footer-copy{color:#94a3b8}
 @media(max-width:480px){
   .docs-main{padding:28px 16px 48px}
   .step-card{flex-direction:column;gap:12px}
-  .docs-pricing-cta{flex-direction:column}
-  .docs-pricing-cta .btn{width:100%;text-align:center}
   .docs-support-grid{grid-template-columns:1fr}
   .docs-hero-title{letter-spacing:-.045em}
 }
@@ -3006,7 +3036,7 @@ html[data-theme="light"] .btn-ghost{background:rgba(15,23,42,.02);color:#334155;
 .hero-orb1{width:540px;height:540px;top:-80px;left:2%;background:radial-gradient(circle,rgba(139,126,255,.16),transparent 65%);animation:orbDrift 30s ease-in-out infinite}
 .hero-orb2{width:420px;height:420px;bottom:-80px;right:2%;background:radial-gradient(circle,rgba(244,114,182,.09),transparent 65%);animation:orbDrift 26s ease-in-out infinite reverse}
 .hero-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.7}
-.hero-inner{max-width:920px;margin:0 auto;position:relative;z-index:5}
+.hero-inner{max-width:920px;margin:0 auto;position:relative;z-index:5;will-change:transform}
 
 .badge{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(180deg,rgba(139,126,255,.18),rgba(139,126,255,.06));border:1px solid rgba(139,126,255,.32);border-radius:100px;padding:5px 18px 5px 9px;font-size:10.5px;font-weight:600;color:rgba(200,190,255,.92);letter-spacing:.12em;margin-bottom:40px;text-transform:uppercase;font-family:'Geist Mono',monospace;backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 4px 24px -8px rgba(139,126,255,.3)}
 .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--lp-violet);box-shadow:0 0 12px var(--lp-violet);flex-shrink:0;animation:badgePulse 2.4s ease-in-out infinite}
@@ -3061,8 +3091,10 @@ section{padding:128px 24px;position:relative}
 .section-inner{max-width:1240px;margin:0 auto;position:relative}
 .section-label{font-size:10px;font-weight:600;letter-spacing:.22em;color:var(--lp-violet);margin-bottom:22px;display:flex;align-items:center;gap:14px;text-transform:uppercase;font-family:'Geist Mono',monospace}
 .section-label::before{content:'';width:24px;height:1px;background:linear-gradient(90deg,transparent,var(--lp-violet));flex-shrink:0}
-h2{font-size:clamp(30px,4.4vw,56px);font-weight:700;letter-spacing:-.04em;margin-bottom:72px;line-height:1.04;font-family:'Geist',sans-serif;color:#fff}
-html[data-theme="light"] h2{color:#0f172a}
+h2{font-size:clamp(30px,4.4vw,56px);font-weight:700;letter-spacing:-.04em;margin-bottom:72px;line-height:1.04;font-family:'Geist',sans-serif;color:#fff;background:linear-gradient(180deg,#fff 55%,rgba(255,255,255,.62));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+html[data-theme="light"] h2{color:#0f172a;background:linear-gradient(180deg,#0f172a 55%,#3f4c63);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+::selection{background:rgba(139,126,255,.35);color:#fff}
+html[data-theme="light"] ::selection{background:rgba(139,126,255,.25);color:#0f172a}
 
 /* ── parallax blobs (absolutely-positioned in sections) ────── */
 .plx-blob{position:absolute;border-radius:50%;filter:blur(110px);pointer-events:none;will-change:transform;z-index:0;opacity:1}
@@ -3099,18 +3131,18 @@ html[data-theme="light"] .term-window{background:linear-gradient(180deg,#1e293b 
 .term-dim{color:rgba(255,255,255,.3)}
 .term-final{margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)}
 .pipeline-demo.in-view .term-line{animation:termIn .35s cubic-bezier(.2,.7,.2,1) forwards}
-.pipeline-demo.in-view .l1{animation-delay:.6s}
-.pipeline-demo.in-view .l2{animation-delay:1.4s}
-.pipeline-demo.in-view .l3{animation-delay:2.2s}
-.pipeline-demo.in-view .l4{animation-delay:2.9s}
-.pipeline-demo.in-view .l5{animation-delay:3.6s}
-.pipeline-demo.in-view .l6{animation-delay:4.8s}
-.pipeline-demo.in-view .l7{animation-delay:5.6s}
+.pipeline-demo.in-view .l1{animation-delay:1.5s}
+.pipeline-demo.in-view .l2{animation-delay:2.3s}
+.pipeline-demo.in-view .l3{animation-delay:3s}
+.pipeline-demo.in-view .l4{animation-delay:3.7s}
+.pipeline-demo.in-view .l5{animation-delay:4.4s}
+.pipeline-demo.in-view .l6{animation-delay:5.5s}
+.pipeline-demo.in-view .l7{animation-delay:6.3s}
 
 .pipeline-steps{display:grid;grid-template-columns:repeat(5,1fr);position:relative;padding-top:12px;gap:0}
 .pipeline-steps::before{content:'';position:absolute;top:35px;left:calc(10% + 30px);right:calc(10% + 30px);height:2px;background:linear-gradient(90deg,transparent,rgba(139,126,255,.2) 12%,rgba(139,126,255,.35) 50%,rgba(34,211,238,.25) 88%,transparent);pointer-events:none;border-radius:2px}
 .pstep{padding:0 14px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;z-index:1}
-.pstep-num{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:linear-gradient(145deg,rgba(139,126,255,.1) 0%,rgba(14,12,26,.55) 100%);border:1px solid rgba(139,126,255,.28);font-size:12px;font-weight:600;color:var(--lp-violet);letter-spacing:.04em;margin:0 auto 28px;position:relative;z-index:1;transition:all .3s;flex-shrink:0;font-family:'Geist Mono',monospace;backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 4px var(--bg),0 4px 16px -4px rgba(139,126,255,.2)}
+.pstep-num{display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:linear-gradient(145deg,rgba(139,126,255,.1) 0%,rgba(14,12,26,.55) 100%);border:1px solid rgba(139,126,255,.28);font-size:12px;font-weight:600;color:var(--lp-violet);letter-spacing:.04em;margin:0 auto 28px;position:relative;z-index:1;transition:all .3s;flex-shrink:0;font-family:'Geist Mono',monospace;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 4px var(--bg),0 4px 16px -4px rgba(139,126,255,.2)}
 .pstep:hover .pstep-num{border-color:rgba(139,126,255,.65);background:linear-gradient(145deg,rgba(139,126,255,.2) 0%,rgba(34,211,238,.08) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 0 0 4px var(--bg),0 0 36px -4px rgba(139,126,255,.55);transform:translateY(-2px)}
 html[data-theme="light"] .pstep-num{background:linear-gradient(145deg,rgba(139,126,255,.07) 0%,rgba(255,255,255,.85) 100%);border-color:rgba(139,126,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 0 0 4px var(--bg)}
 .pstep-title{font-size:13px;font-weight:600;color:#fff;margin-bottom:10px;letter-spacing:-.015em;font-family:'Geist',sans-serif}
@@ -3128,7 +3160,7 @@ html[data-theme="light"] .pstep-desc{color:#64748b}
 .features-section{background:linear-gradient(180deg,var(--bg) 0%,#08080e 100%);border-top:1px solid rgba(255,255,255,.04);padding:128px 24px;overflow:hidden}
 html[data-theme="light"] .features-section{background:linear-gradient(180deg,var(--bg) 0%,#eef2f7 100%);border-top-color:rgba(15,23,42,.06)}
 .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:linear-gradient(135deg,rgba(139,126,255,.14),rgba(34,211,238,.06));border:1px solid rgba(139,126,255,.18);border-radius:24px;overflow:hidden;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 80px -30px rgba(139,126,255,.2)}
-.feature-card{background:linear-gradient(145deg,rgba(139,126,255,.07) 0%,rgba(22,22,38,.38) 45%,rgba(8,8,18,.42) 100%);border:none;border-radius:0;padding:40px 36px;display:flex;flex-direction:column;gap:0;transition:background .3s,transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s;position:relative;overflow:hidden;backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);min-height:280px;will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+.feature-card{background:linear-gradient(145deg,rgba(139,126,255,.07) 0%,rgba(22,22,38,.38) 45%,rgba(8,8,18,.42) 100%);border:none;border-radius:0;padding:40px 36px;display:flex;flex-direction:column;gap:0;transition:background .3s,transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s;position:relative;overflow:hidden;min-height:280px;will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
 html[data-theme="light"] .feature-card{background:linear-gradient(145deg,rgba(139,126,255,.05) 0%,rgba(255,255,255,.68) 45%,rgba(248,250,253,.72) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
 .feature-card:hover{transform:translateY(-3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 20px 56px -22px rgba(139,126,255,.4),0 0 40px -20px rgba(139,126,255,.15)}
 .feature-card-icon{color:rgba(255,255,255,.7);line-height:0;flex-shrink:0;width:48px;height:48px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;margin-bottom:28px;transition:all .3s;position:relative;overflow:hidden}
@@ -3154,7 +3186,7 @@ html[data-theme="light"] .sdk-section{border-top-color:rgba(15,23,42,.06)}
 .sdk-intro{color:rgba(255,255,255,.58);font-size:17px;line-height:1.7;max-width:560px;margin-top:-60px;margin-bottom:72px;font-weight:400;font-family:'Geist',sans-serif;letter-spacing:-.005em}
 html[data-theme="light"] .sdk-intro{color:#475569}
 .sdk-teaser-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:linear-gradient(135deg,rgba(139,126,255,.14),rgba(34,211,238,.06));border:1px solid rgba(139,126,255,.18);border-radius:24px;overflow:hidden;max-width:900px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 80px -30px rgba(139,126,255,.2)}
-.sdk-teaser-card{background:linear-gradient(145deg,rgba(139,126,255,.08) 0%,rgba(22,22,38,.38) 45%,rgba(8,8,18,.42) 100%);border:none;border-radius:0;padding:44px;display:flex;flex-direction:column;gap:24px;transition:background .3s,transform .4s cubic-bezier(.2,.8,.2,1),box-shadow .4s;position:relative;overflow:hidden;backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+.sdk-teaser-card{background:linear-gradient(145deg,rgba(139,126,255,.08) 0%,rgba(22,22,38,.38) 45%,rgba(8,8,18,.42) 100%);border:none;border-radius:0;padding:44px;display:flex;flex-direction:column;gap:24px;transition:background .3s,transform .4s cubic-bezier(.2,.8,.2,1),box-shadow .4s;position:relative;overflow:hidden;will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
 html[data-theme="light"] .sdk-teaser-card{background:linear-gradient(145deg,rgba(139,126,255,.05) 0%,rgba(255,255,255,.68) 45%,rgba(248,250,253,.72) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
 .sdk-teaser-card:hover{box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 28px 72px -22px rgba(139,126,255,.44),0 0 50px -25px rgba(139,126,255,.15)}
 .sdk-teaser-top{display:flex;align-items:center;gap:18px}
@@ -3177,7 +3209,7 @@ html[data-theme="light"] .pricing-section{background:linear-gradient(180deg,var(
 .pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px;padding-top:20px;align-items:center}
 
 /* ── base card ── */
-.pricing-card{background:radial-gradient(ellipse 200% 80% at 95% 0%,rgba(139,126,255,.06),transparent 55%),linear-gradient(160deg,rgba(22,22,38,.52) 0%,rgba(10,10,20,.58) 100%);border:1px solid rgba(255,255,255,.11);border-radius:22px;padding:36px 32px 32px;display:flex;flex-direction:column;position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1),border-color .3s,box-shadow .35s;backdrop-filter:blur(32px) saturate(200%);-webkit-backdrop-filter:blur(32px) saturate(200%);overflow:hidden;will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 8px 32px -12px rgba(0,0,0,.5)}
+.pricing-card{background:radial-gradient(ellipse 200% 80% at 95% 0%,rgba(139,126,255,.06),transparent 55%),linear-gradient(160deg,rgba(22,22,38,.52) 0%,rgba(10,10,20,.58) 100%);border:1px solid rgba(255,255,255,.11);border-radius:22px;padding:36px 32px 32px;display:flex;flex-direction:column;position:relative;transition:transform .35s cubic-bezier(.2,.8,.2,1),border-color .3s,box-shadow .35s;overflow:hidden;will-change:transform;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 8px 32px -12px rgba(0,0,0,.5)}
 html[data-theme="light"] .pricing-card{background:radial-gradient(ellipse 200% 80% at 95% 0%,rgba(139,126,255,.06),transparent 55%),linear-gradient(160deg,rgba(255,255,255,.78),rgba(248,250,253,.72));border-color:rgba(15,23,42,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 8px 32px -12px rgba(15,23,42,.1)}
 .pricing-card:hover{transform:translateY(-5px);border-color:rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 28px 56px -20px rgba(0,0,0,.7),0 0 50px -22px rgba(139,126,255,.28)}
 
@@ -3262,7 +3294,7 @@ html[data-theme="light"] .currency-toggle .cur-pill[aria-selected="true"]{backgr
 .faq-section{background:var(--bg);border-top:1px solid rgba(255,255,255,.04);padding:128px 24px}
 html[data-theme="light"] .faq-section{border-top-color:rgba(15,23,42,.06)}
 .faq-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:linear-gradient(135deg,rgba(139,126,255,.14),rgba(34,211,238,.06));border:1px solid rgba(139,126,255,.18);border-radius:24px;overflow:hidden;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 80px -30px rgba(139,126,255,.2)}
-.faq-item{background:linear-gradient(145deg,rgba(139,126,255,.06) 0%,rgba(22,22,38,.36) 45%,rgba(8,8,18,.42) 100%);border:none;padding:36px;transition:background .3s;position:relative;overflow:hidden;backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+.faq-item{background:linear-gradient(145deg,rgba(139,126,255,.06) 0%,rgba(22,22,38,.36) 45%,rgba(8,8,18,.42) 100%);border:none;padding:36px;transition:background .3s;position:relative;overflow:hidden;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
 html[data-theme="light"] .faq-item{background:linear-gradient(145deg,rgba(139,126,255,.04) 0%,rgba(255,255,255,.7) 45%,rgba(248,250,253,.72) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
 .faq-q{font-size:15px;font-weight:600;color:#fff;margin-bottom:14px;line-height:1.45;letter-spacing:-.015em;font-family:'Geist',sans-serif}
 html[data-theme="light"] .faq-q{color:#0f172a}
@@ -3301,6 +3333,31 @@ html[data-theme="light"] .footer-docs-link:hover{color:var(--lp-violet)!importan
 .footer-simple{justify-content:space-between;align-items:center}
 .text-muted{color:rgba(255,255,255,.45)}
 
+/* ── scroll progress bar ─────────────────────────────────────── */
+.scroll-progress{position:fixed;top:0;left:0;width:100%;height:2px;z-index:300;background:linear-gradient(90deg,#8b7eff 0%,#22d3ee 55%,#f472b6 100%);transform:scaleX(0);transform-origin:0 50%;pointer-events:none;box-shadow:0 0 12px rgba(139,126,255,.55)}
+
+/* ── rotating hero word (cycles through target languages) ────── */
+#rotate-word{display:inline-block;transition:opacity .38s ease,filter .38s ease,transform .38s ease;will-change:opacity,filter,transform}
+#rotate-word.swap{opacity:0;filter:blur(8px);transform:translateY(14px)}
+
+/* ── terminal typed command caret ────────────────────────────── */
+@keyframes caretBlink{0%,49%{opacity:1}50%,100%{opacity:0}}
+.term-caret{display:inline-block;width:8px;height:14px;background:var(--lp-violet);margin-left:3px;vertical-align:-2px;border-radius:1px;animation:caretBlink .9s steps(1,end) infinite;box-shadow:0 0 10px rgba(139,126,255,.8)}
+
+/* ── nav scrollspy active state ──────────────────────────────── */
+.nav-links a:not(.btn).active{color:#fff}
+.nav-links a:not(.btn).active::after{transform:scaleX(1)}
+html[data-theme="light"] .nav-links a:not(.btn).active{color:#0f172a}
+
+/* ── 3D tilt support (transform set by JS) ───────────────────── */
+.features-grid,.sdk-teaser-grid{perspective:1400px}
+.feature-card,.sdk-teaser-card{transform-style:preserve-3d}
+
+/* ── pulsing ring on the final CTA ───────────────────────────── */
+@keyframes ctaPulse{0%,100%{box-shadow:0 4px 18px -6px rgba(139,126,255,.55),inset 0 1px 0 rgba(255,255,255,.18),0 0 0 0 rgba(139,126,255,.45)}50%{box-shadow:0 4px 18px -6px rgba(139,126,255,.55),inset 0 1px 0 rgba(255,255,255,.18),0 0 0 14px rgba(139,126,255,0)}}
+.cta-btn{animation:ctaPulse 3.2s ease-in-out infinite}
+.cta-btn:hover{animation:none}
+
 /* ── misc ────────────────────────────────────────────────────── */
 .sdk-coming-soon{background:rgba(251,191,36,.08)!important;color:#fbbf24!important;border:1px solid rgba(251,191,36,.22)!important}
 .sdk-teaser-link-disabled{display:inline-block;font-size:13.5px;font-weight:500;color:rgba(255,255,255,.36);letter-spacing:-.005em;opacity:.55;cursor:default;font-family:'Geist',sans-serif;font-style:italic}
@@ -3323,6 +3380,7 @@ html[data-theme="light"] .footer-docs-link:hover{color:var(--lp-violet)!importan
   html[data-theme="light"] .nav-links{background:rgba(245,247,250,.98);border-bottom-color:rgba(15,23,42,.08)}
   .nav-links.open{display:flex}
   .nav-links a:not(.btn){padding:14px 24px;font-size:14.5px;width:100%;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,.04)}
+  .nav-links a:not(.btn).active::after{display:none}
   .nav-links .nav-cta{margin:8px 16px 0;width:calc(100% - 32px)!important;text-align:center;display:block;padding:12px 16px!important;font-size:14px!important;box-sizing:border-box}
   .nav-inner{position:relative;flex-wrap:nowrap}
   .hero{padding:112px 20px 84px}
@@ -3368,7 +3426,8 @@ html[data-theme="light"] .footer-docs-link:hover{color:var(--lp-violet)!importan
 
 /* ── reduced motion ──────────────────────────────────────────── */
 @media(prefers-reduced-motion:reduce){
-  .accent,.hero-glow,.hero-orb1,.hero-orb2,.hero-grid,.cta-section::after,.pricing-card.recommended::after,.sdk-icon::before,.badge::before,.btn-primary.cta-btn::before,.pricing-cta.accent::after,.hero-lang-strip,.meteor.run{animation:none!important}
+  .accent,.hero-glow,.hero-orb1,.hero-orb2,.hero-grid,.cta-section::after,.pricing-card.recommended::after,.sdk-icon::before,.badge::before,.btn-primary.cta-btn::before,.pricing-cta.accent::after,.hero-lang-strip,.meteor.run,.cta-btn,.term-caret{animation:none!important}
+  #rotate-word{transition:none!important}
   .feature-card:hover,.sdk-teaser-card:hover,.pricing-card:hover{transform:none!important}
   .pricing-card.recommended{transform:none!important}
 }
@@ -4389,6 +4448,14 @@ function handlePipelineEvent(evt){
     if(d.prUrl)run.prUrl=d.prUrl;if(d.error)run.error=d.error;
     if(d.surfaceSkipped)run.surfaceSkipped=d.surfaceSkipped;
     run.retryPending=false;
+    // Any step still showing "running" when the run ends needs to be resolved.
+    // On cancellation/error the server never emits a step event for the interrupted
+    // step, so we flip it to "error" here to avoid it spinning forever.
+    if(d.error&&run.steps){
+      Object.keys(run.steps).forEach(function(k){
+        if(run.steps[k].status==='running')run.steps[k]={status:'error',detail:run.steps[k].detail};
+      });
+    }
     // Auto-collapse all finished runs so only running ones are expanded by default
     run.collapsed=true;
     scheduleRender(d.runId);scheduleWidgets();loadStats();

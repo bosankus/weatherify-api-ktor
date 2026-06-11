@@ -592,14 +592,74 @@
     };
 
     let _currentChatTicketId = null;
+    let _chatRelocated = false;
+    let _threadPollTimer = null;
+    let _audioCtx = null;
+
+    // The drawer markup is rendered inside the dashboard card, whose ancestors use
+    // backdrop-filter — that creates a CSS containing block, so position:fixed pins
+    // the drawer to the card (it used to render clipped at the top of the page)
+    // instead of the viewport. Re-parent it to <body> once, before first open.
+    function relocateChatDrawer() {
+        if (_chatRelocated) return;
+        const backdrop = document.getElementById('support-chat-backdrop');
+        const modal = document.getElementById('support-chat-modal');
+        if (backdrop) document.body.appendChild(backdrop);
+        if (modal) document.body.appendChild(modal);
+        _chatRelocated = true;
+    }
+
+    function isChatOpen() {
+        const modal = document.getElementById('support-chat-modal');
+        return !!(modal && modal.classList.contains('open'));
+    }
+
+    // Reuse a single AudioContext — browsers cap concurrent contexts.
+    function playTing() {
+        try {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            if (!_audioCtx) _audioCtx = new AC();
+            const ctx = _audioCtx;
+            if (ctx.state === 'suspended') { try { ctx.resume(); } catch (_) { } }
+            const osc = ctx.createOscillator(), gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+            osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
+        } catch (_) { }
+    }
 
     function _renderChatStatusPills(t) {
         const container = document.getElementById('support-chat-status-pills');
         if (!container || !t) return;
         container.innerHTML = ['open', 'acknowledged', 'resolved'].map(s => {
             const active = t.status === s;
-            return `<button class="support-chat-pill" onclick="window.updateTicketStatus('${escHtml(t.id)}','${s}')" style="border:1px solid ${active ? 'transparent' : 'var(--card-border)'};background:${active ? '#6366f1' : 'transparent'};color:${active ? '#fff' : 'var(--text-color)'};font-weight:${active ? '600' : '400'};">${s.charAt(0).toUpperCase() + s.slice(1)}</button>`;
+            return `<button class="scx-pill${active ? ' active' : ''}" onclick="window.updateTicketStatus('${escHtml(t.id)}','${s}')">${s.charAt(0).toUpperCase() + s.slice(1)}</button>`;
         }).join('');
+    }
+
+    function _renderChatChips(t) {
+        const chips = document.getElementById('scx-chips');
+        if (!chips || !t) return;
+        let h = `<span class="scx-chip" style="${CAT_COLORS[t.category] || ''}">${escHtml(t.category)}</span>` +
+            `<span class="scx-chip" style="${ST_COLORS[t.status] || ''}">${escHtml(t.status)}</span>`;
+        if (t.status !== 'resolved') {
+            h += `<button class="scx-resolve" onclick="window.resolveSupportChat()"><span class="material-icons">check_circle</span>Resolve</button>`;
+        }
+        chips.innerHTML = h;
+    }
+
+    // Hide the composer once a ticket is resolved; show the resolved note instead.
+    function _syncComposeState(t) {
+        const compose = document.getElementById('scx-compose');
+        const note = document.getElementById('scx-resolved-note');
+        const resolved = t && t.status === 'resolved';
+        if (compose) compose.style.display = resolved ? 'none' : '';
+        if (note) note.style.display = resolved ? '' : 'none';
     }
 
     function ago(ms){
@@ -610,13 +670,13 @@
         return new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
     }
 
-    function _renderChatMessages(t) {
+    function _renderChatMessages(t, animateId) {
         const area = document.getElementById('support-chat-messages');
         if (!area) return;
-        
+
         let msgs = t.messages || [];
         if (!msgs.length) {
-            // fallback
+            // fallback for legacy tickets without stored messages
             if (t.message) {
                 msgs.push({ senderType: 'user', content: t.message, sentAt: t.createdAt });
             }
@@ -624,26 +684,70 @@
                 msgs.push({ senderType: 'admin', content: t.adminReply, sentAt: t.createdAt });
             }
         }
-        
+
         if (!msgs.length) {
-            area.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-secondary);font-size:0.84rem;opacity:.6;"><span class="material-icons" style="font-size:32px;">forum</span>No messages yet</div>';
+            area.innerHTML = '<div class="scx-empty"><span class="material-icons" style="font-size:32px;">forum</span>No messages yet</div>';
             return;
         }
-        
+
+        // Preserve scroll position on silent refresh; snap to bottom for new messages
+        const wasAtBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 40;
         area.innerHTML = msgs.map(m => {
             const role = m.senderType === 'admin' ? 'admin' : 'user';
-            const label = role === 'admin' ? 'Support (You)' : (t.userEmail || t.userId);
+            const label = role === 'admin' ? 'Support' : (t.userEmail || t.userId);
             const timeStr = m.sentAt ? ago(m.sentAt) : '';
+            const isNew = animateId && m.id === animateId;
             return `
-            <div class="chat-msg-row ${role}">
-                <div class="chat-bubble ${role}">${escHtml(m.content)}</div>
-                <div class="chat-meta ${role}">
-                    <div style="font-weight:700;">${escHtml(label)}</div>
-                    <div>${escHtml(timeStr)}</div>
-                </div>
+            <div class="scx-row ${role}${isNew ? ' scx-new' : ''}">
+                <div class="scx-bubble">${escHtml(m.content)}</div>
+                <div class="scx-msg-meta">${escHtml(label)} · ${escHtml(timeStr)}</div>
             </div>`;
         }).join('');
-        area.scrollTop = area.scrollHeight;
+        if (wasAtBottom || animateId) area.scrollTop = area.scrollHeight;
+    }
+
+    // Re-fetch the open thread from the server and re-render. `fromPoll` keeps
+    // failures quiet and tings only when something genuinely new arrived.
+    async function refreshChatThread(id, fromPoll) {
+        try {
+            const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id), { headers: adminHeaders() });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            const detail = data.data;
+            const t = _supportTickets.find(x => x.id === id);
+            if (!t) return;
+            const prevCount = (t.messages || []).length;
+            t.messages = detail.messages || [];
+            if (detail.ticket) {
+                t.status = detail.ticket.status;
+                t.adminNote = detail.ticket.adminNote;
+            }
+            if (_currentChatTicketId !== id || !isChatOpen()) return;
+            _renderChatMessages(t);
+            _renderChatChips(t);
+            _renderChatStatusPills(t);
+            _syncComposeState(t);
+            if (fromPoll && t.messages.length > prevCount) playTing();
+        } catch (e) {
+            if (!fromPoll) {
+                console.error('Failed to load thread:', e);
+                const area = document.getElementById('support-chat-messages');
+                if (area) area.innerHTML = '<div class="scx-empty" style="color:#ef4444;">Failed to load conversation.</div>';
+            }
+        }
+    }
+
+    // Polling safety net while the drawer is open — SSE is the primary channel but
+    // can silently miss frames (proxy buffering, reconnect gaps).
+    function startThreadPoll() {
+        if (_threadPollTimer) return;
+        _threadPollTimer = setInterval(() => {
+            if (_currentChatTicketId && isChatOpen()) refreshChatThread(_currentChatTicketId, true);
+        }, 10000);
+    }
+
+    function stopThreadPoll() {
+        if (_threadPollTimer) { clearInterval(_threadPollTimer); _threadPollTimer = null; }
     }
 
     window.updateTicketStatus = async function (id, newStatus) {
@@ -652,15 +756,14 @@
         if (t) t.status = newStatus;
         renderSupportTable(_supportTickets);
         updateOpenBadge(_supportTickets);
-        const modal = document.getElementById('support-chat-modal');
-        if (modal && modal.style.display !== 'none' && modal.dataset.ticketId === id) {
+        const chatShowing = () => isChatOpen() && _currentChatTicketId === id;
+        const syncChatUi = () => {
+            if (!chatShowing()) return;
             _renderChatStatusPills(t);
-            const badges = document.getElementById('support-chat-badges');
-            if (badges && t) {
-                const stStyle = ST_COLORS[t.status] || '';
-                badges.innerHTML = `<span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span>`;
-            }
-        }
+            _renderChatChips(t);
+            _syncComposeState(t);
+        };
+        syncChatUi();
         try {
             const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/status', {
                 method: 'PATCH',
@@ -672,7 +775,7 @@
             if (t && prev) t.status = prev;
             renderSupportTable(_supportTickets);
             updateOpenBadge(_supportTickets);
-            if (modal && modal.style.display !== 'none' && modal.dataset.ticketId === id) _renderChatStatusPills(t);
+            syncChatUi();
             if (typeof showBanner === 'function') showBanner('error', 'Failed to update status: ' + e.message);
             else console.error('Failed to update status:', e.message);
         }
@@ -686,7 +789,7 @@
         const reply = ta.value.trim();
         if (!reply) return;
         const btn = document.getElementById('support-chat-send-btn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">hourglass_top</span>Sending…'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons">hourglass_top</span>'; }
         try {
             const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id) + '/reply', {
                 method: 'PATCH',
@@ -696,20 +799,25 @@
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
             const newMsg = data.data; // The returned SupportMessage object
-            
+
             const t = _supportTickets.find(x => x.id === id);
             if (t) {
                 if (!t.messages) t.messages = [];
-                t.messages.push(newMsg);
+                // SSE may have echoed our own reply already — dedup by message id
+                if (newMsg && !t.messages.some(m => m.id === newMsg.id)) t.messages.push(newMsg);
                 t.adminReply = reply;
                 if (t.status === 'open') t.status = 'acknowledged';
             }
             ta.value = '';
-            _renderChatMessages(t);
+            ta.style.height = 'auto';
+            _renderChatMessages(t, newMsg && newMsg.id);
+            _renderChatChips(t);
+            _renderChatStatusPills(t);
             renderSupportTable(_supportTickets);
-            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">send</span>Send'; }
+            updateOpenBadge(_supportTickets);
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons">send</span>'; }
         } catch (e) {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">send</span>Send'; }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons">send</span>'; }
             if (typeof showBanner === 'function') showBanner('error', 'Failed to send reply: ' + e.message);
         }
     };
@@ -750,13 +858,15 @@
     window.resolveSupportChat = async function () {
         const id = _currentChatTicketId;
         if (!id) return;
+        // Keep the drawer open — the UI flips into its resolved state (composer
+        // hidden, resolved note shown) so the admin sees the outcome.
         await window.updateTicketStatus(id, 'resolved');
-        window.closeSupportDetail();
     };
 
     window.openSupportDetail = async function (id) {
         const t = _supportTickets.find(x => x.id === id);
         if (!t) return;
+        relocateChatDrawer();
         _currentChatTicketId = id;
         const modal = document.getElementById('support-chat-modal');
         const backdrop = document.getElementById('support-chat-backdrop');
@@ -764,44 +874,24 @@
         modal.dataset.ticketId = id;
 
         // Header
-        const titleEl = document.getElementById('support-chat-title');
-        if (titleEl) titleEl.textContent = 'Ticket #' + t.id.substring(0, 8);
-        const subjectEl = document.getElementById('support-chat-subject');
-        if (subjectEl) subjectEl.textContent = (t.userEmail || t.userId) + ' · ' + t.subject;
-        const badges = document.getElementById('support-chat-badges');
-        if (badges) {
-            const catStyle = CAT_COLORS[t.category] || '';
-            const stStyle = ST_COLORS[t.status] || '';
-            badges.innerHTML = `<span class="status-badge" style="${catStyle}">${escHtml(t.category)}</span><span class="status-badge" style="${stStyle}">${escHtml(t.status)}</span>`;
-        }
-        
-        const area = document.getElementById('support-chat-messages');
-        if (area) area.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);">Loading thread...</div>';
-        
-        if (backdrop) backdrop.style.display = 'block';
-        modal.style.display = 'flex';
-        requestAnimationFrame(() => {
-            modal.classList.add('open');
-            if (backdrop) backdrop.classList.add('open');
-        });
-        
-        try {
-            const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id), { headers: adminHeaders() });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
-            const detail = data.data;
-            t.messages = detail.messages;
-        } catch (e) {
-            console.error('Failed to load thread:', e);
-            if (area) area.innerHTML = '<div style="color:#ef4444;text-align:center;">Failed to load thread.</div>';
-            return;
-        }
-
-        // Messages
-        _renderChatMessages(t);
-
-        // Status pills
+        const who = t.userEmail || t.userId || '?';
+        const avatar = document.getElementById('scx-avatar');
+        if (avatar) avatar.textContent = who.charAt(0);
+        const userEl = document.getElementById('scx-user');
+        if (userEl) userEl.textContent = who;
+        const subline = document.getElementById('scx-subline');
+        if (subline) subline.textContent = 'Ticket #' + t.id.substring(0, 8) + ' · opened ' + ago(t.createdAt);
+        const subjectEl = document.getElementById('scx-subject');
+        if (subjectEl) subjectEl.textContent = t.subject;
+        _renderChatChips(t);
         _renderChatStatusPills(t);
+        _syncComposeState(t);
+
+        const area = document.getElementById('support-chat-messages');
+        if (area) area.innerHTML = '<div class="scx-empty">Loading conversation…</div>';
+
+        if (backdrop) backdrop.classList.add('open');
+        requestAnimationFrame(() => modal.classList.add('open'));
 
         // Note
         const noteTa = document.getElementById('support-chat-note-ta');
@@ -813,37 +903,153 @@
 
         // Reply
         const replyTa = document.getElementById('support-chat-reply-ta');
-        if (replyTa) replyTa.value = '';
+        if (replyTa) { replyTa.value = ''; replyTa.style.height = 'auto'; }
+
+        startThreadPoll();
+        await refreshChatThread(id, false);
     };
 
     window.closeSupportDetail = function () {
         const modal = document.getElementById('support-chat-modal');
         const backdrop = document.getElementById('support-chat-backdrop');
-        if (modal) {
-            modal.classList.remove('open');
-            setTimeout(() => { modal.style.display = 'none'; }, 260);
-        }
-        if (backdrop) {
-            backdrop.classList.remove('open');
-            setTimeout(() => { backdrop.style.display = 'none'; }, 260);
-        }
+        if (modal) modal.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('open');
+        stopThreadPoll();
         _currentChatTicketId = null;
     };
 
-    // Escape key closes the chat modal
+    // Escape key closes the chat drawer
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-            const modal = document.getElementById('support-chat-modal');
-            if (modal && modal.style.display !== 'none') window.closeSupportDetail();
-        }
+        if (e.key === 'Escape' && isChatOpen()) window.closeSupportDetail();
     });
 
-    // Wire status filter dropdown + refresh button once DOM is ready
+    // ── Real-time support events (SSE) ────────────────────────────────────────
+    // Streams /admin/support/events via fetch (EventSource can't send Authorization
+    // headers). Reconnects with exponential backoff; Last-Event-ID replays anything
+    // missed during the gap. While connected the drawer shows a LIVE badge.
+    let _sseAbort = null, _sseDelay = 1000, _sseStop = false, _sseLastId = '';
+
+    function setLiveIndicator(on) {
+        const el = document.getElementById('scx-live');
+        if (el) el.classList.toggle('on', !!on);
+    }
+
+    function scheduleSupportSseReconnect() {
+        _sseAbort = null;
+        setLiveIndicator(false);
+        if (_sseStop) return;
+        const delay = _sseDelay;
+        _sseDelay = Math.min(_sseDelay * 2, 30000);
+        setTimeout(startSupportSse, delay);
+    }
+
+    function startSupportSse() {
+        if (_sseAbort || _sseStop) return;
+        _sseAbort = new AbortController();
+        const headers = adminHeaders();
+        if (_sseLastId) headers['Last-Event-ID'] = _sseLastId;
+        fetch('/admin/support/events', { headers, signal: _sseAbort.signal })
+            .then(res => {
+                // Auth failures are not retryable — stop so a logged-out tab
+                // doesn't hammer the endpoint forever.
+                if (res.status === 401 || res.status === 403) { _sseStop = true; _sseAbort = null; return; }
+                if (!res.ok) throw new Error('SSE status ' + res.status);
+                const reader = res.body.getReader(), decoder = new TextDecoder();
+                let buf = '', gotFrame = false;
+                setLiveIndicator(true);
+                function pump() {
+                    reader.read().then(r => {
+                        if (r.done) { scheduleSupportSseReconnect(); return; }
+                        buf += decoder.decode(r.value, { stream: true });
+                        const parts = buf.split('\n\n');
+                        buf = parts.pop();
+                        parts.forEach(chunk => {
+                            const lines = chunk.split('\n');
+                            let data = null, id = null;
+                            for (const line of lines) {
+                                if (line.indexOf('data:') === 0) data = line.slice(5).trim();
+                                else if (line.indexOf('id:') === 0) id = line.slice(3).trim();
+                            }
+                            if (id) _sseLastId = id;
+                            if (!data) return;
+                            // Reset backoff only after a real frame — a server that 200s
+                            // then drops immediately would otherwise pin the delay at 1s.
+                            if (!gotFrame) { gotFrame = true; _sseDelay = 1000; }
+                            try {
+                                const evt = JSON.parse(data);
+                                if (evt.type === 'support_message') handleSupportEvent(evt);
+                            } catch (_) { }
+                        });
+                        pump();
+                    }).catch(() => scheduleSupportSseReconnect());
+                }
+                pump();
+            })
+            .catch(() => scheduleSupportSseReconnect());
+    }
+
+    function handleSupportEvent(evt) {
+        const tid = evt.supportTicketId;
+        if (!tid) return;
+        const t = _supportTickets.find(x => x.id === tid);
+        if (!t) {
+            // Unknown ticket — a customer just opened a new one; refresh the inbox.
+            window.loadSupportTickets(true);
+            playTing();
+            return;
+        }
+        if (evt.supportTicketStatus) t.status = evt.supportTicketStatus;
+        renderSupportTable(_supportTickets);
+        updateOpenBadge(_supportTickets);
+
+        const open = isChatOpen() && _currentChatTicketId === tid;
+        if (evt.supportMessageId && evt.supportMessageContent) {
+            if (!t.messages) t.messages = [];
+            const already = t.messages.some(m => m.id === evt.supportMessageId);
+            if (!already) {
+                t.messages.push({
+                    id: evt.supportMessageId,
+                    senderType: evt.supportSenderType,
+                    content: evt.supportMessageContent,
+                    sentAt: evt.supportMessageSentAt || Date.now(),
+                });
+                if (open) {
+                    _renderChatMessages(t, evt.supportMessageId);
+                    _renderChatChips(t);
+                    _renderChatStatusPills(t);
+                    _syncComposeState(t);
+                }
+                if (evt.supportSenderType === 'user') playTing();
+            }
+        } else if (open) {
+            // Status-only event (resolve / pill change from elsewhere)
+            _renderChatChips(t);
+            _renderChatStatusPills(t);
+            _syncComposeState(t);
+        }
+    }
+
+    // Wire status filter dropdown, refresh button, and reply composer once DOM is ready
     function wireSupportControls() {
         const filter = document.getElementById('support-status-filter');
         if (filter) filter.addEventListener('change', () => window.loadSupportTickets(true));
         const refresh = document.getElementById('support-refresh-btn');
         if (refresh) refresh.addEventListener('click', () => window.loadSupportTickets(true));
+        const replyTa = document.getElementById('support-chat-reply-ta');
+        if (replyTa) {
+            replyTa.addEventListener('input', function () {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            });
+            replyTa.addEventListener('keydown', function (e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); window.sendSupportChatReply(); }
+            });
+        }
+        // Only pages that render the support inbox get the live stream
+        if (document.getElementById('support-chat-modal')) {
+            relocateChatDrawer();
+            startSupportSse();
+        }
     }
 
     if (document.readyState === 'loading') {

@@ -546,7 +546,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
   var BASE='/api/support';
   var _open=false,_view='home',_convId=null,_convs=null,_thread=null,_loaded=false,_isAdmin=false,_submitting=false,_lastSent=null;
   var _unread={},_sseCtrl=null,_pollTimer=null,_sseDelay=1000,_sseStop=false,_audioCtx=null;
-  var _adminOnline=null,_presenceTimer=null,_lastEventId='';
+  var _adminOnline=null,_presenceTimer=null,_lastEventId='',_threadPollTimer=null;
   var CAT_LABELS={'bug':'Bug report','question':'Question','feature':'Feature request','billing':'Billing'};
   var CAT_EMOJIS={'bug':'🐛','question':'💬','feature':'✨','billing':'💳'};
 
@@ -707,6 +707,20 @@ internal val SUPPORT_CHAT_JS = """(function(){
   }
   function stopPresencePoll(){
     if(_presenceTimer){clearInterval(_presenceTimer);_presenceTimer=null;}
+  }
+
+  // ── Thread-view polling fallback (SSE safety net) ───────────────────────────
+  // SSE is the primary delivery channel but can silently miss events (gap on
+  // reconnect, dropped frame, proxy buffering). A 5-second refresh of the open
+  // thread catches anything SSE missed without noticeable latency.
+  function startThreadPoll(){
+    if(_threadPollTimer)return;
+    _threadPollTimer=setInterval(function(){
+      if(_view==='thread'&&_convId)silentRefreshThread(false);
+    },5000);
+  }
+  function stopThreadPoll(){
+    if(_threadPollTimer){clearInterval(_threadPollTimer);_threadPollTimer=null;}
   }
 
   // ── Home view ───────────────────────────────────────────────────────────────
@@ -931,6 +945,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
     _view=newView;_convId=newId;
     if(newView==='thread'){
       _thread=null;renderHeader();setThreadMode(true);renderThread(true);
+      startThreadPoll();
       fetch(BASE+'/'+newId,{headers:H()})
         .then(function(r){return r.ok?r.json():Promise.reject(r.status);})
         .then(function(data){
@@ -939,6 +954,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
           renderThread(true);renderHeader();updateFabDot();
         }).catch(function(){});
     } else {
+      stopThreadPoll();
       renderBody();renderHeader();
     }
   }
@@ -951,10 +967,17 @@ internal val SUPPORT_CHAT_JS = """(function(){
     _open=!_open;
     var panel=document.getElementById('sc-panel');
     if(panel)panel.classList.toggle('open',_open);
-    if(_open){if(!_loaded)loadConvs();}
+    if(_open){
+      if(!_loaded)loadConvs();
+      // Reconnect SSE if it silently dropped (not a 401/403 stop)
+      if(!_sseCtrl&&!_sseStop)startSse();
+      // Re-fetch thread in case messages arrived while the panel was closed
+      if(_view==='thread'&&_convId)silentRefreshThread(false);
+    }
   };
   window._scClose=function(){
     _open=false;
+    stopThreadPoll();
     var panel=document.getElementById('sc-panel');if(panel)panel.classList.remove('open');
   };
   window._scBack=function(){if(_view!=='home')window._scHome();};
