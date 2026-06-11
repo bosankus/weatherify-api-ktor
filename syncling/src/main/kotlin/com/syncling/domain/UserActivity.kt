@@ -14,6 +14,7 @@ enum class UserEvent {
     PAYMENT_VERIFIED,             // Checkout.js handler signature verified
     SUBSCRIPTION_AUTHENTICATED,   // webhook: card saved during trial
     SUBSCRIPTION_CHARGED,         // webhook: real money moved
+    PAYMENT_FAILED,               // webhook/reconciliation: recurring charge failed, plan on hold
     SUBSCRIPTION_CANCELLED,
     PLAN_ACTIVATED,               // pending → active plan promotion
     INVOICE_GENERATED,

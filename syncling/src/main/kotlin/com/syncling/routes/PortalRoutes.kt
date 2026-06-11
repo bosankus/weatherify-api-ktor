@@ -1,5 +1,6 @@
 package com.syncling.routes
 
+import com.syncling.repository.BillingRepository
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.html.*
@@ -99,7 +100,21 @@ private val FAVICON_PNG_180 by lazy { generateFaviconPng(180) }
 private val FAVICON_PNG_192 by lazy { generateFaviconPng(192) }
 private val FAVICON_PNG_512 by lazy { generateFaviconPng(512) }
 
-fun Route.configurePortalRoutes(jwtSecret: String, statusService: com.syncling.services.StatusService) {
+fun Route.configurePortalRoutes(
+    jwtSecret: String,
+    statusService: com.syncling.services.StatusService,
+    billingRepository: BillingRepository? = null
+) {
+    // When a recurring charge has failed the subscription is on hold: app pages redirect
+    // to the pending-payment page until the user clears the outstanding payment.
+    // Billing pages stay reachable so the user can always manage their plan.
+    suspend fun ApplicationCall.redirectedToPendingPayment(userId: String): Boolean {
+        val pending = billingRepository?.let {
+            runCatching { it.getSubscription(userId).paymentPending }.getOrDefault(false)
+        } ?: false
+        if (pending) respondRedirect("/billing/payment-pending")
+        return pending
+    }
     // Public JSON status endpoint — used by uptime monitors and the status page client.
     get("/syncling/api/status") {
         call.respond(statusService.report())
@@ -176,6 +191,7 @@ fun Route.configurePortalRoutes(jwtSecret: String, statusService: com.syncling.s
             call.respondRedirect("/billing/checkout?plan=$pendingPlan")
             return@get
         }
+        if (call.redirectedToPendingPayment(sessionUserId)) return@get
 
         call.issueBootstrapCookie()
         call.respondHtml { dashboardApp() }
@@ -204,36 +220,44 @@ fun Route.configurePortalRoutes(jwtSecret: String, statusService: com.syncling.s
         call.respondHtml { billingAnalyticsApp() }
     }
     get("/projects") {
-        if (call.sessionUserId(jwtSecret) == null) {
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId == null) {
             call.respondRedirect("/auth/github")
             return@get
         }
+        if (call.redirectedToPendingPayment(userId)) return@get
         call.issueBootstrapCookie()
         call.respondHtml { projectsApp() }
     }
     get("/review-portal") {
-        if (call.sessionUserId(jwtSecret) == null) {
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId == null) {
             call.respondRedirect("/auth/github")
             return@get
         }
+        if (call.redirectedToPendingPayment(userId)) return@get
         call.issueBootstrapCookie()
         call.respondHtml { reviewPortal() }
     }
     // Members landing — no projectId. Client will pick the first project after
     // it loads /api/projects; if there are none, the server-rendered empty state shows.
     get("/members") {
-        if (call.sessionUserId(jwtSecret) == null) {
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId == null) {
             call.respondRedirect("/auth/github")
             return@get
         }
+        if (call.redirectedToPendingPayment(userId)) return@get
         call.issueBootstrapCookie()
         call.respondHtml { membersApp(projectId = null) }
     }
     get("/members/{projectId}") {
-        if (call.sessionUserId(jwtSecret) == null) {
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId == null) {
             call.respondRedirect("/auth/github")
             return@get
         }
+        if (call.redirectedToPendingPayment(userId)) return@get
         call.issueBootstrapCookie()
         call.respondHtml { membersApp(projectId = call.parameters["projectId"]) }
     }

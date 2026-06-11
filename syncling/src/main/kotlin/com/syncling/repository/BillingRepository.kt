@@ -30,6 +30,17 @@ interface BillingRepository {
 
     suspend fun setLimitHitAt(userId: String, at: Instant?)
 
+    /** Marks (or clears, with null) the payment-failed hold that blocks all plan features. */
+    suspend fun setPaymentFailedAt(userId: String, at: Instant?)
+
+    /**
+     * Returns paid-plan subscriptions whose billing state may be stale: the current period
+     * ended more than [graceMillis] ago, or the subscription never received a first charge
+     * and the trial window plus grace has elapsed. Used by the reconciliation pass to catch
+     * missed/ignored webhooks (e.g. users who cancelled autopay after the trial).
+     */
+    suspend fun findOverdueSubscriptions(now: Instant, graceMillis: Long): List<Subscription>
+
     /**
      * Marks that the user has begun a 7-day free trial. Idempotent — only sets the
      * timestamp on first call; preserved across downgrades so the trial cannot be reused.

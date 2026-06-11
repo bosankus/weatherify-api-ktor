@@ -91,6 +91,7 @@
         if (act === 'dismiss') hideBanner();
         else if (act === 'dismiss-limit') dismissLimit();
         else if (act === 'upgrade') openPlanPicker();
+        else if (act === 'pay-pending') window.location.href = '/billing/payment-pending';
     });
 
     // ── Subscription loader ──────────────────────────────────────────────────
@@ -117,7 +118,10 @@
 
         // Status pill
         const pill = $('bl-plan-status');
-        if (sub.cancelAtPeriodEnd) {
+        if (sub.paymentPending) {
+            pill.className = 'bl-pill bl-pill-cancelling';
+            pill.textContent = 'Payment due';
+        } else if (sub.cancelAtPeriodEnd) {
             pill.className = 'bl-pill bl-pill-cancelling';
             pill.textContent = 'Cancelling';
         } else if (sub.inTrial) {
@@ -165,7 +169,10 @@
         // Action buttons
         const actions = $('bl-plan-actions');
         const buttons = [];
-        if (isFree) {
+        if (sub.paymentPending) {
+            buttons.push({ id: 'pay-pending', label: 'Complete payment', primary: true });
+            buttons.push({ id: 'cancel', label: 'Cancel plan', kind: 'danger' });
+        } else if (isFree) {
             buttons.push({ id: 'upgrade', label: 'Upgrade plan', primary: true });
         } else if (sub.cancelAtPeriodEnd) {
             buttons.push({ id: 'upgrade', label: 'Change plan' });
@@ -191,10 +198,15 @@
         if (act === 'upgrade') openPlanPicker();
         else if (act === 'activate') activateNow(t);
         else if (act === 'cancel') cancelSubscription(t);
+        else if (act === 'pay-pending') window.location.href = '/billing/payment-pending';
     });
 
     function maybeShowContextualBanner(sub) {
-        if (sub.trialLimitHit) {
+        if (sub.paymentPending) {
+            showBanner('error', 'Payment pending — subscription on hold',
+                'Your last payment didn\'t go through, so translations are paused. Complete the pending payment to resume your plan.',
+                [{ id: 'pay-pending', label: 'Complete payment', kind: 'primary' }]);
+        } else if (sub.trialLimitHit) {
             showBanner('warn', 'Trial limit reached',
                 'You\'ve hit the trial usage limit. Translations are paused until you activate your subscription.',
                 [
@@ -555,6 +567,12 @@
     }
 
     // ── Boot ─────────────────────────────────────────────────────────────────
+    // Landing back from a successful pending-payment retry (/billing?payment=recovered).
+    if (new URLSearchParams(window.location.search).get('payment') === 'recovered') {
+        showBanner('success', 'Payment received',
+            'Your subscription is active again — translations have resumed.');
+        history.replaceState(null, '', window.location.pathname);
+    }
     loadSubscription();
     loadUsage();
     loadInvoices();

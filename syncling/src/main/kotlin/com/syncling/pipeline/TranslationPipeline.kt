@@ -102,15 +102,16 @@ class TranslationPipeline(
 
         // ── Pre-flight billing check ───────────────────────────────────────────
         // Fail fast before any GitHub API calls or MongoDB reads if the user has
-        // already hit their plan limit — avoids wasting quota on a doomed run.
-        if (billingService.isLimitAlreadyExceeded(userId)) {
-            val friendlyMsg = "Monthly string quota reached — upgrade your plan to resume translations."
+        // hit their plan limit or their subscription payment failed — avoids
+        // wasting quota on a doomed run.
+        val billingBlock = billingService.accessBlockReason(userId)
+        if (billingBlock != null) {
             eventBus.stepSkipped(userId, runId, "FETCHING_STRINGS")
             eventBus.stepSkipped(userId, runId, "DETECTING_CHANGES")
-            eventBus.stepError(userId, runId, "BILLING_CHECK", friendlyMsg)
+            eventBus.stepError(userId, runId, "BILLING_CHECK", billingBlock)
             listOf("TRANSLATING", "CREATING_PR", "CDN_PUBLISH").forEach { eventBus.stepSkipped(userId, runId, it) }
-            eventBus.finishRun(userId, runId, error = friendlyMsg)
-            log.info("Pipeline skipped — userId={} has exceeded plan limit", userId)
+            eventBus.finishRun(userId, runId, error = billingBlock)
+            log.info("Pipeline skipped — userId={} billing block: {}", userId, billingBlock)
             return
         }
 

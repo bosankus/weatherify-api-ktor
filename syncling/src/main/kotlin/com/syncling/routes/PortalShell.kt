@@ -466,7 +466,7 @@ internal const val SUPPORT_CHAT_CSS = """
 .sc-resolve-btn{margin-left:auto;flex-shrink:0;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(139,126,255,.3);border-radius:6px;padding:3px 10px;cursor:pointer;transition:background .12s;white-space:nowrap}
 .sc-resolve-btn:hover{background:rgba(139,126,255,.2)}
 /* Messages area */
-.sc-msg-area{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
+.sc-msg-area{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
 /* Chat bubbles */
 .sc-msg{display:flex;flex-direction:column;max-width:86%}
 .sc-msg-me{align-self:flex-end;align-items:flex-end}
@@ -476,6 +476,10 @@ internal const val SUPPORT_CHAT_CSS = """
 .sc-bubble-me{background:linear-gradient(135deg,#5535dd,#7c3aed);color:#fff;border-bottom-right-radius:4px}
 .sc-bubble-other{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:4px}
 .sc-msg-meta{font-size:10px;color:var(--text-dim);margin-top:4px;padding:0 2px}
+.sc-bubble-failed{opacity:.6;border:1px dashed #ef4444}
+.sc-msg-failed .sc-msg-meta{color:#ef4444}
+.sc-retry-btn{background:none;border:none;color:#ef4444;cursor:pointer;font-size:10px;font-weight:700;padding:0;text-decoration:underline}
+.sc-retry-btn:disabled{opacity:.5;cursor:default}
 .sc-msg-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#5535dd,#a855f7);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
 /* Waiting / typing indicator */
 .sc-waiting{align-self:flex-start;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;border-bottom-left-radius:4px}
@@ -545,8 +549,8 @@ internal const val SUPPORT_CHAT_CSS = """
 internal val SUPPORT_CHAT_JS = """(function(){
   var BASE='/api/support';
   var _open=false,_view='home',_convId=null,_convs=null,_thread=null,_loaded=false,_isAdmin=false,_submitting=false,_lastSent=null;
-  var _unread={},_sseCtrl=null,_pollTimer=null,_sseDelay=1000,_sseStop=false,_audioCtx=null;
-  var _adminOnline=null,_presenceTimer=null,_lastEventId='',_threadPollTimer=null;
+  var _unread={},_sseCtrl=null,_sseDelay=1000,_sseStop=false,_sseDropped=false,_sseOff=false,_audioCtx=null;
+  var _adminOnline=null,_presenceTimer=null,_lastEventId='',_threadCache={},_failed=[];
   var CAT_LABELS={'bug':'Bug report','question':'Question','feature':'Feature request','billing':'Billing'};
   var CAT_EMOJIS={'bug':'🐛','question':'💬','feature':'✨','billing':'💳'};
 
@@ -585,14 +589,30 @@ internal val SUPPORT_CHAT_JS = """(function(){
   // ── SSE real-time channel (both user↔admin) ────────────────────────────────
   function scheduleReconnect(){
     _sseCtrl=null;
-    if(_sseStop)return;
+    _sseDropped=true;
+    if(_sseStop||_sseOff)return;
     var delay=_sseDelay;
     _sseDelay=Math.min(_sseDelay*2,30000);
     setTimeout(startSse,delay);
   }
 
+  // Deliberate disconnect (panel closed / everything resolved) — _sseOff also
+  // cancels any reconnect timer that fires later.
+  function stopSse(){
+    _sseOff=true;
+    if(_sseCtrl){try{_sseCtrl.abort();}catch(_){}_sseCtrl=null;}
+  }
+  function ensureSse(){
+    _sseOff=false;
+    if(!_sseCtrl&&!_sseStop){_sseDelay=1000;startSse();}
+  }
+  // Stop streaming when nothing is live anymore (every conversation resolved).
+  function maybeStopSse(){
+    if(_convs&&!_convs.some(function(t){return t.status!=='resolved';}))stopSse();
+  }
+
   function startSse(){
-    if(_sseCtrl||_sseStop)return;
+    if(_sseCtrl||_sseStop||_sseOff)return;
     var token=localStorage.getItem('syncling_token');if(!token)return;
     _sseCtrl=new AbortController();
     var headers={'Authorization':'Bearer '+token};
@@ -604,6 +624,14 @@ internal val SUPPORT_CHAT_JS = """(function(){
         // through to scheduleReconnect with backoff.
         if(res.status===401||res.status===403){_sseStop=true;_sseCtrl=null;return;}
         if(!res.ok){throw new Error('SSE status '+res.status);}
+        // One-shot gap fill after a reconnect: Last-Event-ID replays most missed
+        // events, this catches anything outside the replay window. Replaces the
+        // old fixed-interval thread poll.
+        if(_sseDropped){
+          _sseDropped=false;
+          if(_view==='thread'&&_convId)silentRefreshThread(true);
+          fetchPresence();
+        }
         // Don't reset backoff on headers alone — a server that 200s then immediately
         // closes would pin the delay at 1s. Reset only after the first real frame.
         var reader=res.body.getReader(),decoder=new TextDecoder(),buf='',gotFrame=false;
@@ -666,18 +694,27 @@ internal val SUPPORT_CHAT_JS = """(function(){
       if(_view==='home'&&_convs)renderBody();
     }
     playTing();
+    if(evt.supportTicketStatus==='resolved')maybeStopSse();
   }
 
-  function silentRefreshThread(isAdminPoll){
+  function silentRefreshThread(notify){
     var id=_convId;if(!id)return;
-    var prevCount=_thread?(_thread.messages||[]).length:0;
     fetch(BASE+'/'+id,{headers:H()})
       .then(function(r){return r.ok?r.json():Promise.reject(r.status);})
       .then(function(data){
-        var gotNew=(data.messages||[]).length>prevCount;
-        _thread=data;
+        var prevMsgs=_thread?(_thread.messages||[]):[];
+        var newMsgs=data.messages||[];
+        // Re-render only when something actually changed — an identical thread
+        // would just wipe the reply draft and flash the message list.
+        var changed=!_thread||_thread.status!==data.status||newMsgs.length!==prevMsgs.length||
+          (newMsgs.length>0&&prevMsgs.length>0&&newMsgs[newMsgs.length-1].id!==prevMsgs[prevMsgs.length-1].id);
+        _threadCache[id]=data;_thread=data;
         if(_convs)_convs.forEach(function(t){if(t.id===id)t.status=data.status;});
-        if(_view==='thread'&&_convId===id){renderThread(false);if(gotNew&&isAdminPoll)playTing();}
+        if(!changed)return;
+        if(_view==='thread'&&_convId===id){
+          renderThread(false);renderHeader();
+          if(notify&&newMsgs.length>prevMsgs.length)playTing();
+        }
       }).catch(function(){});
   }
 
@@ -707,20 +744,6 @@ internal val SUPPORT_CHAT_JS = """(function(){
   }
   function stopPresencePoll(){
     if(_presenceTimer){clearInterval(_presenceTimer);_presenceTimer=null;}
-  }
-
-  // ── Thread-view polling fallback (SSE safety net) ───────────────────────────
-  // SSE is the primary delivery channel but can silently miss events (gap on
-  // reconnect, dropped frame, proxy buffering). A 5-second refresh of the open
-  // thread catches anything SSE missed without noticeable latency.
-  function startThreadPoll(){
-    if(_threadPollTimer)return;
-    _threadPollTimer=setInterval(function(){
-      if(_view==='thread'&&_convId)silentRefreshThread(false);
-    },5000);
-  }
-  function stopThreadPoll(){
-    if(_threadPollTimer){clearInterval(_threadPollTimer);_threadPollTimer=null;}
   }
 
   // ── Home view ───────────────────────────────────────────────────────────────
@@ -836,6 +859,13 @@ internal val SUPPORT_CHAT_JS = """(function(){
         '</div>';
       }
     });
+    _failed.forEach(function(f,i){
+      if(f.convId!==_convId)return;
+      msgsHtml+='<div class="sc-msg sc-msg-me sc-msg-failed">'+
+        '<div class="sc-bubble sc-bubble-me sc-bubble-failed">'+esc(f.content)+'</div>'+
+        '<div class="sc-msg-meta">Not sent · <button class="sc-retry-btn" id="sc-retry-'+i+'" onclick="window._scRetry('+i+')" title="Retry sending">&#8635; Retry</button></div>'+
+      '</div>';
+    });
     if(!isResolved&&msgs.length<=1&&!_isAdmin){
       msgsHtml+='<div class="sc-waiting"><div class="sc-dots"><div class="sc-dot"></div><div class="sc-dot"></div><div class="sc-dot"></div></div><span class="sc-waiting-text">Support will reply shortly</span></div>';
     }
@@ -944,17 +974,22 @@ internal val SUPPORT_CHAT_JS = """(function(){
   function navigate(newView,newId){
     _view=newView;_convId=newId;
     if(newView==='thread'){
-      _thread=null;renderHeader();setThreadMode(true);renderThread(true);
-      startThreadPoll();
-      fetch(BASE+'/'+newId,{headers:H()})
-        .then(function(r){return r.ok?r.json():Promise.reject(r.status);})
-        .then(function(data){
-          _thread=data;_unread[newId]=false;
-          if(_convs)_convs.forEach(function(t){if(t.id===newId)t.status=data.status;});
-          renderThread(true);renderHeader();updateFabDot();
-        }).catch(function(){});
+      // Show the cached thread instantly (no loading flash); reconcile silently.
+      _thread=_threadCache[newId]||null;
+      _unread[newId]=false;updateFabDot();
+      renderHeader();setThreadMode(true);renderThread(true);
+      if(_thread){
+        silentRefreshThread(false);
+      } else {
+        fetch(BASE+'/'+newId,{headers:H()})
+          .then(function(r){return r.ok?r.json():Promise.reject(r.status);})
+          .then(function(data){
+            _threadCache[newId]=data;_thread=data;
+            if(_convs)_convs.forEach(function(t){if(t.id===newId)t.status=data.status;});
+            renderThread(true);renderHeader();
+          }).catch(function(){});
+      }
     } else {
-      stopThreadPoll();
       renderBody();renderHeader();
     }
   }
@@ -969,15 +1004,16 @@ internal val SUPPORT_CHAT_JS = """(function(){
     if(panel)panel.classList.toggle('open',_open);
     if(_open){
       if(!_loaded)loadConvs();
-      // Reconnect SSE if it silently dropped (not a 401/403 stop)
-      if(!_sseCtrl&&!_sseStop)startSse();
+      ensureSse();
       // Re-fetch thread in case messages arrived while the panel was closed
       if(_view==='thread'&&_convId)silentRefreshThread(false);
+    } else {
+      stopSse();
     }
   };
   window._scClose=function(){
     _open=false;
-    stopThreadPoll();
+    stopSse();
     var panel=document.getElementById('sc-panel');if(panel)panel.classList.remove('open');
   };
   window._scBack=function(){if(_view!=='home')window._scHome();};
@@ -995,27 +1031,61 @@ internal val SUPPORT_CHAT_JS = """(function(){
       .then(function(r){return r.ok?r.json():r.json().then(function(e){throw new Error(e.error||'Failed');});})
       .then(function(d){
         _submitting=false;_lastSent=d;_loaded=false;_convs=null;
+        // A fresh ticket needs the stream back (it may have stopped after the
+        // last conversation was resolved).
+        ensureSse();
         navigate('sent',null);
       })
       .catch(function(e){_submitting=false;renderBody();if(window.toast)toast(e.message||'Failed to send.','error');});
   };
 
+  function postMessage(convId,content){
+    return fetch(BASE+'/'+convId+'/messages',{method:'POST',headers:H(),body:JSON.stringify({content:content})})
+      .then(function(r){return r.ok?r.json():r.json().then(function(e){throw new Error(e.error||'Failed');});});
+  }
+  function acceptSent(convId,msg){
+    if(_thread&&_convId===convId){
+      _thread.messages=_thread.messages||[];_thread.messages.push(msg);
+      if(msg.senderType==='admin'&&_thread.status==='open')_thread.status='acknowledged';
+      renderThread(true);renderHeader();
+    }
+  }
+
   window._scSendReply=function(){
     var ta=document.getElementById('sc-reply-ta');if(!ta)return;
     var content=ta.value.trim();if(!content)return;
+    var convId=_convId;
     var btn=document.getElementById('sc-reply-send');
     if(btn)btn.disabled=true;ta.disabled=true;
-    fetch(BASE+'/'+_convId+'/messages',{method:'POST',headers:H(),body:JSON.stringify({content:content})})
-      .then(function(r){return r.ok?r.json():r.json().then(function(e){throw new Error(e.error||'Failed');});})
+    postMessage(convId,content)
       .then(function(msg){
-        if(_thread){
-          _thread.messages=_thread.messages||[];_thread.messages.push(msg);
-          if(msg.senderType==='admin'&&_thread.status==='open')_thread.status='acknowledged';
-        }
         ta.value='';ta.style.height='auto';ta.disabled=false;if(btn)btn.disabled=false;
-        renderThread(true);renderHeader();
+        acceptSent(convId,msg);
       })
-      .catch(function(e){ta.disabled=false;if(btn)btn.disabled=false;if(window.toast)toast(e.message||'Failed to send.','error');});
+      .catch(function(){
+        // Park the message as a failed bubble with a retry control and clear the
+        // composer so the user can keep typing.
+        _failed.push({convId:convId,content:content});
+        ta.value='';ta.style.height='auto';ta.disabled=false;if(btn)btn.disabled=false;
+        renderThread(true);
+      });
+  };
+
+  // Retry a failed message: revive SSE first (the send usually failed because
+  // the connection is down), then re-post. Stays parked on another miss.
+  window._scRetry=function(i){
+    var f=_failed[i];if(!f)return;
+    ensureSse();
+    var b=document.getElementById('sc-retry-'+i);if(b)b.disabled=true;
+    postMessage(f.convId,f.content)
+      .then(function(msg){
+        _failed.splice(i,1);
+        acceptSent(f.convId,msg);
+      })
+      .catch(function(){
+        var b2=document.getElementById('sc-retry-'+i);if(b2)b2.disabled=false;
+        if(window.toast)toast('Still unable to send — try again.','error');
+      });
   };
 
   window._scResolve=function(){
@@ -1027,6 +1097,7 @@ internal val SUPPORT_CHAT_JS = """(function(){
         if(_thread)_thread.status='resolved';
         if(_convs)_convs.forEach(function(t){if(t.id===_convId)t.status='resolved';});
         renderThread(false);renderHeader();
+        maybeStopSse();
       })
       .catch(function(){if(window.toast)toast('Failed to resolve. Please try again.','error');});
   };

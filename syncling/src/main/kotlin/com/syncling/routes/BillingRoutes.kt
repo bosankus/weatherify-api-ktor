@@ -60,7 +60,9 @@ data class SubscriptionResponse(
     /** Approximate date the trial ends (startedAt + 7 days), or null if not in trial. */
     val trialEndsOn: String?,
     /** Whole days until renewal or cancellation date; null when no active period. */
-    val daysUntilRenewal: Int?
+    val daysUntilRenewal: Int?,
+    /** True when a recurring charge failed — the plan is on hold until the pending payment is made. */
+    val paymentPending: Boolean = false
 )
 
 @Serializable
@@ -353,7 +355,18 @@ fun Route.configurePublicCheckoutRoute(
         // Signature verified — immediately activate the pending plan so the dashboard
         // shows the correct tier as soon as the user lands there after redirect.
         val activated = billingRepository.activatePendingPlan(sessionUserId)
+        // A verified payment also lifts any payment-failed hold (retry of a failed autopay).
+        billingRepository.setPaymentFailedAt(sessionUserId, null)
         log.info("rp-callback: activated plan={} for userId={} sub={}", activated?.name, sessionUserId, subscriptionId)
+        if (call.request.queryParameters["flow"] == "retry") {
+            call.application.launch {
+                userActivityService.record(
+                    sessionUserId, UserEvent.PAYMENT_VERIFIED,
+                    mapOf("paymentId" to paymentId, "subscriptionId" to subscriptionId, "flow" to "retry")
+                )
+            }
+            return@get call.respondRedirect("/billing?payment=recovered")
+        }
         call.application.launch {
             userActivityService.record(
                 sessionUserId, UserEvent.PAYMENT_VERIFIED,
@@ -406,6 +419,27 @@ fun Route.configurePublicCheckoutRoute(
         }
 
         call.respondHtml { successPage(subscriptionId, token, plan, trialEndsOn) }
+    }
+
+    /**
+     * Shown when a recurring charge failed and the subscription is on hold. Opens Razorpay
+     * Checkout against the existing subscription so the user can clear the outstanding
+     * payment; a halted/pending subscription resumes automatically once it succeeds.
+     */
+    get("/billing/payment-pending") {
+        val userId = call.sessionUserId(jwtSecret)
+            ?: return@get call.respondRedirect("/auth/github")
+        val user = userRepository.findById(userId)
+            ?: return@get call.respondRedirect("/auth/github")
+        val sub = billingRepository.getSubscription(userId)
+        val subscriptionId = sub.razorpaySubscriptionId
+        if (!sub.paymentPending || subscriptionId == null) {
+            // Nothing outstanding — back to the billing dashboard.
+            return@get call.respondRedirect("/billing")
+        }
+        call.respondHtml {
+            paymentPendingPage(sub.plan, subscriptionId, razorpayService.publicKeyId, user.email, user.githubUsername, user.avatarUrl)
+        }
     }
 
     // Called by the checkout page's 15-minute session timer when it expires.
@@ -623,7 +657,8 @@ internal fun Subscription.toResponse(): SubscriptionResponse {
         trialLimitHit = inTrial && limitHitAt != null,
         inTrial = inTrial,
         trialEndsOn = trialEndsOn,
-        daysUntilRenewal = daysUntilRenewal
+        daysUntilRenewal = daysUntilRenewal,
+        paymentPending = paymentPending
     )
 }
 

@@ -41,8 +41,18 @@ data class Subscription(
      * When this account first started a 7-day free trial. Set once and preserved across
      * downgrades so a user can never claim a second trial after the first has been consumed.
      */
-    val trialStartedAt: Instant? = null
+    val trialStartedAt: Instant? = null,
+    /**
+     * Set when a recurring charge fails (subscription.pending / subscription.halted webhook,
+     * or reconciliation against the Razorpay API). While set, all plan features are blocked
+     * and the user is routed to the pending-payment page. Cleared on a successful charge.
+     */
+    val paymentFailedAt: Instant? = null
 ) {
+    /** True when the subscription is on hold awaiting a payment retry. Blocks all plan features. */
+    val paymentPending: Boolean get() =
+        paymentFailedAt != null && plan != BillingPlan.FREE && plan != BillingPlan.ENTERPRISE
+
     val inTrial: Boolean get() {
         if (plan == BillingPlan.FREE || plan == BillingPlan.ENTERPRISE) return false
         if (razorpaySubscriptionId == null || currentPeriodEnd != null) return false

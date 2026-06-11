@@ -20,6 +20,7 @@ class UserLifecycleMonitor(
     private val userActivityService: UserActivityService,
     private val notificationService: NotificationService? = null,
     private val inAppNotificationService: InAppNotificationService? = null,
+    private val razorpayService: RazorpayBillingService? = null,
     private val interval: Duration = 1.hours,     // was 6h — users stuck > 1h are now caught faster
     private val initialDelay: Duration = 1.minutes
 ) {
@@ -48,6 +49,13 @@ class UserLifecycleMonitor(
     }
 
     suspend fun scan() {
+        // Reconcile overdue paid subscriptions against the Razorpay API first so users whose
+        // payment-failed/cancelled webhooks were missed are blocked or downgraded promptly.
+        razorpayService?.let {
+            runCatching { it.reconcileOverdueSubscriptions() }
+                .onFailure { e -> log.error("Subscription reconciliation failed: {}", e.message, e) }
+        }
+
         val stuck = userActivityService.findStuckUsers()
         if (stuck.isNotEmpty()) {
             log.warn("Lifecycle scan: {} stuck user(s) detected", stuck.size)

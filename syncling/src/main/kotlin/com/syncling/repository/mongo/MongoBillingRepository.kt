@@ -2,9 +2,12 @@ package com.syncling.repository.mongo
 
 import com.mongodb.client.model.Filters.and
 import com.mongodb.client.model.Filters.eq
+import com.mongodb.client.model.Filters.exists
 import com.mongodb.client.model.Filters.gte
+import com.mongodb.client.model.Filters.lt
 import com.mongodb.client.model.Filters.lte
 import com.mongodb.client.model.Filters.nin
+import com.mongodb.client.model.Filters.or
 import com.mongodb.client.model.FindOneAndUpdateOptions
 import com.mongodb.client.model.Sorts
 import com.mongodb.client.model.Updates
@@ -104,9 +107,25 @@ class MongoBillingRepository(
                 Updates.unset("currentPeriodEnd"),
                 Updates.unset("pendingPlan"),
                 Updates.unset("limitHitAt"),
+                Updates.unset("paymentFailedAt"),
                 Updates.set("updatedAt", System.currentTimeMillis())
             )
         )
+    }
+
+    override suspend fun setPaymentFailedAt(userId: String, at: Instant?) {
+        val update = if (at != null) {
+            Updates.combine(
+                Updates.set("paymentFailedAt", at.toEpochMilliseconds()),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        } else {
+            Updates.combine(
+                Updates.unset("paymentFailedAt"),
+                Updates.set("updatedAt", System.currentTimeMillis())
+            )
+        }
+        subscriptions.updateOne(eq("userId", userId), update)
     }
 
     override suspend fun setLimitHitAt(userId: String, at: Instant?) {
@@ -245,6 +264,23 @@ class MongoBillingRepository(
         }
     }
 
+    override suspend fun findOverdueSubscriptions(now: Instant, graceMillis: Long): List<Subscription> {
+        val sevenDaysMillis = 7L * 24 * 3600 * 1000
+        return subscriptions.find(
+            and(
+                nin("plan", listOf(BillingPlan.FREE.name, BillingPlan.ENTERPRISE.name)),
+                exists("razorpaySubscriptionId", true),
+                or(
+                    lt("currentPeriodEnd", now.toEpochMilliseconds() - graceMillis),
+                    and(
+                        exists("currentPeriodEnd", false),
+                        lt("trialStartedAt", now.toEpochMilliseconds() - sevenDaysMillis - graceMillis)
+                    )
+                )
+            )
+        ).toList().map { it.toSubscription() }
+    }
+
     override suspend fun findExpiringSubscriptions(from: Instant, to: Instant): List<Subscription> =
         subscriptions.find(
             and(
@@ -299,6 +335,8 @@ class MongoBillingRepository(
             ?.let { Instant.fromEpochMilliseconds(it) }
         val trialStartedAt = (get("trialStartedAt") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
+        val paymentFailedAt = (get("paymentFailedAt") as? Number)?.toLong()
+            ?.let { Instant.fromEpochMilliseconds(it) }
         return Subscription(
             userId = getString("userId"),
             plan = plan,
@@ -309,7 +347,8 @@ class MongoBillingRepository(
             limitHitAt = limitHitAt,
             pendingPlan = pendingPlan,
             startedAt = startedAt,
-            trialStartedAt = trialStartedAt
+            trialStartedAt = trialStartedAt,
+            paymentFailedAt = paymentFailedAt
         )
     }
 }

@@ -593,7 +593,6 @@
 
     let _currentChatTicketId = null;
     let _chatRelocated = false;
-    let _threadPollTimer = null;
     let _audioCtx = null;
 
     // The drawer markup is rendered inside the dashboard card, whose ancestors use
@@ -670,7 +669,8 @@
         return new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
     }
 
-    function _renderChatMessages(t, animateId) {
+    // `newMsgId` forces a scroll-to-bottom when a just-arrived message is rendered.
+    function _renderChatMessages(t, newMsgId) {
         const area = document.getElementById('support-chat-messages');
         if (!area) return;
 
@@ -696,19 +696,21 @@
             const role = m.senderType === 'admin' ? 'admin' : 'user';
             const label = role === 'admin' ? 'Support' : (t.userEmail || t.userId);
             const timeStr = m.sentAt ? ago(m.sentAt) : '';
-            const isNew = animateId && m.id === animateId;
             return `
-            <div class="scx-row ${role}${isNew ? ' scx-new' : ''}">
+            <div class="scx-row ${role}">
                 <div class="scx-bubble">${escHtml(m.content)}</div>
                 <div class="scx-msg-meta">${escHtml(label)} · ${escHtml(timeStr)}</div>
             </div>`;
         }).join('');
-        if (wasAtBottom || animateId) area.scrollTop = area.scrollHeight;
+        if (wasAtBottom || newMsgId) area.scrollTop = area.scrollHeight;
     }
 
-    // Re-fetch the open thread from the server and re-render. `fromPoll` keeps
-    // failures quiet and tings only when something genuinely new arrived.
-    async function refreshChatThread(id, fromPoll) {
+    // Re-fetch the open thread from the server and reconcile. `silent` keeps
+    // failures quiet, skips the re-render when nothing changed (so the reply
+    // draft and scroll position survive), and tings only on genuinely new
+    // messages. A non-silent call always renders — it replaces the initial
+    // "Loading conversation…" placeholder.
+    async function refreshChatThread(id, silent) {
         try {
             const res = await fetch('/admin/support/tickets/' + encodeURIComponent(id), { headers: adminHeaders() });
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -716,38 +718,31 @@
             const detail = data.data;
             const t = _supportTickets.find(x => x.id === id);
             if (!t) return;
-            const prevCount = (t.messages || []).length;
+            const prevMsgs = t.messages || [];
+            const prevStatus = t.status;
             t.messages = detail.messages || [];
             if (detail.ticket) {
                 t.status = detail.ticket.status;
                 t.adminNote = detail.ticket.adminNote;
             }
             if (_currentChatTicketId !== id || !isChatOpen()) return;
-            _renderChatMessages(t);
-            _renderChatChips(t);
-            _renderChatStatusPills(t);
-            _syncComposeState(t);
-            if (fromPoll && t.messages.length > prevCount) playTing();
+            const newMsgs = t.messages;
+            const changed = t.status !== prevStatus || newMsgs.length !== prevMsgs.length ||
+                (newMsgs.length > 0 && prevMsgs.length > 0 && newMsgs[newMsgs.length - 1].id !== prevMsgs[prevMsgs.length - 1].id);
+            if (changed || !silent) {
+                _renderChatMessages(t);
+                _renderChatChips(t);
+                _renderChatStatusPills(t);
+                _syncComposeState(t);
+            }
+            if (silent && newMsgs.length > prevMsgs.length) playTing();
         } catch (e) {
-            if (!fromPoll) {
+            if (!silent) {
                 console.error('Failed to load thread:', e);
                 const area = document.getElementById('support-chat-messages');
                 if (area) area.innerHTML = '<div class="scx-empty" style="color:#ef4444;">Failed to load conversation.</div>';
             }
         }
-    }
-
-    // Polling safety net while the drawer is open — SSE is the primary channel but
-    // can silently miss frames (proxy buffering, reconnect gaps).
-    function startThreadPoll() {
-        if (_threadPollTimer) return;
-        _threadPollTimer = setInterval(() => {
-            if (_currentChatTicketId && isChatOpen()) refreshChatThread(_currentChatTicketId, true);
-        }, 10000);
-    }
-
-    function stopThreadPoll() {
-        if (_threadPollTimer) { clearInterval(_threadPollTimer); _threadPollTimer = null; }
     }
 
     window.updateTicketStatus = async function (id, newStatus) {
@@ -887,8 +882,11 @@
         _renderChatStatusPills(t);
         _syncComposeState(t);
 
+        // Cached conversations render instantly — no loading placeholder flash.
         const area = document.getElementById('support-chat-messages');
-        if (area) area.innerHTML = '<div class="scx-empty">Loading conversation…</div>';
+        const cached = !!(t.messages && t.messages.length);
+        if (cached) _renderChatMessages(t);
+        else if (area) area.innerHTML = '<div class="scx-empty">Loading conversation…</div>';
 
         if (backdrop) backdrop.classList.add('open');
         requestAnimationFrame(() => modal.classList.add('open'));
@@ -905,8 +903,7 @@
         const replyTa = document.getElementById('support-chat-reply-ta');
         if (replyTa) { replyTa.value = ''; replyTa.style.height = 'auto'; }
 
-        startThreadPoll();
-        await refreshChatThread(id, false);
+        await refreshChatThread(id, cached);
     };
 
     window.closeSupportDetail = function () {
@@ -914,7 +911,6 @@
         const backdrop = document.getElementById('support-chat-backdrop');
         if (modal) modal.classList.remove('open');
         if (backdrop) backdrop.classList.remove('open');
-        stopThreadPoll();
         _currentChatTicketId = null;
     };
 
@@ -927,7 +923,7 @@
     // Streams /admin/support/events via fetch (EventSource can't send Authorization
     // headers). Reconnects with exponential backoff; Last-Event-ID replays anything
     // missed during the gap. While connected the drawer shows a LIVE badge.
-    let _sseAbort = null, _sseDelay = 1000, _sseStop = false, _sseLastId = '';
+    let _sseAbort = null, _sseDelay = 1000, _sseStop = false, _sseLastId = '', _sseDropped = false;
 
     function setLiveIndicator(on) {
         const el = document.getElementById('scx-live');
@@ -936,6 +932,7 @@
 
     function scheduleSupportSseReconnect() {
         _sseAbort = null;
+        _sseDropped = true;
         setLiveIndicator(false);
         if (_sseStop) return;
         const delay = _sseDelay;
@@ -954,6 +951,13 @@
                 // doesn't hammer the endpoint forever.
                 if (res.status === 401 || res.status === 403) { _sseStop = true; _sseAbort = null; return; }
                 if (!res.ok) throw new Error('SSE status ' + res.status);
+                // One-shot gap fill after a reconnect: Last-Event-ID replays most
+                // missed events, this catches anything outside the replay window.
+                // Replaces the old fixed-interval thread poll.
+                if (_sseDropped) {
+                    _sseDropped = false;
+                    if (_currentChatTicketId && isChatOpen()) refreshChatThread(_currentChatTicketId, true);
+                }
                 const reader = res.body.getReader(), decoder = new TextDecoder();
                 let buf = '', gotFrame = false;
                 setLiveIndicator(true);

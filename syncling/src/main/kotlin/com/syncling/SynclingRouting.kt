@@ -228,7 +228,7 @@ Sitemap: https://syncling.space/sitemap.xml
         // Serve portal CSS/JS bundles from src/main/resources/static at /transloom/static/*.
         // Cached aggressively in prod via the etag plugin (default Ktor behavior).
         staticResources("/transloom/static", "static")
-        configurePortalRoutes(d.jwtSecret, d.statusService)
+        configurePortalRoutes(d.jwtSecret, d.statusService, d.billingRepository)
         rateLimit(RateLimitName("github_webhook")) {
             configureWebhookRoutes(d.jobQueue, d.projectRepository, d.billingRepository, d.pipelineEventBus)
         }

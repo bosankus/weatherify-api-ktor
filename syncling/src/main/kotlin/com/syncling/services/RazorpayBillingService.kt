@@ -74,25 +74,12 @@ class RazorpayBillingService(
             // Card saved for trial — upgrade the plan immediately so the user's dashboard
             // reflects the correct plan during the 7-day trial before any charge fires.
             "subscription.authenticated" -> handleSubscriptionAuthenticated(event)
-            "subscription.activated", "subscription.charged" -> handleSubscriptionCharged(event)
+            "subscription.activated", "subscription.charged", "subscription.resumed" -> handleSubscriptionCharged(event)
             "subscription.cancelled", "subscription.completed" -> handleSubscriptionEnded(event)
-            "subscription.halted" -> {
-                val sub = subEntity(event)
-                val subId = sub?.get("id")?.jsonPrimitive?.contentOrNull
-                log.warn("Subscription halted: {}", subId)
-                val haltedPlan = sub?.get("notes")?.jsonObject?.get("plan")?.jsonPrimitive?.contentOrNull
-                    ?.let { runCatching { BillingPlan.valueOf(it) }.getOrNull() }
-                val userId = subId?.let { billingRepository.findByRazorpaySubscription(it) }
-                userId?.let { uid ->
-                    runCatching {
-                        val user = userRepository?.findById(uid)
-                        val plan = haltedPlan ?: BillingPlan.SOLO
-                        if (user != null) notificationService?.sendPaymentFailed(user, plan)
-                        inAppNotificationService?.notifyPaymentFailed(uid, plan.displayName)
-                    }.onFailure { log.warn("Payment-failed notification error userId={}: {}", uid, it.message) }
-                }
-                WebhookResult.Ok
-            }
+            // A recurring charge failed: pending = Razorpay is still retrying, halted = retries
+            // exhausted (also fired when the customer revokes a UPI/card mandate). Either way the
+            // subscription stops immediately — features are blocked until the pending payment clears.
+            "subscription.pending", "subscription.halted" -> handleChargeFailed(event, eventType)
             else -> WebhookResult.Skipped("Unhandled subscription event: $eventType")
         }
 
@@ -260,6 +247,45 @@ class RazorpayBillingService(
         return WebhookResult.Ok
     }
 
+    private suspend fun handleChargeFailed(event: JsonObject, eventType: String): WebhookResult {
+        val sub = subEntity(event) ?: return WebhookResult.Skipped("No subscription entity")
+        val subscriptionId = sub["id"]?.jsonPrimitive?.contentOrNull ?: return WebhookResult.Skipped("No sub ID")
+        val userId = sub["notes"]?.jsonObject?.get("userId")?.jsonPrimitive?.contentOrNull
+            ?: billingRepository.findByRazorpaySubscription(subscriptionId)
+            ?: return WebhookResult.Skipped("No userId for $eventType sub=$subscriptionId")
+        val plan = sub["notes"]?.jsonObject?.get("plan")?.jsonPrimitive?.contentOrNull
+            ?.let { runCatching { BillingPlan.valueOf(it) }.getOrNull() }
+            ?: billingRepository.getSubscription(userId).plan
+        markPaymentFailed(userId, plan, subscriptionId, source = eventType)
+        return WebhookResult.Ok
+    }
+
+    /**
+     * Puts the subscription on hold: features are blocked and the user is routed to the
+     * pending-payment page until the outstanding charge succeeds. Notifications are
+     * deduplicated to one per 24h since Razorpay fires subscription.pending on every retry.
+     */
+    private suspend fun markPaymentFailed(userId: String, plan: BillingPlan, subscriptionId: String, source: String) {
+        val alreadyPending = billingRepository.getSubscription(userId).paymentFailedAt != null
+        if (!alreadyPending) {
+            billingRepository.setPaymentFailedAt(userId, Clock.System.now())
+        }
+        log.warn("Subscription payment failed ({}): userId={} plan={} sub={} alreadyPending={}",
+            source, userId, plan.name, subscriptionId, alreadyPending)
+        val notify = userActivityService?.shouldNotify(userId, setOf(UserEvent.PAYMENT_FAILED), withinHours = 24) ?: !alreadyPending
+        userActivityService?.record(
+            userId, UserEvent.PAYMENT_FAILED,
+            mapOf("plan" to plan.name, "subscriptionId" to subscriptionId, "source" to source)
+        )
+        if (notify) {
+            runCatching {
+                val user = userRepository?.findById(userId)
+                if (user != null) notificationService?.sendPaymentFailed(user, plan)
+                inAppNotificationService?.notifyPaymentFailed(userId, plan.displayName)
+            }.onFailure { log.warn("Payment-failed notification error userId={}: {}", userId, it.message) }
+        }
+    }
+
     private suspend fun handleSubscriptionCharged(event: JsonObject): WebhookResult {
         val sub = subEntity(event) ?: return WebhookResult.Skipped("No subscription entity")
         val payment = event["payload"]?.jsonObject?.get("payment")?.jsonObject?.get("entity")?.jsonObject
@@ -283,6 +309,8 @@ class RazorpayBillingService(
         )
         // Clear any stale pendingPlan now that the subscription is definitively active.
         billingRepository.clearPendingPlan(userId)
+        // A successful charge lifts the payment-failed hold (recovered pending/halted subscription).
+        billingRepository.setPaymentFailedAt(userId, null)
 
         if (payment != null) {
             val paymentId = payment["id"]?.jsonPrimitive?.contentOrNull
@@ -348,14 +376,69 @@ class RazorpayBillingService(
         return WebhookResult.Ok
     }
 
-    private suspend fun fetchSubscriptionStatus(subscriptionId: String): String? = runCatching {
+    private suspend fun fetchSubscription(subscriptionId: String): JsonObject? = runCatching {
         withContext(Dispatchers.IO) {
             http.get("$RAZORPAY_API/subscriptions/$subscriptionId") {
                 header(HttpHeaders.Authorization, authHeader)
-            }.body<JsonObject>()["status"]?.jsonPrimitive?.contentOrNull
+            }.body<JsonObject>()
         }
-    }.onFailure { log.warn("Could not fetch subscription status for {}: {}", subscriptionId, it.message) }
+    }.onFailure { log.warn("Could not fetch subscription {}: {}", subscriptionId, it.message) }
         .getOrNull()
+
+    private suspend fun fetchSubscriptionStatus(subscriptionId: String): String? =
+        fetchSubscription(subscriptionId)?.get("status")?.jsonPrimitive?.contentOrNull
+
+    // ─── Reconciliation ───────────────────────────────────────────────────────
+
+    /**
+     * Safety net for missed or historically ignored webhooks: finds paid subscriptions whose
+     * billing period lapsed (or whose trial ended without a first charge) and applies the real
+     * state from the Razorpay API — blocking pending/halted subscriptions and downgrading
+     * cancelled/completed/expired ones. Catches users who cancelled autopay after the trial
+     * but kept full access because the halted webhook was only logged.
+     */
+    suspend fun reconcileOverdueSubscriptions(grace: kotlin.time.Duration = 1.days) {
+        val overdue = runCatching {
+            billingRepository.findOverdueSubscriptions(Clock.System.now(), grace.inWholeMilliseconds)
+        }.getOrElse {
+            log.error("Reconciliation: overdue query failed: {}", it.message, it)
+            return
+        }
+        if (overdue.isEmpty()) return
+        log.info("Reconciliation: {} overdue paid subscription(s) to verify against Razorpay", overdue.size)
+        for (sub in overdue) {
+            val subscriptionId = sub.razorpaySubscriptionId ?: continue
+            val remote = fetchSubscription(subscriptionId) ?: continue
+            val status = remote["status"]?.jsonPrimitive?.contentOrNull ?: continue
+            runCatching {
+                when (status) {
+                    "active" -> {
+                        // Charge went through but we missed the webhook — refresh the period end.
+                        val currentEnd = remote["current_end"]?.jsonPrimitive?.longOrNull
+                            ?.let { Instant.fromEpochSeconds(it) }
+                        if (currentEnd != null) {
+                            billingRepository.upsertSubscription(sub.userId, sub.plan, currentPeriodEnd = currentEnd)
+                        }
+                        billingRepository.setPaymentFailedAt(sub.userId, null)
+                        log.info("Reconciliation: sub={} active, refreshed periodEnd={}", subscriptionId, currentEnd)
+                    }
+                    "pending", "halted" ->
+                        markPaymentFailed(sub.userId, sub.plan, subscriptionId, source = "reconciliation:$status")
+                    "cancelled", "completed", "expired" -> {
+                        billingRepository.downgradeToFree(subscriptionId)
+                        userActivityService?.record(
+                            sub.userId, UserEvent.SUBSCRIPTION_CANCELLED,
+                            mapOf("subscriptionId" to subscriptionId, "source" to "reconciliation:$status")
+                        )
+                        log.info("Reconciliation: sub={} is {} on Razorpay — downgraded userId={} to FREE",
+                            subscriptionId, status, sub.userId)
+                    }
+                    // created/authenticated = checkout or first charge still in flight; paused = manual hold.
+                    else -> log.info("Reconciliation: sub={} status={} — no action", subscriptionId, status)
+                }
+            }.onFailure { log.warn("Reconciliation failed for sub={}: {}", subscriptionId, it.message, it) }
+        }
+    }
 
     private fun subEntity(event: JsonObject): JsonObject? =
         event["payload"]?.jsonObject?.get("subscription")?.jsonObject?.get("entity")?.jsonObject

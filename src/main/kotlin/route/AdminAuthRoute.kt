@@ -2759,7 +2759,7 @@ fun Route.adminAuthRoute() {
                                 /* Messages */
                                 .scx-messages {
                                     flex: 1; overflow-y: auto; padding: 16px;
-                                    display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth;
+                                    display: flex; flex-direction: column; gap: 10px;
                                 }
                                 .scx-row { display: flex; flex-direction: column; max-width: 85%; }
                                 .scx-row.user { align-self: flex-start; align-items: flex-start; }
@@ -2779,11 +2779,6 @@ fun Route.adminAuthRoute() {
                                 .scx-msg-meta {
                                     font-size: 0.64rem; color: var(--text-secondary); margin-top: 3px;
                                     padding: 0 3px; opacity: .75;
-                                }
-                                .scx-row.scx-new .scx-bubble { animation: scx-in .25s cubic-bezier(.2,.9,.3,1.2); }
-                                @keyframes scx-in {
-                                    from { transform: translateY(8px) scale(.97); opacity: 0; }
-                                    to { transform: none; opacity: 1; }
                                 }
                                 .scx-empty {
                                     flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;

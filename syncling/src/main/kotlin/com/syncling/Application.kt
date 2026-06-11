@@ -287,7 +287,7 @@ fun Application.module() {
         billingRepository, userActivityService,
         userRepository, notificationService, inAppNotificationService
     )
-    val lifecycleMonitor = UserLifecycleMonitor(userActivityService, notificationService, inAppNotificationService)
+    val lifecycleMonitor = UserLifecycleMonitor(userActivityService, notificationService, inAppNotificationService, razorpayService)
     lifecycleMonitor.start()
     val webhookDispatcher = RazorpayWebhookDispatcher(
         webhookSecret = getSecretValue("razorpay-webhook-secret"),

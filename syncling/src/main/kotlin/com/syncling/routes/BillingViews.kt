@@ -148,6 +148,127 @@ private fun planFeatureRows(plan: BillingPlan): List<String> = when (plan) {
     else -> emptyList()
 }
 
+/**
+ * Shown when a recurring charge failed and the subscription is on hold. Re-opens
+ * Razorpay Checkout against the existing subscription so the customer can clear the
+ * outstanding payment and resume the plan.
+ */
+internal fun HTML.paymentPendingPage(
+    plan: BillingPlan,
+    subscriptionId: String,
+    keyId: String,
+    userEmail: String?,
+    userName: String,
+    avatarUrl: String?
+) {
+    val pricePaise = plan.monthlyPricePaise ?: 0
+    val priceRupees = "₹${"%,d".format(pricePaise / 100)}"
+    head {
+        meta { charset = "utf-8" }
+        meta { name = "viewport"; content = "width=device-width,initial-scale=1" }
+        title { +"Payment pending · Syncling" }
+        link { rel = "icon"; type = "image/svg+xml"; href = "/syncling/favicon.svg" }
+        script { src = "https://checkout.razorpay.com/v1/checkout.js" }
+        style { unsafe { +CHECKOUT_CSS } }
+    }
+    body {
+        div("co-wrap") {
+            div("co-blob co-blob-1") {}
+            div("co-blob co-blob-2") {}
+            header("co-header") {
+                a(href = "/syncling", classes = "co-brand") {
+                    unsafe { +CHECKOUT_LOGO_SVG }
+                    span { +"Syncling" }
+                }
+                div("co-user") {
+                    if (!avatarUrl.isNullOrBlank()) {
+                        img(src = avatarUrl, alt = userName, classes = "co-avatar")
+                    } else {
+                        div("co-avatar co-avatar-fallback") { +userName.take(1).uppercase() }
+                    }
+                    span("co-user-name") { +userName }
+                }
+            }
+            main("co-main") {
+                div("co-stack co-stack-left") {
+                    p("co-eyebrow") { +"Action required · Payment pending" }
+                    h1("co-title") {
+                        +"Your subscription is "; span("co-title-accent") { +"on hold" }; +"."
+                    }
+                    p("co-sub") {
+                        +"Your last payment for the ${plan.displayName} plan didn't go through, so translations are "
+                        +"paused. Complete the pending payment below to resume your subscription instantly — "
+                        +"your projects, languages, and settings are untouched."
+                    }
+                    div("co-trust-row") {
+                        div("co-trust") { unsafe { +ICON_SHIELD }; span { +"PCI-DSS Level 1" } }
+                        div("co-trust") { unsafe { +ICON_LOCK }; span { +"256-bit TLS" } }
+                        div("co-trust") { unsafe { +ICON_RAZORPAY }; span { +"Powered by Razorpay" } }
+                    }
+                    ul("co-checks") {
+                        li { unsafe { +ICON_CHECK }; +"Access resumes the moment payment succeeds" }
+                        li { unsafe { +ICON_CHECK }; +"No data or configuration is lost while on hold" }
+                        li { unsafe { +ICON_CHECK }; +"GST-compliant invoice in your account after payment" }
+                    }
+                }
+                aside("co-stack co-stack-right") {
+                    div("co-summary") {
+                        div("co-summary-head") {
+                            span("co-summary-label") { +"PLAN" }
+                            span("co-summary-badge") { +"Payment due" }
+                        }
+                        h2("co-summary-plan") { +plan.displayName }
+                        div("co-summary-price-row") {
+                            span("co-summary-price") { +priceRupees }
+                            span("co-summary-period") { +"/month" }
+                        }
+                        p("co-summary-meta") { +"Billed in INR · GST included · Renews monthly" }
+                        div("co-summary-divider") {}
+                        div("co-summary-due-row") {
+                            span { +"Due now" }
+                            span("co-summary-due") { +priceRupees }
+                        }
+                        div {
+                            id = "co-pay-error"
+                            attributes["style"] = "display:none"
+                            classes = setOf("co-pay-error")
+                        }
+                        button(type = ButtonType.button, classes = "co-pay-btn") {
+                            id = "co-pay"
+                            unsafe { +ICON_LOCK_SOLID }
+                            span { +"Complete payment · Resume plan" }
+                        }
+                        p("co-pay-foot") {
+                            +"Questions about this charge? Contact "
+                            a("mailto:support@syncling.space") { +"support@syncling.space" }
+                            +"."
+                        }
+                    }
+                }
+            }
+            footer("co-footer") {
+                span { +"Need help? " }
+                a("mailto:support@syncling.space") { +"support@syncling.space" }
+            }
+            div("co-overlay") { id = "co-overlay"; div("co-spinner") {}; p { +"Preparing secure checkout…" } }
+        }
+        script {
+            unsafe {
+                +"""
+                (function(){
+                  var cfg={key:${quote(keyId)},subscription_id:${quote(subscriptionId)},name:'Syncling',description:${quote("${plan.displayName} plan · pending payment")},image:'https://syncling.space/syncling/favicon.svg',prefill:{name:${quote(userName)},email:${quote(userEmail ?: "")}},theme:{color:'#8B7EFF',backdrop_color:'#000000'},handler:function(resp){var params=new URLSearchParams({razorpay_payment_id:resp.razorpay_payment_id||'',razorpay_subscription_id:resp.razorpay_subscription_id||${quote(subscriptionId)},razorpay_signature:resp.razorpay_signature||'',flow:'retry'});window.location.href='/billing/rp-callback?'+params.toString()},modal:{ondismiss:function(){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1},escape:!0,backdropclose:!1}};
+                  function showPayError(msg){var el=document.getElementById('co-pay-error');if(el){el.textContent=msg;el.style.display='block';setTimeout(function(){el.style.display='none'},8000)}}
+                  function openCheckout(){var rzp=new Razorpay(cfg);rzp.on('payment.failed',function(resp){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1;showPayError('Payment failed: '+(resp.error&&resp.error.description?resp.error.description:'Please try again.'))});rzp.open()}
+                  var btn=document.getElementById('co-pay'),overlay=document.getElementById('co-overlay');
+                  function ready(){overlay.classList.remove('co-overlay-show');btn.addEventListener('click',function(){btn.disabled=!0;overlay.classList.add('co-overlay-show');setTimeout(openCheckout,80)})}
+                  if(window.Razorpay){ready()}else{overlay.classList.add('co-overlay-show');var checkReady=setInterval(function(){if(window.Razorpay){clearInterval(checkReady);ready()}},50)}
+                })();
+                """.trimIndent()
+            }
+        }
+    }
+}
+
 internal fun HTML.successPage(
     subscriptionId: String,
     token: String? = null,

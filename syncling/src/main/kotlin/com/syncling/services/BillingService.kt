@@ -13,6 +13,11 @@ class BillingService(
 ) {
     private val log = LoggerFactory.getLogger(BillingService::class.java)
 
+    companion object {
+        const val PAYMENT_PENDING_MESSAGE =
+            "Subscription payment failed — complete the pending payment to resume translations."
+    }
+
     suspend fun getPlan(userId: String): BillingPlan = billingRepository.getSubscription(userId).plan
 
     suspend fun subscribe(userId: String, plan: BillingPlan) {
@@ -26,8 +31,23 @@ class BillingService(
     suspend fun isLimitAlreadyExceeded(userId: String): Boolean =
         billingRepository.getSubscription(userId).limitHitAt != null
 
+    /**
+     * Cheap pre-check returning a user-facing reason translations are blocked, or null when
+     * the account is in good standing. A payment-failed hold takes priority over quota.
+     */
+    suspend fun accessBlockReason(userId: String): String? {
+        val subscription = billingRepository.getSubscription(userId)
+        return when {
+            subscription.paymentPending -> PAYMENT_PENDING_MESSAGE
+            subscription.limitHitAt != null ->
+                "Monthly string quota reached — upgrade your plan to resume translations."
+            else -> null
+        }
+    }
+
     suspend fun checkAndEnforceLimits(userId: String, stringsToTranslate: Int): Boolean {
         val subscription = billingRepository.getSubscription(userId)
+        if (subscription.paymentPending) throw IllegalStateException(PAYMENT_PENDING_MESSAGE)
         val plan = subscription.plan
         val usage = billingRepository.getUsage(userId)
 
