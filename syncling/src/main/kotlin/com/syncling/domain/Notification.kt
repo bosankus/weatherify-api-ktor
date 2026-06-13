@@ -33,4 +33,5 @@ object NotificationType {
     const val PAYMENT_FAILED        = "PAYMENT_FAILED"
     const val PAYMENT_RECEIVED      = "PAYMENT_RECEIVED"
     const val SUBSCRIPTION_ENDED    = "SUBSCRIPTION_ENDED"
+    const val TRANSLATIONS_RESUMED  = "TRANSLATIONS_RESUMED"
 }

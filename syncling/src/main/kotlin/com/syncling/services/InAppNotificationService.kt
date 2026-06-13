@@ -156,6 +156,30 @@ class InAppNotificationService(
         dedupMs = DEDUP_6H
     )
 
+    suspend fun notifyTranslationsResumed(
+        userId: String,
+        projects: Int,
+        strings: Int,
+        trigger: String
+    ) = notify(
+        userId = userId,
+        type = NotificationType.TRANSLATIONS_RESUMED,
+        title = "Translations resumed",
+        message = buildString {
+            append(
+                if (trigger == "quota_reset") "Your monthly quota has reset. "
+                else "Your plan is active. "
+            )
+            append("$projects blocked project${if (projects != 1) "s" else ""} ")
+            if (strings > 0) append("(≈$strings string${if (strings != 1) "s" else ""}) ")
+            append("are being translated now — no re-push needed.")
+        },
+        level = "success",
+        actionUrl = "/app#activity",
+        actionLabel = "Watch progress",
+        dedupMs = DEDUP_1H
+    )
+
     suspend fun notifyInviteAccepted(
         ownerId: String,
         memberName: String,

@@ -22,6 +22,7 @@ enum class UserEvent {
     TRIAL_LIMIT_HIT,
     PLAN_EXPIRY_NOTIFIED,         // monitor flagged user for upcoming renewal
     PIPELINE_RETRIED,             // user triggered manual retry on a failed run
+    QUOTA_RESUMED,                // quota hold lifted (upgrade/reset) and blocked runs re-enqueued
     CHECKOUT_ABANDONED,           // monitor: SUBSCRIPTION_INITIATED > 60min, no payment completed
     ONBOARDING_STUCK,             // monitor: user stalled at an onboarding step past threshold
 }

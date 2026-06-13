@@ -7,6 +7,13 @@ import com.syncling.repository.BillingRepository
 import kotlinx.datetime.Clock
 import org.slf4j.LoggerFactory
 
+/**
+ * Thrown when a run would exceed the owner's plan-level string quota (as opposed to a
+ * per-project cap). Carries the counts so the pipeline can record a resumable blocked
+ * run and tell the user exactly how much work is waiting.
+ */
+class PlanLimitExceededException(message: String, val stringsPending: Int) : IllegalStateException(message)
+
 class BillingService(
     private val billingRepository: BillingRepository,
     private val userActivityService: UserActivityService? = null
@@ -60,7 +67,7 @@ class BillingService(
                     "Free plan limit of $stringLimit strings/month reached. Upgrade to continue translating."
                 else
                     "Monthly string quota ($stringLimit) reached for the ${plan.displayName} plan. Upgrade for unlimited strings."
-                throw IllegalStateException(msg)
+                throw PlanLimitExceededException(msg, stringsToTranslate)
             }
         }
         return true

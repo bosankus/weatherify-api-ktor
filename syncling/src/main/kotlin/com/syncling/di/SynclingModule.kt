@@ -42,6 +42,7 @@ fun synclingModule(encryptionKey: String) = module {
     single<com.syncling.repository.SupportTicketRepository> { com.syncling.repository.mongo.MongoSupportTicketRepository(get()) }
     single<com.syncling.repository.ApiTokenRepository> { com.syncling.repository.mongo.MongoApiTokenRepository(get()) }
     single<MemberUsageRepository> { MongoMemberUsageRepository(get()) }
+    single<QuotaBlockedRunRepository> { MongoQuotaBlockedRunRepository(get()) }
     single { com.syncling.services.MemberUsageService(get()) }
     single {
         com.syncling.services.StatusService(
@@ -153,5 +154,10 @@ fun synclingIndexes(): List<IndexSpec> {
         // API tokens: tokenHash is the primary lookup key (must be unique); userId for list queries
         IndexSpec("api_tokens", Document("tokenHash", 1), unique),
         IndexSpec("api_tokens", Document("userId", 1)),
+        // Quota-blocked runs: one per project; ownerId scan drives the post-upgrade resume.
+        // TTL safety net — a record that never resumes (project deleted, user gone) expires after 60 days.
+        IndexSpec("quota_blocked_runs", Document("projectId", 1), unique),
+        IndexSpec("quota_blocked_runs", Document("ownerId", 1)),
+        IndexSpec("quota_blocked_runs", Document("updatedAt", 1), IndexOptions().expireAfter(60, TimeUnit.DAYS).name("ttl_quota_blocked_60d")),
     )
 }

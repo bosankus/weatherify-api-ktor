@@ -143,6 +143,11 @@ class MongoBillingRepository(
         subscriptions.updateOne(eq("userId", userId), update)
     }
 
+    override suspend fun findExpiredLimitHolds(beforeEpochMillis: Long): List<String> =
+        subscriptions.find(and(exists("limitHitAt"), lt("limitHitAt", beforeEpochMillis)))
+            .toList()
+            .mapNotNull { it.getString("userId") }
+
     override suspend fun markTrialStarted(userId: String, at: Instant) {
         // setOnInsert wouldn't fire here (the subscription doc already exists), so use $setOnInsert-like
         // semantics manually: only set the field if it isn't already present, to preserve the original

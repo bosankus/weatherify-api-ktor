@@ -112,6 +112,10 @@ class SynclingDeps(
     val apiTokenRepository: ApiTokenRepository? = null,
     val reviewerFeedbackRepository: com.syncling.repository.ReviewerFeedbackRepository? = null,
     val meterRegistry: io.micrometer.prometheusmetrics.PrometheusMeterRegistry? = null,
+    /** Stores pushes/runs blocked by a quota hold so they can be re-enqueued on upgrade. */
+    val quotaBlockedRunRepository: com.syncling.repository.QuotaBlockedRunRepository? = null,
+    /** Lifts quota holds and resumes blocked runs after checkout/upgrade. */
+    val quotaResumeService: com.syncling.services.QuotaResumeService? = null,
 )
 
 /**
@@ -230,7 +234,7 @@ Sitemap: https://syncling.space/sitemap.xml
         staticResources("/transloom/static", "static")
         configurePortalRoutes(d.jwtSecret, d.statusService, d.billingRepository)
         rateLimit(RateLimitName("github_webhook")) {
-            configureWebhookRoutes(d.jobQueue, d.projectRepository, d.billingRepository, d.pipelineEventBus)
+            configureWebhookRoutes(d.jobQueue, d.projectRepository, d.billingRepository, d.pipelineEventBus, d.quotaBlockedRunRepository)
         }
         rateLimit(RateLimitName("auth")) {
             configureAuthRoutes(d.jwtSecret, d.userRepository, d.userActivityService)
@@ -238,7 +242,7 @@ Sitemap: https://syncling.space/sitemap.xml
         rateLimit(RateLimitName("razorpay_webhook")) {
             configureRazorpayWebhook(d.webhookDispatcher)
         }
-        configurePublicCheckoutRoute(d.razorpayService, d.userRepository, d.billingRepository, d.jwtSecret, d.userActivityService)
+        configurePublicCheckoutRoute(d.razorpayService, d.userRepository, d.billingRepository, d.jwtSecret, d.userActivityService, d.quotaResumeService)
         configureBillingReceiptRoute(d.jwtSecret, d.billingRepository, d.userRepository, d.userActivityService)
         rateLimit(RateLimitName("bundle_fetch")) {
             configureCdnBundleRoutes(d.projectRepository, d.cdnPublishRepository, d.cdnPublishService, d.membershipRepository)

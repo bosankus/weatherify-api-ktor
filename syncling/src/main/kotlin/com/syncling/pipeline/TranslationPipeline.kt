@@ -76,6 +76,8 @@ class TranslationPipeline(
     private val reviewerFeedbackRepository: com.syncling.repository.ReviewerFeedbackRepository? = null,
     /** Per-stage timing + outcome counters + run-level totals. Optional so tests/previews can omit. */
     private val metrics: com.syncling.services.PipelineMetrics? = null,
+    /** Quota-blocked run records — written on plan-limit aborts so the run auto-resumes after upgrade. Optional. */
+    private val blockedRunRepository: com.syncling.repository.QuotaBlockedRunRepository? = null,
     /** Max concurrent Gemini batch calls per translation run. */
     private val translationConcurrency: Int = 8
 ) {
@@ -111,6 +113,11 @@ class TranslationPipeline(
             eventBus.stepError(userId, runId, "BILLING_CHECK", billingBlock)
             listOf("TRANSLATING", "CREATING_PR", "CDN_PUBLISH").forEach { eventBus.stepSkipped(userId, runId, it) }
             eventBus.finishRun(userId, runId, error = billingBlock)
+            // Advance the blocked-run record to this commit so the eventual post-upgrade
+            // resume processes the newest push, not the one that first hit the quota.
+            if (billingService.isLimitAlreadyExceeded(userId)) {
+                recordQuotaBlockedRun(payload, project, stringsPending = 0, languagesPending = 0, runId = runId)
+            }
             log.info("Pipeline skipped — userId={} billing block: {}", userId, billingBlock)
             return
         }
@@ -290,7 +297,15 @@ class TranslationPipeline(
             }
             billingService.checkAndEnforceLimits(project.ownerId, addedStrings.size * config.targets.size)
         } catch (e: Exception) {
-            val friendlyMsg = e.message?.let { humanizeBillingError(it) } ?: "Plan limit reached"
+            var friendlyMsg = e.message?.let { humanizeBillingError(it) } ?: "Plan limit reached"
+            if (e is com.syncling.services.PlanLimitExceededException) {
+                // Plan-level quota (not a per-project cap): the run is resumable. Record it
+                // and tell the user exactly what's waiting and that no re-push is needed.
+                recordQuotaBlockedRun(payload, project, addedStrings.size, config.targets.size, runId)
+                friendlyMsg += " ${addedStrings.size} string${if (addedStrings.size != 1) "s" else ""} × " +
+                    "${config.targets.size} language${if (config.targets.size != 1) "s" else ""} are queued " +
+                    "and will be translated automatically when you upgrade."
+            }
             eventBus.stepError(userId, runId, "BILLING_CHECK", friendlyMsg)
             metrics?.recordStage("BILLING_CHECK", System.nanoTime() - billingStartNs, "error")
             metrics?.incrementRun("quota_exceeded")
@@ -377,7 +392,9 @@ class TranslationPipeline(
         if (total > 0) {
             val billed = billingService.recordUsageAtomic(project.ownerId, total)
             if (!billed) {
-                val msg = "Monthly string quota exceeded mid-run — PR suppressed. Upgrade your plan."
+                recordQuotaBlockedRun(payload, project, addedStrings.size, config.targets.size, runId)
+                val msg = "Monthly string quota exceeded mid-run — PR suppressed. " +
+                    "Upgrade your plan and this run will finish automatically."
                 eventBus.stepError(userId, runId, "BILLING_CHECK", msg)
                 eventBus.finishRun(userId, runId, error = msg)
                 log.warn("Pipeline aborted post-translation: userId={} hit quota on atomic billing check", userId)
@@ -534,6 +551,33 @@ class TranslationPipeline(
             if (promote) eventBus.emitCdnReady(userId, runId, receipt.bundleVersion, receipt.locales)
         }
         log.info("CDN publish done: project={} locales={} version={}", projectId, receipt.locales, receipt.bundleVersion)
+    }
+
+    /**
+     * Best-effort write of the resumable-run record. Failures are logged and swallowed —
+     * the user can always re-trigger manually, so this must never fail the run handling.
+     */
+    private suspend fun recordQuotaBlockedRun(
+        payload: WebhookPayload,
+        project: Project,
+        stringsPending: Int,
+        languagesPending: Int,
+        runId: String
+    ) {
+        val repo = blockedRunRepository ?: return
+        runCatching {
+            repo.upsert(com.syncling.domain.QuotaBlockedRun(
+                projectId = project.id,
+                ownerId = project.ownerId,
+                repo = payload.repositoryFullName,
+                branch = payload.branchName,
+                commitHash = payload.commitHash,
+                originalRunId = runId,
+                stringsPending = stringsPending,
+                languagesPending = languagesPending,
+                blockedAt = System.currentTimeMillis()
+            ))
+        }.onFailure { log.warn("Failed to record quota-blocked run for project={}: {}", project.id, it.message) }
     }
 
     private fun humanizeBillingError(msg: String): String = when {

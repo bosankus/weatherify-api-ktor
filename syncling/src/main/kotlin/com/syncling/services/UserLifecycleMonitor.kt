@@ -21,6 +21,7 @@ class UserLifecycleMonitor(
     private val notificationService: NotificationService? = null,
     private val inAppNotificationService: InAppNotificationService? = null,
     private val razorpayService: RazorpayBillingService? = null,
+    private val quotaResumeService: QuotaResumeService? = null,
     private val interval: Duration = 1.hours,     // was 6h — users stuck > 1h are now caught faster
     private val initialDelay: Duration = 1.minutes
 ) {
@@ -54,6 +55,15 @@ class UserLifecycleMonitor(
         razorpayService?.let {
             runCatching { it.reconcileOverdueSubscriptions() }
                 .onFailure { e -> log.error("Subscription reconciliation failed: {}", e.message, e) }
+        }
+
+        // Quota holds set in a previous UTC month are stale (usage counters are month-keyed):
+        // lift them and re-enqueue the runs that were blocked, fulfilling the "resets next
+        // month" promise shown to users when their webhook was dropped.
+        quotaResumeService?.let {
+            runCatching { it.resumeExpiredHolds() }
+                .onSuccess { n -> if (n > 0) log.info("Lifecycle scan: lifted {} expired quota hold(s)", n) }
+                .onFailure { e -> log.error("Expired quota-hold resume failed: {}", e.message, e) }
         }
 
         val stuck = userActivityService.findStuckUsers()

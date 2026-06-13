@@ -78,9 +78,24 @@ fun Application.configureSyncling(refundService: RefundService) {
         billingRepository = billingRepository,
         projectRepository = projectRepository
     )
-    val razorpayService = RazorpayBillingService(billingRepository, userActivityService)
-    val lifecycleMonitor = UserLifecycleMonitor(userActivityService).also { it.start() }
     val githubService = GitHubService()
+    val quotaBlockedRunRepository = MongoQuotaBlockedRunRepository(db)
+    val quotaResumeService = QuotaResumeService(
+        billingRepository = billingRepository,
+        blockedRunRepository = quotaBlockedRunRepository,
+        userRepository = userRepository,
+        githubService = githubService,
+        jobQueue = jobQueue,
+        userActivityService = userActivityService
+    )
+    val razorpayService = RazorpayBillingService(
+        billingRepository, userActivityService,
+        quotaResumeService = quotaResumeService
+    )
+    val lifecycleMonitor = UserLifecycleMonitor(
+        userActivityService,
+        quotaResumeService = quotaResumeService
+    ).also { it.start() }
     val translationService = TranslationService(memoryRepository)
     val pipelineRunRepository = MongoPipelineRunRepository(db)
     val memberUsageRepository = MongoMemberUsageRepository(db)
@@ -122,7 +137,8 @@ fun Application.configureSyncling(refundService: RefundService) {
         githubService, translationService, billingService, projectRepository, translationRepository,
         pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService,
         sharedMemoryRepository = null, memberUsageService = memberUsageService,
-        metrics = pipelineMetrics
+        metrics = pipelineMetrics,
+        blockedRunRepository = quotaBlockedRunRepository
     )
 
     // Central webhook dispatcher — register all Razorpay event handlers here.
@@ -199,6 +215,8 @@ fun Application.configureSyncling(refundService: RefundService) {
             supportTicketRepository = supportTicketRepository,
             apiTokenRepository = apiTokenRepository,
             meterRegistry = meterRegistry,
+            quotaBlockedRunRepository = quotaBlockedRunRepository,
+            quotaResumeService = quotaResumeService,
         )
     )
 }

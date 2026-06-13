@@ -237,6 +237,7 @@ fun Application.module() {
     val supportTicketRepository: com.syncling.repository.SupportTicketRepository by inject()
     val apiTokenRepository: com.syncling.repository.ApiTokenRepository by inject()
     val memberUsageService: MemberUsageService by inject()
+    val quotaBlockedRunRepository: com.syncling.repository.QuotaBlockedRunRepository by inject()
     val analyticsService: AnalyticsService by inject()
     val statusService: com.syncling.services.StatusService by inject()
     // Materialize OWNER membership rows for legacy projects so the new permission
@@ -283,17 +284,30 @@ fun Application.module() {
         inAppNotificationService = inAppNotificationService
     )
     val billingService = BillingService(billingRepository, userActivityService)
+    val githubService = GitHubService()
+    val quotaResumeService = QuotaResumeService(
+        billingRepository = billingRepository,
+        blockedRunRepository = quotaBlockedRunRepository,
+        userRepository = userRepository,
+        githubService = githubService,
+        jobQueue = jobQueue,
+        inAppNotificationService = inAppNotificationService,
+        userActivityService = userActivityService
+    )
     val razorpayService = RazorpayBillingService(
         billingRepository, userActivityService,
-        userRepository, notificationService, inAppNotificationService
+        userRepository, notificationService, inAppNotificationService,
+        quotaResumeService = quotaResumeService
     )
-    val lifecycleMonitor = UserLifecycleMonitor(userActivityService, notificationService, inAppNotificationService, razorpayService)
+    val lifecycleMonitor = UserLifecycleMonitor(
+        userActivityService, notificationService, inAppNotificationService, razorpayService,
+        quotaResumeService = quotaResumeService
+    )
     lifecycleMonitor.start()
     val webhookDispatcher = RazorpayWebhookDispatcher(
         webhookSecret = getSecretValue("razorpay-webhook-secret"),
         handlers = listOf(razorpayService)
     )
-    val githubService = GitHubService()
     val pipelineMetrics: com.syncling.services.PipelineMetrics by inject()
     val translationService = TranslationService(memoryRepository, sharedMemoryRepository, pipelineMetrics)
     val outboundWebhookService = OutboundWebhookService()
@@ -305,7 +319,8 @@ fun Application.module() {
         sharedMemoryRepository, memberUsageService, outboundWebhookService,
         fuzzyMemoryService = fuzzyMemoryService,
         reviewerFeedbackRepository = reviewerFeedbackRepository,
-        metrics = pipelineMetrics
+        metrics = pipelineMetrics,
+        blockedRunRepository = quotaBlockedRunRepository
     )
 
     jobQueue.startWorker { payload ->
@@ -497,5 +512,7 @@ fun Application.module() {
         apiTokenRepository = apiTokenRepository,
         reviewerFeedbackRepository = reviewerFeedbackRepository,
         meterRegistry = meterRegistry,
+        quotaBlockedRunRepository = quotaBlockedRunRepository,
+        quotaResumeService = quotaResumeService,
     ))
 }

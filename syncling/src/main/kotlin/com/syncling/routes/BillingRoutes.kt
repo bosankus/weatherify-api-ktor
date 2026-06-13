@@ -248,7 +248,8 @@ fun Route.configurePublicCheckoutRoute(
     userRepository: UserRepository,
     billingRepository: BillingRepository,
     jwtSecret: String,
-    userActivityService: UserActivityService
+    userActivityService: UserActivityService,
+    quotaResumeService: com.syncling.services.QuotaResumeService? = null
 ) {
     get("/billing/start-subscription") {
         val planParam = call.request.queryParameters["plan"]?.uppercase()
@@ -357,6 +358,12 @@ fun Route.configurePublicCheckoutRoute(
         val activated = billingRepository.activatePendingPlan(sessionUserId)
         // A verified payment also lifts any payment-failed hold (retry of a failed autopay).
         billingRepository.setPaymentFailedAt(sessionUserId, null)
+        // Resume runs blocked on the old quota right now, before the user lands on the
+        // dashboard — by the time the page loads, translation is already running again.
+        call.application.launch {
+            runCatching { quotaResumeService?.resumeAfterUpgrade(sessionUserId) }
+                .onFailure { log.warn("rp-callback quota resume failed userId={}: {}", sessionUserId, it.message) }
+        }
         log.info("rp-callback: activated plan={} for userId={} sub={}", activated?.name, sessionUserId, subscriptionId)
         if (call.request.queryParameters["flow"] == "retry") {
             call.application.launch {

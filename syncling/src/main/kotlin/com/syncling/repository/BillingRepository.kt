@@ -30,6 +30,13 @@ interface BillingRepository {
 
     suspend fun setLimitHitAt(userId: String, at: Instant?)
 
+    /**
+     * Returns userIds whose limit hold was set before [beforeEpochMillis] (i.e. in a previous
+     * UTC month, since usage counters are keyed by year-month). Their quota has effectively
+     * reset, so the hold is stale and their blocked runs can resume.
+     */
+    suspend fun findExpiredLimitHolds(beforeEpochMillis: Long): List<String>
+
     /** Marks (or clears, with null) the payment-failed hold that blocks all plan features. */
     suspend fun setPaymentFailedAt(userId: String, at: Instant?)
 

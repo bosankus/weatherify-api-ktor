@@ -48,7 +48,8 @@ fun Route.configureWebhookRoutes(
     jobQueue: TranslationJobQueue,
     projectRepository: ProjectRepository,
     billingRepository: BillingRepository,
-    eventBus: PipelineEventBus
+    eventBus: PipelineEventBus,
+    blockedRunRepository: com.syncling.repository.QuotaBlockedRunRepository? = null
 ) {
     if (webhookSecret == null) {
         log.warn("GITHUB_WEBHOOK_SECRET not set — webhook signature verification is DISABLED (dev mode only, never run this in production)")
@@ -175,10 +176,20 @@ fun Route.configureWebhookRoutes(
             val subscription = billingRepository.getSubscription(project.ownerId)
             if (subscription.limitHitAt != null) {
                 log.info("Webhook ignored: project={} owner={} has hit usage limit", project.id, project.ownerId)
+                // Remember this push (newest commit wins) so it is translated automatically
+                // when the quota constraint lifts — upgrade or monthly reset.
+                runCatching {
+                    blockedRunRepository?.upsert(com.syncling.domain.QuotaBlockedRun(
+                        projectId = project.id, ownerId = project.ownerId,
+                        repo = repo, branch = branchName, commitHash = commitHash,
+                        originalRunId = null, stringsPending = 0, languagesPending = 0,
+                        blockedAt = System.currentTimeMillis()
+                    ))
+                }.onFailure { log.warn("Failed to record blocked push for project={}: {}", project.id, it.message) }
                 eventBus.emitWebhookRejected(
                     ownerId = project.ownerId, repo = repo, branch = branchName,
                     projectId = project.id, reason = "usage_limit",
-                    detail = "Monthly string quota reached. The pipeline is paused until you upgrade your plan or the quota resets next month."
+                    detail = "Monthly string quota reached. This push is saved — it will be translated automatically when you upgrade or the quota resets next month."
                 )
                 call.respond(HttpStatusCode.Accepted, "Ignored: usage limit reached — upgrade your plan to resume translations")
                 return@post

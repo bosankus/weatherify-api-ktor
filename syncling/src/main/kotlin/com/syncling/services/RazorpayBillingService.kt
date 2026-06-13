@@ -47,7 +47,9 @@ class RazorpayBillingService(
     private val userActivityService: UserActivityService? = null,
     private val userRepository: UserRepository? = null,
     private val notificationService: NotificationService? = null,
-    private val inAppNotificationService: InAppNotificationService? = null
+    private val inAppNotificationService: InAppNotificationService? = null,
+    /** Lifts the quota hold + re-enqueues blocked runs when a plan becomes active. Optional. */
+    private val quotaResumeService: QuotaResumeService? = null
 ) : RazorpayEventHandler {
 
     private val log = LoggerFactory.getLogger(RazorpayBillingService::class.java)
@@ -192,8 +194,20 @@ class RazorpayBillingService(
             plan = sub.plan,
             currentPeriodEnd = estimatedPeriodEnd
         )
-        billingRepository.setLimitHitAt(userId, null)
+        resumeBlockedWork(userId)
         log.info("Trial activated immediately for userId={} sub={}", userId, subscriptionId)
+    }
+
+    /**
+     * Lifts the quota hold and re-enqueues blocked runs. Falls back to just clearing the
+     * hold flag when the resume service isn't wired (tests, minimal deployments). Never
+     * throws — a resume failure must not fail webhook processing or checkout flows.
+     */
+    private suspend fun resumeBlockedWork(userId: String) {
+        runCatching {
+            quotaResumeService?.resumeAfterUpgrade(userId)
+                ?: billingRepository.setLimitHitAt(userId, null)
+        }.onFailure { log.warn("Quota resume failed for userId={}: {}", userId, it.message) }
     }
 
     // ─── Cancel subscription ───────────────────────────────────────────────────
@@ -229,6 +243,8 @@ class RazorpayBillingService(
             razorpayCustomerId = sub["customer_id"]?.jsonPrimitive?.contentOrNull,
             razorpaySubscriptionId = subscriptionId
         )
+        // Trial is live on the paid plan's quota — resume anything blocked on the free limit.
+        resumeBlockedWork(userId)
         userActivityService?.record(
             userId, UserEvent.SUBSCRIPTION_AUTHENTICATED,
             mapOf("plan" to plan.name, "subscriptionId" to subscriptionId)
@@ -311,6 +327,9 @@ class RazorpayBillingService(
         billingRepository.clearPendingPlan(userId)
         // A successful charge lifts the payment-failed hold (recovered pending/halted subscription).
         billingRepository.setPaymentFailedAt(userId, null)
+        // ...and the quota hold: the new plan has fresh/unlimited quota, so any runs blocked
+        // on the old limit are re-enqueued instead of waiting for a manual re-push.
+        resumeBlockedWork(userId)
 
         if (payment != null) {
             val paymentId = payment["id"]?.jsonPrimitive?.contentOrNull
