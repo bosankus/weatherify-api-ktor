@@ -391,6 +391,9 @@ fun Route.configureApiRoutes(
                 if (!body.outboundWebhookUrl.isNullOrBlank() && !isPaidPlan) {
                     return@put call.respond(HttpStatusCode.Forbidden, ApiError("Outbound webhooks require a PRO or Team plan."))
                 }
+                if (body.otaEnabled == true && !isPaidPlan) {
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("CDN delivery (OTA) requires a PRO or Team plan."))
+                }
                 if (body.monthlyStringQuota != null && !isPaidPlan) {
                     return@put call.respond(HttpStatusCode.Forbidden, ApiError("Per-project string quotas require a PRO or Team plan."))
                 }

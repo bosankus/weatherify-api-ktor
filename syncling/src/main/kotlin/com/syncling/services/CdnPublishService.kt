@@ -43,7 +43,14 @@ data class PublishReceipt(
 class CdnPublishService(
     private val translationRepository: TranslationRepository,
     private val cfKv: CloudflareR2Service,
-    private val publishLog: CdnPublishRepository
+    private val publishLog: CdnPublishRepository,
+    /**
+     * Gate for whether a project's owner is on a paid plan. CDN delivery (OTA) is a paid-only
+     * feature: free projects are never published to the edge, and any pre-existing bundle for a
+     * project whose owner has since downgraded stops being served. Defaults to always-eligible
+     * so tests and callers that don't care can ignore it.
+     */
+    private val isCdnEligible: suspend (projectId: String) -> Boolean = { true }
 ) {
 
     private val log = LoggerFactory.getLogger(CdnPublishService::class.java)
@@ -57,6 +64,17 @@ class CdnPublishService(
      * - [rolloutPercent] == 0: writes no pointer (staged only, manual promotion required).
      */
     suspend fun publish(projectId: String, promote: Boolean = true, rolloutPercent: Int = 100): PublishReceipt {
+        if (!isCdnEligible(projectId)) {
+            log.info("CDN publish skipped: project={} owner not on a paid plan (CDN delivery is paid-only)", projectId)
+            return PublishReceipt(
+                publishedAt = System.currentTimeMillis(),
+                locales = emptyList(),
+                bundleVersion = "",
+                skipped = true,
+                skipReason = "plan_not_eligible"
+            )
+        }
+
         val translations = translationRepository.getPublishableTranslations(projectId)
 
         if (translations.isEmpty()) {
@@ -152,6 +170,9 @@ class CdnPublishService(
      * Fails if the version was never published.
      */
     suspend fun promote(projectId: String, bundleVersion: String): PublishReceipt {
+        if (!isCdnEligible(projectId)) {
+            throw CdnPublishException("CDN delivery is a paid feature — upgrade to promote bundles to the edge.")
+        }
         val record = publishLog.findByVersion(projectId, bundleVersion)
             ?: throw CdnPublishException("Version '$bundleVersion' was never published for project '$projectId'")
         promoteInternal(projectId, bundleVersion, record.locales, rolloutPercent = 100)
@@ -169,6 +190,7 @@ class CdnPublishService(
      * Roll back to the second-most-recent successful publish. Returns null if there's nothing to roll back to.
      */
     suspend fun rollback(projectId: String): PublishReceipt? {
+        if (!isCdnEligible(projectId)) return null
         val recent = publishLog.listPublishes(projectId, limit = 10).filter { it.status == "success" }
         val active = publishLog.getActiveVersion(projectId)
         // Pick the most recent version that is not the current active one.
@@ -237,6 +259,9 @@ class CdnPublishService(
      * or if the underlying versioned bundle is missing.
      */
     suspend fun fetchActiveBundle(projectId: String, locale: String): ResolvedBundle? {
+        // Delivery is paid-only: stop serving bundles for projects whose owner is on the free plan
+        // (e.g. after a downgrade), even though the versioned objects may still exist on R2.
+        if (!isCdnEligible(projectId)) return null
         val version = cfKv.get(pointerKey(projectId, locale, "active")) ?: return null
         val bundle = cfKv.get(versionedKey(projectId, locale, version)) ?: return null
         return ResolvedBundle(version = version, json = bundle)

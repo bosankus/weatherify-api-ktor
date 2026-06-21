@@ -66,6 +66,19 @@
     margin-bottom: 20px;
 }
 
+/* ── Paid-feature gate (mirrors members page .mb-empty plan gate) ─────────── */
+.tk-plan-gate {
+    text-align: center;
+    padding: 64px 24px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    background: var(--surface);
+    margin-bottom: 20px;
+}
+.tk-plan-gate h3 { color: var(--text); font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+.tk-plan-gate p { font-size: 13px; margin: 0 0 20px; line-height: 1.55; }
+
 .tk-list-head {
     display: flex;
     align-items: center;

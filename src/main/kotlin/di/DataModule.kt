@@ -6,8 +6,10 @@ import com.androidplay.weatherify.di.weatherifyModule
 import com.androidplay.weatherify.di.weatherifyIndexes
 import com.androidplay.core.mongo.MongoIndexer
 import config.Environment
+import data.repository.WeatherRepositoryImpl
 import data.source.WeatherApiClient
 import data.source.WeatherApiClientImpl
+import domain.repository.WeatherRepository
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -49,6 +51,8 @@ val dataModule = module {
     }
 
     single<WeatherApiClient> { WeatherApiClientImpl() }
+
+    single<WeatherRepository> { WeatherRepositoryImpl(get()) }
 
     single<util.Analytics> { util.GoogleAnalyticsClient.fromEnv() }
 }

@@ -99,7 +99,7 @@ fun main() {
             }
             get("/tokens") {
                 call.setBootstrapCookie()
-                call.respondHtml { tokensApp() }
+                call.respondHtml { tokensApp(isPaid = true) }
             }
 
             // ── Mock API routes ───────────────────────────────────────────────

@@ -6,6 +6,10 @@ const listMeta = document.getElementById('tk-list-meta');
 const newBtn   = document.getElementById('tk-new-btn');
 const modalMount = document.getElementById('tk-modal-mount');
 
+// Creating tokens is a paid feature; the server tags the list card accordingly.
+// When false, we hide every "+ New key" affordance — existing tokens stay revocable.
+const isPaid = listCard?.dataset.paid === 'true';
+
 // ── Load & render ─────────────────────────────────────────────────────────────
 
 async function loadTokens() {
@@ -55,7 +59,7 @@ function render(tokens) {
         </div>
         <h3>No tokens or SDK keys yet</h3>
         <p>Create a CLI token, Android SDK key, or iOS SDK key<br>to start integrating with Syncling.</p>
-        <button class="bl-btn primary" id="tk-empty-new-btn">+ New key</button>
+        ${isPaid ? '<button class="bl-btn primary" id="tk-empty-new-btn">+ New key</button>' : ''}
       </div>`;
     document.getElementById('tk-empty-new-btn')?.addEventListener('click', openCreateModal);
     return;
@@ -145,7 +149,7 @@ async function revokeToken(id) {
 
 // ── Create modal ──────────────────────────────────────────────────────────────
 
-newBtn.addEventListener('click', openCreateModal);
+newBtn?.addEventListener('click', openCreateModal);
 
 function openCreateModal() {
   const overlay = document.createElement('div');

@@ -252,7 +252,14 @@ fun Application.module() {
     val cfR2AccessKeyId = getSecretValue("cloudflare-r2-access-key-id")
     val cfR2SecretAccessKey = getSecretValue("cloudflare-r2-secret-access-key")
     val cfKvService = CloudflareR2Service(cfAccountId, cfR2BucketName, cfR2AccessKeyId, cfR2SecretAccessKey)
-    val cdnPublishService = CdnPublishService(translationRepository, cfKvService, cdnPublishRepository)
+    val cdnPublishService = CdnPublishService(
+        translationRepository, cfKvService, cdnPublishRepository,
+        // CDN delivery (OTA) is paid-only. A project is eligible when its owner is on any non-free plan.
+        isCdnEligible = { projectId ->
+            val ownerId = runCatching { projectRepository.findById(projectId)?.ownerId }.getOrNull()
+            ownerId != null && billingRepository.getSubscription(ownerId).plan != com.syncling.domain.BillingPlan.FREE
+        }
+    )
 
     val jobQueue = TranslationJobQueue(jobQueueRepository)
     // PipelineEventBus created first so it can be injected into UserActivityService

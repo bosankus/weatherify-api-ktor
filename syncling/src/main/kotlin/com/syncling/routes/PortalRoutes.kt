@@ -1160,7 +1160,7 @@ private val LANDING_JSON_LD = """{
       "description":"AI-powered mobile app localization platform. Push a commit to GitHub and translations are automatically detected, translated into 10+ languages with Claude AI, and published to Cloudflare's global CDN — typically within a minute, no app store release needed.",
       "url":"https://syncling.space/syncling",
       "offers":[
-        {"@type":"Offer","name":"Free","price":"0","priceCurrency":"INR","description":"500 strings per month, 1 project, 3 target languages, GitHub webhook, CDN delivery"},
+        {"@type":"Offer","name":"Free","price":"0","priceCurrency":"INR","description":"500 strings per month, 1 project, 3 target languages, GitHub webhook, delivery via GitHub pull request"},
         {"@type":"Offer","name":"PRO","price":"499","priceCurrency":"INR","description":"5000 strings per month, 3 projects, all languages, glossary, translation memory, review portal"},
         {"@type":"Offer","name":"Team","price":"1999","priceCurrency":"INR","description":"Unlimited strings, 10 projects, team collaboration, per-project quotas, priority support"}
       ],
@@ -1192,7 +1192,7 @@ private val LANDING_JSON_LD = """{
         {"@type":"Question","name":"How quickly does Syncling publish translations after a commit?","acceptedAnswer":{"@type":"Answer","text":"End-to-end from git push to globally available CDN bundle typically takes around 45 seconds for a small batch of changed strings — including webhook processing, semantic detection, AI translation, placeholder validation, bundle signing, and Cloudflare R2 replication. Larger batches scale roughly linearly with the number of changed strings and target languages."}},
         {"@type":"Question","name":"What languages does Syncling support?","acceptedAnswer":{"@type":"Answer","text":"Syncling supports Spanish, French, German, Japanese, Korean, Chinese Simplified, Hindi, Portuguese Brazilian, Italian, and Arabic. The Free tier includes 3 target languages; PRO and Team plans include all available languages."}},
         {"@type":"Question","name":"How is Syncling different from Phrase, Lokalise, or Crowdin?","acceptedAnswer":{"@type":"Answer","text":"Syncling is built for fully automated, git-native localization with no manual workflows. Key differences: semantic change detection avoids re-translating unchanged strings; CDN-first delivery enables OTA updates without app store releases; developer-friendly pricing starts free with no credit card required."}},
-        {"@type":"Question","name":"Is there a free tier for Syncling?","acceptedAnswer":{"@type":"Answer","text":"Yes. The Free plan includes 500 strings per month, 1 project, 3 target languages, GitHub webhook, AI translation, and CDN delivery — no credit card required, free forever. Paid plans include a 7-day free trial with no charge until the trial ends."}},
+        {"@type":"Question","name":"Is there a free tier for Syncling?","acceptedAnswer":{"@type":"Answer","text":"Yes. The Free plan includes 500 strings per month, 1 project, 3 target languages, GitHub webhook, and AI translation with delivery via GitHub pull request — no credit card required, free forever. Global CDN / over-the-air delivery is available on the paid plans, which include a 7-day free trial with no charge until the trial ends."}},
         {"@type":"Question","name":"Can I update app translations without a new app store release?","acceptedAnswer":{"@type":"Answer","text":"Yes. Translations are served over-the-air (OTA) from Cloudflare's global CDN via the Syncling Android and iOS SDKs. Fix a typo or add a language at any time — it typically goes live within a minute, with no App Store or Play Store submission required."}}
       ]
     }
@@ -1235,7 +1235,7 @@ internal object PricingData {
                 "1 active repository",
                 "3 target languages",
                 "GitHub webhook + AI translation",
-                "Global CDN delivery",
+                "Delivery via GitHub pull request",
                 "Community support",
             ),
             ctaHref = "/auth/github",
@@ -1255,6 +1255,7 @@ internal object PricingData {
                 "5,000 AI strings / month",
                 "3 active repositories",
                 "Unlimited target languages",
+                "Global CDN + OTA delivery",
                 "Glossary enforcement",
                 "Translation memory caching",
                 "Collaborative review portal",
@@ -1690,7 +1691,7 @@ internal fun HTML.landingPage() {
         section("cta-section") {
             div("cta-inner") {
                 h2("fade-up") { +"Ready to go global?" }
-                p("fade-up d1") { +"Free tier includes 500 strings/month, CDN delivery, and SDK access." }
+                p("fade-up d1") { +"Free tier includes 500 strings/month and AI translation. Unlock global CDN + OTA delivery on Pro." }
                 a("/auth/github") { classes = setOf("btn","btn-primary","cta-btn","fade-up","d2"); +"Get started free" }
             }
         }
@@ -3943,6 +3944,16 @@ body{font-family:'DM Sans',system-ui,sans-serif}
 .cdnw-proj-time{color:var(--text-muted);white-space:nowrap;margin-left:4px}
 .cdnw-sdk-note{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:var(--text-muted);line-height:1.55;padding-top:10px;border-top:1px solid var(--border)}
 .cdnw-sdk-note svg{flex-shrink:0;margin-top:1px;opacity:.6}
+/* ── CDN paid-feature upsell (shown to free users in place of status) ──────── */
+.cdn-widget-badge.locked{color:var(--accent);background:var(--accent-dim);border:1px solid rgba(139,126,255,.3)}
+.cdnw-upsell{display:flex;flex-direction:column;gap:10px}
+.cdnw-upsell-desc{font-size:12px;line-height:1.55;color:var(--text-muted);margin:0}
+.cdnw-upsell-desc strong{color:var(--text-dim);font-weight:600}
+.cdnw-upsell-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.cdnw-upsell-list li{position:relative;padding-left:18px;font-size:11.5px;color:var(--text-dim);line-height:1.4}
+.cdnw-upsell-list li::before{content:'';position:absolute;left:0;top:5px;width:9px;height:9px;border-radius:50%;background:var(--accent-dim);border:1px solid rgba(139,126,255,.45)}
+.cdnw-upsell-cta{display:block;text-align:center;font-size:12px;font-weight:600;color:#fff;background:var(--accent);border-radius:6px;padding:8px 10px;margin-top:2px;transition:filter .15s}
+.cdnw-upsell-cta:hover{filter:brightness(1.08)}
 .run-no-retranslation{font-size:12px;color:var(--accent);opacity:.8}
 .force-translate-btn{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;color:var(--text-muted);background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px 9px;cursor:pointer;transition:border-color .15s,color .15s;margin-left:8px}
 .force-translate-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -4834,10 +4845,33 @@ async function loadPipelineRuns(){
 }
 
 async function loadCdnStatus(){
+  // CDN delivery is a paid feature. Free users see an upgrade promo in place of the
+  // status widget — the dashboard is where they feel the missing capability, so it's
+  // the highest-intent place to surface the upsell.
+  if(window.tlSubscription){
+    try{const sub=await window.tlSubscription();if(sub&&sub.plan==='FREE'){renderCdnUpsell();return;}}catch(_){}
+  }
   const res=await api('/dashboard/cdn-status');
   if(!res||!res.ok)return;
   const data=await res.json();
   updateCdnWidget(data.publishes||[]);
+}
+
+function renderCdnUpsell(){
+  const body=document.getElementById('cdn-widget-body');
+  const badge=document.getElementById('cdn-widget-badge');
+  if(badge){badge.textContent='PRO';badge.className='cdn-widget-badge locked';}
+  if(!body)return;
+  body.innerHTML=''
+    +'<div class="cdnw-upsell">'
+    +'<p class="cdnw-upsell-desc">Push signed translation bundles to Cloudflare\'s global edge and update your app strings <strong>without an app-store release</strong> — served in ~20ms from 330+ PoPs.</p>'
+    +'<ul class="cdnw-upsell-list">'
+    +'<li>Instant over-the-air updates</li>'
+    +'<li>Versioned bundles &middot; one-click rollback</li>'
+    +'<li>Canary rollouts to a % of users</li>'
+    +'</ul>'
+    +'<a href="/billing" class="cdnw-upsell-cta">Unlock CDN delivery &rarr;</a>'
+    +'</div>';
 }
 
 function updateCdnWidget(publishes){

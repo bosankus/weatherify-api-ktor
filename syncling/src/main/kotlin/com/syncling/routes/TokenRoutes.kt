@@ -1,7 +1,9 @@
 package com.syncling.routes
 
+import com.syncling.domain.BillingPlan
 import com.syncling.model.ApiError
 import com.syncling.repository.ApiTokenRepository
+import com.syncling.repository.BillingRepository
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.html.*
@@ -42,7 +44,10 @@ data class TokenListItem(
 
 private val ALLOWED_PLATFORMS = setOf("CLI", "ANDROID", "IOS")
 
-fun Route.configureTokenApiRoutes(tokenRepository: ApiTokenRepository) {
+fun Route.configureTokenApiRoutes(
+    tokenRepository: ApiTokenRepository,
+    billingRepository: BillingRepository,
+) {
     route("/api/me/tokens") {
         get {
             val userId = call.userId()
@@ -56,6 +61,13 @@ fun Route.configureTokenApiRoutes(tokenRepository: ApiTokenRepository) {
         post {
             val userId = call.userId()
                 ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            // API tokens & SDK keys are a paid feature. Listing/revoking stays open so a
+            // downgraded user can still manage tokens they already minted.
+            if (billingRepository.getSubscription(userId).plan == BillingPlan.FREE)
+                return@post call.respond(
+                    HttpStatusCode.Forbidden,
+                    ApiError("API tokens & SDK keys require a paid plan. Upgrade to create one.")
+                )
             val body = runCatching { call.receive<CreateTokenBody>() }.getOrElse {
                 return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
             }
@@ -99,17 +111,18 @@ fun Route.configureTokenApiRoutes(tokenRepository: ApiTokenRepository) {
 
 // ── Portal page ───────────────────────────────────────────────────────────────
 
-fun Route.configureTokenPortalRoute(jwtSecret: String) {
+fun Route.configureTokenPortalRoute(jwtSecret: String, billingRepository: BillingRepository) {
     get("/tokens") {
-        if (call.sessionUserId(jwtSecret) == null) {
+        val userId = call.sessionUserId(jwtSecret) ?: run {
             call.respondRedirect("/auth/github")
             return@get
         }
-        call.respondHtml { tokensApp() }
+        val isPaid = billingRepository.getSubscription(userId).plan != BillingPlan.FREE
+        call.respondHtml { tokensApp(isPaid) }
     }
 }
 
-internal fun HTML.tokensApp() {
+internal fun HTML.tokensApp(isPaid: Boolean) {
     portalShell(
         pageTitle = "API Tokens",
         navKey = "tokens",
@@ -123,16 +136,35 @@ internal fun HTML.tokensApp() {
                 h1("page-title") { +"API Tokens & SDK Keys" }
                 p("page-sub") { +"Authenticate the Syncling CLI. Native SDKs are coming soon." }
             }
-            button(classes = "bl-btn primary") {
-                id = "tk-new-btn"
-                type = ButtonType.button
-                +"+ New key"
+            if (isPaid) {
+                button(classes = "bl-btn primary") {
+                    id = "tk-new-btn"
+                    type = ButtonType.button
+                    +"+ New key"
+                }
+            }
+        }
+
+        // ── Paid-feature gate ────────────────────────────────────────────────
+        // Creating tokens is a paid feature. Free users see this gate (mirrors the
+        // members page plan gate); any tokens they minted on a previous paid plan
+        // still render below so they can revoke them.
+        if (!isPaid) {
+            div("tk-plan-gate") {
+                h3 { +"API tokens & SDK keys are a paid feature" }
+                p {
+                    +"You're on the "
+                    b { +"Free" }
+                    +" plan. Upgrade to a paid plan to create CLI tokens and SDK keys for the Syncling CLI, Android, and iOS SDKs."
+                }
+                a("/billing") { classes = setOf("bl-btn", "primary"); +"Upgrade plan" }
             }
         }
 
         // ── Token list card ──────────────────────────────────────────────
         div("tk-list-card") {
             id = "tk-list-card"
+            attributes["data-paid"] = isPaid.toString()
             div("tk-list-head") {
                 h2 { +"Active tokens & keys" }
                 span("tk-list-head-meta") { id = "tk-list-meta" }

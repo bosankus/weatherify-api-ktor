@@ -232,6 +232,12 @@ fun Route.configureCdnPublishRoute(
 
             runCatching { cdnPublishService.publish(projectId, promote = project.autoPromote, rolloutPercent = project.rolloutPercent) }
                 .onSuccess { receipt ->
+                    if (receipt.skipReason == "plan_not_eligible") {
+                        return@onSuccess call.respond(
+                            HttpStatusCode.PaymentRequired,
+                            ApiError("CDN delivery is a paid feature. Upgrade to publish translations to the global edge.")
+                        )
+                    }
                     call.respond(HttpStatusCode.OK, receipt.toResponse())
                 }
                 .onFailure { e ->
