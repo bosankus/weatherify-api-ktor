@@ -5,7 +5,6 @@ import com.syncling.model.ApiError
 import com.syncling.repository.ApiTokenRepository
 import com.syncling.repository.BillingRepository
 import io.ktor.http.*
-import io.ktor.server.application.*
 import io.ktor.server.html.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
