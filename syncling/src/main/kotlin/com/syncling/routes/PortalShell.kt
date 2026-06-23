@@ -206,6 +206,7 @@ internal val SHELL_RUNTIME_JS = """
     t._timer=setTimeout(function(){t.className='toast '+(kind||'');},2800);
   };
   window.logout=function(){
+    if(window._tlStopSse)try{window._tlStopSse();}catch(_){}
     localStorage.removeItem('syncling_token');
     window.location.href='/auth/logout';
   };
@@ -602,6 +603,11 @@ internal val SUPPORT_CHAT_JS = """(function(){
     _sseOff=true;
     if(_sseCtrl){try{_sseCtrl.abort();}catch(_){}_sseCtrl=null;}
   }
+  // Exposed so window.logout() (defined in a separate IIFE) can force an immediate
+  // disconnect instead of relying on the browser to cancel the in-flight fetch during
+  // navigation — that cancellation isn't guaranteed to happen, which left admins stuck
+  // "online" after logout until the connection eventually timed out server-side.
+  window._tlStopSse=stopSse;
   function ensureSse(){
     _sseOff=false;
     if(!_sseCtrl&&!_sseStop){_sseDelay=1000;startSse();}
