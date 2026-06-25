@@ -87,5 +87,18 @@ fun Application.configureRouting() {
         registrars.forEach { it.register(this) }
         notFoundRoute()
 
+        // Genuine catch-all: Ktor only reaches this wildcard when no literal route matched,
+        // so it never intercepts 404s that a real handler returns intentionally (e.g. "item not found").
+        route("{...}") {
+            handle {
+                val path = call.request.path()
+                if (path in excluded404Paths) {
+                    call.respond(HttpStatusCode.NotFound)
+                } else {
+                    logger.info("404 Not Found: ${call.request.httpMethod.value} request to non-existent endpoint: $path")
+                    call.handleNotFound()
+                }
+            }
+        }
     }
 }
