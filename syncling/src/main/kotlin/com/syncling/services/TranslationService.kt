@@ -53,8 +53,12 @@ data class GeminiSystemInstruction(val parts: List<GeminiPart>)
 @Serializable
 data class GeminiContent(val parts: List<GeminiPart>)
 
+/** One content part — plain text or an inline image (base64). Exactly one field should be set. */
 @Serializable
-data class GeminiPart(val text: String)
+data class GeminiPart(val text: String? = null, val inlineData: GeminiInlineData? = null)
+
+@Serializable
+data class GeminiInlineData(val mimeType: String, val data: String)
 
 @Serializable
 data class GeminiResponse(
@@ -98,8 +102,23 @@ data class TranslationContext(
      * Recent (source → reviewerEdit) pairs — what a human shipped after correcting the model.
      * Strongest signal we have for project tone/voice; presented before fuzzy examples.
      */
-    val reviewerExamples: List<Pair<String, String>> = emptyList()
+    val reviewerExamples: List<Pair<String, String>> = emptyList(),
+    /**
+     * PNG of the UI screen this string appears on (Figma frame preview). Attached to the
+     * Gemini request so the model sees the widget context — resolves verb/noun ambiguity
+     * ("Book", "Back") and hints at available space. Excluded from the cache key: the
+     * screenshot refines the same translation, it doesn't define a different one.
+     */
+    val screenshot: ByteArray? = null
 )
+
+/**
+ * Supplies per-string-key UI screenshots for a project — implemented by FigmaSyncService
+ * from frame previews, but the pipeline only knows this seam.
+ */
+fun interface VisualContextProvider {
+    suspend fun screenshotsForKeys(projectId: String, keys: Collection<String>): Map<String, ByteArray>
+}
 
 // CLDR plural form requirements per language name. Languages not listed use the default two-form
 // system (one / other) that matches English.
@@ -130,6 +149,9 @@ fun requiredPluralForms(languageName: String): List<String> =
     PLURAL_FORMS_BY_LANGUAGE[languageName] ?: listOf("one", "other")
 
 private val PLURAL_QUANTITIES = setOf("zero", "one", "two", "few", "many", "other")
+
+/** At most this many distinct frame screenshots ride along per batch call — context, not a slideshow. */
+private const val MAX_BATCH_SCREENSHOTS = 4
 
 private const val GEMINI_MAX_RETRIES = 3
 private const val GEMINI_RETRY_BASE_MS = 1_000L
@@ -232,9 +254,13 @@ class TranslationService(
         val firstCtx = keyedContexts.values.first()
         val batchInput = toTranslate.mapValues { (_, pair) -> pair.second.cleanText }
         val inputJson = json.encodeToString(mapSerializer, batchInput)
+        val imageParts = buildImageParts(toTranslate)
 
         val (llmOutput, usage) = try {
-            callGeminiApiJson(buildBatchSystemPrompt(firstCtx), inputJson)
+            callGeminiApiJson(
+                buildBatchSystemPrompt(firstCtx, withScreenshots = imageParts.isNotEmpty()),
+                imageParts + GeminiPart(inputJson),
+            )
         } catch (e: Exception) {
             log.warn("Batch Gemini call failed for {} strings: {}", toTranslate.size, e.message)
             toTranslate.keys.forEach { key -> results[key] = Result.failure(e) }
@@ -266,6 +292,37 @@ class TranslationService(
         }
 
         return Triple(results, cacheHits, tokenUsage)
+    }
+
+    /**
+     * Interleaved (label, image) parts for the batch request: strings sharing a screenshot are
+     * grouped, the largest groups win the [MAX_BATCH_SCREENSHOTS] slots. Empty when no context
+     * in the batch carries a screenshot — the request is then byte-identical to the old shape.
+     */
+    private fun buildImageParts(
+        toTranslate: Map<String, Pair<TranslationContext, ExtractionResult>>
+    ): List<GeminiPart> {
+        class Group(val png: ByteArray) { val keys = mutableListOf<String>() }
+        val groups = LinkedHashMap<Int, Group>()
+        for ((key, pair) in toTranslate) {
+            val png = pair.first.screenshot ?: continue
+            groups.getOrPut(png.contentHashCode()) { Group(png) }.keys += key
+        }
+        if (groups.isEmpty()) return emptyList()
+        return groups.values
+            .sortedByDescending { it.keys.size }
+            .take(MAX_BATCH_SCREENSHOTS)
+            .flatMap { group ->
+                listOf(
+                    GeminiPart("UI screenshot for keys: ${group.keys.joinToString(", ")}"),
+                    GeminiPart(
+                        inlineData = GeminiInlineData(
+                            mimeType = "image/png",
+                            data = java.util.Base64.getEncoder().encodeToString(group.png),
+                        )
+                    ),
+                )
+            }
     }
 
     private fun recordCallMetrics(endpoint: String, usage: TokenUsage) {
@@ -377,9 +434,12 @@ class TranslationService(
         """.trimIndent()
     }
 
-    private fun buildBatchSystemPrompt(ctx: TranslationContext): String {
+    private fun buildBatchSystemPrompt(ctx: TranslationContext, withScreenshots: Boolean = false): String {
         val glossaryLine = ctx.glossary?.entries?.joinToString(", ") { (k, v) -> "[$k -> $v]" }
             ?.let { "Apply the following glossary exactly: $it" } ?: ""
+        val screenshotLine = if (!withScreenshots) "" else
+            "UI screenshots are attached, each preceded by the string keys visible on that screen. " +
+                "Use them to resolve ambiguity (verb vs noun, formality, abbreviations) and prefer concise phrasing for space-constrained widgets like buttons and tabs."
         val reviewerBlock = if (ctx.reviewerExamples.isEmpty()) "" else buildString {
             appendLine("Reviewer corrections — strongly prefer these phrasings, capitalization, and tone:")
             ctx.reviewerExamples.take(8).forEach { (src, edit) ->
@@ -403,6 +463,7 @@ class TranslationService(
             Input: a JSON object mapping string keys to English source text.
             Output: a JSON object mapping the SAME keys to their translations. No extra text.
             $glossaryLine
+            $screenshotLine
             $reviewerBlock
             $fuzzyBlock
         """.trimIndent()
@@ -419,10 +480,13 @@ class TranslationService(
         return text
     }
 
-    private suspend fun callGeminiApiJson(systemPrompt: String, userPrompt: String): Pair<String, TokenUsage> {
+    private suspend fun callGeminiApiJson(systemPrompt: String, userPrompt: String): Pair<String, TokenUsage> =
+        callGeminiApiJson(systemPrompt, listOf(GeminiPart(userPrompt)))
+
+    private suspend fun callGeminiApiJson(systemPrompt: String, parts: List<GeminiPart>): Pair<String, TokenUsage> {
         val payload = GeminiRequest(
             systemInstruction = GeminiSystemInstruction(listOf(GeminiPart(systemPrompt))),
-            contents = listOf(GeminiContent(listOf(GeminiPart(userPrompt)))),
+            contents = listOf(GeminiContent(parts)),
             generationConfig = GenerationConfig(
                 thinkingConfig = ThinkingConfig(0),
                 temperature = 0.1,

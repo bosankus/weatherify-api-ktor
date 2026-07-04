@@ -214,6 +214,7 @@ class MongoFigmaNodeBindingRepository(db: MongoDatabase) : FigmaNodeBindingRepos
                     .append("figmaNodeId", b.figmaNodeId)
                     .append("stringKey", b.stringKey)
                     .append("lastText", b.lastText)
+                    .append("figmaFrameId", b.figmaFrameId)
                     .append("updatedAt", b.updatedAt.toEpochMilliseconds()),
                 ReplaceOptions().upsert(true),
             )
@@ -230,6 +231,7 @@ class MongoFigmaNodeBindingRepository(db: MongoDatabase) : FigmaNodeBindingRepos
             figmaNodeId = getString("figmaNodeId"),
             stringKey = getString("stringKey"),
             lastText = getString("lastText") ?: "",
+            figmaFrameId = getString("figmaFrameId"),
             updatedAt = Instant.fromEpochMilliseconds(getLong("updatedAt")),
         )
 }

@@ -155,7 +155,8 @@ fun Application.configureSyncling(refundService: RefundService) {
         pipelineEventBus, semanticChangeAnalyzer, culturalSensitivityAnalyzer, cdnPublishService,
         sharedMemoryRepository = null, memberUsageService = memberUsageService,
         metrics = pipelineMetrics,
-        blockedRunRepository = quotaBlockedRunRepository
+        blockedRunRepository = quotaBlockedRunRepository,
+        visualContextProvider = figmaSyncService
     )
 
     // Central webhook dispatcher — register all Razorpay event handlers here.

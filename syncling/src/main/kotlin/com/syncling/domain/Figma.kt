@@ -106,5 +106,7 @@ data class FigmaNodeBinding(
     val stringKey: String,
     /** Text at the time of the last approved sync — used to detect unchanged re-pushes. */
     val lastText: String,
+    /** Frame the node lives in — lets the pipeline attach the frame screenshot as translation context. */
+    val figmaFrameId: String? = null,
     val updatedAt: Instant,
 )

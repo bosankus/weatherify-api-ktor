@@ -103,7 +103,7 @@ class FigmaSyncService(
     private val embeddingService: EmbeddingService? = null,
     private val embeddingRepository: TranslationEmbeddingRepository? = null,
     private val notificationService: InAppNotificationService? = null,
-) {
+) : VisualContextProvider {
     private val log = LoggerFactory.getLogger(FigmaSyncService::class.java)
     private val geminiApiKey: String = getSecretValue("gemini-api-key")
     private val json = Json { ignoreUnknownKeys = true }
@@ -250,6 +250,29 @@ class FigmaSyncService(
                 log.warn("Figma auto-approve fell back to inbox: project={} reason={}", project.id, e.message)
             }
             .getOrNull()
+    }
+
+    /**
+     * [VisualContextProvider]: frame screenshots for the string keys that came through Figma.
+     * Keys sharing a frame get the same ByteArray instance, so the translation batcher can
+     * group them and attach each frame once. Best-effort — any failure returns what we have.
+     */
+    override suspend fun screenshotsForKeys(projectId: String, keys: Collection<String>): Map<String, ByteArray> {
+        val repo = previewRepository ?: return emptyMap()
+        if (keys.isEmpty()) return emptyMap()
+        val keySet = keys.toSet()
+        val bindings = runCatching { bindingRepository.listForProject(projectId) }
+            .getOrElse { return emptyMap() }
+            .filter { it.stringKey in keySet && it.figmaFrameId != null }
+        if (bindings.isEmpty()) return emptyMap()
+
+        val result = mutableMapOf<String, ByteArray>()
+        for ((frame, frameBindings) in bindings.groupBy { it.figmaFileKey to it.figmaFrameId!! }) {
+            val png = runCatching { repo.find(projectId, frame.first, frame.second)?.png }.getOrNull()
+                ?: continue
+            frameBindings.forEach { result[it.stringKey] = png }
+        }
+        return result
     }
 
     /** Bound keys whose repo copy no longer matches what Figma last synced — the design file is stale. */
@@ -410,6 +433,7 @@ class FigmaSyncService(
                     figmaNodeId = it.figmaNodeId,
                     stringKey = it.effectiveKey,
                     lastText = it.sourceText,
+                    figmaFrameId = it.figmaFrameId,
                     updatedAt = now,
                 )
             },

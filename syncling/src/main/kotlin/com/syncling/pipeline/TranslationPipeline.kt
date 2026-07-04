@@ -79,6 +79,8 @@ class TranslationPipeline(
     private val metrics: com.syncling.services.PipelineMetrics? = null,
     /** Quota-blocked run records — written on plan-limit aborts so the run auto-resumes after upgrade. Optional. */
     private val blockedRunRepository: com.syncling.repository.QuotaBlockedRunRepository? = null,
+    /** UI screenshots per string key (Figma frame previews) attached to translation prompts. Optional. */
+    private val visualContextProvider: com.syncling.services.VisualContextProvider? = null,
     /** Max concurrent Gemini batch calls per translation run. */
     private val translationConcurrency: Int = 8
 ) {
@@ -743,6 +745,13 @@ class TranslationPipeline(
             ?.getOrNull()
             ?.map { it.source to it.translation }
             ?: emptyList()
+        // Frame screenshots for Figma-originated keys — visual context the model uses to
+        // disambiguate short UI copy. Language-independent, but fetched per locale to keep
+        // this the single augmentation site; the reads are a handful of small Mongo docs.
+        val screenshotsByKey: Map<String, ByteArray> = visualContextProvider
+            ?.runCatching { screenshotsForKeys(project.id, simpleStrings.keys) }
+            ?.getOrNull()
+            ?: emptyMap()
 
         val semaphore = Semaphore(translationConcurrency)
         val batches = simpleStrings.entries.chunked(BATCH_SIZE).map { chunk -> chunk.associate { it.key to it.value } }
@@ -755,14 +764,15 @@ class TranslationPipeline(
             batches.map { batch ->
                 async {
                     semaphore.withPermit {
-                        val keyedContexts = batch.mapValues { (_, sourceText) ->
+                        val keyedContexts = batch.mapValues { (key, sourceText) ->
                             TranslationContext(
                                 appId = payload.repositoryFullName, appName = config.app.name,
                                 category = config.app.category, tone = config.app.tone,
                                 glossary = config.glossary?.get(target.code),
                                 sourceText = sourceText, targetLanguage = target.name, targetRegion = target.region,
                                 fuzzyExamples = fuzzyExamples,
-                                reviewerExamples = reviewerExamples
+                                reviewerExamples = reviewerExamples,
+                                screenshot = screenshotsByKey[key]
                             )
                         }
                         val batchOutcome = translationService.translateBatchTracked(keyedContexts)

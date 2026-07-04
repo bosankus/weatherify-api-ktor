@@ -351,7 +351,8 @@ fun Application.module() {
         fuzzyMemoryService = fuzzyMemoryService,
         reviewerFeedbackRepository = reviewerFeedbackRepository,
         metrics = pipelineMetrics,
-        blockedRunRepository = quotaBlockedRunRepository
+        blockedRunRepository = quotaBlockedRunRepository,
+        visualContextProvider = figmaSyncService
     )
 
     jobQueue.startWorker { payload ->
