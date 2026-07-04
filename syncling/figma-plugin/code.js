@@ -48,6 +48,9 @@ function collectTextNodes(selection) {
           pageName: figma.currentPage.name,
           frameName: frame ? frame.name : null,
           frameId: frame ? frame.id : null,
+          // Fixed-width text boxes can overflow when translations run longer —
+          // the server returns a heads-up for these per target language.
+          fixedWidth: node.textAutoResize !== "WIDTH_AND_HEIGHT",
         });
       }
       return;

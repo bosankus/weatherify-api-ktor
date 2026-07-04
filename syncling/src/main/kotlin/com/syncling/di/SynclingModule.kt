@@ -45,6 +45,7 @@ fun synclingModule(encryptionKey: String) = module {
     single<FigmaCandidateRepository> { MongoFigmaCandidateRepository(get()) }
     single<FigmaNodeBindingRepository> { MongoFigmaNodeBindingRepository(get()) }
     single<com.syncling.repository.FigmaPreviewRepository> { com.syncling.repository.mongo.MongoFigmaPreviewRepository(get()) }
+    single<com.syncling.repository.FigmaSettingsRepository> { com.syncling.repository.mongo.MongoFigmaSettingsRepository(get()) }
     single<QuotaBlockedRunRepository> { MongoQuotaBlockedRunRepository(get()) }
     single { com.syncling.services.MemberUsageService(get()) }
     single {
@@ -175,5 +176,7 @@ fun synclingIndexes(): List<IndexSpec> {
         IndexSpec("figma_node_bindings", Document("projectId", 1)),
         // Figma frame screenshots: one row per frame, replaced on every push.
         IndexSpec("figma_previews", Document(mapOf("projectId" to 1, "figmaFileKey" to 1, "figmaFrameId" to 1)), unique),
+        // Figma sync preferences: one row per project.
+        IndexSpec("figma_settings", Document("projectId", 1), unique),
     )
 }

@@ -130,4 +130,87 @@ class FigmaSyncServiceTest {
         )
         assertTrue(json.contains("\"checkout_cta\""))
     }
+
+    // ── expansionWarnings ────────────────────────────────────────────────────
+
+    private fun node(id: String, text: String, fixedWidth: Boolean) =
+        FigmaPushNode(nodeId = id, nodeName = id, text = text, fixedWidth = fixedWidth)
+
+    @Test
+    fun `warns for fixed-width text when a target language expands`() {
+        val warnings = FigmaSyncService.expansionWarnings(
+            listOf(node("1:1", "Continue to secure checkout", fixedWidth = true)),
+            listOf("de-DE", "ja"),
+        )
+        assertEquals(1, warnings.size)
+        assertEquals("1:1", warnings[0].nodeId)
+        assertTrue(warnings[0].message.contains("DE"))
+        assertTrue(warnings[0].message.contains("35"))
+    }
+
+    @Test
+    fun `skips auto-growing, short, and non-expanding cases`() {
+        // auto-grow box
+        assertTrue(
+            FigmaSyncService.expansionWarnings(
+                listOf(node("1:1", "Continue to secure checkout", fixedWidth = false)), listOf("de"),
+            ).isEmpty(),
+        )
+        // short text
+        assertTrue(
+            FigmaSyncService.expansionWarnings(
+                listOf(node("1:1", "OK", fixedWidth = true)), listOf("de"),
+            ).isEmpty(),
+        )
+        // no expanding target language
+        assertTrue(
+            FigmaSyncService.expansionWarnings(
+                listOf(node("1:1", "Continue to secure checkout", fixedWidth = true)), listOf("ja", "ko"),
+            ).isEmpty(),
+        )
+    }
+
+    // ── computeDrift ─────────────────────────────────────────────────────────
+
+    private fun binding(key: String, lastText: String) = com.syncling.domain.FigmaNodeBinding(
+        projectId = "p1", figmaFileKey = "file1", figmaNodeId = "1:$key",
+        stringKey = key, lastText = lastText,
+        updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(0),
+    )
+
+    @Test
+    fun `reports keys whose repo copy changed since the last sync`() {
+        val drift = FigmaSyncService.computeDrift(
+            bindings = listOf(
+                binding("checkout_cta", "Pay now"),
+                binding("welcome_title", "Hello there"),
+            ),
+            currentSources = mapOf(
+                "checkout_cta" to "Pay securely now",   // changed in repo
+                "welcome_title" to "Hello there",       // unchanged
+            ),
+        )
+        assertEquals(1, drift.size)
+        assertEquals("checkout_cta", drift[0].stringKey)
+        assertEquals("Pay now", drift[0].figmaText)
+        assertEquals("Pay securely now", drift[0].repoText)
+    }
+
+    @Test
+    fun `ignores bindings whose key was deleted from the source file`() {
+        val drift = FigmaSyncService.computeDrift(
+            bindings = listOf(binding("removed_key", "Old copy")),
+            currentSources = emptyMap(),
+        )
+        assertTrue(drift.isEmpty())
+    }
+
+    @Test
+    fun `drift comparison trims surrounding whitespace`() {
+        val drift = FigmaSyncService.computeDrift(
+            bindings = listOf(binding("checkout_cta", "Pay now")),
+            currentSources = mapOf("checkout_cta" to "  Pay now  "),
+        )
+        assertTrue(drift.isEmpty())
+    }
 }

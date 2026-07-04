@@ -3,6 +3,7 @@ package com.syncling.repository
 import com.syncling.domain.FigmaCandidateStatus
 import com.syncling.domain.FigmaFramePreview
 import com.syncling.domain.FigmaNodeBinding
+import com.syncling.domain.FigmaProjectSettings
 import com.syncling.domain.FigmaStringCandidate
 
 interface FigmaCandidateRepository {
@@ -46,6 +47,17 @@ interface FigmaNodeBindingRepository {
     suspend fun findForNodes(projectId: String, fileKey: String, nodeIds: List<String>): List<FigmaNodeBinding>
 
     suspend fun upsertAll(bindings: List<FigmaNodeBinding>)
+
+    /** Every binding for a project — drift detection compares them against the current source file. */
+    suspend fun listForProject(projectId: String, limit: Int = 1000): List<FigmaNodeBinding>
+}
+
+interface FigmaSettingsRepository {
+
+    /** Returns defaults (autoApprove = false) when the project has no stored settings. */
+    suspend fun get(projectId: String): FigmaProjectSettings
+
+    suspend fun setAutoApprove(projectId: String, autoApprove: Boolean): FigmaProjectSettings
 }
 
 interface FigmaPreviewRepository {

@@ -10,10 +10,12 @@ import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import com.syncling.domain.FigmaCandidateStatus
 import com.syncling.domain.FigmaFramePreview
 import com.syncling.domain.FigmaNodeBinding
+import com.syncling.domain.FigmaProjectSettings
 import com.syncling.domain.FigmaStringCandidate
 import com.syncling.repository.FigmaCandidateRepository
 import com.syncling.repository.FigmaNodeBindingRepository
 import com.syncling.repository.FigmaPreviewRepository
+import com.syncling.repository.FigmaSettingsRepository
 import org.bson.types.Binary
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
@@ -218,6 +220,9 @@ class MongoFigmaNodeBindingRepository(db: MongoDatabase) : FigmaNodeBindingRepos
         }
     }
 
+    override suspend fun listForProject(projectId: String, limit: Int): List<FigmaNodeBinding> =
+        col.find(eq("projectId", projectId)).limit(limit).toList().map { it.toBinding() }
+
     private fun Document.toBinding(): FigmaNodeBinding =
         FigmaNodeBinding(
             projectId = getString("projectId"),
@@ -225,6 +230,34 @@ class MongoFigmaNodeBindingRepository(db: MongoDatabase) : FigmaNodeBindingRepos
             figmaNodeId = getString("figmaNodeId"),
             stringKey = getString("stringKey"),
             lastText = getString("lastText") ?: "",
+            updatedAt = Instant.fromEpochMilliseconds(getLong("updatedAt")),
+        )
+}
+
+class MongoFigmaSettingsRepository(db: MongoDatabase) : FigmaSettingsRepository {
+
+    private val col = db.getCollection<Document>("figma_settings")
+
+    override suspend fun get(projectId: String): FigmaProjectSettings =
+        col.find(eq("projectId", projectId)).firstOrNull()?.toSettings()
+            ?: FigmaProjectSettings(projectId = projectId, updatedAt = Clock.System.now())
+
+    override suspend fun setAutoApprove(projectId: String, autoApprove: Boolean): FigmaProjectSettings {
+        val now = Clock.System.now()
+        col.replaceOne(
+            eq("projectId", projectId),
+            Document("projectId", projectId)
+                .append("autoApprove", autoApprove)
+                .append("updatedAt", now.toEpochMilliseconds()),
+            ReplaceOptions().upsert(true),
+        )
+        return FigmaProjectSettings(projectId = projectId, autoApprove = autoApprove, updatedAt = now)
+    }
+
+    private fun Document.toSettings(): FigmaProjectSettings =
+        FigmaProjectSettings(
+            projectId = getString("projectId"),
+            autoApprove = getBoolean("autoApprove", false),
             updatedAt = Instant.fromEpochMilliseconds(getLong("updatedAt")),
         )
 }

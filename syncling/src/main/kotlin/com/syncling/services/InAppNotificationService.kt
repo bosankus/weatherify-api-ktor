@@ -198,6 +198,18 @@ class InAppNotificationService(
         projectId = projectId
     )
 
+    suspend fun notifyFigmaAutoPr(userId: String, projectName: String, projectId: String, count: Int, prUrl: String) = notify(
+        userId = userId,
+        type = NotificationType.FIGMA_AUTO_PR,
+        title = "PR opened from Figma — $projectName",
+        message = "Auto-approve turned $count pushed string${if (count != 1) "s" else ""} into a PR. Merge it to translate.",
+        level = "success",
+        actionUrl = prUrl,
+        actionLabel = "View PR",
+        dedupMs = DEDUP_1H,
+        projectId = projectId
+    )
+
     suspend fun notifyInviteAccepted(
         ownerId: String,
         memberName: String,

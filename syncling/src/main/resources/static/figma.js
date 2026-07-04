@@ -54,8 +54,9 @@
         fillProjectSelect();
         fillTargetFiles();
         bindToolbar();
+        loadSettings();
         await loadCandidates();
-        if (window._tlOnWake) window._tlOnWake(() => loadCandidates());
+        if (window._tlOnWake) window._tlOnWake(() => reloadCurrentTab());
     }
 
     function fillProjectSelect() {
@@ -68,7 +69,8 @@
             conflicts = {};
             history.replaceState(null, '', '/figma/' + currentProjectId);
             fillTargetFiles();
-            loadCandidates();
+            loadSettings();
+            reloadCurrentTab();
         };
     }
 
@@ -87,11 +89,46 @@
                 document.querySelectorAll('.fg-tab').forEach(t => t.classList.toggle('active', t === tab));
                 currentStatus = tab.dataset.status;
                 conflicts = {};
-                loadCandidates();
+                reloadCurrentTab();
             };
         });
         $('fg-approve-btn').onclick = approveSelected;
         $('fg-reject-btn').onclick = rejectSelected;
+        $('fg-auto-approve').onchange = saveAutoApprove;
+    }
+
+    function reloadCurrentTab() {
+        if (currentStatus === 'DRIFT') loadDrift();
+        else loadCandidates();
+    }
+
+    // ── Settings (auto-approve) ──────────────────────────────────────────────
+    async function loadSettings() {
+        const box = $('fg-auto-approve');
+        try {
+            const res = await tlFetch(`/api/figma/projects/${currentProjectId}/settings`);
+            if (res.ok) box.checked = !!(await res.json()).autoApprove;
+        } catch (_) { /* leave unchecked */ }
+    }
+
+    async function saveAutoApprove() {
+        const box = $('fg-auto-approve');
+        const wanted = box.checked;
+        try {
+            const res = await tlFetch(`/api/figma/projects/${currentProjectId}/settings`, {
+                method: 'PUT', body: JSON.stringify({ autoApprove: wanted })
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || 'HTTP ' + res.status);
+            }
+            toast(wanted
+                ? 'Auto-approve on — every Figma push now opens a PR immediately.'
+                : 'Auto-approve off — pushes wait in this inbox.', 'success');
+        } catch (e) {
+            box.checked = !wanted;
+            toast(e.message || 'Could not change auto-approve', 'error');
+        }
     }
 
     // ── Data ─────────────────────────────────────────────────────────────────
@@ -109,6 +146,43 @@
         }
         render();
         loadThumbnails();
+    }
+
+    // ── Drift tab ────────────────────────────────────────────────────────────
+    async function loadDrift() {
+        const listEl = $('fg-list');
+        listEl.innerHTML = '<div class="fg-row fg-row-skeleton"></div>';
+        updateActionButtons();
+        let items;
+        try {
+            const res = await tlFetch(`/api/figma/projects/${currentProjectId}/drift`);
+            if (!res.ok) throw new Error('drift ' + res.status);
+            items = (await res.json()).items || [];
+        } catch (_) {
+            renderError('Could not load the drift report. Refresh to retry.');
+            return;
+        }
+        if (!items.length) {
+            listEl.innerHTML = '<div class="fg-empty"><h3>No drift</h3><p>Every synced string still matches the repo. Figma and code agree. 🤝</p></div>';
+            return;
+        }
+        listEl.innerHTML =
+            '<div class="fg-drift-note">These strings were changed in the repo after their last Figma sync — the design file shows stale copy. Update Figma (or re-push from the plugin to rebind).</div>' +
+            items.map(driftRowHtml).join('');
+    }
+
+    function driftRowHtml(d) {
+        const figmaUrl = `https://www.figma.com/design/${encodeURIComponent(d.figmaFileKey)}?node-id=${encodeURIComponent(d.figmaNodeId.replace(/:/g, '-'))}`;
+        return `<div class="fg-row">
+            <div class="fg-row-body">
+                <span class="fg-drift-key">${esc(d.stringKey)}</span>
+                <div class="fg-drift-texts">
+                    <div class="fg-drift-col"><div class="fg-drift-label">Figma (stale)</div><div class="fg-drift-text">${esc(d.figmaText)}</div></div>
+                    <div class="fg-drift-col repo"><div class="fg-drift-label">Repo (current)</div><div class="fg-drift-text">${esc(d.repoText)}</div></div>
+                </div>
+                <div class="fg-drift-actions"><a href="${figmaUrl}" target="_blank" rel="noopener">Open in Figma ↗</a></div>
+            </div>
+        </div>`;
     }
 
     // ── Rendering ────────────────────────────────────────────────────────────
@@ -195,6 +269,10 @@
         $('fg-approve-btn').disabled = n === 0;
         $('fg-reject-btn').disabled = n === 0;
         $('fg-approve-btn').textContent = n > 0 ? `Approve ${n} → PR` : 'Approve → PR';
+        const onDrift = currentStatus === 'DRIFT';
+        $('fg-approve-btn').style.display = onDrift ? 'none' : '';
+        $('fg-reject-btn').style.display = onDrift ? 'none' : '';
+        $('fg-target-file').style.display = onDrift ? 'none' : '';
     }
 
     // ── Actions ──────────────────────────────────────────────────────────────

@@ -241,6 +241,7 @@ fun Application.module() {
     val figmaCandidateRepository: com.syncling.repository.FigmaCandidateRepository by inject()
     val figmaNodeBindingRepository: com.syncling.repository.FigmaNodeBindingRepository by inject()
     val figmaPreviewRepository: com.syncling.repository.FigmaPreviewRepository by inject()
+    val figmaSettingsRepository: com.syncling.repository.FigmaSettingsRepository by inject()
     val embeddingService: com.syncling.services.EmbeddingService by inject()
     val translationEmbeddingRepository: com.syncling.repository.TranslationEmbeddingRepository by inject()
     val analyticsService: AnalyticsService by inject()
@@ -551,6 +552,7 @@ fun Application.module() {
         figmaSyncService = figmaSyncService,
         figmaCandidateRepository = figmaCandidateRepository,
         figmaPreviewRepository = figmaPreviewRepository,
+        figmaSettingsRepository = figmaSettingsRepository,
         chatNotificationService = chatNotificationService,
     ))
 }

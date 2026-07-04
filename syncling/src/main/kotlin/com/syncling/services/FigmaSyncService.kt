@@ -41,6 +41,15 @@ data class FigmaPushNode(
     val frameName: String? = null,
     /** Nearest frame node id — links the node to its shared frame screenshot. */
     val frameId: String? = null,
+    /** True when the Figma text box has a fixed width — translations that expand may overflow it. */
+    val fixedWidth: Boolean = false,
+)
+
+/** Designer-facing heads-up returned with the push response — never blocks the push. */
+data class FigmaLengthWarning(
+    val nodeId: String,
+    val text: String,
+    val message: String,
 )
 
 /** One frame screenshot uploaded alongside a push (already base64-decoded by the route). */
@@ -57,6 +66,10 @@ data class FigmaIngestSummary(
     val skippedUnchanged: Int,
     /** Nodes skipped because the dev previously rejected this exact text. */
     val skippedRejected: Int,
+    /** Fixed-width texts likely to overflow once translated — designer feedback, non-blocking. */
+    val warnings: List<FigmaLengthWarning> = emptyList(),
+    /** Set when auto-approve turned this push straight into a PR. */
+    val autoPrUrl: String? = null,
 )
 
 data class FigmaApproveResult(
@@ -111,6 +124,9 @@ class FigmaSyncService(
         fileKey: String,
         nodes: List<FigmaPushNode>,
         previews: List<FigmaFrameUpload> = emptyList(),
+        /** Auto-approve mode: turn every pending candidate into a PR right away. Needs [githubToken]. */
+        autoApprove: Boolean = false,
+        githubToken: String? = null,
     ): FigmaIngestSummary {
         val cleaned = nodes
             .map { it.copy(text = it.text.trim()) }
@@ -190,17 +206,58 @@ class FigmaSyncService(
             )
         }
         storeFramePreviews(project.id, fileKey, previews, toStage, now)
-        notificationService?.notifyFigmaStrings(
-            userId = project.ownerId,
-            projectName = project.name,
-            projectId = project.id,
-            count = toStage.size,
-        )
+        val warnings = expansionWarnings(toStage, project.targets.map { it.code })
+
+        val autoPrUrl = if (autoApprove && githubToken != null) autoApproveAll(project, githubToken) else null
+        if (autoPrUrl != null) {
+            notificationService?.notifyFigmaAutoPr(
+                userId = project.ownerId,
+                projectName = project.name,
+                projectId = project.id,
+                count = toStage.size,
+                prUrl = autoPrUrl,
+            )
+        } else {
+            notificationService?.notifyFigmaStrings(
+                userId = project.ownerId,
+                projectName = project.name,
+                projectId = project.id,
+                count = toStage.size,
+            )
+        }
         log.info(
-            "Figma ingest: project={} file={} staged={} updates={} duplicates={} unchanged={} rejected={}",
-            project.id, fileKey, toStage.size, updates, duplicates, skippedUnchanged, skippedRejected,
+            "Figma ingest: project={} file={} staged={} updates={} duplicates={} unchanged={} rejected={} autoPr={}",
+            project.id, fileKey, toStage.size, updates, duplicates, skippedUnchanged, skippedRejected, autoPrUrl != null,
         )
-        return FigmaIngestSummary(toStage.size, updates, duplicates, skippedUnchanged, skippedRejected)
+        return FigmaIngestSummary(
+            toStage.size, updates, duplicates, skippedUnchanged, skippedRejected,
+            warnings = warnings, autoPrUrl = autoPrUrl,
+        )
+    }
+
+    /**
+     * Auto-approve: sweep every pending candidate (not just this push) into one PR so the
+     * inbox stays empty. Any failure — key conflicts, GitHub down — leaves the candidates
+     * in the inbox and falls back to the normal "awaiting review" notification.
+     */
+    private suspend fun autoApproveAll(project: Project, githubToken: String): String? {
+        val targetFile = project.sourceFilePaths.firstOrNull() ?: return null
+        val pending = candidateRepository.listForProject(project.id, FigmaCandidateStatus.PENDING, 200, 0)
+        if (pending.isEmpty()) return null
+        return runCatching { approve(project, pending.map { it.id }, targetFile, githubToken).prUrl }
+            .onFailure { e ->
+                if (e is CancellationException) throw e
+                log.warn("Figma auto-approve fell back to inbox: project={} reason={}", project.id, e.message)
+            }
+            .getOrNull()
+    }
+
+    /** Bound keys whose repo copy no longer matches what Figma last synced — the design file is stale. */
+    suspend fun detectDrift(project: Project): List<com.syncling.domain.FigmaDriftItem> {
+        val bindings = bindingRepository.listForProject(project.id)
+        if (bindings.isEmpty()) return emptyList()
+        val sources = translationRepository.getStringKeysAndTexts(project.id)
+        return computeDrift(bindings, sources)
     }
 
     /** Keeps only screenshots of frames that actually produced staged candidates. Best-effort. */
@@ -429,6 +486,62 @@ class FigmaSyncService(
 
         /** Cosine floor for suggesting an existing key as a semantic near-duplicate. */
         const val FUZZY_SIMILARITY_THRESHOLD = 0.90f
+
+        /**
+         * Typical length expansion of English UI copy per target language (rough industry
+         * averages). Only languages that grow ≥20% are listed — the warning is a nudge,
+         * not a measurement.
+         */
+        val EXPANSION_FACTORS: Map<String, Float> = mapOf(
+            "de" to 1.35f, "fi" to 1.30f, "hu" to 1.30f, "el" to 1.30f,
+            "fr" to 1.25f, "es" to 1.25f, "pt" to 1.25f, "pl" to 1.25f,
+            "it" to 1.20f, "ru" to 1.20f, "nl" to 1.20f, "tr" to 1.20f,
+        )
+
+        /** Fixed-width texts too short to meaningfully overflow are not worth warning about. */
+        private const val MIN_WARN_TEXT_LENGTH = 12
+
+        /**
+         * Warns about fixed-width text boxes whose copy will likely grow past the box once
+         * translated into the project's target languages. Pure — testable without the service.
+         */
+        fun expansionWarnings(nodes: List<FigmaPushNode>, targetLanguageCodes: List<String>): List<FigmaLengthWarning> {
+            val worst = targetLanguageCodes
+                .mapNotNull { code ->
+                    val lang = code.substringBefore('-').substringBefore('_').lowercase()
+                    EXPANSION_FACTORS[lang]?.let { lang to it }
+                }
+                .maxByOrNull { it.second }
+                ?: return emptyList()
+            val (lang, factor) = worst
+            val pct = ((factor - 1f) * 100).toInt()
+            return nodes
+                .filter { it.fixedWidth && it.text.length >= MIN_WARN_TEXT_LENGTH }
+                .map {
+                    FigmaLengthWarning(
+                        nodeId = it.nodeId,
+                        text = it.text,
+                        message = "Fixed-width text box — ${lang.uppercase()} copy typically runs ~$pct% longer and may overflow.",
+                    )
+                }
+        }
+
+        /** Compares last-synced Figma copy against the current source file. Pure — testable without repos. */
+        fun computeDrift(
+            bindings: List<FigmaNodeBinding>,
+            currentSources: Map<String, String>,
+        ): List<com.syncling.domain.FigmaDriftItem> =
+            bindings.mapNotNull { b ->
+                val repoText = currentSources[b.stringKey]?.trim() ?: return@mapNotNull null
+                if (repoText == b.lastText.trim()) return@mapNotNull null
+                com.syncling.domain.FigmaDriftItem(
+                    stringKey = b.stringKey,
+                    figmaFileKey = b.figmaFileKey,
+                    figmaNodeId = b.figmaNodeId,
+                    figmaText = b.lastText,
+                    repoText = repoText,
+                )
+            }.sortedBy { it.stringKey }
 
         private val KEY_SYSTEM_PROMPT = """
             You are an Android/iOS localization engineer. For each Figma text node, produce a resource string key.

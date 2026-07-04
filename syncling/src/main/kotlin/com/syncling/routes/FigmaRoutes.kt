@@ -9,6 +9,7 @@ import com.syncling.model.StructuredApiError
 import com.syncling.repository.BillingRepository
 import com.syncling.repository.FigmaCandidateRepository
 import com.syncling.repository.FigmaPreviewRepository
+import com.syncling.repository.FigmaSettingsRepository
 import com.syncling.repository.ProjectMembershipRepository
 import com.syncling.repository.ProjectRepository
 import com.syncling.repository.UserRepository
@@ -50,6 +51,7 @@ data class FigmaPushNodeBody(
     val pageName: String? = null,
     val frameName: String? = null,
     val frameId: String? = null,
+    val fixedWidth: Boolean = false,
 )
 
 @Serializable
@@ -68,6 +70,9 @@ data class FigmaPushBody(
 )
 
 @Serializable
+data class FigmaPushWarning(val nodeId: String, val text: String, val message: String)
+
+@Serializable
 data class FigmaPushResponse(
     val staged: Int,
     val updates: Int,
@@ -75,7 +80,29 @@ data class FigmaPushResponse(
     val skippedUnchanged: Int,
     val skippedRejected: Int,
     val pendingTotal: Int,
+    /** Length-overflow heads-ups for the designer — informational only. */
+    val warnings: List<FigmaPushWarning> = emptyList(),
+    /** Set when auto-approve turned this push straight into a PR. */
+    val autoPrUrl: String? = null,
 )
+
+@Serializable
+data class FigmaSettingsResponse(val autoApprove: Boolean)
+
+@Serializable
+data class FigmaSettingsBody(val autoApprove: Boolean)
+
+@Serializable
+data class FigmaDriftItemResponse(
+    val stringKey: String,
+    val figmaFileKey: String,
+    val figmaNodeId: String,
+    val figmaText: String,
+    val repoText: String,
+)
+
+@Serializable
+data class FigmaDriftResponse(val items: List<FigmaDriftItemResponse>)
 
 @Serializable
 data class FigmaCandidateResponse(
@@ -158,6 +185,7 @@ fun Route.configureFigmaRoutes(
     billingRepository: BillingRepository,
     memberships: ProjectMembershipRepository,
     previewRepository: FigmaPreviewRepository? = null,
+    settingsRepository: FigmaSettingsRepository? = null,
 ) {
     route("/api/figma") {
 
@@ -209,6 +237,11 @@ fun Route.configureFigmaRoutes(
                 )
             }
 
+            // Auto-approve rides the owner's GitHub token, same as manual approval. A missing
+            // token silently downgrades to inbox mode — the push itself must never fail on it.
+            val autoApprove = settingsRepository?.get(projectId)?.autoApprove == true
+            val autoApproveToken = if (autoApprove) userRepository.findById(project.ownerId)?.githubToken else null
+
             val summary = figmaSyncService.ingest(
                 project = project,
                 submittedByUserId = userId,
@@ -217,9 +250,12 @@ fun Route.configureFigmaRoutes(
                     FigmaPushNode(
                         nodeId = it.nodeId, nodeName = it.nodeName, text = it.text,
                         pageName = it.pageName, frameName = it.frameName, frameId = it.frameId,
+                        fixedWidth = it.fixedWidth,
                     )
                 },
                 previews = previews,
+                autoApprove = autoApprove,
+                githubToken = autoApproveToken,
             )
             val pendingTotal = candidateRepository.countForProject(projectId, FigmaCandidateStatus.PENDING)
             call.respond(
@@ -231,8 +267,73 @@ fun Route.configureFigmaRoutes(
                     skippedUnchanged = summary.skippedUnchanged,
                     skippedRejected = summary.skippedRejected,
                     pendingTotal = pendingTotal,
+                    warnings = summary.warnings.map { FigmaPushWarning(it.nodeId, it.text, it.message) },
+                    autoPrUrl = summary.autoPrUrl,
                 ),
             )
+        }
+
+        // Drift report: bound keys whose repo copy changed since the last Figma sync.
+        get("/projects/{projectId}/drift") {
+            val userId = call.userId()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["projectId"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+
+            val project = projectRepository.findById(projectId)
+            call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+                ?: return@get
+
+            val items = figmaSyncService.detectDrift(project)
+            call.respond(
+                HttpStatusCode.OK,
+                FigmaDriftResponse(
+                    items.map {
+                        FigmaDriftItemResponse(it.stringKey, it.figmaFileKey, it.figmaNodeId, it.figmaText, it.repoText)
+                    },
+                ),
+            )
+        }
+
+        // Per-project sync preferences (currently just auto-approve).
+        get("/projects/{projectId}/settings") {
+            val userId = call.userId()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["projectId"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+
+            val project = projectRepository.findById(projectId)
+            call.requireProjectRole(project, userId, ProjectRole.VIEWER, memberships)
+                ?: return@get
+
+            val settings = settingsRepository?.get(projectId)
+            call.respond(HttpStatusCode.OK, FigmaSettingsResponse(autoApprove = settings?.autoApprove == true))
+        }
+
+        put("/projects/{projectId}/settings") {
+            val userId = call.userId()
+                ?: return@put call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            val projectId = call.parameters["projectId"]
+                ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                ?: return@put call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+            val body = runCatching { call.receive<FigmaSettingsBody>() }.getOrElse {
+                return@put call.respond(HttpStatusCode.BadRequest, ApiError("autoApprove is required"))
+            }
+            val repo = settingsRepository
+                ?: return@put call.respond(HttpStatusCode.NotFound, ApiError("Settings are not available"))
+
+            val project = projectRepository.findById(projectId)
+            // Auto-approve writes to the repo without human review — restrict the switch to admins.
+            call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                ?: return@put
+            if (body.autoApprove && billingRepository.getSubscription(project.ownerId).plan == BillingPlan.FREE) {
+                return@put call.respond(HttpStatusCode.Forbidden, ApiError("Figma sync requires a PRO or Team plan."))
+            }
+
+            val updated = repo.setAutoApprove(projectId, body.autoApprove)
+            call.respond(HttpStatusCode.OK, FigmaSettingsResponse(autoApprove = updated.autoApprove))
         }
 
         // Inbox listing for the portal (and plugin status badges).

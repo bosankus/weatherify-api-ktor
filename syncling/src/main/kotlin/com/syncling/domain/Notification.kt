@@ -35,4 +35,5 @@ object NotificationType {
     const val SUBSCRIPTION_ENDED    = "SUBSCRIPTION_ENDED"
     const val TRANSLATIONS_RESUMED  = "TRANSLATIONS_RESUMED"
     const val FIGMA_STRINGS         = "FIGMA_STRINGS"
+    const val FIGMA_AUTO_PR         = "FIGMA_AUTO_PR"
 }

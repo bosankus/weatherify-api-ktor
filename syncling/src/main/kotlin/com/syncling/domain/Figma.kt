@@ -54,6 +54,28 @@ data class FigmaStringCandidate(
 }
 
 /**
+ * Per-project Figma sync preferences. Lives in its own collection so the feature
+ * stays self-contained instead of widening the core Project document.
+ */
+data class FigmaProjectSettings(
+    val projectId: String,
+    /** When true, a plugin push immediately opens a PR with every pending candidate — no inbox stop. */
+    val autoApprove: Boolean = false,
+    val updatedAt: Instant,
+)
+
+/** A bound key whose repo copy has changed since the last Figma sync — the design file is stale. */
+data class FigmaDriftItem(
+    val stringKey: String,
+    val figmaFileKey: String,
+    val figmaNodeId: String,
+    /** Copy at the time of the last approved sync (what Figma still shows). */
+    val figmaText: String,
+    /** Copy currently in the repo source file. */
+    val repoText: String,
+)
+
+/**
  * Persistent mapping between a Figma text node and the string key it produced.
  * This is what turns a designer's later copy edit into an update of the existing
  * key rather than a duplicate new key.

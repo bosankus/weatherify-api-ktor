@@ -21,6 +21,9 @@
   #status { margin-top: 8px; min-height: 16px; }
   #status.err { color: #e5484d; }
   #status.ok { color: #30a46c; }
+  #status a { color: #18a0fb; }
+  #status .warn { color: #b8860b; margin-top: 6px; }
+  #status .warn ul { margin: 4px 0 0 16px; padding: 0; }
 </style>
 
 <h2>Syncling — push strings to GitHub</h2>
@@ -122,8 +125,24 @@
         if (body.updates) parts.push(body.updates + " copy update" + (body.updates === 1 ? "" : "s"));
         if (body.duplicates) parts.push(body.duplicates + " duplicate" + (body.duplicates === 1 ? "" : "s") + " flagged");
         if (body.skippedUnchanged) parts.push(body.skippedUnchanged + " unchanged skipped");
-        setStatus(parts.join(", ") + ". Review them in the Syncling inbox.", "ok");
-        parent.postMessage({ pluginMessage: { type: "notify", message: body.staged + " strings sent to Syncling" } }, "*");
+        let html = escapeHtml(parts.join(", ")) + ". ";
+        if (body.autoPrUrl) {
+          html += 'Auto-approved — <a href="' + escapeHtml(body.autoPrUrl) + '" target="_blank" rel="noopener">PR opened ↗</a>';
+        } else {
+          html += "Review them in the Syncling inbox.";
+        }
+        const warnings = body.warnings || [];
+        if (warnings.length) {
+          html += '<div class="warn">⚠ ' + warnings.length + " fixed-width text box" + (warnings.length === 1 ? "" : "es") +
+            " may overflow when translated:<ul>" +
+            warnings.slice(0, 5).map((w) => "<li>“" + escapeHtml(w.text.substring(0, 40)) + (w.text.length > 40 ? "…" : "") + "” — " + escapeHtml(w.message) + "</li>").join("") +
+            (warnings.length > 5 ? "<li>…and " + (warnings.length - 5) + " more</li>" : "") +
+            "</ul></div>";
+        }
+        const s = $("status");
+        s.innerHTML = html;
+        s.className = "ok";
+        parent.postMessage({ pluginMessage: { type: "notify", message: body.autoPrUrl ? "PR opened from your push 🎉" : body.staged + " strings sent to Syncling" } }, "*");
       }
     } catch (e) {
       setStatus("Network error — is syncling.space reachable?", "err");

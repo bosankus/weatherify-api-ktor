@@ -50,10 +50,16 @@ internal fun HTML.figmaApp(projectId: String?) {
                 button(classes = "fg-tab active") { attributes["data-status"] = "PENDING"; type = ButtonType.button; +"Pending" }
                 button(classes = "fg-tab") { attributes["data-status"] = "PR_OPEN"; type = ButtonType.button; +"PR opened" }
                 button(classes = "fg-tab") { attributes["data-status"] = "REJECTED"; type = ButtonType.button; +"Rejected" }
+                button(classes = "fg-tab") { attributes["data-status"] = "DRIFT"; type = ButtonType.button; +"Drift" }
             }
             // Bulk actions — enabled while at least one pending row is checked.
             div("fg-actions") {
                 id = "fg-actions"
+                label("fg-auto") {
+                    attributes["title"] = "Skip the inbox: every push opens a PR immediately (admins only)"
+                    input(InputType.checkBox) { id = "fg-auto-approve" }
+                    +" Auto-approve → PR"
+                }
                 select { id = "fg-target-file"; classes = setOf("fg-target-file"); attributes["aria-label"] = "Target source file" }
                 button(classes = "bl-btn primary") { id = "fg-approve-btn"; type = ButtonType.button; disabled = true; +"Approve → PR" }
                 button(classes = "bl-btn") { id = "fg-reject-btn"; type = ButtonType.button; disabled = true; +"Reject" }

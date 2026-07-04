@@ -111,6 +111,7 @@ fun Application.configureSyncling(refundService: RefundService) {
     val figmaCandidateRepository = com.syncling.repository.mongo.MongoFigmaCandidateRepository(db)
     val figmaNodeBindingRepository = com.syncling.repository.mongo.MongoFigmaNodeBindingRepository(db)
     val figmaPreviewRepository = com.syncling.repository.mongo.MongoFigmaPreviewRepository(db)
+    val figmaSettingsRepository = com.syncling.repository.mongo.MongoFigmaSettingsRepository(db)
     val figmaEmbeddingService = EmbeddingService()
     val translationEmbeddingRepository = MongoTranslationEmbeddingRepository(db)
     val figmaInAppNotificationService = InAppNotificationService(notificationRepository, pipelineEventBus)
@@ -238,6 +239,7 @@ fun Application.configureSyncling(refundService: RefundService) {
             figmaSyncService = figmaSyncService,
             figmaCandidateRepository = figmaCandidateRepository,
             figmaPreviewRepository = figmaPreviewRepository,
+            figmaSettingsRepository = figmaSettingsRepository,
         )
     )
 }

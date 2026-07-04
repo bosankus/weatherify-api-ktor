@@ -121,6 +121,7 @@ class SynclingDeps(
     val figmaSyncService: com.syncling.services.FigmaSyncService? = null,
     val figmaCandidateRepository: com.syncling.repository.FigmaCandidateRepository? = null,
     val figmaPreviewRepository: com.syncling.repository.FigmaPreviewRepository? = null,
+    val figmaSettingsRepository: com.syncling.repository.FigmaSettingsRepository? = null,
     /** Slack/Teams chat notifications — optional so previews/tests can omit. */
     val chatNotificationService: com.syncling.services.ChatNotificationService? = null,
 )
@@ -288,7 +289,7 @@ Sitemap: https://syncling.space/sitemap.xml
                 configureFigmaRoutes(
                     d.figmaSyncService, d.figmaCandidateRepository, d.projectRepository,
                     d.userRepository, d.billingRepository, d.membershipRepository,
-                    d.figmaPreviewRepository
+                    d.figmaPreviewRepository, d.figmaSettingsRepository
                 )
             }
         }
