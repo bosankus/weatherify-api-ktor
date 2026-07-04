@@ -15,6 +15,7 @@ import com.syncling.repository.UserRepository
 import com.syncling.model.*
 import com.syncling.domain.UserEvent
 import com.syncling.services.BillingService
+import com.syncling.services.ChatNotificationService
 import com.syncling.services.GitHubService
 import com.syncling.services.CdnPublishService
 import com.syncling.services.effectiveRole
@@ -51,6 +52,26 @@ import java.util.UUID
 
 private val apiLog = LoggerFactory.getLogger("ApiRoutes")
 
+/** Hard ceiling on source files per project, regardless of plan (mirrors the 25-language cap). */
+private const val MAX_SOURCE_FILES = 20
+
+/**
+ * Validates a normalized (trimmed, non-blank, deduped) source file path list against the plan.
+ * Returns a status-to-message pair to respond with, or null when the list is acceptable.
+ */
+private fun sourceFilePathsError(paths: List<String>, plan: com.syncling.domain.BillingPlan): Pair<HttpStatusCode, String>? = when {
+    paths.size > MAX_SOURCE_FILES ->
+        HttpStatusCode.BadRequest to "Maximum $MAX_SOURCE_FILES source files per project"
+    paths.size > plan.maxSourceFiles ->
+        if (plan == com.syncling.domain.BillingPlan.FREE)
+            HttpStatusCode.Forbidden to "Multiple source files require a PRO or Team plan."
+        else
+            HttpStatusCode.Forbidden to "Your ${plan.displayName} plan supports up to ${plan.maxSourceFiles} source files per project."
+    paths.any { it.length > 300 || it.startsWith("/") || it.contains("..") || it.contains('\\') } ->
+        HttpStatusCode.BadRequest to "Invalid source file path. Use a repo-relative path without '..' or leading '/'"
+    else -> null
+}
+
 private const val MAX_RETRIES = 3
 // TTL-bounded retry tracking — entries older than 30 min are evicted on each access
 // so the map never grows unbounded across thousands of pipeline runs.
@@ -76,6 +97,9 @@ data class RetryEnqueuedResponse(
     val attempt: Int,
     val maxRetries: Int
 )
+
+@Serializable
+data class ChatNotificationTestResponse(val ok: Boolean)
 
 @Serializable
 data class ManualSyncResponse(
@@ -112,6 +136,8 @@ fun Route.configureApiRoutes(
     /** Reviewer correction log — when reviewers edit during approve/hotfix we record (source, modelOutput, edit). */
     reviewerFeedbackRepository: com.syncling.repository.ReviewerFeedbackRepository? = null,
     supportAdminEmailDomain: String = "androidplay.in",
+    /** Slack/Teams chat notification delivery — used by the notifications test endpoint. */
+    chatNotificationService: ChatNotificationService? = null,
 ) {
     val adminSuffix = "@" + supportAdminEmailDomain.trimStart('@').lowercase()
 
@@ -246,6 +272,11 @@ fun Route.configureApiRoutes(
                         ApiError("Custom PR branch patterns require a PRO or Team plan.")
                     )
                 }
+                val sourcePaths = body.sourceFilePaths.map { it.trim() }.filter { it.isNotBlank() }
+                    .distinct().ifEmpty { listOf("values/strings.xml") }
+                sourceFilePathsError(sourcePaths, plan)?.let { (status, message) ->
+                    return@post call.respond(status, ApiError(message))
+                }
                 val validatedBranchPattern = body.prBranchPattern?.takeIf { it.isNotBlank() }?.also { pat ->
                     if (pat.length > 120 || pat.contains("..") || pat.any { c -> c == ' ' || c == '~' || c == '^' || c == ':' || c == '?' || c == '*' || c == '[' }) {
                         return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid PR branch pattern. Avoid spaces and special characters (~ ^ : ? * [ ..)"))
@@ -278,7 +309,7 @@ fun Route.configureApiRoutes(
                     name = body.name,
                     githubRepo = body.githubRepo,
                     watchBranch = body.watchBranch,
-                    sourceFilePaths = body.sourceFilePaths.filter { it.isNotBlank() }.ifEmpty { listOf("values/strings.xml") },
+                    sourceFilePaths = sourcePaths,
                     category = body.category,
                     tone = body.tone,
                     targets = body.targets,
@@ -402,13 +433,55 @@ fun Route.configureApiRoutes(
                 }
                 val validatedRollout = body.rolloutPercent?.coerceIn(0, 100)
 
+                // Gate + validate Slack/Teams chat notifications — paid only, "" clears (allowed on free).
+                if (!body.slackWebhookUrl.isNullOrBlank() && !isPaidPlan) {
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Slack notifications require a PRO or Team plan."))
+                }
+                if (!body.teamsWebhookUrl.isNullOrBlank() && !isPaidPlan) {
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Microsoft Teams notifications require a PRO or Team plan."))
+                }
+                if (!body.chatNotifyEvents.isNullOrEmpty() && !isPaidPlan) {
+                    return@put call.respond(HttpStatusCode.Forbidden, ApiError("Chat notification settings require a PRO or Team plan."))
+                }
+                if (!body.slackWebhookUrl.isNullOrBlank() && !ChatNotificationService.isValidSlackWebhookUrl(body.slackWebhookUrl)) {
+                    return@put call.respond(HttpStatusCode.BadRequest, ApiError("Invalid Slack webhook URL. Use an https URL on hooks.slack.com."))
+                }
+                if (!body.teamsWebhookUrl.isNullOrBlank() && !ChatNotificationService.isValidTeamsWebhookUrl(body.teamsWebhookUrl)) {
+                    return@put call.respond(HttpStatusCode.BadRequest, ApiError("Invalid Teams webhook URL. Use the https URL from your Power Automate Workflow."))
+                }
+                val validatedChatEvents = body.chatNotifyEvents?.map { it.trim().lowercase() }?.distinct()?.also { events ->
+                    val unknown = events.filterNot { it in ChatNotificationService.EVENT_KEYS }
+                    if (unknown.isNotEmpty()) {
+                        return@put call.respond(
+                            HttpStatusCode.BadRequest,
+                            ApiError("Unknown chat notification event(s): ${unknown.joinToString()}. Allowed: ${ChatNotificationService.EVENT_KEYS.joinToString()}")
+                        )
+                    }
+                }
+
+                // Gate source file edits: changing or adding paths after setup is Solo/Team only.
+                // An unchanged list passes through so idempotent full-object PUTs keep working on free.
+                val requestedSourcePaths = body.sourceFilePaths
+                    ?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct()
+                if (requestedSourcePaths != null && requestedSourcePaths != project?.sourceFilePaths) {
+                    if (requestedSourcePaths.isEmpty()) {
+                        return@put call.respond(HttpStatusCode.BadRequest, ApiError("At least one source file path is required"))
+                    }
+                    if (!isPaidPlan) {
+                        return@put call.respond(HttpStatusCode.Forbidden, ApiError("Editing source file paths requires a PRO or Team plan."))
+                    }
+                    sourceFilePathsError(requestedSourcePaths, currentPlan)?.let { (status, message) ->
+                        return@put call.respond(status, ApiError(message))
+                    }
+                }
+
                 projectRepository.update(
                     projectId = projectId,
                     name = body.name,
                     tone = body.tone,
                     category = body.category,
                     watchBranch = body.watchBranch,
-                    sourceFilePaths = body.sourceFilePaths?.filter { it.isNotBlank() }?.ifEmpty { null },
+                    sourceFilePaths = requestedSourcePaths,
                     targets = body.targets,
                     culturalSensitivityEnabled = body.culturalSensitivityEnabled,
                     autoApproveEnabled = body.autoApproveEnabled,
@@ -418,6 +491,9 @@ fun Route.configureApiRoutes(
                     prBranchPattern = validatedBranchPattern,
                     outboundWebhookUrl = body.outboundWebhookUrl,
                     outboundWebhookSecret = body.outboundWebhookSecret,
+                    slackWebhookUrl = body.slackWebhookUrl,
+                    teamsWebhookUrl = body.teamsWebhookUrl,
+                    chatNotifyEvents = validatedChatEvents,
                     monthlyStringQuota = body.monthlyStringQuota,
                     rolloutPercent = validatedRollout
                 )
@@ -448,6 +524,9 @@ fun Route.configureApiRoutes(
                         webhookVerifiedAt = updated.webhookVerifiedAt?.toString(),
                         prBranchPattern = updated.prBranchPattern,
                         outboundWebhookUrl = updated.outboundWebhookUrl,
+                        slackWebhookUrl = updated.slackWebhookUrl,
+                        teamsWebhookUrl = updated.teamsWebhookUrl,
+                        chatNotifyEvents = updated.chatNotifyEvents,
                         monthlyStringQuota = updated.monthlyStringQuota,
                         rolloutPercent = updated.rolloutPercent
                     )
@@ -483,6 +562,9 @@ fun Route.configureApiRoutes(
                         webhookVerifiedAt = project.webhookVerifiedAt?.toString(),
                         prBranchPattern = project.prBranchPattern,
                         outboundWebhookUrl = project.outboundWebhookUrl,
+                        slackWebhookUrl = project.slackWebhookUrl,
+                        teamsWebhookUrl = project.teamsWebhookUrl,
+                        chatNotifyEvents = project.chatNotifyEvents,
                         monthlyStringQuota = project.monthlyStringQuota,
                         rolloutPercent = project.rolloutPercent
                     )
@@ -507,6 +589,34 @@ fun Route.configureApiRoutes(
                     )
                 }
                 call.respond(HttpStatusCode.OK, mapOf("status" to "Project deleted", "id" to projectId))
+            }
+
+            // Fires a test message at the project's configured Slack/Teams webhooks so users can
+            // verify their setup without waiting for a real pipeline run. Paid plans only.
+            post("/{id}/notifications/test") {
+                val userId = call.userId()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+                val projectId = call.parameters["id"]
+                    ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("Invalid project id"))
+
+                val project = projectRepository.findById(projectId)
+                call.requireProjectRole(project, userId, ProjectRole.ADMIN, memberships)
+                    ?: return@post
+
+                val plan = billingService.getPlan(userId)
+                if (plan == com.syncling.domain.BillingPlan.FREE) {
+                    return@post call.respond(HttpStatusCode.Forbidden, ApiError("Chat notifications require a PRO or Team plan."))
+                }
+                if (chatNotificationService == null) {
+                    return@post call.respond(HttpStatusCode.ServiceUnavailable, ApiError("Chat notifications are not enabled on this server."))
+                }
+                if (project.slackWebhookUrl.isNullOrBlank() && project.teamsWebhookUrl.isNullOrBlank()) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiError("No Slack or Teams webhook URL is configured on this project."))
+                }
+
+                val ok = chatNotificationService.sendTest(project)
+                call.respond(HttpStatusCode.OK, ChatNotificationTestResponse(ok = ok))
             }
 
             // Round-trip export: rebuild the localized resource file for a target language

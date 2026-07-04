@@ -42,6 +42,9 @@ fun synclingModule(encryptionKey: String) = module {
     single<com.syncling.repository.SupportTicketRepository> { com.syncling.repository.mongo.MongoSupportTicketRepository(get()) }
     single<com.syncling.repository.ApiTokenRepository> { com.syncling.repository.mongo.MongoApiTokenRepository(get()) }
     single<MemberUsageRepository> { MongoMemberUsageRepository(get()) }
+    single<FigmaCandidateRepository> { MongoFigmaCandidateRepository(get()) }
+    single<FigmaNodeBindingRepository> { MongoFigmaNodeBindingRepository(get()) }
+    single<com.syncling.repository.FigmaPreviewRepository> { com.syncling.repository.mongo.MongoFigmaPreviewRepository(get()) }
     single<QuotaBlockedRunRepository> { MongoQuotaBlockedRunRepository(get()) }
     single { com.syncling.services.MemberUsageService(get()) }
     single {
@@ -159,5 +162,18 @@ fun synclingIndexes(): List<IndexSpec> {
         IndexSpec("quota_blocked_runs", Document("projectId", 1), unique),
         IndexSpec("quota_blocked_runs", Document("ownerId", 1)),
         IndexSpec("quota_blocked_runs", Document("updatedAt", 1), IndexOptions().expireAfter(60, TimeUnit.DAYS).name("ttl_quota_blocked_60d")),
+        // Figma inbox: project-scoped listing sorted by recency; at most one PENDING row per
+        // node so a designer re-pushing the same node refreshes the inbox entry in place.
+        IndexSpec("figma_candidates", Document(mapOf("projectId" to 1, "status" to 1, "updatedAt" to -1))),
+        IndexSpec(
+            "figma_candidates",
+            Document(mapOf("projectId" to 1, "figmaFileKey" to 1, "figmaNodeId" to 1)),
+            IndexOptions().unique(true).partialFilterExpression(Document("status", "PENDING")).name("uniq_pending_node")
+        ),
+        // Figma node bindings: nodeId ↔ stringKey map, one row per node per project.
+        IndexSpec("figma_node_bindings", Document(mapOf("projectId" to 1, "figmaFileKey" to 1, "figmaNodeId" to 1)), unique),
+        IndexSpec("figma_node_bindings", Document("projectId", 1)),
+        // Figma frame screenshots: one row per frame, replaced on every push.
+        IndexSpec("figma_previews", Document(mapOf("projectId" to 1, "figmaFileKey" to 1, "figmaFrameId" to 1)), unique),
     )
 }

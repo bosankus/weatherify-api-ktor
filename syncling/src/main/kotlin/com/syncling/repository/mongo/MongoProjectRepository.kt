@@ -110,6 +110,9 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
         prBranchPattern: String?,
         outboundWebhookUrl: String?,
         outboundWebhookSecret: String?,
+        slackWebhookUrl: String?,
+        teamsWebhookUrl: String?,
+        chatNotifyEvents: List<String>?,
         monthlyStringQuota: Int?,
         rolloutPercent: Int?
     ): Boolean {
@@ -140,6 +143,17 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             if (it.isBlank()) updates.add(Updates.unset("outboundWebhookSecret"))
             else updates.add(Updates.set("outboundWebhookSecret", it))
         }
+        // "" clears the chat webhook URLs; non-blank sets them; null = no change
+        slackWebhookUrl?.let {
+            if (it.isBlank()) updates.add(Updates.unset("slackWebhookUrl"))
+            else updates.add(Updates.set("slackWebhookUrl", it))
+        }
+        teamsWebhookUrl?.let {
+            if (it.isBlank()) updates.add(Updates.unset("teamsWebhookUrl"))
+            else updates.add(Updates.set("teamsWebhookUrl", it))
+        }
+        // Empty list = deliver nothing; null = no change. Missing field falls back to the default set on read.
+        chatNotifyEvents?.let { updates.add(Updates.set("chatNotifyEvents", it)) }
         // -1 clears the quota; positive value sets it; null = no change
         monthlyStringQuota?.let {
             if (it < 0) updates.add(Updates.unset("monthlyStringQuota"))
@@ -281,6 +295,11 @@ class MongoProjectRepository(db: MongoDatabase) : ProjectRepository {
             prBranchPattern = getString("prBranchPattern"),
             outboundWebhookUrl = getString("outboundWebhookUrl"),
             outboundWebhookSecret = getString("outboundWebhookSecret"),
+            slackWebhookUrl = getString("slackWebhookUrl"),
+            teamsWebhookUrl = getString("teamsWebhookUrl"),
+            // Missing field (legacy docs) → default set; stored empty list means "deliver nothing".
+            chatNotifyEvents = (get("chatNotifyEvents") as? List<*>)?.mapNotNull { it as? String }
+                ?: com.syncling.domain.DEFAULT_CHAT_NOTIFY_EVENTS,
             monthlyStringQuota = (get("monthlyStringQuota") as? Number)?.toInt(),
             rolloutPercent = (get("rolloutPercent") as? Number)?.toInt() ?: 100
         )

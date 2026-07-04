@@ -32,6 +32,9 @@ interface ProjectRepository {
         prBranchPattern: String? = null,
         outboundWebhookUrl: String? = null,
         outboundWebhookSecret: String? = null,
+        slackWebhookUrl: String? = null,
+        teamsWebhookUrl: String? = null,
+        chatNotifyEvents: List<String>? = null,
         monthlyStringQuota: Int? = null,
         rolloutPercent: Int? = null
     ): Boolean

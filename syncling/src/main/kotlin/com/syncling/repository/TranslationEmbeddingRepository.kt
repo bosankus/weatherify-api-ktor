@@ -31,4 +31,7 @@ interface TranslationEmbeddingRepository {
 
     /** Returns all rows for a project that carry a translation for [targetLanguage]. */
     suspend fun listForLanguage(projectId: String, targetLanguage: String): List<EmbeddingRow>
+
+    /** Returns every row for a project regardless of translated languages — used for source-side similarity. */
+    suspend fun listForProject(projectId: String): List<EmbeddingRow>
 }

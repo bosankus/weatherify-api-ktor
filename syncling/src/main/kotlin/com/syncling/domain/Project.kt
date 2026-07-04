@@ -3,6 +3,9 @@ package com.syncling.domain
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 
+/** Event keys a project can subscribe its Slack/Teams webhooks to. All enabled by default. */
+val DEFAULT_CHAT_NOTIFY_EVENTS: List<String> = listOf("run_completed", "run_failed", "quota_exceeded", "billing")
+
 data class Project(
     val id: String,
     val ownerId: String,
@@ -32,6 +35,12 @@ data class Project(
     val outboundWebhookUrl: String? = null,
     /** HMAC-SHA256 signing secret for outbound webhook payloads. Stored encrypted. */
     val outboundWebhookSecret: String? = null,
+    /** Slack incoming-webhook URL to post chat notifications to. Solo/Team only. */
+    val slackWebhookUrl: String? = null,
+    /** Microsoft Teams (Power Automate Workflows) webhook URL to post chat notifications to. Solo/Team only. */
+    val teamsWebhookUrl: String? = null,
+    /** Which event keys are delivered to the chat webhooks. See [DEFAULT_CHAT_NOTIFY_EVENTS]. */
+    val chatNotifyEvents: List<String> = DEFAULT_CHAT_NOTIFY_EVENTS,
     /**
      * Per-project monthly string cap (independent of plan-level quota). When set, the pipeline
      * hard-stops for this project once this many strings have been translated in the current month,

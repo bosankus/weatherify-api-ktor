@@ -1,0 +1,133 @@
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 11px/1.5 Inter, system-ui, sans-serif; margin: 0; padding: 12px; }
+  h2 { font-size: 13px; margin: 0 0 8px; }
+  label { display: block; font-weight: 600; margin: 8px 0 2px; }
+  input[type="text"], input[type="password"] {
+    width: 100%; box-sizing: border-box; padding: 6px 8px;
+    border: 1px solid #8884; border-radius: 4px; background: transparent; color: inherit;
+  }
+  button {
+    margin-top: 10px; padding: 7px 14px; border: 0; border-radius: 5px;
+    background: #18a0fb; color: #fff; font-weight: 600; cursor: pointer;
+  }
+  button.secondary { background: #8883; color: inherit; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .string-row { display: flex; gap: 6px; padding: 6px 4px; border-bottom: 1px solid #8882; align-items: flex-start; }
+  .string-row .meta { color: #888; font-size: 10px; }
+  .string-row .text { flex: 1; word-break: break-word; }
+  #list { max-height: 280px; overflow-y: auto; margin-top: 8px; }
+  #status { margin-top: 8px; min-height: 16px; }
+  #status.err { color: #e5484d; }
+  #status.ok { color: #30a46c; }
+</style>
+
+<h2>Syncling — push strings to GitHub</h2>
+
+<label for="token">API token (sli_… from syncling.space/tokens)</label>
+<input type="password" id="token" placeholder="sli_…" />
+
+<label for="project">Project ID</label>
+<input type="text" id="project" placeholder="00000000-0000-0000-0000-000000000000" />
+
+<div class="row">
+  <button id="extract">Extract from selection</button>
+  <button id="send" class="secondary" disabled>Send 0 strings</button>
+</div>
+
+<div id="list"></div>
+<div id="status"></div>
+
+<script>
+  const API_BASE = "https://syncling.space";
+  let extracted = { fileKey: "", nodes: [], previews: [] };
+
+  const $ = (id) => document.getElementById(id);
+  const setStatus = (msg, cls) => { const s = $("status"); s.textContent = msg; s.className = cls || ""; };
+
+  parent.postMessage({ pluginMessage: { type: "load-settings" } }, "*");
+
+  onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === "settings" && msg.settings) {
+      $("token").value = msg.settings.token || "";
+      $("project").value = msg.settings.projectId || "";
+    }
+
+    if (msg.type === "error") setStatus(msg.message, "err");
+
+    if (msg.type === "extracted") {
+      extracted = msg;
+      const list = $("list");
+      list.innerHTML = "";
+      msg.nodes.forEach((n, i) => {
+        const row = document.createElement("div");
+        row.className = "string-row";
+        row.innerHTML =
+          '<input type="checkbox" checked data-i="' + i + '" />' +
+          '<div class="text">' + escapeHtml(n.text) +
+          '<div class="meta">' + escapeHtml(n.frameName || n.pageName || "") + " · " + escapeHtml(n.nodeName) + "</div></div>";
+        list.appendChild(row);
+      });
+      updateSendButton();
+      setStatus(msg.nodes.length ? "" : "No UI text found in the selection.", msg.nodes.length ? "" : "err");
+    }
+  };
+
+  function selectedNodes() {
+    return Array.from(document.querySelectorAll('#list input[type="checkbox"]:checked'))
+      .map((cb) => extracted.nodes[Number(cb.dataset.i)]);
+  }
+
+  function updateSendButton() {
+    const n = selectedNodes().length;
+    $("send").textContent = "Send " + n + " string" + (n === 1 ? "" : "s");
+    $("send").disabled = n === 0;
+    $("send").className = n === 0 ? "secondary" : "";
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  $("list").addEventListener("change", updateSendButton);
+  $("extract").onclick = () => parent.postMessage({ pluginMessage: { type: "extract" } }, "*");
+
+  $("send").onclick = async () => {
+    const token = $("token").value.trim();
+    const projectId = $("project").value.trim();
+    if (!token || !projectId) { setStatus("Enter your API token and project ID first.", "err"); return; }
+    parent.postMessage({ pluginMessage: { type: "save-settings", settings: { token, projectId } } }, "*");
+
+    const nodes = selectedNodes();
+    $("send").disabled = true;
+    setStatus("Pushing " + nodes.length + " strings…");
+    try {
+      // Only ship screenshots of frames that still have a selected string.
+      const frameIds = new Set(nodes.map((n) => n.frameId).filter(Boolean));
+      const previews = (extracted.previews || []).filter((p) => frameIds.has(p.frameId));
+      const res = await fetch(API_BASE + "/api/figma/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ projectId, fileKey: extracted.fileKey, nodes, previews }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(body.error || "Push failed (HTTP " + res.status + ")", "err");
+      } else {
+        const parts = [body.staged + " staged"];
+        if (body.updates) parts.push(body.updates + " copy update" + (body.updates === 1 ? "" : "s"));
+        if (body.duplicates) parts.push(body.duplicates + " duplicate" + (body.duplicates === 1 ? "" : "s") + " flagged");
+        if (body.skippedUnchanged) parts.push(body.skippedUnchanged + " unchanged skipped");
+        setStatus(parts.join(", ") + ". Review them in the Syncling inbox.", "ok");
+        parent.postMessage({ pluginMessage: { type: "notify", message: body.staged + " strings sent to Syncling" } }, "*");
+      }
+    } catch (e) {
+      setStatus("Network error — is syncling.space reachable?", "err");
+    }
+    $("send").disabled = false;
+  };
+</script>

@@ -38,8 +38,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 fun buildConfigWithGlossary(project: Project, glossary: Map<String, Map<String, String>>): SynclingConfig {
-    // Use the filename as the map key so multiple files of the same type can coexist.
-    val filesMap = project.sourceFilePaths.associateBy { it.substringAfterLast('/') }
+    // Key by full path — basenames collide across modules (e.g. two values/strings.xml),
+    // and keying by filename would silently drop all but one of them.
+    val filesMap = project.sourceFilePaths.associateWith { it }
     return SynclingConfig(
         app = AppConfig(name = project.name, category = project.category, tone = project.tone),
         source = SourceConfig(

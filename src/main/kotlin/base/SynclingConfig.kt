@@ -108,6 +108,22 @@ fun Application.configureSyncling(refundService: RefundService) {
     val membershipRepository = MongoProjectMembershipRepository(db)
     val supportTicketRepository = MongoSupportTicketRepository(db)
     val apiTokenRepository = MongoApiTokenRepository(db)
+    val figmaCandidateRepository = com.syncling.repository.mongo.MongoFigmaCandidateRepository(db)
+    val figmaNodeBindingRepository = com.syncling.repository.mongo.MongoFigmaNodeBindingRepository(db)
+    val figmaPreviewRepository = com.syncling.repository.mongo.MongoFigmaPreviewRepository(db)
+    val figmaEmbeddingService = EmbeddingService()
+    val translationEmbeddingRepository = MongoTranslationEmbeddingRepository(db)
+    val figmaInAppNotificationService = InAppNotificationService(notificationRepository, pipelineEventBus)
+    val figmaSyncService = com.syncling.services.FigmaSyncService(
+        candidateRepository = figmaCandidateRepository,
+        bindingRepository = figmaNodeBindingRepository,
+        translationRepository = translationRepository,
+        gitHubService = githubService,
+        previewRepository = figmaPreviewRepository,
+        embeddingService = figmaEmbeddingService,
+        embeddingRepository = translationEmbeddingRepository,
+        notificationService = figmaInAppNotificationService
+    )
     val analyticsService = AnalyticsService(
         pipelineRunRepository = pipelineRunRepository,
         memberUsageRepository = memberUsageRepository,
@@ -185,6 +201,8 @@ fun Application.configureSyncling(refundService: RefundService) {
         razorpayService.close()
         lifecycleMonitor.stop()
         cfKvService.close()
+        figmaSyncService.close()
+        figmaEmbeddingService.close()
         log.info("Syncling resources closed")
     }
 
@@ -217,6 +235,9 @@ fun Application.configureSyncling(refundService: RefundService) {
             meterRegistry = meterRegistry,
             quotaBlockedRunRepository = quotaBlockedRunRepository,
             quotaResumeService = quotaResumeService,
+            figmaSyncService = figmaSyncService,
+            figmaCandidateRepository = figmaCandidateRepository,
+            figmaPreviewRepository = figmaPreviewRepository,
         )
     )
 }

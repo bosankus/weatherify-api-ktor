@@ -110,6 +110,12 @@ data class UpdateProjectBody(
     val outboundWebhookUrl: String? = null,
     /** Set to "" to clear the signing secret. Solo/Team only. */
     val outboundWebhookSecret: String? = null,
+    /** Slack incoming-webhook URL. Set to "" to clear. Solo/Team only. */
+    val slackWebhookUrl: String? = null,
+    /** Teams (Power Automate Workflows) webhook URL. Set to "" to clear. Solo/Team only. */
+    val teamsWebhookUrl: String? = null,
+    /** Which chat event keys to deliver: run_completed | run_failed | quota_exceeded | billing. Solo/Team only. */
+    val chatNotifyEvents: List<String>? = null,
     /** Set to -1 to remove the project-level cap. Solo/Team only. */
     val monthlyStringQuota: Int? = null,
     /** 0–100. 100 = full traffic to active; 1–99 = canary rollout. Solo/Team only. */
@@ -136,6 +142,12 @@ data class ProjectDetailResponse(
     val prBranchPattern: String? = null,
     /** Configured outbound webhook URL, or null if not set. Secret is never returned. */
     val outboundWebhookUrl: String? = null,
+    /** Configured Slack incoming-webhook URL, or null if not set. */
+    val slackWebhookUrl: String? = null,
+    /** Configured Teams (Power Automate Workflows) webhook URL, or null if not set. */
+    val teamsWebhookUrl: String? = null,
+    /** Chat event keys currently delivered to the Slack/Teams webhooks. */
+    val chatNotifyEvents: List<String> = emptyList(),
     val monthlyStringQuota: Int? = null,
     val rolloutPercent: Int = 100
 )

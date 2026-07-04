@@ -143,8 +143,8 @@ internal fun HTML.checkoutPage(
 }
 
 private fun planFeatureRows(plan: BillingPlan): List<String> = when (plan) {
-    BillingPlan.SOLO -> listOf("5,000 strings / month", "3 projects", "All target languages", "Glossary enforcement", "Translation memory", "Review portal")
-    BillingPlan.TEAM -> listOf("Unlimited strings", "10 projects", "All target languages", "Everything in PRO", "Priority support")
+    BillingPlan.SOLO -> listOf("5,000 strings / month", "3 projects", "All target languages", "Up to 10 source files / project", "Glossary enforcement", "Translation memory", "Review portal")
+    BillingPlan.TEAM -> listOf("Unlimited strings", "10 projects", "All target languages", "Up to 20 source files / project", "Everything in PRO", "Priority support")
     else -> emptyList()
 }
 

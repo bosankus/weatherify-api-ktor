@@ -238,6 +238,11 @@ fun Application.module() {
     val apiTokenRepository: com.syncling.repository.ApiTokenRepository by inject()
     val memberUsageService: MemberUsageService by inject()
     val quotaBlockedRunRepository: com.syncling.repository.QuotaBlockedRunRepository by inject()
+    val figmaCandidateRepository: com.syncling.repository.FigmaCandidateRepository by inject()
+    val figmaNodeBindingRepository: com.syncling.repository.FigmaNodeBindingRepository by inject()
+    val figmaPreviewRepository: com.syncling.repository.FigmaPreviewRepository by inject()
+    val embeddingService: com.syncling.services.EmbeddingService by inject()
+    val translationEmbeddingRepository: com.syncling.repository.TranslationEmbeddingRepository by inject()
     val analyticsService: AnalyticsService by inject()
     val statusService: com.syncling.services.StatusService by inject()
     // Materialize OWNER membership rows for legacy projects so the new permission
@@ -279,7 +284,15 @@ fun Application.module() {
         log.info("Email notifications disabled — set smtp-user + smtp-password secrets to enable")
     }
 
-    val inAppNotificationService = InAppNotificationService(notificationRepository, pipelineEventBus)
+    // Slack/Teams chat notifications are paid-only. Same eligibility pattern as CdnPublishService.
+    val chatNotificationService = com.syncling.services.ChatNotificationService(
+        projectRepository = projectRepository,
+        isEligible = { ownerId ->
+            billingRepository.getSubscription(ownerId).plan != com.syncling.domain.BillingPlan.FREE
+        }
+    )
+
+    val inAppNotificationService = InAppNotificationService(notificationRepository, pipelineEventBus, chatNotificationService)
 
     val userActivityService = UserActivityService(
         userRepository = userRepository,
@@ -318,6 +331,16 @@ fun Application.module() {
     val pipelineMetrics: com.syncling.services.PipelineMetrics by inject()
     val translationService = TranslationService(memoryRepository, sharedMemoryRepository, pipelineMetrics)
     val outboundWebhookService = OutboundWebhookService()
+    val figmaSyncService = com.syncling.services.FigmaSyncService(
+        candidateRepository = figmaCandidateRepository,
+        bindingRepository = figmaNodeBindingRepository,
+        translationRepository = translationRepository,
+        gitHubService = githubService,
+        previewRepository = figmaPreviewRepository,
+        embeddingService = embeddingService,
+        embeddingRepository = translationEmbeddingRepository,
+        notificationService = inAppNotificationService
+    )
     val semanticChangeAnalyzer: SemanticChangeAnalyzer by inject()
     val culturalSensitivityAnalyzer: CulturalSensitivityAnalyzer by inject()
     val pipeline = TranslationPipeline(
@@ -358,7 +381,7 @@ fun Application.module() {
             pipelineEventBus.finishRun(project.ownerId, runId, error = errMsg)
             launch {
                 runCatching {
-                    inAppNotificationService.notifyGitHubTokenInvalid(project.ownerId, project.githubRepo)
+                    inAppNotificationService.notifyGitHubTokenInvalid(project.ownerId, project.githubRepo, projectId = project.id)
                 }
             }
             return@startWorker
@@ -400,7 +423,8 @@ fun Application.module() {
                         projectName = project.name,
                         prUrl = completedRun.prUrl!!,
                         langDetail = langDetail,
-                        commitShort = completedRun.commitShort
+                        commitShort = completedRun.commitShort,
+                        projectId = project.id
                     )
                 }.onFailure { log.warn("Pipeline complete in-app notification failed project={}: {}", project.id, it.message) }
             }
@@ -482,7 +506,10 @@ fun Application.module() {
             "razorpay service"       to { razorpayService.close() },
             "lifecycle monitor"      to { lifecycleMonitor.stop() },
             "cloudflare r2 service"  to { cfKvService.close() },
-            "outbound webhook service" to { outboundWebhookService.close() }
+            "outbound webhook service" to { outboundWebhookService.close() },
+            "chat notification service" to { chatNotificationService.close() },
+            "figma sync service"     to { figmaSyncService.close() },
+            "embedding service"      to { embeddingService.close() }
         ).forEach { (name, closer) ->
             runCatching(closer).onFailure { log.error("Failed to close {}: {}", name, it.message) }
         }
@@ -521,5 +548,9 @@ fun Application.module() {
         meterRegistry = meterRegistry,
         quotaBlockedRunRepository = quotaBlockedRunRepository,
         quotaResumeService = quotaResumeService,
+        figmaSyncService = figmaSyncService,
+        figmaCandidateRepository = figmaCandidateRepository,
+        figmaPreviewRepository = figmaPreviewRepository,
+        chatNotificationService = chatNotificationService,
     ))
 }

@@ -261,6 +261,28 @@ fun Route.configurePortalRoutes(
         call.issueBootstrapCookie()
         call.respondHtml { membersApp(projectId = call.parameters["projectId"]) }
     }
+    // Figma inbox — same landing/deep-link split as Members: no projectId means
+    // the client picks the first project after /api/projects loads.
+    get("/figma") {
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId == null) {
+            call.respondRedirect("/auth/github")
+            return@get
+        }
+        if (call.redirectedToPendingPayment(userId)) return@get
+        call.issueBootstrapCookie()
+        call.respondHtml { figmaApp(projectId = null) }
+    }
+    get("/figma/{projectId}") {
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId == null) {
+            call.respondRedirect("/auth/github")
+            return@get
+        }
+        if (call.redirectedToPendingPayment(userId)) return@get
+        call.issueBootstrapCookie()
+        call.respondHtml { figmaApp(projectId = call.parameters["projectId"]) }
+    }
     // Public invite landing — no session required. The page itself decides whether
     // to offer Accept (logged in) or Continue with GitHub (logged out).
     get("/invite/{token}") {
@@ -320,6 +342,10 @@ internal fun appSidebar(active: String, reviewBadge: Boolean = false) = """
     <a href="/review-portal" class="nav-item${if (active=="review") " active" else ""}" title="Review">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       <span class="nav-label">Review</span>${if (reviewBadge) """<span class="nav-badge review-badge" id="review-count"></span>""" else ""}
+    </a>
+    <a href="/figma" class="nav-item${if (active=="figma") " active" else ""}" title="Figma inbox">
+      <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      <span class="nav-label">Figma</span>
     </a>
     <a href="/billing/analytics" class="nav-item${if (active=="analytics") " active" else ""}" title="Analytics">
       <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -2113,7 +2139,7 @@ struct ContentView: View {
                         li { +"Open "; a("/projects") { +"Projects" }; +" in the dashboard and click "; strong { +"New Project" }; +"." }
                         li { +"Select the GitHub repository from the list (only repos you authorised are shown)." }
                         li { +"Set the "; strong { +"Watch Branch" }; +" (default: "; code { +"main" }; +")." }
-                        li { +"Set the "; strong { +"Source File Path" }; +" — e.g. "; code { +"src/main/res/values/strings.xml" }; +" for Android." }
+                        li { +"Set the "; strong { +"Source File Paths" }; +" — e.g. "; code { +"src/main/res/values/strings.xml" }; +" for Android. Solo and Team plans can add multiple source files and rename them later; Free supports one." }
                         li { +"Choose the "; strong { +"Source Language" }; +" (the language your strings are written in)." }
                         li { +"Add one or more "; strong { +"Target Languages" }; +" from the supported list." }
                         li { +"Click "; strong { +"Create" }; +". The webhook is installed automatically." }

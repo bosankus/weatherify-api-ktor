@@ -49,6 +49,16 @@
         { code: 'vi', name: 'Vietnamese' },
     ];
 
+    // Chat-notification event catalogue. Keys match the backend's
+    // chatNotifyEvents values; all four are on by default server-side.
+    const CHAT_NOTIFY_EVENTS = [
+        ['run_completed', 'Run completed', 'Notify when a translation run finishes successfully.'],
+        ['run_failed', 'Run failed', 'Notify when a translation run errors out or is blocked.'],
+        ['quota_exceeded', 'Quota exceeded', 'Notify when a run stops because the plan quota ran out.'],
+        ['billing', 'Billing alerts', 'Notify on payment failures and subscription changes.'],
+    ];
+    const DEFAULT_CHAT_NOTIFY_EVENTS = CHAT_NOTIFY_EVENTS.map(([key]) => key);
+
     // ── Utility helpers ──────────────────────────────────────────────────────
     const $ = id => document.getElementById(id);
     const esc = s => {
@@ -59,6 +69,48 @@
     const langKey = t => `${t.code}|${t.region || ''}`;
     const langLabel = t => t.region ? `${t.name || t.code} (${t.region})` : (t.name || t.code);
     const defaultLangFile = t => `values-${t.region ? `${t.code}-r${t.region}` : t.code}/strings.xml`;
+
+    // ── Source file list editor (shared by create modal + drawer) ────────────
+    // Mirrors the backend hard cap; the per-plan limit is enforced server-side.
+    const MAX_SOURCE_FILES = 20;
+
+    function sourceRowHtml(value, removable) {
+        return `<div class="pr-source-row" style="display:flex;gap:8px;margin-top:6px">
+          <input type="text" class="pr-source-input" value="${esc(value)}" placeholder="values/strings.xml" style="flex:1">
+          ${removable ? '<button type="button" class="bl-btn" data-rm-src aria-label="Remove file" style="flex-shrink:0;padding:4px 10px">×</button>' : ''}
+        </div>`;
+    }
+
+    // Wires add/remove on a source list container. Rows are plain DOM (never
+    // re-rendered in bulk) so typed-but-unsaved values survive add/remove.
+    function wireSourceList(list, addBtn) {
+        list.addEventListener('click', e => {
+            const rm = e.target.closest('[data-rm-src]');
+            if (!rm) return;
+            if (list.querySelectorAll('.pr-source-input').length <= 1) {
+                toast('At least one source file is required', 'error');
+                return;
+            }
+            rm.closest('.pr-source-row').remove();
+        });
+        if (addBtn) addBtn.addEventListener('click', () => {
+            if (list.querySelectorAll('.pr-source-input').length >= MAX_SOURCE_FILES) {
+                toast(`Maximum ${MAX_SOURCE_FILES} source files`, 'error');
+                return;
+            }
+            list.insertAdjacentHTML('beforeend', sourceRowHtml('', true));
+            list.lastElementChild.querySelector('input').focus();
+        });
+    }
+
+    function collectSourcePaths(list) {
+        const seen = new Set();
+        list.querySelectorAll('.pr-source-input').forEach(input => {
+            const v = input.value.trim();
+            if (v) seen.add(v);
+        });
+        return [...seen];
+    }
 
     let projectsState = [];
 
@@ -189,6 +241,8 @@
             refreshLangSelect();
         });
 
+        wireSourceList(overlay.querySelector('#pr-source-list'), overlay.querySelector('#pr-source-add-btn'));
+
         overlay.addEventListener('click', e => {
             if (e.target === overlay || e.target.closest('[data-modal-act="close"]')) {
                 return closeCreateModal();
@@ -231,14 +285,21 @@
               <div class="pr-form-hint">Public or private — we'll use your GitHub OAuth token to access it.</div>
             </div>
 
-            <div class="pr-form-grid-2">
-              <div class="pr-form-row">
-                <label for="pr-branch">Branch to watch</label>
-                <input type="text" id="pr-branch" value="main">
-              </div>
-              <div class="pr-form-row">
-                <label for="pr-source">Source file path</label>
-                <input type="text" id="pr-source" value="values/strings.xml">
+            <div class="pr-form-row">
+              <label for="pr-branch">Branch to watch</label>
+              <input type="text" id="pr-branch" value="main">
+            </div>
+
+            <div class="pr-form-row">
+              <label>Source file paths
+                ${isPaid ? '' : '<span class="pr-locked-badge" style="vertical-align:middle">PRO+</span>'}
+              </label>
+              <div id="pr-source-list">${sourceRowHtml('values/strings.xml', false)}</div>
+              ${isPaid ? '<button type="button" class="bl-btn" id="pr-source-add-btn" style="margin-top:8px;padding:5px 10px;font-size:12px">+ Add file</button>' : ''}
+              <div class="pr-form-hint">
+                ${isPaid
+                    ? `Repo-relative paths, e.g. <code>app/src/main/res/values/strings.xml</code>. Up to ${MAX_SOURCE_FILES} files.`
+                    : 'One source file on the Free plan. <a href="/billing" style="color:var(--accent)">Upgrade to PRO</a> for multiple files.'}
               </div>
             </div>
 
@@ -287,7 +348,7 @@
         const name = overlay.querySelector('#pr-name').value.trim();
         const repo = overlay.querySelector('#pr-repo').value.trim();
         const branch = overlay.querySelector('#pr-branch').value.trim() || 'main';
-        const source = overlay.querySelector('#pr-source').value.trim() || 'values/strings.xml';
+        const sourcePaths = collectSourcePaths(overlay.querySelector('#pr-source-list'));
         const category = overlay.querySelector('#pr-category').value;
         const tone = overlay.querySelector('#pr-tone').value;
         const branchPatternInput = overlay.querySelector('#pr-branch-pattern');
@@ -314,7 +375,7 @@
         try {
             const payload = {
                 name, githubRepo: repo, watchBranch: branch,
-                sourceFilePaths: [source],
+                sourceFilePaths: sourcePaths.length ? sourcePaths : ['values/strings.xml'],
                 category, tone,
                 targets: selectedLangs.map(l => ({
                     code: l.code, name: l.name, region: l.region || null, file: l.file,
@@ -408,6 +469,9 @@
         mount.querySelector('[data-drawer-act="close"]').addEventListener('click', closeDrawer);
 
         const webhookOk = !!p.webhookVerifiedAt;
+        // Missing field (older project objects) means "all events on" — same
+        // default the backend applies.
+        const chatEvents = Array.isArray(p.chatNotifyEvents) ? p.chatNotifyEvents : DEFAULT_CHAT_NOTIFY_EVENTS;
         const body = mount.querySelector('.pr-drawer-body');
         body.innerHTML = `
           <section class="pr-section">
@@ -415,11 +479,23 @@
             <dl class="pr-detail-meta">
               <dt>Repo</dt><dd><a href="https://github.com/${esc(p.githubRepo)}" target="_blank" rel="noopener">${esc(p.githubRepo)}</a></dd>
               <dt>Branch</dt><dd>${esc(p.watchBranch)}</dd>
-              <dt>Source</dt><dd>${esc((p.sourceFilePaths || []).join(', '))}</dd>
               <dt>Webhook</dt><dd>${webhookOk
                 ? '<span class="pr-webhook-pill connected">● Connected</span>'
                 : '<span class="pr-webhook-pill disconnected">● Not verified</span> <button type="button" class="bl-btn" style="margin-left:8px;padding:4px 10px;font-size:11px" data-drawer-act="reinstall-webhook">Reinstall</button>'}</dd>
             </dl>
+            <div class="pr-form-row" id="pr-source-files-section" style="margin-top:12px">
+              <label>Source file paths <span class="pr-locked-badge" id="pr-source-files-badge" style="display:none">PRO+</span></label>
+              <div id="pr-drawer-source-list">
+                ${(p.sourceFilePaths || []).map(path => sourceRowHtml(path, (p.sourceFilePaths || []).length > 1)).join('')}
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button type="button" class="bl-btn" id="pr-drawer-source-add-btn" style="padding:5px 10px;font-size:12px">+ Add file</button>
+                <button type="button" class="bl-btn" data-drawer-act="save-sources" style="padding:5px 10px;font-size:12px">Save files</button>
+              </div>
+              <div class="pr-form-hint" id="pr-source-files-hint">
+                Repo-relative paths, e.g. <code>app/src/main/res/values/strings.xml</code>. Up to ${MAX_SOURCE_FILES} files.
+              </div>
+            </div>
             <div class="pr-form-row" id="pr-branch-pattern-section" style="margin-top:12px">
               <label for="pr-edit-branch-pattern">PR branch pattern <span class="pr-locked-badge" id="pr-branch-pattern-badge" style="display:none">PRO+</span></label>
               <div style="display:flex;gap:8px;align-items:center">
@@ -432,6 +508,35 @@
               <div class="pr-form-hint" id="pr-branch-pattern-hint">
                 Tokens: <code>{timestamp}</code>, <code>{date}</code>, <code>{branch}</code>. Leave blank for the default.
               </div>
+            </div>
+          </section>
+
+          <section class="pr-section" id="pr-chat-notify-section">
+            <h3 class="pr-section-title">Chat notifications <span class="pr-locked-badge" id="pr-chat-notify-badge" style="display:none;vertical-align:middle">PRO+</span></h3>
+            <p class="pr-toggle-hint" style="margin:0 0 12px">Post pipeline and billing events to Slack or Microsoft Teams. Leave a URL blank to skip that channel.</p>
+            <div class="pr-form-row">
+              <label for="pr-slack-webhook">Slack webhook URL</label>
+              <input type="text" id="pr-slack-webhook" maxlength="500"
+                value="${esc(p.slackWebhookUrl || '')}"
+                placeholder="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXX">
+              <div class="pr-form-hint">Paste a Slack incoming webhook URL (hooks.slack.com).</div>
+            </div>
+            <div class="pr-form-row">
+              <label for="pr-teams-webhook">Teams webhook URL</label>
+              <input type="text" id="pr-teams-webhook" maxlength="500"
+                value="${esc(p.teamsWebhookUrl || '')}"
+                placeholder="https://prod-00.westus.logic.azure.com/workflows/…/invoke">
+              <div class="pr-form-hint">Paste a Teams workflow (Power Automate) webhook URL.</div>
+            </div>
+            <div id="pr-chat-notify-events">
+              ${CHAT_NOTIFY_EVENTS.map(([key, label, hint]) => chatEventRow(key, label, hint, chatEvents.includes(key))).join('')}
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button type="button" class="bl-btn primary" data-drawer-act="save-chat-notify" style="padding:6px 12px;font-size:12px">Save notifications</button>
+              <button type="button" class="bl-btn" data-drawer-act="test-chat-notify" style="padding:6px 12px;font-size:12px">Send test</button>
+            </div>
+            <div class="pr-form-hint" id="pr-chat-notify-hint" style="margin-top:6px">
+              Save first, then send a test — the test message uses the saved URLs.
             </div>
           </section>
 
@@ -528,6 +633,12 @@
         // Wire PR branch pattern — gate to paid plan.
         initDrawerBranchPattern(p, body);
 
+        // Wire source file editor — gate to paid plan.
+        initDrawerSourceFiles(p, body);
+
+        // Wire Slack/Teams chat notifications — gate to paid plan.
+        initDrawerChatNotifications(p, body);
+
         renderLockedFeatures(body);
 
         const foot = mount.querySelector('.pr-drawer-foot');
@@ -555,6 +666,11 @@
                     plan: 'PRO',
                     title: 'Parallel locale translation',
                     hint: 'Translate every target language in parallel instead of sequentially. Typical PRO run is 3–5× faster.',
+                },
+                {
+                    plan: 'PRO',
+                    title: 'Multiple source files',
+                    hint: 'Translate strings from several files — per-module strings.xml, iOS Localizable.strings, JSON — in one project, and rename paths any time.',
                 },
                 {
                     plan: 'PRO',
@@ -681,6 +797,57 @@
         }
     }
 
+    // ── Drawer: source file editor ───────────────────────────────────────────
+    // Paid plans edit paths and add/remove files; free users see their single
+    // configured path read-only with an upgrade hint (server enforces the same).
+    function initDrawerSourceFiles(p, body) {
+        const list = body.querySelector('#pr-drawer-source-list');
+        const addBtn = body.querySelector('#pr-drawer-source-add-btn');
+        const saveBtn = body.querySelector('[data-drawer-act="save-sources"]');
+        const badge = body.querySelector('#pr-source-files-badge');
+        const hint = body.querySelector('#pr-source-files-hint');
+
+        wireSourceList(list, addBtn);
+
+        if (window.tlSubscription) {
+            window.tlSubscription().then(sub => {
+                const isPaid = sub && sub.plan !== 'FREE';
+                if (isPaid) return;
+                list.querySelectorAll('.pr-source-input').forEach(input => {
+                    input.disabled = true;
+                    input.style.opacity = '0.55';
+                });
+                list.querySelectorAll('[data-rm-src]').forEach(btn => { btn.style.display = 'none'; });
+                addBtn.style.display = 'none';
+                saveBtn.disabled = true;
+                badge.style.display = '';
+                hint.innerHTML = 'Editing source files requires PRO or Team. <a href="/billing" style="color:var(--accent)">Upgrade</a>';
+            }).catch(() => {});
+        }
+
+        saveBtn.addEventListener('click', async function () {
+            const paths = collectSourcePaths(list);
+            if (!paths.length) { toast('At least one source file path is required', 'error'); return; }
+            const btn = this;
+            setBusy(btn, true, 'Saving');
+            try {
+                const r = await tlFetch(`${API}/${encodeURIComponent(p.id)}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ sourceFilePaths: paths }),
+                });
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({}));
+                    throw new Error(err.error || 'Save failed');
+                }
+                toast('Source files saved', 'success');
+            } catch (err) {
+                toast(err.message, 'error');
+            } finally {
+                setBusy(btn, false, 'Save files');
+            }
+        });
+    }
+
     // ── Drawer: PR branch pattern ────────────────────────────────────────────
     function initDrawerBranchPattern(p, body) {
         const input = body.querySelector('#pr-edit-branch-pattern');
@@ -723,6 +890,129 @@
                 setBusy(btn, false, 'Save');
             }
         });
+    }
+
+    // ── Drawer: Slack / Teams chat notifications ─────────────────────────────
+    // Paid-only feature (server 403s free plans on save); free users see the
+    // section locked with the same PRO+ badge treatment as branch patterns.
+    // Event switches auto-save the checked-key array like the Automation
+    // toggles; the webhook URLs persist via the explicit Save button.
+    function initDrawerChatNotifications(p, body) {
+        const section = body.querySelector('#pr-chat-notify-section');
+        if (!section) return;
+        const slackInput = section.querySelector('#pr-slack-webhook');
+        const teamsInput = section.querySelector('#pr-teams-webhook');
+        const switches = [...section.querySelectorAll('[data-chat-event]')];
+        const saveBtn = section.querySelector('[data-drawer-act="save-chat-notify"]');
+        const testBtn = section.querySelector('[data-drawer-act="test-chat-notify"]');
+        const badge = section.querySelector('#pr-chat-notify-badge');
+        const hint = section.querySelector('#pr-chat-notify-hint');
+
+        const collectCheckedEvents = () => switches
+            .filter(btn => btn.getAttribute('aria-pressed') === 'true')
+            .map(btn => btn.dataset.chatEvent);
+
+        if (window.tlSubscription) {
+            window.tlSubscription().then(sub => {
+                const isPaid = sub && sub.plan !== 'FREE';
+                if (isPaid) return;
+                [slackInput, teamsInput].forEach(input => {
+                    input.disabled = true;
+                    input.style.opacity = '0.55';
+                });
+                switches.forEach(btn => btn.setAttribute('disabled', ''));
+                saveBtn.disabled = true;
+                testBtn.disabled = true;
+                badge.style.display = '';
+                hint.innerHTML = 'Slack &amp; Teams notifications require PRO or Team. <a href="/billing" style="color:var(--accent)">Upgrade</a>';
+            }).catch(() => {});
+        }
+
+        // Optimistic flip + immediate save of the full checked-key array,
+        // mirroring toggleSetting's rollback-on-failure behaviour.
+        switches.forEach(btn => btn.addEventListener('click', async () => {
+            const next = btn.getAttribute('aria-pressed') !== 'true';
+            btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+            btn.setAttribute('disabled', '');
+            try {
+                const r = await tlFetch(`${API}/${encodeURIComponent(p.id)}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ chatNotifyEvents: collectCheckedEvents() }),
+                });
+                if (!r.ok) throw new Error('save failed');
+            } catch {
+                btn.setAttribute('aria-pressed', next ? 'false' : 'true');
+                toast('Could not save notification events', 'error');
+            } finally {
+                btn.removeAttribute('disabled');
+            }
+        }));
+
+        saveBtn.addEventListener('click', async function () {
+            const slack = slackInput.value.trim();
+            const teams = teamsInput.value.trim();
+            section.querySelectorAll('[aria-invalid="true"]').forEach(el => el.removeAttribute('aria-invalid'));
+            const errors = [];
+            if (slack && !slack.startsWith('https://')) errors.push([slackInput, 'Slack webhook must be an https:// URL']);
+            if (teams && !teams.startsWith('https://')) errors.push([teamsInput, 'Teams webhook must be an https:// URL']);
+            if (errors.length) {
+                errors.forEach(([el]) => el.setAttribute('aria-invalid', 'true'));
+                toast(errors[0][1], 'error');
+                return;
+            }
+            const btn = this;
+            setBusy(btn, true, 'Saving');
+            try {
+                const r = await tlFetch(`${API}/${encodeURIComponent(p.id)}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        slackWebhookUrl: slack,
+                        teamsWebhookUrl: teams,
+                        chatNotifyEvents: collectCheckedEvents(),
+                    }),
+                });
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({}));
+                    throw new Error(err.error || 'Save failed');
+                }
+                toast('Notification settings saved', 'success');
+            } catch (err) {
+                toast(err.message, 'error');
+            } finally {
+                setBusy(btn, false, 'Save notifications');
+            }
+        });
+
+        testBtn.addEventListener('click', async function () {
+            const btn = this;
+            setBusy(btn, true, 'Sending');
+            try {
+                const r = await tlFetch(`${API}/${encodeURIComponent(p.id)}/notifications/test`, { method: 'POST' });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.ok) {
+                    throw new Error(data.error || 'Test message failed — check your webhook URLs');
+                }
+                toast('Test message sent — check your channel', 'success');
+            } catch (err) {
+                toast(err.message, 'error');
+            } finally {
+                setBusy(btn, false, 'Send test');
+            }
+        });
+    }
+
+    // Same markup as toggleRow, but with data-chat-event instead of data-toggle
+    // so the Automation-section wiring (immediate boolean PUT) never picks
+    // these up — chat events save as an array, not per-field booleans.
+    function chatEventRow(key, label, hint, value) {
+        return `
+          <div class="pr-toggle-row">
+            <div class="pr-toggle-label-block">
+              <p class="pr-toggle-label">${esc(label)}</p>
+              <p class="pr-toggle-hint">${esc(hint)}</p>
+            </div>
+            <button type="button" class="pr-switch" aria-pressed="${value ? 'true' : 'false'}" data-chat-event="${esc(key)}" aria-label="${esc(label)}"></button>
+          </div>`;
     }
 
     function toggleRow(field, label, hint, value) {

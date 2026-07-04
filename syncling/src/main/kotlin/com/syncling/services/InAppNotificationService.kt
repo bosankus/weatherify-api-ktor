@@ -14,7 +14,9 @@ private const val DEDUP_1H = 60 * 60 * 1000L
  */
 class InAppNotificationService(
     private val notificationRepository: NotificationRepository,
-    private val eventBus: PipelineEventBus
+    private val eventBus: PipelineEventBus,
+    /** Optional Slack/Teams fan-out — every in-app notification is mirrored to chat when set. */
+    private val chatNotificationService: ChatNotificationService? = null
 ) {
     private val log = LoggerFactory.getLogger(InAppNotificationService::class.java)
 
@@ -23,7 +25,8 @@ class InAppNotificationService(
         projectName: String,
         prUrl: String,
         langDetail: String,
-        commitShort: String
+        commitShort: String,
+        projectId: String? = null
     ) = notify(
         userId = userId,
         type = NotificationType.PIPELINE_COMPLETE,
@@ -32,7 +35,8 @@ class InAppNotificationService(
         level = "success",
         actionUrl = prUrl,
         actionLabel = "View PR",
-        dedupMs = DEDUP_1H
+        dedupMs = DEDUP_1H,
+        projectId = projectId
     )
 
     suspend fun notifyReviewQueue(userId: String, pendingCount: Int) = notify(
@@ -79,7 +83,7 @@ class InAppNotificationService(
         dedupMs = DEDUP_6H
     )
 
-    suspend fun notifyGitHubTokenInvalid(userId: String, repo: String) = notify(
+    suspend fun notifyGitHubTokenInvalid(userId: String, repo: String, projectId: String? = null) = notify(
         userId = userId,
         type = NotificationType.GITHUB_TOKEN_INVALID,
         title = "GitHub access lost — re-authenticate",
@@ -87,10 +91,11 @@ class InAppNotificationService(
         level = "error",
         actionUrl = "/auth/github",
         actionLabel = "Re-connect GitHub",
-        dedupMs = DEDUP_6H
+        dedupMs = DEDUP_6H,
+        projectId = projectId
     )
 
-    suspend fun notifyPipelineFailed(userId: String, repo: String, reason: String) = notify(
+    suspend fun notifyPipelineFailed(userId: String, repo: String, reason: String, projectId: String? = null) = notify(
         userId = userId,
         type = NotificationType.PIPELINE_FAILED,
         title = "Pipeline failed — $repo",
@@ -98,7 +103,8 @@ class InAppNotificationService(
         level = "error",
         actionUrl = "/app#activity",
         actionLabel = "View details",
-        dedupMs = DEDUP_1H
+        dedupMs = DEDUP_1H,
+        projectId = projectId
     )
 
     suspend fun notifyOnboarding(userId: String, stuckReason: String) = notify(
@@ -180,6 +186,18 @@ class InAppNotificationService(
         dedupMs = DEDUP_1H
     )
 
+    suspend fun notifyFigmaStrings(userId: String, projectName: String, projectId: String, count: Int) = notify(
+        userId = userId,
+        type = NotificationType.FIGMA_STRINGS,
+        title = "$count Figma string${if (count != 1) "s" else ""} awaiting review — $projectName",
+        message = "New copy was pushed from Figma. Approve to open a PR that adds the strings to your source file.",
+        level = "info",
+        actionUrl = "/figma/$projectId",
+        actionLabel = "Open inbox",
+        dedupMs = DEDUP_1H,
+        projectId = projectId
+    )
+
     suspend fun notifyInviteAccepted(
         ownerId: String,
         memberName: String,
@@ -206,7 +224,9 @@ class InAppNotificationService(
         level: String,
         actionUrl: String?,
         actionLabel: String?,
-        dedupMs: Long
+        dedupMs: Long,
+        /** Project context when the event is project-scoped (pipeline runs). Null = account-level. */
+        projectId: String? = null
     ) {
         runCatching {
             if (notificationRepository.existsRecent(userId, type, dedupMs)) {
@@ -216,6 +236,9 @@ class InAppNotificationService(
             val notif = notificationRepository.create(userId, type, title, message, level, actionUrl, actionLabel)
             eventBus.emitNotification(userId, notif.id, title, message, level, actionUrl, actionLabel)
             log.debug("In-app notification created: userId={} type={} id={}", userId, type, notif.id)
+            // Mirror to Slack/Teams. Runs on the chat service's own scope — never blocks
+            // or fails the in-app path (and stays behind the dedup gate above).
+            chatNotificationService?.fireAndForget(userId, projectId, type, title, message)
         }.onFailure {
             log.error("In-app notification failed: userId={} type={} error={}", userId, type, it.message)
         }

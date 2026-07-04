@@ -50,12 +50,22 @@ class MongoTranslationEmbeddingRepository(db: MongoDatabase) : TranslationEmbedd
             )
         ).toList().mapNotNull { it.toRow(targetLanguage) }
 
+    override suspend fun listForProject(projectId: String): List<EmbeddingRow> =
+        col.find(eq("projectId", projectId)).toList().mapNotNull { it.toRow(targetLanguage = null) }
+
     @Suppress("UNCHECKED_CAST")
-    private fun Document.toRow(targetLanguage: String): EmbeddingRow? {
+    private fun Document.toRow(targetLanguage: String?): EmbeddingRow? {
         val src = getString("sourceText") ?: return null
         val raw = (get("embedding") as? List<Number>) ?: return null
         val translations = (get("translations") as? Document)
             ?.entries?.associate { (k, v) -> k to v.toString() } ?: return null
+        if (targetLanguage == null) {
+            return EmbeddingRow(
+                sourceText = src,
+                embedding = FloatArray(raw.size) { raw[it].toFloat() },
+                translations = translations
+            )
+        }
         val tgt = translations[targetLanguage] ?: return null
         return EmbeddingRow(
             sourceText = src,

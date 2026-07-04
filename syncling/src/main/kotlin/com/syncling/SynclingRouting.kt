@@ -24,6 +24,7 @@ import com.syncling.routes.configureOnboardingRoutes
 import com.syncling.routes.configurePortalRoutes
 import com.syncling.routes.configurePublicCheckoutRoute
 import com.syncling.routes.configureRazorpayWebhook
+import com.syncling.routes.configureFigmaRoutes
 import com.syncling.routes.configureWebhookRoutes
 import com.syncling.routes.configureSupportRoutes
 import io.ktor.server.http.content.staticResources
@@ -116,6 +117,12 @@ class SynclingDeps(
     val quotaBlockedRunRepository: com.syncling.repository.QuotaBlockedRunRepository? = null,
     /** Lifts quota holds and resumes blocked runs after checkout/upgrade. */
     val quotaResumeService: com.syncling.services.QuotaResumeService? = null,
+    /** Figma plugin sync — inbox staging + approve→PR. Optional so previews/tests can omit. */
+    val figmaSyncService: com.syncling.services.FigmaSyncService? = null,
+    val figmaCandidateRepository: com.syncling.repository.FigmaCandidateRepository? = null,
+    val figmaPreviewRepository: com.syncling.repository.FigmaPreviewRepository? = null,
+    /** Slack/Teams chat notifications — optional so previews/tests can omit. */
+    val chatNotificationService: com.syncling.services.ChatNotificationService? = null,
 )
 
 /**
@@ -256,7 +263,8 @@ Sitemap: https://syncling.space/sitemap.xml
                 d.glossaryRepository, d.userActivityService, d.membershipRepository,
                 d.cdnPublishService, d.translationService, d.pipelineRunRepository,
                 d.reviewerFeedbackRepository,
-                d.supportAdminEmailDomain
+                d.supportAdminEmailDomain,
+                chatNotificationService = d.chatNotificationService
             )
             configureDashboardRoutes(
                 d.projectRepository, d.translationRepository, d.billingRepository, d.cdnPublishRepository,
@@ -275,6 +283,13 @@ Sitemap: https://syncling.space/sitemap.xml
             )
             d.supportTicketRepository?.let { repo ->
                 configureSupportRoutes(repo, d.userRepository, d.notificationService, d.supportAdminEmail, d.supportAdminEmailDomain, d.pipelineEventBus)
+            }
+            if (d.figmaSyncService != null && d.figmaCandidateRepository != null) {
+                configureFigmaRoutes(
+                    d.figmaSyncService, d.figmaCandidateRepository, d.projectRepository,
+                    d.userRepository, d.billingRepository, d.membershipRepository,
+                    d.figmaPreviewRepository
+                )
             }
         }
     }

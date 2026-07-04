@@ -1,0 +1,12 @@
+{
+  "name": "Syncling — Strings to GitHub",
+  "id": "syncling-strings-sync",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["https://syncling.space"],
+    "reasoning": "Pushes selected text strings to the Syncling API, which stages them for a GitHub PR."
+  }
+}
