@@ -23,6 +23,7 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -188,6 +189,15 @@ fun Route.configureFigmaRoutes(
     settingsRepository: FigmaSettingsRepository? = null,
 ) {
     route("/api/figma") {
+
+        // Marks the one-time onboarding walkthrough as seen so it doesn't show again.
+        // Server-authoritative (like the main onboarding tour) — no localStorage.
+        post("/onboarding/seen") {
+            val userId = call.userId()
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid token"))
+            userRepository.markFigmaOnboardingSeen(userId, Clock.System.now())
+            call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
+        }
 
         // Plugin push: stage extracted text nodes into the project's Figma inbox.
         post("/push") {

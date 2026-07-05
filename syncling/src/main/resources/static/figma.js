@@ -37,7 +37,8 @@
     document.addEventListener('DOMContentLoaded', init);
 
     async function init() {
-        const bootId = $('fg-bootstrap')?.dataset.projectId || '';
+        const boot = $('fg-bootstrap');
+        const bootId = boot?.dataset.projectId || '';
         try {
             const res = await tlFetch('/api/projects');
             if (!res.ok) throw new Error('projects ' + res.status);
@@ -57,6 +58,72 @@
         loadSettings();
         await loadCandidates();
         if (window._tlOnWake) window._tlOnWake(() => reloadCurrentTab());
+
+        $('fg-help-btn').onclick = () => openOnboarding();
+        if (boot?.dataset.showOnboarding === 'true') openOnboarding({ markSeenOnClose: true });
+    }
+
+    // ── Onboarding walkthrough ───────────────────────────────────────────────
+    // Shown once automatically on first visit (server decides via
+    // data-show-onboarding); reopenable anytime from the "How it works" button.
+    const ONBOARDING_STEPS = [
+        {
+            title: '1. Push from Figma',
+            body: 'Install the Syncling plugin in Figma (Plugins → Syncling — Strings to GitHub), select the text layers or frames to translate, and send. It needs an <a href="/tokens">API token</a> and this project\'s ID.',
+        },
+        {
+            title: '2. Review in the inbox',
+            body: 'Every push lands here as a pending candidate, with the frame screenshot attached for context. Edit a suggested key before approving if you want a different one.',
+        },
+        {
+            title: '3. Approve → PR',
+            body: 'Select candidates and approve them — Syncling opens a pull request against your watch branch. Turn on auto-approve to skip the inbox and open a PR on every push instead.',
+        },
+        {
+            title: '4. Merge runs the pipeline',
+            body: 'Merging that PR kicks off your whole translation pipeline, using the attached frame screenshots as visual context for higher-quality translations.',
+        },
+    ];
+
+    function openOnboarding(opts) {
+        const markSeenOnClose = !!(opts && opts.markSeenOnClose);
+        const mount = $('fg-onboarding-mount');
+        if (!mount) return;
+        mount.innerHTML = `<div class="fg-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="fg-onboarding-title">
+            <div class="fg-modal">
+                <div class="fg-modal-head">
+                    <h3 id="fg-onboarding-title">How Figma sync works</h3>
+                    <button type="button" class="fg-modal-close" data-modal-act="close" aria-label="Close">&times;</button>
+                </div>
+                <p class="fg-modal-sub">Four steps from a Figma frame to translated copy in production.</p>
+                <div class="fg-onboarding-steps">
+                    ${ONBOARDING_STEPS.map(s => `<div class="fg-onboarding-step">
+                        <div class="fg-onboarding-step-title">${esc(s.title)}</div>
+                        <div class="fg-onboarding-step-body">${s.body}</div>
+                    </div>`).join('')}
+                </div>
+                <div class="fg-modal-actions">
+                    <button type="button" class="bl-btn primary" data-modal-act="close">Got it</button>
+                </div>
+            </div>
+        </div>`;
+        const overlay = mount.firstElementChild;
+        requestAnimationFrame(() => overlay.classList.add('show'));
+
+        const close = () => {
+            mount.innerHTML = '';
+            document.removeEventListener('keydown', onKey);
+            if (markSeenOnClose) markOnboardingSeen();
+        };
+        const onKey = e => { if (e.key === 'Escape') close(); };
+        document.addEventListener('keydown', onKey);
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay || e.target.closest('[data-modal-act="close"]')) close();
+        });
+    }
+
+    function markOnboardingSeen() {
+        tlFetch('/api/figma/onboarding/seen', { method: 'POST' }).catch(() => {});
     }
 
     function fillProjectSelect() {

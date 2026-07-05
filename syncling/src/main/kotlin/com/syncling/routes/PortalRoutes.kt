@@ -1,5 +1,6 @@
 package com.syncling.routes
 
+import com.syncling.domain.BillingPlan
 import com.syncling.repository.BillingRepository
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -103,7 +104,8 @@ private val FAVICON_PNG_512 by lazy { generateFaviconPng(512) }
 fun Route.configurePortalRoutes(
     jwtSecret: String,
     statusService: com.syncling.services.StatusService,
-    billingRepository: BillingRepository? = null
+    billingRepository: BillingRepository? = null,
+    userRepository: com.syncling.repository.UserRepository? = null
 ) {
     // When a recurring charge has failed the subscription is on hold: app pages redirect
     // to the pending-payment page until the user clears the outstanding payment.
@@ -115,6 +117,17 @@ fun Route.configurePortalRoutes(
         if (pending) respondRedirect("/billing/payment-pending")
         return pending
     }
+    // Figma sync and analytics are paid features: their page shells swap to a
+    // plan gate for FREE users (same formation as the tokens/members gates).
+    // Fails closed — the gate shows — when the plan can't be resolved.
+    suspend fun hasPaidPlan(userId: String): Boolean = billingRepository?.let {
+        runCatching { it.getSubscription(userId).plan != BillingPlan.FREE }.getOrDefault(false)
+    } ?: false
+    // Figma onboarding walkthrough shows once per user, the first time they reach the
+    // (paid) inbox. Fails closed — no walkthrough — if the user can't be resolved.
+    suspend fun needsFigmaOnboarding(userId: String): Boolean = userRepository?.let {
+        runCatching { it.findById(userId)?.figmaOnboardingSeenAt == null }.getOrDefault(false)
+    } ?: false
     // Public JSON status endpoint — used by uptime monitors and the status page client.
     get("/syncling/api/status") {
         call.respond(statusService.report())
@@ -212,12 +225,14 @@ fun Route.configurePortalRoutes(
         call.respondHtml { billingApp() }
     }
     get("/billing/analytics") {
-        if (call.sessionUserId(jwtSecret) == null) {
+        val userId = call.sessionUserId(jwtSecret)
+        if (userId == null) {
             call.respondRedirect("/auth/github")
             return@get
         }
         call.issueBootstrapCookie()
-        call.respondHtml { billingAnalyticsApp() }
+        val isPaid = hasPaidPlan(userId)
+        call.respondHtml { billingAnalyticsApp(isPaid) }
     }
     get("/projects") {
         val userId = call.sessionUserId(jwtSecret)
@@ -271,7 +286,9 @@ fun Route.configurePortalRoutes(
         }
         if (call.redirectedToPendingPayment(userId)) return@get
         call.issueBootstrapCookie()
-        call.respondHtml { figmaApp(projectId = null) }
+        val isPaid = hasPaidPlan(userId)
+        val showOnboarding = isPaid && needsFigmaOnboarding(userId)
+        call.respondHtml { figmaApp(projectId = null, isPaid = isPaid, showOnboarding = showOnboarding) }
     }
     get("/figma/{projectId}") {
         val userId = call.sessionUserId(jwtSecret)
@@ -281,7 +298,9 @@ fun Route.configurePortalRoutes(
         }
         if (call.redirectedToPendingPayment(userId)) return@get
         call.issueBootstrapCookie()
-        call.respondHtml { figmaApp(projectId = call.parameters["projectId"]) }
+        val isPaid = hasPaidPlan(userId)
+        val showOnboarding = isPaid && needsFigmaOnboarding(userId)
+        call.respondHtml { figmaApp(projectId = call.parameters["projectId"], isPaid = isPaid, showOnboarding = showOnboarding) }
     }
     // Public invite landing — no session required. The page itself decides whether
     // to offer Accept (logged in) or Continue with GitHub (logged out).

@@ -41,28 +41,18 @@
   color: #faad14;
 }
 
+/* Paid-feature gate — same formation as .tk-plan-gate / .mb-empty */
 .bla-plan-gate {
-  padding: 20px 22px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  text-align: center;
+  padding: 64px 24px;
+  border: 1px dashed var(--border);
   border-radius: var(--radius);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  align-items: flex-start;
-  margin-bottom: 24px;
+  color: var(--text-muted);
+  background: var(--surface);
+  margin-bottom: 20px;
 }
-.bla-plan-gate-text strong { color: var(--text); font-weight: 600; display: block; margin-bottom: 4px; }
-.bla-plan-gate-cta {
-  background: var(--accent);
-  color: #000;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 13px;
-  text-decoration: none;
-}
-.bla-plan-gate-cta:hover { filter: brightness(1.08); }
+.bla-plan-gate h3 { color: var(--text); font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+.bla-plan-gate p { font-size: 13px; margin: 0 0 20px; line-height: 1.55; }
 
 .bla-overview-grid {
   display: grid;

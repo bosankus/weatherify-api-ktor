@@ -14,13 +14,21 @@ import kotlinx.html.*
  *   POST  /api/figma/projects/{id}/reject              → reject selection
  *
  * Same thin-server / fat-client split as MembersApp.kt.
+ *
+ * Figma sync is a paid feature. Free users get the plan gate (same formation as
+ * the tokens/members pages) instead of the inbox — no toolbar, no list, and the
+ * client script isn't loaded at all.
+ *
+ * [showOnboarding] opens the one-time "how this works" walkthrough on first paint.
+ * State lives server-side on the user (figmaOnboardingSeenAt), not localStorage,
+ * so it shows exactly once per user regardless of device — see PortalRoutes.
  */
-internal fun HTML.figmaApp(projectId: String?) {
+internal fun HTML.figmaApp(projectId: String?, isPaid: Boolean, showOnboarding: Boolean = false) {
     portalShell(
         pageTitle = "Figma inbox",
         navKey = "figma",
         staticStylesheets = listOf("/transloom/static/figma.css"),
-        staticScripts = listOf("/transloom/static/figma.js"),
+        staticScripts = if (isPaid) listOf("/transloom/static/figma.js") else emptyList(),
         mainClass = "fg-page",
     ) {
         header("fg-header") {
@@ -28,21 +36,49 @@ internal fun HTML.figmaApp(projectId: String?) {
                 h1("page-title") { +"Figma inbox" }
                 p("page-sub") { +"Strings pushed from the Figma plugin. Approve to open a PR — merging it runs the whole translation pipeline." }
             }
-            div("fg-header-actions") {
-                select {
-                    id = "fg-project-select"
-                    classes = setOf("fg-project-select")
-                    attributes["aria-label"] = "Switch project"
+            if (isPaid) {
+                div("fg-header-actions") {
+                    button(classes = "bl-btn") {
+                        id = "fg-help-btn"
+                        type = ButtonType.button
+                        attributes["aria-label"] = "How Figma sync works"
+                        +"How it works"
+                    }
+                    select {
+                        id = "fg-project-select"
+                        classes = setOf("fg-project-select")
+                        attributes["aria-label"] = "Switch project"
+                    }
                 }
             }
+        }
+
+        // ── Paid-feature gate ────────────────────────────────────────────────
+        // Mirrors the tokens page plan gate: free users only see what upgrading
+        // unlocks — never the inbox itself.
+        if (!isPaid) {
+            div("fg-plan-gate") {
+                h3 { +"Figma sync is a paid feature" }
+                p {
+                    +"You're on the "
+                    b { +"Free" }
+                    +" plan. Upgrade to push copy straight from Figma with the Syncling plugin, review incoming strings in this inbox, and approve them into a pull request — merging it runs your whole translation pipeline, with frame screenshots attached as context for higher-quality translations."
+                }
+                a("/billing") { classes = setOf("bl-btn", "primary"); +"Upgrade plan" }
+            }
+            return@portalShell
         }
 
         // Read by the client to know which project to load on first paint.
         div {
             id = "fg-bootstrap"
             attributes["data-project-id"] = projectId ?: ""
+            attributes["data-show-onboarding"] = showOnboarding.toString()
             attributes["hidden"] = "hidden"
         }
+
+        // Built lazily by figma.js only when data-show-onboarding is true.
+        div { id = "fg-onboarding-mount" }
 
         div("fg-toolbar") {
             div("fg-tabs") {

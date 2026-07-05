@@ -11,16 +11,17 @@ import kotlinx.html.*
  * (filled in once the overview endpoint returns); each section degrades to an
  * "Unable to load" empty-state if its fetch fails.
  *
- * FREE users hit a 403 from the endpoints; the JS catches that and shows a soft
- * upgrade prompt without leaving the page. Team-only sections (Members, Cost
- * breakdown) are hidden on the client when /overview reports a non-TEAM plan.
+ * Analytics is a paid feature. Free users get the plan gate (same formation as
+ * the tokens/members pages) instead of the metric sections — the client script
+ * isn't loaded at all. The hidden gate on the paid page is a fallback for the
+ * mid-session downgrade case: the JS unhides it when the endpoints return 403.
  */
-internal fun HTML.billingAnalyticsApp() {
+internal fun HTML.billingAnalyticsApp(isPaid: Boolean) {
     portalShell(
         pageTitle = "Analytics",
         navKey = "analytics",
         staticStylesheets = listOf("/transloom/static/billing.css", "/transloom/static/billing-analytics.css"),
-        staticScripts = listOf("/transloom/static/billing-analytics.js"),
+        staticScripts = if (isPaid) listOf("/transloom/static/billing-analytics.js") else emptyList(),
         mainClass = "bl-page",
     ) {
         header("bl-header") {
@@ -28,26 +29,36 @@ internal fun HTML.billingAnalyticsApp() {
                 h1("page-title") { +"Analytics" }
                 p("page-sub") { +"Translation activity, costs, and team performance — sourced from your own pipeline runs." }
             }
-            div("bla-range-picker") {
-                id = "bla-range-picker"
-                attributes["role"] = "tablist"
-                attributes["aria-label"] = "Date range"
-                button(classes = "bla-range-btn active") {
-                    attributes["data-range"] = "30d"
-                    attributes["role"] = "tab"
-                    +"30 days"
-                }
-                button(classes = "bla-range-btn") {
-                    attributes["data-range"] = "90d"
-                    attributes["role"] = "tab"
-                    +"90 days"
-                }
-                button(classes = "bla-range-btn") {
-                    attributes["data-range"] = "month"
-                    attributes["role"] = "tab"
-                    +"This month"
+            if (isPaid) {
+                div("bla-range-picker") {
+                    id = "bla-range-picker"
+                    attributes["role"] = "tablist"
+                    attributes["aria-label"] = "Date range"
+                    button(classes = "bla-range-btn active") {
+                        attributes["data-range"] = "30d"
+                        attributes["role"] = "tab"
+                        +"30 days"
+                    }
+                    button(classes = "bla-range-btn") {
+                        attributes["data-range"] = "90d"
+                        attributes["role"] = "tab"
+                        +"90 days"
+                    }
+                    button(classes = "bla-range-btn") {
+                        attributes["data-range"] = "month"
+                        attributes["role"] = "tab"
+                        +"This month"
+                    }
                 }
             }
+        }
+
+        // ── Paid-feature gate ────────────────────────────────────────────────
+        // Mirrors the tokens page plan gate: free users only see what upgrading
+        // unlocks — never the metric sections.
+        if (!isPaid) {
+            blaPlanGate(visible = true)
+            return@portalShell
         }
 
         // Tracking-since banner — JS fills text + show/hide based on overview.trackingSinceMillis.
@@ -59,18 +70,9 @@ internal fun HTML.billingAnalyticsApp() {
             +"Loading…"
         }
 
-        // Plan-gate banner. JS shows it for FREE users and hides the metric sections.
-        div {
-            id = "bla-plan-gate"
-            classes = setOf("bla-plan-gate")
-            attributes["aria-live"] = "polite"
-            style = "display:none"
-            div("bla-plan-gate-text") {
-                strong { +"Analytics is part of PRO and Team plans." }
-                +" Upgrade to see cost-per-string trends, per-project breakdowns, and team activity."
-            }
-            a("/billing") { classes = setOf("bla-plan-gate-cta"); +"Compare plans →" }
-        }
+        // Hidden plan-gate fallback — JS shows it and hides the metric sections
+        // if the endpoints start returning 403 (plan changed mid-session).
+        blaPlanGate(visible = false)
 
         // ── Overview ─────────────────────────────────────────────────────────────
         section("bl-card") {
@@ -153,6 +155,24 @@ internal fun HTML.billingAnalyticsApp() {
             div("bla-table-wrap") { id = "bla-runs-body" }
             div("bla-runs-pagination") { id = "bla-runs-pagination" }
         }
+    }
+}
+
+// Same formation as the tokens/members plan gates: heading, what upgrading
+// unlocks, and a single upgrade CTA — nothing else.
+private fun FlowContent.blaPlanGate(visible: Boolean) {
+    div {
+        id = "bla-plan-gate"
+        classes = setOf("bla-plan-gate")
+        attributes["aria-live"] = "polite"
+        if (!visible) style = "display:none"
+        h3 { +"Analytics is a paid feature" }
+        p {
+            +"You're on the "
+            b { +"Free" }
+            +" plan. Upgrade to a paid plan to see cost-per-string trends, per-project and per-locale breakdowns, translation quality acceptance rates, full pipeline run history, and who on your team translated what."
+        }
+        a("/billing") { classes = setOf("bl-btn", "primary"); +"Upgrade plan" }
     }
 }
 

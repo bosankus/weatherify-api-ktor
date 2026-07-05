@@ -18,4 +18,6 @@ data class User(
     val onboardingCompletedAt: Instant? = null,
     /** Set when the user clicks "Skip" on the in-product tour; cleared on resume. */
     val onboardingDismissedAt: Instant? = null,
+    /** Set once the Figma sync onboarding walkthrough has been shown or dismissed. */
+    val figmaOnboardingSeenAt: Instant? = null,
 )

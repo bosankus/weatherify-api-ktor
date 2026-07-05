@@ -83,7 +83,7 @@ fun main() {
             }
             get("/billing/analytics") {
                 call.setBootstrapCookie()
-                call.respondHtml { billingAnalyticsApp() }
+                call.respondHtml { billingAnalyticsApp(isPaid = true) }
             }
             get("/review-portal") {
                 call.setBootstrapCookie()

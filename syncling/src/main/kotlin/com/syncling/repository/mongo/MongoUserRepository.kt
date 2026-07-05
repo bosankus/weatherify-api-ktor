@@ -147,6 +147,13 @@ class MongoUserRepository(
         )
     }
 
+    override suspend fun markFigmaOnboardingSeen(userId: String, at: Instant) {
+        collection.updateOne(
+            eq("_id", userId),
+            Updates.set("figmaOnboardingSeenAt", at.toEpochMilliseconds())
+        )
+    }
+
     override suspend fun listAll(limit: Int): List<User> =
         collection.find()
             .sort(Sorts.descending("lastActiveAt"))
@@ -189,6 +196,8 @@ class MongoUserRepository(
             ?.let { Instant.fromEpochMilliseconds(it) }
         val onboardingDismissedAt = (get("onboardingDismissedAt") as? Number)?.toLong()
             ?.let { Instant.fromEpochMilliseconds(it) }
+        val figmaOnboardingSeenAt = (get("figmaOnboardingSeenAt") as? Number)?.toLong()
+            ?.let { Instant.fromEpochMilliseconds(it) }
         return User(
             id = getString("_id"),
             githubId = getLong("githubId"),
@@ -200,7 +209,8 @@ class MongoUserRepository(
             lastActiveAt = lastActiveAt,
             onboardingStep = onboardingStep,
             onboardingCompletedAt = onboardingCompletedAt,
-            onboardingDismissedAt = onboardingDismissedAt
+            onboardingDismissedAt = onboardingDismissedAt,
+            figmaOnboardingSeenAt = figmaOnboardingSeenAt
         )
     }
 }
