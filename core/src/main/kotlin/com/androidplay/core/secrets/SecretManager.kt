@@ -154,9 +154,24 @@ private fun parseSecretJson(raw: String, source: String): Map<String, String> =
             ?: "\n  No smart quotes found; check for a trailing comma, an unescaped quote, or a truncated value."
         throw MalformedSecretException(
             "Secret source '$source' is not valid JSON, so NO secrets could be loaded. " +
-                "Refusing to start with development fallbacks.\n  Parser said: ${e.message}$hint"
+                "Refusing to start with development fallbacks.\n  Parser said: ${redactParserMessage(e)}$hint"
         )
     }
+
+/**
+ * kotlinx-serialization appends a verbatim excerpt of the input to its parse errors
+ * ("...at path: $\nJSON input: {\"jwt-secret\": ...}"). For this input that excerpt is the secret
+ * blob itself, and this exception is logged uncaught by main(), so it would publish live
+ * credentials to Cloud Logging. Only the part before that marker names the syntax problem, which
+ * is the half worth keeping; describeSmartQuotes() supplies the located context instead.
+ */
+private fun redactParserMessage(e: Exception): String =
+    e.message
+        ?.substringBefore("\nJSON input:")
+        ?.substringBefore("JSON input:")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: e::class.simpleName.orEmpty().ifEmpty { "unknown parse error" }
 
 /**
  * Runs a metadata-server call, returning null instead of propagating when it is unreachable.
