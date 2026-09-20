@@ -94,3 +94,9 @@ object NoteRoutesRegistrar : RouteRegistrar {
         with(root) { noteRoute() }
     }
 }
+
+object LiveWeatherRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { liveWeatherRoute() }
+    }
+}

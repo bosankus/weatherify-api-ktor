@@ -23,6 +23,7 @@ fun Application.module() {
     configureMonitoring()
     configureHTTP()
     configureAuthentication()
+    configureWebSockets()
     val refundService by inject<RefundService>()
     configureSyncling(refundService)
     configureRouting()

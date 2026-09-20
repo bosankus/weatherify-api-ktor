@@ -39,6 +39,7 @@ ktor-server-compression = { module = "io.ktor:ktor-server-compression", version.
 ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor-version" }
 ktor-server-rate-limit = { module = "io.ktor:ktor-server-rate-limit", version.ref = "ktor-version" }
 ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor-version" }
+ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktor-version" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-version" }
 auth0-jwt = { module = "com.auth0:java-jwt", version.ref = "auth0-jwt-version" }
 jedis = { module = "redis.clients:jedis", version.ref = "jedis-version" }

@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.compression)
     implementation(libs.ktor.server.rate.limit)
+    implementation(libs.ktor.server.websockets)
     implementation(libs.bcrypt)
     implementation(libs.ktor.server.html)
     implementation(libs.ktor.server.metrics.micrometer)
