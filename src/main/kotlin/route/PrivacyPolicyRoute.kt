@@ -194,7 +194,7 @@ fun Route.privacyPolicyRoute() {
                             h1 { +"Weatherify Android App Privacy Policy" }
                             p {
                                 classes = setOf("last-updated")
-                                +"Last Updated: July 27, 2025"
+                                +"Last Updated: September 20, 2026"
                             }
 
                             p {
@@ -206,13 +206,16 @@ fun Route.privacyPolicyRoute() {
                                 +"We may collect information about you in various ways when you use our application. The information we may collect includes:"
                             }
                             p {
-                                +"• Personal Information: Email address, device information, and IP address when you register for an account."
+                                +"• Account Information: Email address and a securely hashed password when you register for an account, along with your assigned role and account status."
                             }
                             p {
-                                +"• Device Information: Device model, operating system, version, and other technical data when you use our application."
+                                +"• Device Information: Device model, operating system, version, push-notification (FCM) token, and other technical data when you use our application."
                             }
                             p {
-                                +"• Location Data: With your permission, we collect precise location data to provide you with localized weather information."
+                                +"• Location Data: With your permission, we collect precise location data to provide you with localized weather information, including continuous location updates while you have our real-time Live Weather feature active (see \"Real-Time Live Weather\" below)."
+                            }
+                            p {
+                                +"• Payment Information: When you purchase a subscription or premium feature, our payment processor (Razorpay) collects and processes your payment details on our behalf. We do not store your full card, UPI, or bank account numbers on our servers — we retain only order identifiers, payment status, and subscription/plan details necessary to manage your entitlement."
                             }
                             p {
                                 +"• Usage Information: How you interact with our application, including features you use and time spent on the app."
@@ -240,13 +243,24 @@ fun Route.privacyPolicyRoute() {
                             p {
                                 +"• Communicate with you about updates, security alerts, and support messages."
                             }
+                            p {
+                                +"• Process payments, manage subscriptions, and send push notifications relevant to your account and weather alerts."
+                            }
 
-                            h2 { +"3. Sharing Your Information" }
+                            h2 { +"3. Real-Time Live Weather" }
+                            p {
+                                +"Our Live Weather feature streams weather, air quality, and alert updates to your device over a persistent connection (WebSocket). While this feature is active, your device periodically sends your location so we can group nearby users and deliver localized updates efficiently. Location is generalized to an area-level identifier (geohash) rather than tracked as an exact continuous trail, and streaming stops as soon as you close the feature or the app."
+                            }
+                            p {
+                                +"You can enable or disable Live Weather at any time from within the app; disabling it stops the location stream immediately."
+                            }
+
+                            h2 { +"4. Sharing Your Information" }
                             p {
                                 +"We may share information we have collected about you in certain situations. Your information may be disclosed as follows:"
                             }
                             p {
-                                +"• With Service Providers: We may share your information with third-party vendors, service providers, contractors or agents who perform services for us or on our behalf and require access to such information to do that work."
+                                +"• With Service Providers: We may share your information with third-party vendors, service providers, contractors or agents who perform services for us or on our behalf and require access to such information to do that work, including Razorpay for payment processing and Firebase Cloud Messaging for push notifications."
                             }
                             p {
                                 +"• For Business Transfers: We may share or transfer your information in connection with, or during negotiations of, any merger, sale of company assets, financing, or acquisition of all or a portion of our business to another company."
@@ -258,12 +272,12 @@ fun Route.privacyPolicyRoute() {
                                 +"• Other Legal Requirements: We may disclose your information where we are legally required to do so in order to comply with applicable law, governmental requests, a judicial proceeding, court order, or legal process."
                             }
 
-                            h2 { +"4. Data Security" }
+                            h2 { +"5. Data Security" }
                             p {
                                 +"We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable, and no method of data transmission can be guaranteed against any interception or other type of misuse."
                             }
 
-                            h2 { +"5. Your Privacy Rights" }
+                            h2 { +"6. Your Privacy Rights" }
                             p {
                                 +"Depending on your location, you may have certain rights regarding your personal information, such as:"
                             }
@@ -286,12 +300,12 @@ fun Route.privacyPolicyRoute() {
                                 +"To exercise these rights, please contact us using the information provided in the 'Contact Us' section below."
                             }
 
-                            h2 { +"6. Children's Privacy" }
+                            h2 { +"7. Children's Privacy" }
                             p {
                                 +"Our application is not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13. If you are a parent or guardian and you are aware that your child has provided us with personal information, please contact us so that we can take necessary actions."
                             }
 
-                            h2 { +"7. Changes to This Privacy Policy" }
+                            h2 { +"8. Changes to This Privacy Policy" }
                             p {
                                 +"We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the 'Last Updated' date at the top of this Privacy Policy."
                             }
@@ -299,7 +313,7 @@ fun Route.privacyPolicyRoute() {
                                 +"You are advised to review this Privacy Policy periodically for any changes. Changes to this Privacy Policy are effective when they are posted on this page."
                             }
 
-                            h2 { +"8. Analytics and Third-Party Tools" }
+                            h2 { +"9. Analytics and Third-Party Tools" }
                             p {
                                 +"We may use third-party Service Providers to monitor and analyze the use of our application. These third parties may use cookies, web beacons, and other tracking technologies to collect information about your use of our application."
                             }
@@ -307,7 +321,12 @@ fun Route.privacyPolicyRoute() {
                                 +"These third parties may collect information such as how often you use the application, the events that occur within the application, usage, performance data, and where the application was downloaded from. This information may be used to improve our application and services."
                             }
 
-                            h2 { +"9. Contact Us" }
+                            h2 { +"10. Account and Data Retention" }
+                            p {
+                                +"Account information (email, hashed password, role, status) and payment/subscription records are retained for as long as your account is active and for a reasonable period afterward to comply with accounting and legal obligations. You may request deletion of your account and associated data at any time, subject to records we are legally required to retain (such as payment records)."
+                            }
+
+                            h2 { +"11. Contact Us" }
                             p {
                                 +"If you have any questions or concerns about this Privacy Policy, please contact us at ankush@androidplay.in."
                             }

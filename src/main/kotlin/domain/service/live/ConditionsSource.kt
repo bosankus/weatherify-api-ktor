@@ -168,13 +168,24 @@ class SimulatedConditionsSource(
 
 private fun Double.round1(): Double = kotlin.math.round(this * 10) / 10
 
+/**
+ * The upstream call never passes units=metric, so OpenWeather returns Kelvin. The REST weather
+ * route has always relied on the Android/wear clients converting at display time (see
+ * Compose-Weatherify's KELVIN_OFFSET), but this protocol's fields are named tempC/feelsLikeC and
+ * are diffed server-side against Celsius-scale noise thresholds, so the conversion has to happen
+ * here instead of trusting every consumer to know the quirk.
+ */
+private const val KELVIN_OFFSET = 273.15
+
+private fun Double.kelvinToCelsius(): Double = this - KELVIN_OFFSET
+
 private fun Weather.toConditions(): Conditions {
     val cur = current
     val w = cur?.weather?.firstOrNull()
     return Conditions(
         observedAt = cur?.dt ?: (System.currentTimeMillis() / 1000),
-        tempC = cur?.temp,
-        feelsLikeC = cur?.feelsLike,
+        tempC = cur?.temp?.kelvinToCelsius()?.round1(),
+        feelsLikeC = cur?.feelsLike?.kelvinToCelsius()?.round1(),
         humidity = cur?.humidity,
         pressure = cur?.pressure,
         windSpeedMs = cur?.windSpeed,

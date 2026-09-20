@@ -8,6 +8,8 @@ import com.androidplay.core.common.Result
 import com.androidplay.weatherify.repository.UserRepository
 import domain.service.NotificationService
 import domain.service.UnregisteredFcmTokenException
+import domain.service.WeatherAggregatorService
+import domain.service.live.LiveEntitlementResolver
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
@@ -24,6 +26,8 @@ import util.AuthHelper.getAuthenticatedAdminOrRespond
 fun Route.userRoute() {
     val userRepository: UserRepository by application.inject()
     val notificationService: NotificationService by application.inject()
+    val weatherAggregatorService: WeatherAggregatorService by application.inject()
+    val liveEntitlementResolver: LiveEntitlementResolver by application.inject()
 
     // Wrap all admin routes under /admin prefix
     route("/admin") {
@@ -354,6 +358,10 @@ fun Route.userRoute() {
                         when (val updRes = userRepository.updateUser(updated)) {
                             is Result.Success -> {
                                 if (updRes.data) {
+                                    // Drop cached entitlements so the change is reflected
+                                    // immediately instead of after their TTL expires.
+                                    weatherAggregatorService.invalidateUserCache(email)
+                                    liveEntitlementResolver.invalidate(email)
                                     call.respondSuccess<PremiumUpdateResponseDTO>(
                                         if (req.isPremium) "Premium enabled" else "Premium disabled",
                                         PremiumUpdateResponseDTO(

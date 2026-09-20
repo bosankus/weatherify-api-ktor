@@ -1,5 +1,6 @@
 package di
 
+import com.androidplay.core.secrets.getSecretValue
 import domain.service.WeatherService
 import domain.service.live.ConditionsSource
 import domain.service.live.LiveEntitlementResolver
@@ -16,8 +17,17 @@ import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("LiveModule")
 
-/** Env flag that swaps the real vendor feed for the simulator. Never set this in production. */
-const val LIVE_SIMULATION_ENV = "LIVE_WEATHER_SIMULATION"
+/**
+ * Secret-manager key that swaps the real vendor feed for the simulator. Never set this to
+ * "true" in production. Resolved through getSecretValue(), so it can live in the app-secrets
+ * JSON blob, as an individual LIVE_WEATHER_ENABLED env var override, or fall back to "false".
+ */
+private const val LIVE_SIMULATION_KEY = "live-weather-enabled"
+
+/** Resolved once per process — the flag never changes within a running instance. */
+private val isLiveSimulationEnabled: Boolean by lazy {
+    getSecretValue(LIVE_SIMULATION_KEY).toBoolean()
+}
 
 /**
  * Minimum seconds between upstream fetches for a single topic.
@@ -45,11 +55,10 @@ val liveModule = module {
     }
 
     single<ConditionsSource> {
-        val simulate = System.getenv(LIVE_SIMULATION_ENV)?.toBoolean() ?: false
         val upstream = get<UpstreamConditionsSource>(named("upstreamConditionsSource"))
-        if (simulate) {
+        if (isLiveSimulationEnabled) {
             log.warn(
-                "$LIVE_SIMULATION_ENV=true — live weather is SYNTHETIC. " +
+                "$LIVE_SIMULATION_KEY=true — live weather is SYNTHETIC. " +
                     "Values drift artificially and alerts are fabricated."
             )
             SimulatedConditionsSource(seedSource = upstream)
@@ -59,11 +68,10 @@ val liveModule = module {
     }
 
     single {
-        val simulate = System.getenv(LIVE_SIMULATION_ENV)?.toBoolean() ?: false
         LiveHub(
             scope = get(named("liveScope")),
             source = get(),
-            minPollSeconds = if (simulate) SIMULATED_MIN_POLL_SECONDS else UPSTREAM_MIN_POLL_SECONDS
+            minPollSeconds = if (isLiveSimulationEnabled) SIMULATED_MIN_POLL_SECONDS else UPSTREAM_MIN_POLL_SECONDS
         )
     }
 

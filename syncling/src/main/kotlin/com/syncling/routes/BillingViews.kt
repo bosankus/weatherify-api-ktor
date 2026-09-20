@@ -129,9 +129,22 @@ internal fun HTML.checkoutPage(
                   var TIMEOUT=900000,startedAt=Date.now(),timerText=document.getElementById('co-timer-text'),timerFill=document.getElementById('co-timer-fill'),expired=!1;
                   function pad(n){return n<10?'0'+n:''+n}
                   function tick(){if(expired)return;var left=Math.max(0,TIMEOUT-(Date.now()-startedAt));if(timerText)timerText.textContent=pad(Math.floor(left/60000))+':'+pad(Math.floor((left%60000)/1000));if(timerFill)timerFill.style.transform='scaleX('+(left/TIMEOUT)+')';if(left===0){expired=!0;fetch('/billing/cancel-pending',{method:'POST',credentials:'include'});var el=document.getElementById('co-expired');if(el)el.classList.add('co-expired-overlay-show');return}setTimeout(tick,1000)}tick();
-                  var cfg={key:${quote(init.keyId)},subscription_id:${quote(init.subscriptionId)},name:'Syncling',description:${quote("${plan.displayName} plan · 7-day free trial")},image:'https://syncling.space/syncling/favicon.svg',prefill:{name:${quote(userName)},email:${quote(userEmail ?: "")}},theme:{color:'#8B7EFF',backdrop_color:'#000000'},handler:function(resp){var params=new URLSearchParams({razorpay_payment_id:resp.razorpay_payment_id||'',razorpay_subscription_id:resp.razorpay_subscription_id||${quote(init.subscriptionId)},razorpay_signature:resp.razorpay_signature||''});window.location.href='/billing/rp-callback?'+params.toString()},modal:{ondismiss:function(){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1},escape:!0,backdropclose:!1},notes:{plan:${quote(plan.name)}}};
+                  var cfg={key:${quote(init.keyId)},subscription_id:${quote(init.subscriptionId)},name:'Syncling',description:${quote("${plan.displayName} plan · 7-day free trial")},image:'https://syncling.space/syncling/favicon.svg',prefill:{name:${quote(userName)},email:${quote(userEmail ?: "")}},theme:{color:'#8B7EFF',backdrop_color:'#000000'},handler:function(resp){var params=new URLSearchParams({razorpay_payment_id:resp.razorpay_payment_id||'',razorpay_subscription_id:resp.razorpay_subscription_id||${quote(init.subscriptionId)},razorpay_signature:resp.razorpay_signature||''});window.location.href='/billing/rp-callback?'+params.toString()},modal:{ondismiss:function(){clearWatchdog();resetOverlay()},escape:!0,backdropclose:!1},notes:{plan:${quote(plan.name)}}};
                   function showPayError(msg){var el=document.getElementById('co-pay-error');if(el){el.textContent=msg;el.style.display='block';setTimeout(function(){el.style.display='none'},8000)}}
-                  function openCheckout(){var rzp=new Razorpay(cfg);rzp.on('payment.failed',function(resp){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1;showPayError('Payment failed: '+(resp.error&&resp.error.description?resp.error.description:'Please try again.'))});rzp.open()}
+                  function resetOverlay(){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1}
+                  var watchdog=null;
+                  function clearWatchdog(){if(watchdog){clearTimeout(watchdog);watchdog=null}}
+                  function openCheckout(){
+                    try{
+                      var rzp=new Razorpay(cfg);
+                      rzp.on('payment.failed',function(resp){clearWatchdog();resetOverlay();showPayError('Payment failed: '+(resp.error&&resp.error.description?resp.error.description:'Please try again.'))});
+                      rzp.open();
+                      watchdog=setTimeout(function(){if(!document.querySelector('.razorpay-container')){clearWatchdog();resetOverlay();showPayError('Checkout failed to load. Please try again or contact support.')}},10000);
+                    }catch(e){
+                      resetOverlay();
+                      showPayError('Checkout failed to load. Please try again or contact support.');
+                    }
+                  }
                   var btn=document.getElementById('co-pay'),overlay=document.getElementById('co-overlay');
                   function ready(){overlay.classList.remove('co-overlay-show');btn.addEventListener('click',function(){btn.disabled=!0;overlay.classList.add('co-overlay-show');setTimeout(openCheckout,80)})}
                   if(window.Razorpay){overlay.classList.add('co-overlay-show');ready()}else{overlay.classList.add('co-overlay-show');var checkReady=setInterval(function(){if(window.Razorpay){clearInterval(checkReady);ready()}},50)}
@@ -256,9 +269,22 @@ internal fun HTML.paymentPendingPage(
             unsafe {
                 +"""
                 (function(){
-                  var cfg={key:${quote(keyId)},subscription_id:${quote(subscriptionId)},name:'Syncling',description:${quote("${plan.displayName} plan · pending payment")},image:'https://syncling.space/syncling/favicon.svg',prefill:{name:${quote(userName)},email:${quote(userEmail ?: "")}},theme:{color:'#8B7EFF',backdrop_color:'#000000'},handler:function(resp){var params=new URLSearchParams({razorpay_payment_id:resp.razorpay_payment_id||'',razorpay_subscription_id:resp.razorpay_subscription_id||${quote(subscriptionId)},razorpay_signature:resp.razorpay_signature||'',flow:'retry'});window.location.href='/billing/rp-callback?'+params.toString()},modal:{ondismiss:function(){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1},escape:!0,backdropclose:!1}};
+                  var cfg={key:${quote(keyId)},subscription_id:${quote(subscriptionId)},name:'Syncling',description:${quote("${plan.displayName} plan · pending payment")},image:'https://syncling.space/syncling/favicon.svg',prefill:{name:${quote(userName)},email:${quote(userEmail ?: "")}},theme:{color:'#8B7EFF',backdrop_color:'#000000'},handler:function(resp){var params=new URLSearchParams({razorpay_payment_id:resp.razorpay_payment_id||'',razorpay_subscription_id:resp.razorpay_subscription_id||${quote(subscriptionId)},razorpay_signature:resp.razorpay_signature||'',flow:'retry'});window.location.href='/billing/rp-callback?'+params.toString()},modal:{ondismiss:function(){clearWatchdog();resetOverlay()},escape:!0,backdropclose:!1}};
                   function showPayError(msg){var el=document.getElementById('co-pay-error');if(el){el.textContent=msg;el.style.display='block';setTimeout(function(){el.style.display='none'},8000)}}
-                  function openCheckout(){var rzp=new Razorpay(cfg);rzp.on('payment.failed',function(resp){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1;showPayError('Payment failed: '+(resp.error&&resp.error.description?resp.error.description:'Please try again.'))});rzp.open()}
+                  function resetOverlay(){document.getElementById('co-overlay').classList.remove('co-overlay-show');document.getElementById('co-pay').disabled=!1}
+                  var watchdog=null;
+                  function clearWatchdog(){if(watchdog){clearTimeout(watchdog);watchdog=null}}
+                  function openCheckout(){
+                    try{
+                      var rzp=new Razorpay(cfg);
+                      rzp.on('payment.failed',function(resp){clearWatchdog();resetOverlay();showPayError('Payment failed: '+(resp.error&&resp.error.description?resp.error.description:'Please try again.'))});
+                      rzp.open();
+                      watchdog=setTimeout(function(){if(!document.querySelector('.razorpay-container')){clearWatchdog();resetOverlay();showPayError('Checkout failed to load. Please try again or contact support.')}},10000);
+                    }catch(e){
+                      resetOverlay();
+                      showPayError('Checkout failed to load. Please try again or contact support.');
+                    }
+                  }
                   var btn=document.getElementById('co-pay'),overlay=document.getElementById('co-overlay');
                   function ready(){overlay.classList.remove('co-overlay-show');btn.addEventListener('click',function(){btn.disabled=!0;overlay.classList.add('co-overlay-show');setTimeout(openCheckout,80)})}
                   if(window.Razorpay){ready()}else{overlay.classList.add('co-overlay-show');var checkReady=setInterval(function(){if(window.Razorpay){clearInterval(checkReady);ready()}},50)}

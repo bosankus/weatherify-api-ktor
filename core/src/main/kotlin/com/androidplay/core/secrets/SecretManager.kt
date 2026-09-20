@@ -71,6 +71,8 @@ private val gcpAccessToken: String? by lazy { gcpProjectId?.let { fetchAccessTok
 //   "cloudflare-r2-secret-access-key" R2 secret access key
 //   "bundle-signing-key"             CDN bundle HMAC signing key
 //   "firebase-service-account-key"   Firebase service-account JSON (stringified)
+//   "live-weather-enabled"           Optional. "true" swaps the live-weather websocket feed
+//                                    for synthetic data. Never "true" in production.
 //
 // Individual env vars (e.g. JWT_SECRET) still override any key — useful for
 // local dev and CI where the JSON secret is not available.
@@ -223,5 +225,7 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "bundle-signing-key"              -> ""
     // Firebase (prod-only; value is a stringified service-account JSON)
     "firebase-service-account-key"    -> ""
+    // Live weather
+    "live-weather-enabled"            -> "false"
     else                              -> ""
 }

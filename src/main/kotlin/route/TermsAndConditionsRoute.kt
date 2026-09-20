@@ -194,7 +194,7 @@ fun Route.termsAndConditionsRoute() {
                             h1 { +"Weatherify Android App Terms & Conditions" }
                             p {
                                 classes = setOf("last-updated")
-                                +"Last Updated: July 27, 2025"
+                                +"Last Updated: September 20, 2026"
                             }
 
                             p {
@@ -217,13 +217,41 @@ fun Route.termsAndConditionsRoute() {
                                 +"To provide location-specific weather information, Weatherify may collect and process your device's location data. This information is used solely for the purpose of delivering relevant weather forecasts and alerts for your area."
                             }
                             p {
+                                +"If you enable our Live Weather feature, the app keeps a live connection open and periodically sends your device's location so we can push real-time weather, air quality, and alert updates for your area. This connection and the associated location sharing remain active only while the feature is turned on, and you may disable it at any time."
+                            }
+                            p {
                                 +"We implement appropriate technical and organizational measures to protect your personal data. Your location data is anonymized and is not shared with third parties except as necessary to provide our services (such as with our weather data providers)."
                             }
                             p {
-                                +"You can control location permissions through your device settings. Please note that disabling location services may affect the app's ability to provide accurate local weather information."
+                                +"You can control location permissions through your device settings. Please note that disabling location services may affect the app's ability to provide accurate local weather information, including Live Weather."
                             }
 
-                            h2 { +"3. Service Availability" }
+                            h2 { +"3. Accounts and Registration" }
+                            p {
+                                +"Certain features require you to create an account using an email address and password. You are responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account."
+                            }
+                            p {
+                                +"You agree to notify us promptly of any unauthorized use of your account. We are not liable for any loss or damage arising from your failure to protect your account credentials."
+                            }
+                            p {
+                                +"We reserve the right to suspend or terminate accounts that violate these Terms, provide false registration information, or remain inactive for extended periods."
+                            }
+
+                            h2 { +"4. Payments, Subscriptions, and Billing" }
+                            p {
+                                +"Certain features of Weatherify, including Live Weather, are offered as paid subscriptions or one-time purchases. Prices are displayed in the app prior to purchase and may change from time to time; changes will not affect a subscription period already paid for."
+                            }
+                            p {
+                                +"Payments are processed by Razorpay, our third-party payment processor. By making a purchase, you agree to Razorpay's applicable terms in addition to these Terms. We do not store your full payment card or bank details."
+                            }
+                            p {
+                                +"Subscriptions renew automatically at the end of each billing cycle unless cancelled before the renewal date. You can manage or cancel your subscription from within the app or your account settings."
+                            }
+                            p {
+                                +"Refunds, where applicable, are handled on a case-by-case basis in accordance with applicable consumer protection law. Failed or disputed payments may result in suspension of paid features until the issue is resolved."
+                            }
+
+                            h2 { +"5. Service Availability" }
                             p {
                                 +"While we strive to maintain continuous availability of the Weatherify app, we do not guarantee uninterrupted access to our services. The app may be subject to occasional downtime for maintenance, updates, or due to technical issues beyond our control."
                             }
@@ -234,7 +262,7 @@ fun Route.termsAndConditionsRoute() {
                                 +"We reserve the right to modify, suspend, or discontinue any part of our service temporarily or permanently, with or without notice."
                             }
 
-                            h2 { +"4. Third-Party API Usage" }
+                            h2 { +"6. Third-Party API Usage" }
                             p {
                                 +"Weatherify relies on third-party weather data providers to deliver forecasts and other meteorological information. Your use of our app is also subject to the terms and conditions of these third-party services."
                             }
@@ -245,7 +273,7 @@ fun Route.termsAndConditionsRoute() {
                                 +"Links to third-party websites or services may be provided in the app for your convenience. These links are not under our control, and we are not responsible for the content or privacy practices of these external sites."
                             }
 
-                            h2 { +"5. User Conduct" }
+                            h2 { +"7. User Conduct" }
                             p {
                                 +"When using the Weatherify app, you agree not to:"
                             }
@@ -265,7 +293,7 @@ fun Route.termsAndConditionsRoute() {
                                 +"• Use automated means or interfaces not provided by us to access the app or extract data"
                             }
 
-                            h2 { +"6. Intellectual Property" }
+                            h2 { +"8. Intellectual Property" }
                             p {
                                 +"The Weatherify app, including its design, graphics, text, and other content, is protected by copyright, trademark, and other intellectual property laws. All rights not expressly granted to you are reserved by us or our licensors."
                             }
@@ -276,7 +304,7 @@ fun Route.termsAndConditionsRoute() {
                                 +"The Weatherify name and logo are trademarks owned by us. No right or license to use any of our trademarks is granted without our prior written permission."
                             }
 
-                            h2 { +"7. Limitation of Liability" }
+                            h2 { +"9. Limitation of Liability" }
                             p {
                                 +"To the maximum extent permitted by applicable law, in no event shall Weatherify, its affiliates, or their respective officers, directors, employees, or agents be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, use, or goodwill, arising out of or in connection with your use of the app."
                             }
@@ -287,7 +315,7 @@ fun Route.termsAndConditionsRoute() {
                                 +"In jurisdictions where the exclusion or limitation of liability for consequential or incidental damages is not allowed, our liability shall be limited to the maximum extent permitted by law."
                             }
 
-                            h2 { +"8. Changes to Terms" }
+                            h2 { +"10. Changes to Terms" }
                             p {
                                 +"We reserve the right to modify these Terms and Conditions at any time. If we make material changes, we will provide notice through the app or by other means. Your continued use of the app after such modifications constitutes your acceptance of the updated terms."
                             }
@@ -295,7 +323,7 @@ fun Route.termsAndConditionsRoute() {
                                 +"It is your responsibility to review these Terms periodically for changes. If you do not agree with the modified terms, you should discontinue using the app."
                             }
 
-                            h2 { +"9. Governing Law" }
+                            h2 { +"11. Governing Law" }
                             p {
                                 +"These Terms and Conditions shall be governed by and construed in accordance with the laws of India, without regard to its conflict of law provisions."
                             }
@@ -303,7 +331,7 @@ fun Route.termsAndConditionsRoute() {
                                 +"Any disputes arising under or in connection with these Terms shall be subject to the exclusive jurisdiction of the courts located in India."
                             }
 
-                            h2 { +"10. Contact Information" }
+                            h2 { +"12. Contact Information" }
                             p {
                                 +"If you have any questions or concerns about these Terms and Conditions, please contact us at ankush@androidplay.in."
                             }

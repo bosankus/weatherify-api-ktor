@@ -87,6 +87,10 @@ class WeatherAggregatorServiceImpl(
     override fun validateLocationParams(lat: String?, lon: String?): Result<Pair<String, String>> =
         weatherService.validateLocationParams(lat, lon)
 
+    override fun invalidateUserCache(email: String) {
+        userFeatureCache.remove(email)
+    }
+
     private suspend fun resolveUserFeatures(email: String): Set<SubscriptionFeature> {
         val now = System.currentTimeMillis()
         val cached = userFeatureCache[email]

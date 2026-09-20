@@ -9,6 +9,8 @@ import com.androidplay.core.secrets.getSecretValue
 import com.androidplay.core.common.Result
 import domain.service.BillService
 import domain.service.NotificationService
+import domain.service.WeatherAggregatorService
+import domain.service.live.LiveEntitlementResolver
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -90,6 +92,8 @@ fun Route.paymentRoute() {
     val userRepository: UserRepository by application.inject()
     val paymentRepository: PaymentRepository by application.inject()
     val analyticsCache: data.service.PaymentAnalyticsCache by application.inject()
+    val weatherAggregatorService: WeatherAggregatorService by application.inject()
+    val liveEntitlementResolver: LiveEntitlementResolver by application.inject()
     // POST /create-order -> Create Razorpay order server-side
     post(Constants.Api.CREATE_ORDER_ENDPOINT) {
         call.getAuthenticatedUserOrRespond() ?: return@post
@@ -391,6 +395,8 @@ fun Route.paymentRoute() {
             try {
                 when (val updateResult = userRepository.updateUser(updatedUser)) {
                     is Result.Success -> {
+                        weatherAggregatorService.invalidateUserCache(userEmail)
+                        liveEntitlementResolver.invalidate(userEmail)
                         paymentLogger.info("Premium activated for $userEmail, expires at $premiumExpiresAt")
                     }
                     is Result.Error -> {
