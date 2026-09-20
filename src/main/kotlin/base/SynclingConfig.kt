@@ -20,7 +20,6 @@ import com.syncling.services.*
 import domain.service.RefundService
 import io.ktor.server.application.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.minutes
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
@@ -55,9 +54,17 @@ fun Application.configureSyncling(refundService: RefundService) {
     val redisUrl = getSecretValue("redis-url").ifBlank { null }
 
     val db = MongoConnection.connect(mongoUri, "transloom")
-    runBlocking {
-        runCatching { MongoIndexer.ensure(db, synclingIndexes()) }
-            .onFailure { log.error("Syncling MongoDB index setup failed — DB may be unreachable: {}", it.message, it) }
+
+    // Deferred to ApplicationStarted for the same reason as the Weatherify indexes in DIConfig:
+    // this module body runs before the HTTP port is bound, and an unreachable cluster costs the
+    // driver's full 30s server-selection timeout here. The failure was already caught, so the
+    // only symptom was a 30s delay before listening — enough to fail a Cloud Run startup probe
+    // and be reported as "container failed to listen on port 8080".
+    monitor.subscribe(ApplicationStarted) { app ->
+        app.launch {
+            runCatching { MongoIndexer.ensure(db, synclingIndexes()) }
+                .onFailure { log.error("Syncling MongoDB index setup failed — DB may be unreachable: {}", it.message, it) }
+        }
     }
 
     val userRepository = MongoUserRepository(db, encryptionKey)

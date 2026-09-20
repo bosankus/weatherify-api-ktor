@@ -71,8 +71,12 @@ private val gcpAccessToken: String? by lazy { gcpProjectId?.let { fetchAccessTok
 //   "cloudflare-r2-secret-access-key" R2 secret access key
 //   "bundle-signing-key"             CDN bundle HMAC signing key
 //   "firebase-service-account-key"   Firebase service-account JSON (stringified)
-//   "live-weather-enabled"           Optional. "true" swaps the live-weather websocket feed
-//                                    for synthetic data. Never "true" in production.
+//   "live-weather-simulation"        Optional, DEVELOPMENT ONLY. "true" replaces the live-weather
+//                                    websocket feed with randomly generated values and fabricated
+//                                    alerts. Never "true" in production. Omitting it = real data.
+//                                    (Old name "live-weather-enabled" still works but is
+//                                    deprecated — it read as a feature toggle, which it is not:
+//                                    the websocket API is always enabled.)
 //
 // Individual env vars (e.g. JWT_SECRET) still override any key — useful for
 // local dev and CI where the JSON secret is not available.
@@ -84,6 +88,17 @@ private val masterSecretName: String
 // Secret Manager API had a valid value — all lookups will fall through to
 // localFallback().
 private val masterSecretCache: Map<String, String>? by lazy { loadMasterSecret() }
+
+/**
+ * Thrown when a secret source exists but cannot be parsed.
+ *
+ * This is deliberately fatal. A *missing* secret source is a legitimate state (local dev), but a
+ * *malformed* one is always a deployment bug, and silently degrading to localFallback() turns it
+ * into a misleading downstream failure — one stray character once surfaced as a 30s MongoDB
+ * timeout against localhost:27017 and a Cloud Run "container failed to listen on port 8080".
+ * Failing here instead names the real problem in the first error line.
+ */
+class MalformedSecretException(message: String) : RuntimeException(message)
 
 private fun loadMasterSecret(): Map<String, String>? {
     // Fast path: Cloud Run mounts the JSON secret as APP_SECRETS env var.
@@ -100,54 +115,96 @@ private fun loadMasterSecret(): Map<String, String>? {
     return parseSecretJson(raw, masterSecretName)
 }
 
-private fun parseSecretJson(raw: String, source: String): Map<String, String>? =
+/**
+ * Typographic quotes that a JSON editor or a copy-paste through a rich-text surface will happily
+ * substitute for ASCII quotes, producing a blob that looks correct to the eye and is rejected by
+ * every parser. Checked explicitly because the raw parser message ("Expected colon ':', but had
+ * 'f' instead") does not hint at the cause.
+ */
+private val SMART_QUOTES = mapOf(
+    '\u201C' to "left double quote",
+    '\u201D' to "right double quote",
+    '\u2018' to "left single quote",
+    '\u2019' to "right single quote"
+)
+
+/**
+ * Locates smart quotes and renders each as "offset N (right double quote) near: ...", with only
+ * the surrounding *key* context, never enough span to leak an adjacent secret value.
+ */
+private fun describeSmartQuotes(raw: String): String? {
+    val hits = raw.withIndex().filter { (_, ch) -> ch in SMART_QUOTES }
+    if (hits.isEmpty()) return null
+    return hits.take(10).joinToString("; ") { (index, ch) ->
+        val from = (index - 24).coerceAtLeast(0)
+        val context = raw.substring(from, (index + 8).coerceAtMost(raw.length))
+            .replace('\n', ' ')
+        "offset $index (${SMART_QUOTES[ch]}) near: ...$context..."
+    }
+}
+
+private fun parseSecretJson(raw: String, source: String): Map<String, String> =
     try {
         Json.parseToJsonElement(raw).jsonObject
             .entries.associate { (k, v) -> k to v.jsonPrimitive.content }
             .also { log.info("Secrets loaded from {} ({} keys)", source, it.size) }
     } catch (e: Exception) {
-        log.error("Secret source '{}' is not valid JSON — cannot load secrets: {}", source, e.message)
+        val hint = describeSmartQuotes(raw)
+            ?.let { "\n  Found non-ASCII \u201Csmart quotes\u201D — replace them with plain \" quotes: $it" }
+            ?: "\n  No smart quotes found; check for a trailing comma, an unescaped quote, or a truncated value."
+        throw MalformedSecretException(
+            "Secret source '$source' is not valid JSON, so NO secrets could be loaded. " +
+                "Refusing to start with development fallbacks.\n  Parser said: ${e.message}$hint"
+        )
+    }
+
+/**
+ * Runs a metadata-server call, returning null instead of propagating when it is unreachable.
+ *
+ * withTimeoutOrNull() only absorbs *timeouts*. Off GCP the host metadata.google.internal does not
+ * resolve at all, which throws UnresolvedAddressException immediately — that escaped runBlocking
+ * and killed main() before the server bound its port, so the fat JAR could not be run locally.
+ * Absence of a metadata server is the normal state off-GCP, so it is logged at debug.
+ */
+private fun <T> metadataCallOrNull(what: String, block: suspend () -> T?): T? =
+    try {
+        runBlocking { withTimeoutOrNull(10.seconds) { block() } }
+    } catch (e: Exception) {
+        log.debug("Metadata server unreachable while resolving {}: {}", what, e.toString())
         null
     }
 
 private fun resolveProjectId(): String? {
     val fromEnv = System.getenv("GCP_PROJECT_ID") ?: System.getenv("GOOGLE_CLOUD_PROJECT")
     if (!fromEnv.isNullOrEmpty()) return fromEnv
-    return runBlocking {
-        withTimeoutOrNull(5.seconds) {
-            val res = httpClient.get("http://metadata.google.internal/computeMetadata/v1/project/project-id") {
-                header("Metadata-Flavor", "Google")
-            }
-            res.bodyAsText().trim().takeIf { it.isNotBlank() }
+    return metadataCallOrNull("project ID") {
+        val res = httpClient.get("http://metadata.google.internal/computeMetadata/v1/project/project-id") {
+            header("Metadata-Flavor", "Google")
         }
+        res.bodyAsText().trim().takeIf { it.isNotBlank() }
     }.also { if (it == null) log.warn("Could not resolve GCP project ID — Secret Manager unavailable") }
 }
 
-private fun fetchAccessToken(): String? {
-    return runBlocking {
-        withTimeoutOrNull(10.seconds) {
-            val res = httpClient.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token") {
-                header("Metadata-Flavor", "Google")
-            }
-            val json = res.bodyAsText()
-            json.substringAfter("\"access_token\":\"").substringBefore("\"").takeIf { it.isNotBlank() }
+private fun fetchAccessToken(): String? =
+    metadataCallOrNull("access token") {
+        val res = httpClient.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token") {
+            header("Metadata-Flavor", "Google")
         }
+        val json = res.bodyAsText()
+        json.substringAfter("\"access_token\":\"").substringBefore("\"").takeIf { it.isNotBlank() }
     }.also { if (it == null) log.warn("Could not fetch GCP access token from metadata server") }
-}
 
 private fun fetchRawSecret(secretName: String): String? {
     val projectId = gcpProjectId ?: return null
     val token = gcpAccessToken ?: return null
-    return runBlocking {
-        withTimeoutOrNull(10.seconds) {
-            val url = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
-            val res = httpClient.get(url) { header("Authorization", "Bearer $token") }
-            if (res.status.value != 200) return@withTimeoutOrNull null
-            val base64 = Json.parseToJsonElement(res.bodyAsText())
-                .jsonObject["payload"]?.jsonObject?.get("data")?.jsonPrimitive?.content
-                ?: return@withTimeoutOrNull null
-            java.util.Base64.getDecoder().decode(base64).toString(Charsets.UTF_8)
-        }
+    return metadataCallOrNull("secret '$secretName'") {
+        val url = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
+        val res = httpClient.get(url) { header("Authorization", "Bearer $token") }
+        if (res.status.value != 200) return@metadataCallOrNull null
+        val base64 = Json.parseToJsonElement(res.bodyAsText())
+            .jsonObject["payload"]?.jsonObject?.get("data")?.jsonPrimitive?.content
+            ?: return@metadataCallOrNull null
+        java.util.Base64.getDecoder().decode(base64).toString(Charsets.UTF_8)
     }
 }
 
@@ -225,7 +282,8 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "bundle-signing-key"              -> ""
     // Firebase (prod-only; value is a stringified service-account JSON)
     "firebase-service-account-key"    -> ""
-    // Live weather
+    // Live weather — see LiveModule. Default false = real upstream data.
+    "live-weather-simulation"         -> "false"
     "live-weather-enabled"            -> "false"
     else                              -> ""
 }

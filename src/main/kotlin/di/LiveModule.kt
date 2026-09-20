@@ -18,15 +18,42 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger("LiveModule")
 
 /**
- * Secret-manager key that swaps the real vendor feed for the simulator. Never set this to
- * "true" in production. Resolved through getSecretValue(), so it can live in the app-secrets
- * JSON blob, as an individual LIVE_WEATHER_ENABLED env var override, or fall back to "false".
+ * Secret-manager key that replaces the real vendor feed with the simulator.
+ *
+ * This is NOT a feature toggle. The live-weather websocket API is registered unconditionally
+ * (see RouteModule) and needs nothing switched on; who may use it is decided by JWT auth and
+ * LiveEntitlementResolver, not by this flag. All this selects is *where the numbers come from*:
+ * false (the default) reads the real OpenWeather feed, true generates them.
+ *
+ * Resolved through getSecretValue(), so it can live in the app-secrets JSON blob, or be
+ * overridden by a LIVE_WEATHER_SIMULATION env var for local dev.
  */
-private const val LIVE_SIMULATION_KEY = "live-weather-enabled"
+private const val LIVE_SIMULATION_KEY = "live-weather-simulation"
+
+/**
+ * Previous name for the same flag. It read as "turn live weather on", which it never meant, so it
+ * is still honoured to avoid orphaning deployed secrets but warns on use.
+ */
+private const val LIVE_SIMULATION_KEY_DEPRECATED = "live-weather-enabled"
 
 /** Resolved once per process — the flag never changes within a running instance. */
-private val isLiveSimulationEnabled: Boolean by lazy {
-    getSecretValue(LIVE_SIMULATION_KEY).toBoolean()
+private val isLiveSimulationEnabled: Boolean by lazy { resolveSimulationFlag() }
+
+private fun resolveSimulationFlag(): Boolean {
+    if (getSecretValue(LIVE_SIMULATION_KEY).toBoolean()) return true
+
+    // Only consult the old name if the current one did not opt in, so the two can coexist
+    // during a rename without the stale key silently winning.
+    val viaDeprecated = getSecretValue(LIVE_SIMULATION_KEY_DEPRECATED).toBoolean()
+    if (viaDeprecated) {
+        log.warn(
+            "Secret key '{}' is deprecated — rename it to '{}'. It does not enable live weather " +
+                "(that is always on); it replaces real data with synthetic data.",
+            LIVE_SIMULATION_KEY_DEPRECATED,
+            LIVE_SIMULATION_KEY
+        )
+    }
+    return viaDeprecated
 }
 
 /**
@@ -54,12 +81,22 @@ val liveModule = module {
         UpstreamConditionsSource(get<WeatherService>())
     }
 
-    single<ConditionsSource> {
+    /**
+     * createdAtStart so the data-source choice is resolved and logged during startup rather than
+     * on the first websocket subscribe. If a deploy is accidentally serving synthetic data, that
+     * must be visible in the deploy logs, not hours later in the first connecting client's trace.
+     * Construction is pure wiring — no network call — so it costs nothing at boot.
+     */
+    single<ConditionsSource>(createdAtStart = true) {
         val upstream = get<UpstreamConditionsSource>(named("upstreamConditionsSource"))
         if (isLiveSimulationEnabled) {
-            log.warn(
-                "$LIVE_SIMULATION_KEY=true — live weather is SYNTHETIC. " +
-                    "Values drift artificially and alerts are fabricated."
+            log.error(
+                "================================================================\n" +
+                    "  LIVE WEATHER IS SERVING SYNTHETIC DATA ($LIVE_SIMULATION_KEY=true).\n" +
+                    "  Temperatures are random-walked and severe-weather alerts are\n" +
+                    "  FABRICATED. This must never be true in production — remove the\n" +
+                    "  key or set it to false to serve the real OpenWeather feed.\n" +
+                    "================================================================"
             )
             SimulatedConditionsSource(seedSource = upstream)
         } else {
