@@ -89,6 +89,14 @@ fun Route.botAtlassianRoute() {
                 call.respondError("Missing project key", Unit, HttpStatusCode.BadRequest)
                 return@get
             }
+            if (!config.isProjectKeyAllowed(key)) {
+                call.respondError(
+                    "Project key is not allowed (bots are constrained to ${config.defaultProject})",
+                    Unit,
+                    HttpStatusCode.Forbidden,
+                )
+                return@get
+            }
             when (val result = apiClient.getProject(key)) {
                 is Result.Success -> call.respondSuccess("Atlassian project", result.data)
                 is Result.Error -> {

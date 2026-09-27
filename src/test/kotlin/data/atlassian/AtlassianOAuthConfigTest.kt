@@ -29,8 +29,34 @@ class AtlassianOAuthConfigTest {
             config.scopes,
         )
         assertTrue(config.isRedirectUriAllowed("https://api.example.com/admin/atlassian/oauth/callback"))
-        assertTrue(config.isRedirectUriAllowed("http://localhost:8080/admin/atlassian/oauth/callback"))
+        // Localhost must NOT be auto-allowlisted when ATLASSIAN_OAUTH_LOCALHOST_REDIRECT is unset.
+        assertFalse(config.isRedirectUriAllowed("http://localhost:8080/admin/atlassian/oauth/callback"))
         assertFalse(config.isRedirectUriAllowed("https://evil.example/callback"))
+        assertTrue(config.isProjectKeyAllowed("APE"))
+        assertTrue(config.isProjectKeyAllowed("ape"))
+        assertFalse(config.isProjectKeyAllowed("OTHER"))
+        assertFalse(config.isProjectKeyAllowed("../APE"))
+        assertFalse(config.isProjectKeyAllowed("APE?x=1"))
+    }
+
+    @Test
+    fun `explicit localhost redirect is allowlisted when env set`() {
+        val config = AtlassianOAuthConfig.fromEnvironment(
+            getSecret = {
+                when (it) {
+                    AtlassianOAuthConfig.SECRET_CLIENT_ID -> "cid"
+                    AtlassianOAuthConfig.SECRET_CLIENT_SECRET -> "csec"
+                    AtlassianOAuthConfig.SECRET_REDIRECT_URI -> "https://api.example.com/admin/atlassian/oauth/callback"
+                    else -> ""
+                }
+            },
+            getenv = { key ->
+                if (key == "ATLASSIAN_OAUTH_LOCALHOST_REDIRECT") {
+                    "http://localhost:8080/admin/atlassian/oauth/callback"
+                } else null
+            },
+        )
+        assertTrue(config.isRedirectUriAllowed("http://localhost:8080/admin/atlassian/oauth/callback"))
     }
 
     @Test

@@ -182,4 +182,23 @@ class AtlassianApiClientTest {
         assertEquals(3, myselfCalls)
         http.close()
     }
+
+    @Test
+    fun `rejects non-APE project key without calling Atlassian`() = runBlocking {
+        var calls = 0
+        val engine = MockEngine {
+            calls++
+            error("Atlassian must not be called for disallowed project keys")
+        }
+        val http = HttpClient(engine)
+        val store = AtlassianTokenStore(initialRefreshToken = "refresh-OLD", clock = { 1_000_000L })
+        val oauth = AtlassianOAuthClient(config(), store, http, clock = { 1_000_000L })
+        val api = AtlassianApiClient(config(), oauth, http, maxAttempts = 2, initialBackoffMs = 1)
+
+        val result = api.getProject("EVIL")
+        assertTrue(result is Result.Error)
+        assertEquals(0, calls)
+        assertTrue((result as Result.Error).message.contains("not allowed", ignoreCase = true))
+        http.close()
+    }
 }
