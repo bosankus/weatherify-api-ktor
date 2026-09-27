@@ -12,7 +12,7 @@ holding Atlassian access tokens.
    Access tokens never leave the API process.
 2. **Atomic refresh_token rotation** with a single-flight mutex so concurrent refreshes cannot
    invalidate tokens.
-3. **Redirect URI fixed allowlist** (configured HTTPS + optional localhost for bootstrap).
+3. **Redirect URI fixed allowlist** (configured HTTPS; localhost only if `ATLASSIAN_OAUTH_LOCALHOST_REDIRECT` is explicitly set).
 4. **Redact** tokens, `Authorization` headers, and refresh bodies from logs/metrics/errors.
 5. **One config object** (`AtlassianOAuthConfig`) for site URL + cloudId + project + OAuth endpoints.
 6. **Backoff** on 429/5xx; refresh **only** on classified auth failures (401 + auth-shaped body).
@@ -40,7 +40,7 @@ Also: `ATLASSIAN_BASE_URL`, `ATLASSIAN_CLOUD_ID`, `ATLASSIAN_DEFAULT_PROJECT`
 | GET | `/bot/atlassian/health` | Config + token freshness (no secrets) |
 | GET | `/bot/atlassian/myself` | Proxy `GET /rest/api/3/myself` |
 | GET | `/bot/atlassian/project` | Proxy default project (APE) |
-| GET | `/bot/atlassian/project/{key}` | Proxy project by key |
+| GET | `/bot/atlassian/project/{key}` | Proxy project by key (**APE only** — other keys → 403) |
 
 ## Admin bootstrap (one-time)
 
