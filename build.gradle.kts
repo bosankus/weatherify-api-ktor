@@ -91,6 +91,7 @@ dependencies {
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.jedis)
+    testImplementation("io.ktor:ktor-client-mock:${libs.versions.ktor.version.get()}")
 }
 
 jacoco {
