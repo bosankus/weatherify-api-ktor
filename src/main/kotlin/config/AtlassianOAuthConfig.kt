@@ -11,7 +11,7 @@ import com.androidplay.core.secrets.getSecretValue
 data class AtlassianOAuthConfig(
     val clientId: String,
     val clientSecret: String,
-    /** Fixed allowlist: configured HTTPS redirect + optional localhost for bootstrap only. */
+    /** Fixed allowlist: configured HTTPS redirect; localhost only if ATLASSIAN_OAUTH_LOCALHOST_REDIRECT is set. */
     val redirectUriAllowlist: Set<String>,
     val baseUrl: String,
     val cloudId: String,
@@ -28,6 +28,15 @@ data class AtlassianOAuthConfig(
     fun isRedirectUriAllowed(redirectUri: String): Boolean =
         redirectUriAllowlist.any { it.equals(redirectUri.trim(), ignoreCase = false) }
 
+    /** APE-10 lock: bots may only touch the configured default project key (APE). */
+    fun isProjectKeyAllowed(key: String): Boolean {
+        val normalized = key.trim().uppercase()
+        if (normalized.isEmpty()) return false
+        // Jira project keys: letters + digits; reject path / query tricks.
+        if (!PROJECT_KEY_REGEX.matches(normalized)) return false
+        return normalized == defaultProject.trim().uppercase()
+    }
+
     fun isConfigured(): Boolean =
         clientId.isNotBlank() &&
             clientSecret.isNotBlank() &&
@@ -41,6 +50,7 @@ data class AtlassianOAuthConfig(
         const val DEFAULT_TOKEN_ENDPOINT = "https://auth.atlassian.com/oauth/token"
         const val DEFAULT_AUTH_ENDPOINT = "https://auth.atlassian.com/authorize"
         val DEFAULT_SCOPES = listOf("read:jira-work", "write:jira-work", "offline_access")
+        private val PROJECT_KEY_REGEX = Regex("^[A-Z][A-Z0-9]{1,9}$")
 
         const val SECRET_CLIENT_ID = "atlassian-oauth-client-id"
         const val SECRET_CLIENT_SECRET = "atlassian-oauth-client-secret"
@@ -54,15 +64,11 @@ data class AtlassianOAuthConfig(
             val configuredRedirect = getSecret(SECRET_REDIRECT_URI).trim()
             val allowlist = buildSet {
                 if (configuredRedirect.isNotBlank()) add(configuredRedirect)
-                // Optional localhost bootstrap only (never production callback).
+                // Localhost bootstrap ONLY when explicitly set — never auto-added in prod.
                 getenv("ATLASSIAN_OAUTH_LOCALHOST_REDIRECT")
                     ?.trim()
                     ?.takeIf { it.isNotBlank() }
                     ?.let { add(it) }
-                    ?: run {
-                        // Sensible default localhost bootstrap URI when none configured.
-                        add("http://localhost:8080/admin/atlassian/oauth/callback")
-                    }
             }
 
             return AtlassianOAuthConfig(

@@ -41,8 +41,13 @@ class AtlassianApiClient(
     suspend fun getMyself(): Result<JsonObject> =
         getJson("/rest/api/3/myself")
 
-    suspend fun getProject(key: String = config.defaultProject): Result<JsonObject> =
-        getJson("/rest/api/3/project/${key.trim()}")
+    suspend fun getProject(key: String = config.defaultProject): Result<JsonObject> {
+        val normalized = key.trim().uppercase()
+        if (!config.isProjectKeyAllowed(normalized)) {
+            return Result.error("Project key is not allowed (APE-10 constraint)")
+        }
+        return getJson("/rest/api/3/project/$normalized")
+    }
 
     suspend fun getJson(path: String): Result<JsonObject> =
         execute(HttpMethod.Get, path).map { body ->
@@ -139,7 +144,11 @@ class AtlassianApiClient(
     }
 
     private fun resolveUrl(path: String): String {
-        if (path.startsWith("http://") || path.startsWith("https://")) return path
+        // Defense in depth: never follow absolute URLs (SSRF footgun if path is ever caller-influenced).
+        require(!path.startsWith("http://") && !path.startsWith("https://")) {
+            "Absolute Atlassian request URLs are not allowed"
+        }
+        require(!path.contains("..")) { "Path traversal is not allowed" }
         val normalized = if (path.startsWith("/")) path else "/$path"
         return "${config.jiraApiBaseUrl}$normalized"
     }
