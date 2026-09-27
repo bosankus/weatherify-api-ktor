@@ -63,6 +63,10 @@ private val gcpAccessToken: String? by lazy { gcpProjectId?.let { fetchAccessTok
 //   "razorpay-plan-id-solo"          Razorpay Solo subscription plan ID
 //   "razorpay-plan-id-team"          Razorpay Team subscription plan ID
 //   "github-client-id"               GitHub OAuth app client ID
+//   "atlassian-oauth-client-id"      Atlassian OAuth (3LO) client ID (APE-10)
+//   "atlassian-oauth-client-secret"  Atlassian OAuth (3LO) client secret (APE-10)
+//   "atlassian-oauth-redirect-uri"   Allowlisted HTTPS redirect URI (APE-10)
+//   "atlassian-oauth-refresh-token"  Shared service-account refresh token (APE-10)
 //   "github-client-secret"           GitHub OAuth app client secret
 //   "github-webhook-secret"          GitHub webhook HMAC secret
 //   "cloudflare-account-id"          Cloudflare account ID
@@ -289,6 +293,11 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "github-client-id"                -> "dummy_client_id"
     "github-client-secret"            -> "dummy_client_secret"
     "github-webhook-secret"           -> ""
+    // Atlassian OAuth (APE-10)
+    "atlassian-oauth-client-id"       -> "dummy_atlassian_client_id"
+    "atlassian-oauth-client-secret"   -> "dummy_atlassian_client_secret"
+    "atlassian-oauth-redirect-uri"    -> "http://localhost:8080/admin/atlassian/oauth/callback"
+    "atlassian-oauth-refresh-token"   -> ""
     // Cloudflare R2 + CDN
     "cloudflare-account-id"           -> ""
     "cloudflare-r2-bucket-name"       -> ""
