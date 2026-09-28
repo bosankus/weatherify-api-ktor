@@ -4,6 +4,8 @@ import com.androidplay.core.secrets.getSecretValue
 import config.AtlassianOAuthConfig
 import data.atlassian.AtlassianApiClient
 import data.atlassian.AtlassianOAuthClient
+import data.atlassian.AtlassianOAuthStateStore
+import data.atlassian.AtlassianRefreshTokenPersister
 import data.atlassian.AtlassianTokenStore
 import org.koin.dsl.module
 
@@ -19,11 +21,16 @@ val atlassianModule = module {
         AtlassianTokenStore(initialRefreshToken = refresh)
     }
 
+    single { AtlassianOAuthStateStore() }
+
+    single { AtlassianRefreshTokenPersister() }
+
     single {
         AtlassianOAuthClient(
             config = get(),
             tokenStore = get(),
             httpClient = get(),
+            refreshTokenPersister = get(),
         )
     }
 

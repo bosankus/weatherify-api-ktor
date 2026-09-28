@@ -3,10 +3,12 @@ package bose.ankush.route
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import com.androidplay.core.common.Result
+import com.androidplay.core.secrets.getSecretValue
 import config.AtlassianOAuthConfig
 import data.atlassian.AtlassianApiClient
 import data.atlassian.AtlassianLogRedactor
 import data.atlassian.AtlassianOAuthClient
+import data.atlassian.AtlassianOAuthStateStore
 import data.atlassian.AtlassianTokenStore
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -18,16 +20,22 @@ import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import org.slf4j.LoggerFactory
-import java.util.UUID
+import util.AuthHelper.getAuthenticatedAdminOrRespond
+import util.AuthHelper.requireBotSharedSecretOrRespond
 
 private val botAtlassianLog = LoggerFactory.getLogger("BotAtlassianRoute")
 
 /**
- * Bot-facing Atlassian proxy routes. Bots call `/bot/atlassian/...` only —
+ * Bot-facing Atlassian proxy routes. Bots call /bot/atlassian/... only —
  * Atlassian access tokens never leave middleware.
  *
- * Admin bootstrap OAuth start/callback live under `/admin/atlassian/oauth/...`
- * and enforce the fixed redirect-URI allowlist.
+ * /bot/atlassian/... requires the bot shared secret
+ * (bot-atlassian-shared-secret / BOT_ATLASSIAN_SHARED_SECRET) via
+ * Authorization: Bearer or X-Bot-Token.
+ *
+ * Admin bootstrap OAuth start/callback live under /admin/atlassian/oauth/...,
+ * require an admin JWT (getAuthenticatedAdminOrRespond), and enforce the fixed
+ * redirect-URI allowlist plus single-use OAuth state.
  *
  * APE-10
  */
@@ -36,9 +44,12 @@ fun Route.botAtlassianRoute() {
     val tokenStore: AtlassianTokenStore by inject()
     val oauthClient: AtlassianOAuthClient by inject()
     val apiClient: AtlassianApiClient by inject()
+    val stateStore: AtlassianOAuthStateStore by inject()
+    val botSharedSecret = getSecretValue(AtlassianOAuthConfig.SECRET_BOT_SHARED)
 
     route("/bot/atlassian") {
         get("/health") {
+            if (!call.requireBotSharedSecretOrRespond(botSharedSecret)) return@get
             val health = tokenStore.health()
             val payload = AtlassianHealthResponse(
                 configured = config.isConfigured(),
@@ -51,11 +62,13 @@ fun Route.botAtlassianRoute() {
                 accessTokenFresh = health.accessTokenFresh,
                 // Epoch only — never the token itself.
                 accessExpiresAtEpochMs = health.accessExpiresAtEpochMs,
+                refreshTokenPersistOk = health.refreshTokenPersistOk,
             )
             call.respondSuccess("Atlassian bot auth health", payload)
         }
 
         get("/myself") {
+            if (!call.requireBotSharedSecretOrRespond(botSharedSecret)) return@get
             when (val result = apiClient.getMyself()) {
                 is Result.Success -> call.respondSuccess("Atlassian myself", result.data)
                 is Result.Error -> {
@@ -70,6 +83,7 @@ fun Route.botAtlassianRoute() {
         }
 
         get("/project") {
+            if (!call.requireBotSharedSecretOrRespond(botSharedSecret)) return@get
             when (val result = apiClient.getProject(config.defaultProject)) {
                 is Result.Success -> call.respondSuccess("Atlassian project", result.data)
                 is Result.Error -> {
@@ -84,6 +98,7 @@ fun Route.botAtlassianRoute() {
         }
 
         get("/project/{key}") {
+            if (!call.requireBotSharedSecretOrRespond(botSharedSecret)) return@get
             val key = call.parameters["key"]?.trim().orEmpty()
             if (key.isEmpty()) {
                 call.respondError("Missing project key", Unit, HttpStatusCode.BadRequest)
@@ -113,6 +128,7 @@ fun Route.botAtlassianRoute() {
 
     route("/admin/atlassian/oauth") {
         get("/start") {
+            call.getAuthenticatedAdminOrRespond() ?: return@get
             val redirectUri = call.request.queryParameters["redirect_uri"]
                 ?: config.redirectUriAllowlist.firstOrNull()
             if (redirectUri.isNullOrBlank()) {
@@ -127,7 +143,7 @@ fun Route.botAtlassianRoute() {
                 )
                 return@get
             }
-            val state = UUID.randomUUID().toString()
+            val state = stateStore.issue()
             when (val url = oauthClient.buildAuthorizationUrl(redirectUri, state)) {
                 is Result.Success -> {
                     botAtlassianLog.info("Starting Atlassian OAuth bootstrap (state issued, redirect allowlisted)")
@@ -142,7 +158,9 @@ fun Route.botAtlassianRoute() {
         }
 
         get("/callback") {
+            call.getAuthenticatedAdminOrRespond() ?: return@get
             val code = call.request.queryParameters["code"]
+            val state = call.request.queryParameters["state"]
             val error = call.request.queryParameters["error"]
             val redirectUri = call.request.queryParameters["redirect_uri"]
                 ?: config.redirectUriAllowlist.firstOrNull()
@@ -153,6 +171,14 @@ fun Route.botAtlassianRoute() {
                 call.respondText(
                     "Atlassian OAuth failed: $safe",
                     status = HttpStatusCode.BadRequest,
+                )
+                return@get
+            }
+            if (!stateStore.consume(state)) {
+                botAtlassianLog.warn("Atlassian OAuth callback rejected: missing, mismatched, expired, or replayed state")
+                call.respondText(
+                    "Invalid or expired OAuth state",
+                    status = HttpStatusCode.Forbidden,
                 )
                 return@get
             }
@@ -170,10 +196,13 @@ fun Route.botAtlassianRoute() {
 
             when (val exchanged = oauthClient.exchangeAuthorizationCode(code, redirectUri)) {
                 is Result.Success -> {
-                    botAtlassianLog.info("Atlassian OAuth bootstrap complete; refresh token stored in memory")
+                    botAtlassianLog.info(
+                        "Atlassian OAuth bootstrap complete; refresh token stored in memory " +
+                            "(durable SM persist attempted on rotation)",
+                    )
                     call.respondText(
-                        "Atlassian OAuth bootstrap succeeded. Persist the rotated refresh token to " +
-                            "secret atlassian-oauth-refresh-token / ATLASSIAN_OAUTH_REFRESH_TOKEN for production.",
+                        "Atlassian OAuth bootstrap succeeded. Refresh token is in memory; " +
+                            "rotation also attempts Secret Manager key atlassian-oauth-refresh-token.",
                         status = HttpStatusCode.OK,
                     )
                 }
@@ -200,4 +229,5 @@ data class AtlassianHealthResponse(
     val hasAccessToken: Boolean,
     val accessTokenFresh: Boolean,
     val accessExpiresAtEpochMs: Long? = null,
+    val refreshTokenPersistOk: Boolean = true,
 )

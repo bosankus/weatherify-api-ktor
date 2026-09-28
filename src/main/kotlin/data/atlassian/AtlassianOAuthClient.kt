@@ -33,6 +33,7 @@ class AtlassianOAuthClient(
     private val httpClient: HttpClient,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val json: Json = Json { ignoreUnknownKeys = true; isLenient = true },
+    private val refreshTokenPersister: AtlassianRefreshTokenPersister? = null,
 ) {
     private val log = LoggerFactory.getLogger(AtlassianOAuthClient::class.java)
 
@@ -147,12 +148,26 @@ class AtlassianOAuthClient(
                 log.warn(msg)
                 return Result.error(msg)
             }
-            tokenStore.updateTokens(
+            val rotated = tokenStore.updateTokens(
                 newAccessToken = access,
                 newRefreshToken = parsed.refreshToken,
                 expiresInSeconds = parsed.expiresIn ?: 3600L,
                 nowEpochMs = clock(),
             )
+            if (rotated) {
+                val newRefresh = parsed.refreshToken
+                if (!newRefresh.isNullOrBlank() && refreshTokenPersister != null) {
+                    // Durable persist is best-effort: never fail the token response.
+                    val persistOk = refreshTokenPersister.persistRotatedRefreshToken(newRefresh)
+                    tokenStore.markRefreshTokenPersistResult(persistOk)
+                    if (!persistOk) {
+                        log.error(
+                            "Atlassian refresh token rotated in-memory but Secret Manager persist failed " +
+                                "(health.refreshTokenPersistOk=false; value redacted)",
+                        )
+                    }
+                }
+            }
             Result.success(
                 TokenPayload(
                     accessToken = access,
