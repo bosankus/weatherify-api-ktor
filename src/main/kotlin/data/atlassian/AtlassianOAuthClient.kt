@@ -65,20 +65,30 @@ class AtlassianOAuthClient(
         if (code.isBlank()) {
             return Result.error("Authorization code is blank")
         }
-        return tokenRequest(
-            mapOf(
-                "grant_type" to "authorization_code",
-                "client_id" to config.clientId,
-                "client_secret" to config.clientSecret,
-                "code" to code,
-                "redirect_uri" to redirectUri,
+        return when (
+            val result = tokenRequest(
+                mapOf(
+                    "grant_type" to "authorization_code",
+                    "client_id" to config.clientId,
+                    "client_secret" to config.clientSecret,
+                    "code" to code,
+                    "redirect_uri" to redirectUri,
+                )
             )
-        ).map { Unit }
+        ) {
+            is Result.Success -> {
+                persistRotatedRefreshIfNeeded(result.data.rotatedRefreshToPersist)
+                Result.success(Unit)
+            }
+            is Result.Error -> result
+        }
     }
 
     /**
      * Returns a valid access token for middleware use only.
      * Concurrent callers coalesce on a single refresh (mutex single-flight).
+     * Durable SM persist runs after the mutex is released so other refresh waiters
+     * are not blocked on Secret Manager HTTP.
      */
     suspend fun getValidAccessToken(): Result<String> {
         if (tokenStore.isAccessTokenFresh(clock())) {
@@ -86,24 +96,45 @@ class AtlassianOAuthClient(
             val token = snap.accessToken
             if (!token.isNullOrBlank()) return Result.success(token)
         }
-        return refreshMutex.withLock {
+        var rotatedToPersist: String? = null
+        val result = refreshMutex.withLock {
             if (tokenStore.isAccessTokenFresh(clock())) {
                 val token = tokenStore.snapshot().accessToken
                 if (!token.isNullOrBlank()) return@withLock Result.success(token)
             }
-            refreshAccessToken()
+            when (val refreshed = refreshAccessToken()) {
+                is Result.Success -> {
+                    rotatedToPersist = refreshed.data.rotatedRefreshToPersist
+                    Result.success(refreshed.data.accessToken)
+                }
+                is Result.Error -> refreshed
+            }
         }
+        persistRotatedRefreshIfNeeded(rotatedToPersist)
+        return result
     }
 
     /**
      * Force a refresh (e.g. after a classified 401 auth failure). Still single-flight.
+     * Persist runs after the mutex is released (same as [getValidAccessToken]).
      */
-    suspend fun forceRefresh(): Result<String> = refreshMutex.withLock {
-        tokenStore.clearAccessToken()
-        refreshAccessToken()
+    suspend fun forceRefresh(): Result<String> {
+        var rotatedToPersist: String? = null
+        val result = refreshMutex.withLock {
+            tokenStore.clearAccessToken()
+            when (val refreshed = refreshAccessToken()) {
+                is Result.Success -> {
+                    rotatedToPersist = refreshed.data.rotatedRefreshToPersist
+                    Result.success(refreshed.data.accessToken)
+                }
+                is Result.Error -> refreshed
+            }
+        }
+        persistRotatedRefreshIfNeeded(rotatedToPersist)
+        return result
     }
 
-    private suspend fun refreshAccessToken(): Result<String> {
+    private suspend fun refreshAccessToken(): Result<TokenPayload> {
         val refresh = tokenStore.snapshot().refreshToken
         if (refresh.isNullOrBlank()) {
             return Result.error("Atlassian OAuth refresh token is not configured")
@@ -115,9 +146,14 @@ class AtlassianOAuthClient(
                 "client_secret" to config.clientSecret,
                 "refresh_token" to refresh,
             )
-        ).map { it.accessToken }
+        )
     }
 
+    /**
+     * Exchanges or refreshes tokens and updates the in-memory store.
+     * Does **not** perform durable SM persist — callers must invoke
+     * [persistRotatedRefreshIfNeeded] after releasing [refreshMutex].
+     */
     private suspend fun tokenRequest(form: Map<String, String>): Result<TokenPayload> {
         return try {
             val response = httpClient.submitForm(
@@ -154,25 +190,14 @@ class AtlassianOAuthClient(
                 expiresInSeconds = parsed.expiresIn ?: 3600L,
                 nowEpochMs = clock(),
             )
-            if (rotated) {
-                val newRefresh = parsed.refreshToken
-                if (!newRefresh.isNullOrBlank() && refreshTokenPersister != null) {
-                    // Durable persist is best-effort: never fail the token response.
-                    val persistOk = refreshTokenPersister.persistRotatedRefreshToken(newRefresh)
-                    tokenStore.markRefreshTokenPersistResult(persistOk)
-                    if (!persistOk) {
-                        log.error(
-                            "Atlassian refresh token rotated in-memory but Secret Manager persist failed " +
-                                "(health.refreshTokenPersistOk=false; value redacted)",
-                        )
-                    }
-                }
-            }
+            val rotatedRefreshToPersist =
+                if (rotated && !parsed.refreshToken.isNullOrBlank()) parsed.refreshToken else null
             Result.success(
                 TokenPayload(
                     accessToken = access,
                     refreshToken = parsed.refreshToken,
                     expiresIn = parsed.expiresIn ?: 3600L,
+                    rotatedRefreshToPersist = rotatedRefreshToPersist,
                 )
             )
         } catch (e: Exception) {
@@ -182,6 +207,19 @@ class AtlassianOAuthClient(
             )
             log.error(msg)
             Result.error(msg, e)
+        }
+    }
+
+    /** Soft-fail durable write; never throws into the token-success path. */
+    private suspend fun persistRotatedRefreshIfNeeded(rotatedRefresh: String?) {
+        if (rotatedRefresh.isNullOrBlank() || refreshTokenPersister == null) return
+        val persistOk = refreshTokenPersister.persistRotatedRefreshToken(rotatedRefresh)
+        tokenStore.markRefreshTokenPersistResult(persistOk)
+        if (!persistOk) {
+            log.error(
+                "Atlassian refresh token rotated in-memory but Secret Manager persist failed " +
+                    "(health.refreshTokenPersistOk=false; value redacted)",
+            )
         }
     }
 
@@ -213,5 +251,6 @@ class AtlassianOAuthClient(
         val accessToken: String,
         val refreshToken: String?,
         val expiresIn: Long,
+        val rotatedRefreshToPersist: String? = null,
     )
 }

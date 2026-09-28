@@ -37,8 +37,9 @@ Also: `ATLASSIAN_BASE_URL`, `ATLASSIAN_CLOUD_ID`, `ATLASSIAN_DEFAULT_PROJECT`
 ## Bot routes
 
 Require `Authorization: Bearer <BOT_ATLASSIAN_SHARED_SECRET>` or `X-Bot-Token: <secret>` (401 otherwise).
-Blank and the public example value `dummy_bot_atlassian_shared_secret` are rejected;
-the gate fails closed when Secret Manager or environment configuration is missing.
+Blank and the public example value `dummy_bot_atlassian_shared_secret` are rejected
+(local Secret Manager fallback is empty; AuthHelper also rejects the public dummy string).
+The gate fails closed when Secret Manager or environment configuration is missing.
 
 | Method | Path | Behavior |
 |---|---|---|
@@ -67,9 +68,12 @@ Instead, its single-use, 10-minute in-process `state` is the callback CSRF check
 | GET | `/admin/atlassian/oauth/callback` | No JWT gate; verifies+consumes single-use `state`; code exchange; stores tokens in memory; persists rotated refresh to SM |
 
 Rotated refresh tokens are written to Secret Manager key `atlassian-oauth-refresh-token`
-(and master `app-secrets` when available). SM write failure does not fail the request but sets
+(and master `app-secrets` when available). Durable persist runs **after** the refresh
+single-flight mutex is released (on `Dispatchers.IO`) so concurrent refresh waiters are not
+blocked on Secret Manager HTTP. SM write failure does not fail the request but sets
 `refreshTokenPersistOk=false` on health; if the write is unavailable, the rotated token is
-only in memory and will be lost on process restart.
+only in memory and will be lost on process restart. Persist success is gated on the
+individual secret `addVersion` (master JSON patch is best-effort only).
 
 OAuth `state` is held in a 10-minute in-process store. This supports a single running
 instance only; multiple instances require session affinity or a durable shared state store.

@@ -216,9 +216,11 @@ private fun fetchAccessToken(): String? =
         json.substringAfter("\"access_token\":\"").substringBefore("\"").takeIf { it.isNotBlank() }
     }.also { if (it == null) log.warn("Could not fetch GCP access token from metadata server") }
 
-private fun fetchRawSecret(secretName: String): String? {
+private fun fetchRawSecret(secretName: String, accessToken: String? = null): String? {
     val projectId = gcpProjectId ?: return null
-    val token = gcpAccessToken ?: return null
+    // Prefer a caller-supplied fresh token (e.g. during updateSecretValue); fall back to
+    // the process-lazy token used by ordinary reads.
+    val token = accessToken ?: gcpAccessToken ?: return null
     return metadataCallOrNull("secret '$secretName'") {
         val url = "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName/versions/latest:access"
         val res = httpClient.get(url) { header("Authorization", "Bearer $token") }
@@ -351,7 +353,9 @@ private fun updateMasterSecretKey(
     value: String,
 ): Boolean {
     val masterName = masterSecretName
-    val raw = fetchRawSecret(masterName) ?: run {
+    // Use the fresh accessToken from updateSecretValue — process-lazy gcpAccessToken
+    // may be expired on long-lived instances.
+    val raw = fetchRawSecret(masterName, accessToken) ?: run {
         log.debug("Master secret '{}' not available for key update", masterName)
         return false
     }
@@ -409,7 +413,7 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "atlassian-oauth-client-secret"   -> "dummy_atlassian_client_secret"
     "atlassian-oauth-redirect-uri"    -> "http://localhost:8080/admin/atlassian/oauth/callback"
     "atlassian-oauth-refresh-token"   -> ""
-    "bot-atlassian-shared-secret"     -> "dummy_bot_atlassian_shared_secret"
+    "bot-atlassian-shared-secret"     -> "" // fail-closed; AuthHelper also rejects the public dummy
     // Cloudflare R2 + CDN
     "cloudflare-account-id"           -> ""
     "cloudflare-r2-bucket-name"       -> ""
