@@ -67,6 +67,9 @@ private val gcpAccessToken: String? by lazy { gcpProjectId?.let { fetchAccessTok
 //   "atlassian-oauth-client-secret"  Atlassian OAuth (3LO) client secret (APE-10)
 //   "atlassian-oauth-redirect-uri"   Allowlisted HTTPS redirect URI (APE-10)
 //   "atlassian-oauth-refresh-token"  Shared service-account refresh token (APE-10)
+//   "bot-atlassian-shared-secret"    Shared secret for /bot/atlassian/... caller auth (APE-10)
+//                                    Env: BOT_ATLASSIAN_SHARED_SECRET. Bots send it as
+//                                    Authorization: Bearer <secret> or X-Bot-Token: <secret>.
 //   "github-client-secret"           GitHub OAuth app client secret
 //   "github-webhook-secret"          GitHub webhook HMAC secret
 //   "cloudflare-account-id"          Cloudflare account ID
@@ -259,6 +262,111 @@ fun getSecretValue(secretName: String): String {
     }
 }
 
+
+/**
+ * Adds a new Secret Manager version for [secretName] with [value].
+ *
+ * Used for durable Atlassian refresh-token rotation (APE-10). Never logs [value].
+ * Returns true when Secret Manager accepts the new version; false when GCP is
+ * unavailable, the call fails, or [value] is blank. Callers must keep serving
+ * from in-memory state and surface a health flag on failure.
+ *
+ * Also attempts to patch the master `app-secrets` JSON (key = [secretName]) when
+ * that secret is readable, so Cloud Run mounts of APP_SECRETS pick up the rotation
+ * on the next revision. Individual-secret success alone is enough to return true.
+ */
+fun updateSecretValue(secretName: String, value: String): Boolean {
+    if (secretName.isBlank() || value.isBlank()) {
+        log.warn("updateSecretValue skipped: blank secret name or value")
+        return false
+    }
+    val projectId = gcpProjectId
+    if (projectId == null) {
+        log.warn("Cannot update secret '{}': GCP project ID unavailable (local/dev?)", secretName)
+        return false
+    }
+    // Fetch a fresh metadata token — the process-lazy token may be stale on long-lived instances.
+    val token = fetchAccessToken()
+    if (token == null) {
+        log.warn("Cannot update secret '{}': GCP access token unavailable", secretName)
+        return false
+    }
+
+    val individualOk = addSecretVersion(projectId, token, secretName, value)
+    val masterOk = updateMasterSecretKey(projectId, token, secretName, value)
+    return individualOk || masterOk
+}
+
+private fun addSecretVersion(
+    projectId: String,
+    accessToken: String,
+    secretName: String,
+    value: String,
+): Boolean {
+    return try {
+        runBlocking {
+            withTimeoutOrNull(15.seconds) {
+                val url =
+                    "https://secretmanager.googleapis.com/v1/projects/$projectId/secrets/$secretName:addVersion"
+                val payloadB64 = java.util.Base64.getEncoder()
+                    .encodeToString(value.toByteArray(Charsets.UTF_8))
+                val bodyJson = """{"payload":{"data":"$payloadB64"}}"""
+                val res = httpClient.post(url) {
+                    header("Authorization", "Bearer $accessToken")
+                    header("Content-Type", "application/json")
+                    setBody(bodyJson)
+                }
+                if (res.status.value in 200..299) {
+                    log.info("Secret '{}' new version added (value redacted)", secretName)
+                    true
+                } else {
+                    log.warn(
+                        "Failed to addVersion for secret '{}': HTTP {} (body redacted)",
+                        secretName,
+                        res.status.value,
+                    )
+                    false
+                }
+            } ?: false.also {
+                log.warn("Timed out adding Secret Manager version for '{}'", secretName)
+            }
+        }
+    } catch (e: Exception) {
+        log.warn("Exception adding Secret Manager version for '{}': {}", secretName, e.toString())
+        false
+    }
+}
+
+/**
+ * Fetches master secret JSON, updates [key], and adds a new version.
+ * Best-effort — races with concurrent writers are possible; failures are logged only.
+ */
+private fun updateMasterSecretKey(
+    projectId: String,
+    accessToken: String,
+    key: String,
+    value: String,
+): Boolean {
+    val masterName = masterSecretName
+    val raw = fetchRawSecret(masterName) ?: run {
+        log.debug("Master secret '{}' not available for key update", masterName)
+        return false
+    }
+    return try {
+        val existing = Json.parseToJsonElement(raw).jsonObject
+        val updatedMap = existing.toMutableMap()
+        updatedMap[key] = kotlinx.serialization.json.JsonPrimitive(value)
+        val updatedJson = Json.encodeToString(
+            kotlinx.serialization.json.JsonObject.serializer(),
+            kotlinx.serialization.json.JsonObject(updatedMap),
+        )
+        addSecretVersion(projectId, accessToken, masterName, updatedJson)
+    } catch (e: Exception) {
+        log.warn("Failed to patch master secret '{}' key '{}': {}", masterName, key, e.toString())
+        false
+    }
+}
+
 // Non-standard: weather-data-secret → WEATHER_API_KEY (all others follow UPPER_SNAKE convention).
 private fun toEnvKey(secretName: String): String = when (secretName) {
     "weather-data-secret" -> "WEATHER_API_KEY"
@@ -298,6 +406,7 @@ private fun localFallback(secretName: String): String = when (secretName) {
     "atlassian-oauth-client-secret"   -> "dummy_atlassian_client_secret"
     "atlassian-oauth-redirect-uri"    -> "http://localhost:8080/admin/atlassian/oauth/callback"
     "atlassian-oauth-refresh-token"   -> ""
+    "bot-atlassian-shared-secret"     -> "dummy_bot_atlassian_shared_secret"
     // Cloudflare R2 + CDN
     "cloudflare-account-id"           -> ""
     "cloudflare-r2-bucket-name"       -> ""
