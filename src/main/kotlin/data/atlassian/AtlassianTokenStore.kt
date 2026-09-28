@@ -28,6 +28,10 @@ class AtlassianTokenStore(
     @Volatile
     private var accessExpiresAtEpochMs: Long = 0L
 
+    /** True until a durable SM persist fails after refresh rotation. */
+    @Volatile
+    private var refreshTokenPersistOk: Boolean = true
+
     data class Snapshot(
         val accessToken: String?,
         val refreshToken: String?,
@@ -48,6 +52,8 @@ class AtlassianTokenStore(
     /**
      * Atomically rotate tokens. When [newRefreshToken] is null/blank the previous
      * refresh token is retained (Atlassian may omit it on refresh).
+     *
+     * @return true when a non-blank new refresh token was applied (caller should persist).
      */
     suspend fun updateTokens(
         newAccessToken: String,
@@ -55,15 +61,22 @@ class AtlassianTokenStore(
         expiresInSeconds: Long,
         nowEpochMs: Long = clock(),
         skewMs: Long = 60_000L,
-    ) {
+    ): Boolean {
         require(newAccessToken.isNotBlank()) { "access token must not be blank" }
-        mutex.withLock {
+        return mutex.withLock {
             accessToken = newAccessToken
+            var rotated = false
             if (!newRefreshToken.isNullOrBlank()) {
                 refreshToken = newRefreshToken
+                rotated = true
             }
             accessExpiresAtEpochMs = nowEpochMs + (expiresInSeconds * 1000L) - skewMs
+            rotated
         }
+    }
+
+    suspend fun markRefreshTokenPersistResult(ok: Boolean) = mutex.withLock {
+        refreshTokenPersistOk = ok
     }
 
     suspend fun clearAccessToken() = mutex.withLock {
@@ -79,6 +92,7 @@ class AtlassianTokenStore(
             hasAccessToken = !snap.accessToken.isNullOrBlank(),
             accessTokenFresh = isAccessTokenFresh(),
             accessExpiresAtEpochMs = if (snap.accessToken.isNullOrBlank()) null else snap.accessExpiresAtEpochMs,
+            refreshTokenPersistOk = refreshTokenPersistOk,
         )
     }
 }
@@ -88,4 +102,5 @@ data class TokenHealth(
     val hasAccessToken: Boolean,
     val accessTokenFresh: Boolean,
     val accessExpiresAtEpochMs: Long?,
+    val refreshTokenPersistOk: Boolean = true,
 )

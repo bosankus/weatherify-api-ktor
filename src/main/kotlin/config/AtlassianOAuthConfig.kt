@@ -28,7 +28,10 @@ data class AtlassianOAuthConfig(
     fun isRedirectUriAllowed(redirectUri: String): Boolean =
         redirectUriAllowlist.any { it.equals(redirectUri.trim(), ignoreCase = false) }
 
-    /** APE-10 lock: bots may only touch the configured default project key (APE). */
+    /**
+     * APE-10 lock: bots may only touch the configured default project key (APE).
+     * Comparison is case-insensitive after trim; path/query tricks are rejected.
+     */
     fun isProjectKeyAllowed(key: String): Boolean {
         val normalized = key.trim().uppercase()
         if (normalized.isEmpty()) return false
@@ -50,12 +53,13 @@ data class AtlassianOAuthConfig(
         const val DEFAULT_TOKEN_ENDPOINT = "https://auth.atlassian.com/oauth/token"
         const val DEFAULT_AUTH_ENDPOINT = "https://auth.atlassian.com/authorize"
         val DEFAULT_SCOPES = listOf("read:jira-work", "write:jira-work", "offline_access")
-        private val PROJECT_KEY_REGEX = Regex("^[A-Z][A-Z0-9]{1,9}$")
+        private val PROJECT_KEY_REGEX = Regex("^[A-Za-z][A-Za-z0-9]{1,9}$")
 
         const val SECRET_CLIENT_ID = "atlassian-oauth-client-id"
         const val SECRET_CLIENT_SECRET = "atlassian-oauth-client-secret"
         const val SECRET_REDIRECT_URI = "atlassian-oauth-redirect-uri"
         const val SECRET_REFRESH_TOKEN = "atlassian-oauth-refresh-token"
+        const val SECRET_BOT_SHARED = "bot-atlassian-shared-secret"
 
         fun fromEnvironment(
             getSecret: (String) -> String = ::getSecretValue,
