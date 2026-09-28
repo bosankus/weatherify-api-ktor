@@ -37,6 +37,8 @@ Also: `ATLASSIAN_BASE_URL`, `ATLASSIAN_CLOUD_ID`, `ATLASSIAN_DEFAULT_PROJECT`
 ## Bot routes
 
 Require `Authorization: Bearer <BOT_ATLASSIAN_SHARED_SECRET>` or `X-Bot-Token: <secret>` (401 otherwise).
+Blank and the public example value `dummy_bot_atlassian_shared_secret` are rejected;
+the gate fails closed when Secret Manager or environment configuration is missing.
 
 | Method | Path | Behavior |
 |---|---|---|
@@ -47,16 +49,32 @@ Require `Authorization: Bearer <BOT_ATLASSIAN_SHARED_SECRET>` or `X-Bot-Token: <
 
 ## Admin bootstrap (one-time)
 
-Require admin JWT (`getAuthenticatedAdminOrRespond` — Bearer or `jwt_token` cookie).
+Require admin JWT (`getAuthenticatedAdminOrRespond`) on `/start` only. For the browser
+bootstrap runbook, use an authenticated browser session with the `jwt_token` cookie on the
+API origin when opening `/admin/atlassian/oauth/start`. The Atlassian cross-site redirect
+will not carry a custom `Authorization: Bearer` header, and a `SameSite=Strict` cookie is
+not expected on that redirect, so `/callback` deliberately does not require the admin JWT.
+Instead, its single-use, 10-minute in-process `state` is the callback CSRF check.
+
+1. Sign in as an admin so the browser has the `jwt_token` cookie.
+2. In that same browser session, open `/admin/atlassian/oauth/start`.
+3. Approve access at Atlassian; the callback validates and consumes the one-time `state`.
+4. Confirm `/bot/atlassian/health` with the bot shared secret and check token health.
 
 | Method | Path | Behavior |
 |---|---|---|
 | GET | `/admin/atlassian/oauth/start` | Issues single-use `state`; redirect to Atlassian authorize (allowlisted URI only) |
-| GET | `/admin/atlassian/oauth/callback` | Verifies+consumes `state`; code exchange; stores tokens in memory; persists rotated refresh to SM |
+| GET | `/admin/atlassian/oauth/callback` | No JWT gate; verifies+consumes single-use `state`; code exchange; stores tokens in memory; persists rotated refresh to SM |
 
 Rotated refresh tokens are written to Secret Manager key `atlassian-oauth-refresh-token`
 (and master `app-secrets` when available). SM write failure does not fail the request but sets
-`refreshTokenPersistOk=false` on health.
+`refreshTokenPersistOk=false` on health; if the write is unavailable, the rotated token is
+only in memory and will be lost on process restart.
+
+OAuth `state` is held in a 10-minute in-process store. This supports a single running
+instance only; multiple instances require session affinity or a durable shared state store.
+The bot shared secret is resolved when the bot routes are registered, so rotating it requires
+a process restart before the new value is accepted.
 
 ## Pending Ankush decisions
 

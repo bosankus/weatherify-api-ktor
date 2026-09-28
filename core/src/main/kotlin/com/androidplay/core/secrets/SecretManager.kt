@@ -273,7 +273,8 @@ fun getSecretValue(secretName: String): String {
  *
  * Also attempts to patch the master `app-secrets` JSON (key = [secretName]) when
  * that secret is readable, so Cloud Run mounts of APP_SECRETS pick up the rotation
- * on the next revision. Individual-secret success alone is enough to return true.
+ * on the next revision. The individual secret's addVersion must succeed; the master
+ * patch is best-effort and never makes a failed individual write look successful.
  */
 fun updateSecretValue(secretName: String, value: String): Boolean {
     if (secretName.isBlank() || value.isBlank()) {
@@ -293,8 +294,10 @@ fun updateSecretValue(secretName: String, value: String): Boolean {
     }
 
     val individualOk = addSecretVersion(projectId, token, secretName, value)
-    val masterOk = updateMasterSecretKey(projectId, token, secretName, value)
-    return individualOk || masterOk
+    // Best-effort convenience for mounted app-secrets; durable success is the
+    // individual secret version above, never this master patch.
+    updateMasterSecretKey(projectId, token, secretName, value)
+    return individualOk
 }
 
 private fun addSecretVersion(

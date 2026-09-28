@@ -215,7 +215,7 @@ object AuthHelper {
     // Accepts Authorization: Bearer <secret> or X-Bot-Token: <secret>.
     // Constant-time comparison; responds 401 when missing/wrong.
     suspend fun ApplicationCall.requireBotSharedSecretOrRespond(expectedSecret: String): Boolean {
-        if (expectedSecret.isBlank()) {
+        if (expectedSecret.isBlank() || expectedSecret == DUMMY_BOT_SHARED_SECRET) {
             logger.error("Bot shared secret is not configured")
             respondAuthError(
                 "Bot authentication is not configured on this server.",
@@ -243,6 +243,8 @@ object AuthHelper {
         }
         return request.headers["X-Bot-Token"]?.trim()?.takeIf { it.isNotEmpty() }
     }
+
+    private const val DUMMY_BOT_SHARED_SECRET = "dummy_bot_atlassian_shared_secret"
 
     private fun constantTimeEquals(a: String, b: String): Boolean {
         val aBytes = a.toByteArray(Charsets.UTF_8)

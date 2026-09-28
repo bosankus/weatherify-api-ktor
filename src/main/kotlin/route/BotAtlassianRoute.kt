@@ -33,9 +33,11 @@ private val botAtlassianLog = LoggerFactory.getLogger("BotAtlassianRoute")
  * (bot-atlassian-shared-secret / BOT_ATLASSIAN_SHARED_SECRET) via
  * Authorization: Bearer or X-Bot-Token.
  *
- * Admin bootstrap OAuth start/callback live under /admin/atlassian/oauth/...,
- * require an admin JWT (getAuthenticatedAdminOrRespond), and enforce the fixed
- * redirect-URI allowlist plus single-use OAuth state.
+ * Admin bootstrap OAuth start/callback live under /admin/atlassian/oauth/... . The
+ * start endpoint requires an admin JWT (getAuthenticatedAdminOrRespond); the callback
+ * relies on single-use OAuth state because the provider redirect cannot carry a
+ * SameSite=Strict jwt_token cookie. Both enforce the fixed redirect-URI allowlist/state
+ * flow.
  *
  * APE-10
  */
@@ -158,12 +160,23 @@ fun Route.botAtlassianRoute() {
         }
 
         get("/callback") {
-            call.getAuthenticatedAdminOrRespond() ?: return@get
+            // The OAuth provider's cross-site redirect does not carry our SameSite=Strict
+            // jwt_token cookie. /start authenticates the admin; this single-use state
+            // validates the callback and provides CSRF protection.
             val code = call.request.queryParameters["code"]
             val state = call.request.queryParameters["state"]
             val error = call.request.queryParameters["error"]
             val redirectUri = call.request.queryParameters["redirect_uri"]
                 ?: config.redirectUriAllowlist.firstOrNull()
+
+            if (!stateStore.consume(state)) {
+                botAtlassianLog.warn("Atlassian OAuth callback rejected: missing, mismatched, expired, or replayed state")
+                call.respondText(
+                    "Invalid or expired OAuth state",
+                    status = HttpStatusCode.Forbidden,
+                )
+                return@get
+            }
 
             if (!error.isNullOrBlank()) {
                 val safe = AtlassianLogRedactor.redact(error)
@@ -171,14 +184,6 @@ fun Route.botAtlassianRoute() {
                 call.respondText(
                     "Atlassian OAuth failed: $safe",
                     status = HttpStatusCode.BadRequest,
-                )
-                return@get
-            }
-            if (!stateStore.consume(state)) {
-                botAtlassianLog.warn("Atlassian OAuth callback rejected: missing, mismatched, expired, or replayed state")
-                call.respondText(
-                    "Invalid or expired OAuth state",
-                    status = HttpStatusCode.Forbidden,
                 )
                 return@get
             }
