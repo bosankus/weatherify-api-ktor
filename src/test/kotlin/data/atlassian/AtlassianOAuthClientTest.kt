@@ -206,4 +206,56 @@ class AtlassianOAuthClientTest {
         assertTrue(message.contains("[REDACTED]") || !message.contains("client_secret="))
         client.close()
     }
+
+    @Test
+    fun `refresh rotation persists via persister and marks health ok`() = runBlocking {
+        var persisted: String? = null
+        val engine = MockEngine {
+            respond(
+                content = """{"access_token":"access-NEW","refresh_token":"refresh-NEW","expires_in":3600}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val client = HttpClient(engine)
+        val clock = { 1_000_000L }
+        val store = AtlassianTokenStore(initialRefreshToken = "refresh-OLD", clock = clock)
+        val persister = AtlassianRefreshTokenPersister(
+            update = { _, value ->
+                persisted = value
+                true
+            },
+        )
+        val oauth = AtlassianOAuthClient(config(), store, client, clock = clock, refreshTokenPersister = persister)
+
+        val result = oauth.getValidAccessToken()
+        assertTrue(result is Result.Success)
+        assertEquals("refresh-NEW", persisted)
+        assertTrue(store.health().refreshTokenPersistOk)
+        client.close()
+    }
+
+    @Test
+    fun `persist failure fails soft and marks health persistOk false`() = runBlocking {
+        val engine = MockEngine {
+            respond(
+                content = """{"access_token":"access-NEW","refresh_token":"refresh-NEW","expires_in":3600}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val client = HttpClient(engine)
+        val clock = { 1_000_000L }
+        val store = AtlassianTokenStore(initialRefreshToken = "refresh-OLD", clock = clock)
+        val persister = AtlassianRefreshTokenPersister(update = { _, _ -> false })
+        val oauth = AtlassianOAuthClient(config(), store, client, clock = clock, refreshTokenPersister = persister)
+
+        val result = oauth.getValidAccessToken()
+        assertTrue(result is Result.Success)
+        assertEquals("access-NEW", (result as Result.Success).data)
+        // In-memory rotation still applied
+        assertEquals("refresh-NEW", store.snapshot().refreshToken)
+        assertFalse(store.health().refreshTokenPersistOk)
+        client.close()
+    }
 }
