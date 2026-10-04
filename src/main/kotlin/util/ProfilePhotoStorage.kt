@@ -176,6 +176,10 @@ class ProfilePhotoActions(
             ProfilePhotoBytes.prepare(bytes, contentType, filename)
         } catch (e: ProfilePhotoRejectedException) {
             return com.androidplay.core.common.Result.error(e.message ?: "Unsupported photo")
+        } catch (e: ProfilePhotoEncoderUnavailableException) {
+            return com.androidplay.core.common.Result.error(
+                e.message ?: ProfilePhotoBytes.ENCODER_UNAVAILABLE
+            )
         }
         val previousKey = user.photoObject?.trim().orEmpty()
         val objectKey = ProfilePhotoKeys.reuseOrCreate(previousKey)

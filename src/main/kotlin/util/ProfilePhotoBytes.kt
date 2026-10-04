@@ -18,6 +18,8 @@ object ProfilePhotoBytes {
 
     const val JPEG_QUALITY = "92"
 
+    const val ENCODER_UNAVAILABLE = "Profile photo encoder is unavailable"
+
     private val ALLOWED = setOf(
         "image/jpeg",
         "image/jpg",
@@ -69,7 +71,12 @@ object ProfilePhotoBytes {
      * Reject HEIC/HEIF, reject SVG, send JPEG through MozJPEG, send PNG through OxiPNG.
      * WebP and GIF are returned unchanged. Dimensions are never changed.
      */
-    fun prepare(bytes: ByteArray, contentType: String, filename: String? = null): PreparedPhoto {
+    fun prepare(
+        bytes: ByteArray,
+        contentType: String,
+        filename: String? = null,
+        locate: (String) -> File? = { executable(it) }
+    ): PreparedPhoto {
         if (isHeic(bytes, contentType, filename)) {
             throw ProfilePhotoRejectedException(HEIC_REJECTED)
         }
@@ -81,17 +88,17 @@ object ProfilePhotoBytes {
             throw ProfilePhotoRejectedException("Unsupported content type: $contentType")
         }
         return when (type) {
-            "image/jpeg", "image/jpg" -> PreparedPhoto(mozjpeg(bytes), "image/jpeg")
-            "image/png" -> PreparedPhoto(oxipng(bytes), "image/png")
+            "image/jpeg", "image/jpg" -> PreparedPhoto(mozjpeg(bytes, locate), "image/jpeg")
+            "image/png" -> PreparedPhoto(oxipng(bytes, locate), "image/png")
             else -> PreparedPhoto(bytes.copyOf(), type)
         }
     }
 
-    private fun mozjpeg(bytes: ByteArray): ByteArray {
-        val cjpeg = executable("cjpeg") ?: return bytes
-        if (!isMozjpeg(cjpeg)) return bytes
+    private fun mozjpeg(bytes: ByteArray, locate: (String) -> File?): ByteArray {
+        val cjpeg = locate("cjpeg") ?: encoderUnavailable("MozJPEG cjpeg is missing")
+        if (!isMozjpeg(cjpeg)) encoderUnavailable("cjpeg is not MozJPEG")
         val djpeg = File(cjpeg.parentFile, "djpeg").takeIf { it.isFile && it.canExecute() }
-            ?: return bytes
+            ?: encoderUnavailable("MozJPEG djpeg is missing")
         return try {
             inTempDir("profile-jpeg") { dir ->
                 val input = File(dir, "in.jpg")
@@ -108,17 +115,20 @@ object ProfilePhotoBytes {
                     output.absolutePath,
                     ppm.absolutePath
                 )
-                val encoded = output.readBytes()
+                val encoded = if (output.isFile) output.readBytes() else ByteArray(0)
                 if (encoded.isNotEmpty() && encoded.size <= bytes.size) encoded else bytes
             }
+        } catch (e: ProfilePhotoEncoderUnavailableException) {
+            throw e
         } catch (e: Exception) {
-            logger.warn("MozJPEG left the original JPEG in place: ${e.message}")
-            bytes
+            logger.warn("MozJPEG failed: ${e.message}")
+            val reason = if (e.message?.contains("timed out") == true) "MozJPEG timed out" else "MozJPEG failed"
+            encoderUnavailable(reason)
         }
     }
 
-    private fun oxipng(bytes: ByteArray): ByteArray {
-        val oxipng = executable("oxipng") ?: return bytes
+    private fun oxipng(bytes: ByteArray, locate: (String) -> File?): ByteArray {
+        val oxipng = locate("oxipng") ?: encoderUnavailable("OxiPNG is missing")
         return try {
             inTempDir("profile-png") { dir ->
                 val input = File(dir, "in.png")
@@ -134,13 +144,21 @@ object ProfilePhotoBytes {
                     output.absolutePath,
                     input.absolutePath
                 )
-                val encoded = output.readBytes()
+                val encoded = if (output.isFile) output.readBytes() else ByteArray(0)
                 if (encoded.isNotEmpty() && encoded.size < bytes.size) encoded else bytes
             }
+        } catch (e: ProfilePhotoEncoderUnavailableException) {
+            throw e
         } catch (e: Exception) {
-            logger.warn("OxiPNG left the original PNG in place: ${e.message}")
-            bytes
+            logger.warn("OxiPNG failed: ${e.message}")
+            val reason = if (e.message?.contains("timed out") == true) "OxiPNG timed out" else "OxiPNG failed"
+            encoderUnavailable(reason)
         }
+    }
+
+    private fun encoderUnavailable(detail: String): Nothing {
+        logger.warn("$ENCODER_UNAVAILABLE: $detail")
+        throw ProfilePhotoEncoderUnavailableException("$ENCODER_UNAVAILABLE: $detail")
     }
 
     private fun isMozjpeg(cjpeg: File): Boolean {
@@ -246,3 +264,5 @@ object ProfilePhotoBytes {
 }
 
 class ProfilePhotoRejectedException(message: String) : IllegalArgumentException(message)
+
+class ProfilePhotoEncoderUnavailableException(message: String) : IllegalStateException(message)

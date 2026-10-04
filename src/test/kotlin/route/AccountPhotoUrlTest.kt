@@ -3,6 +3,7 @@ package bose.ankush.route
 import com.androidplay.core.common.Result
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
+import util.ProfilePhotoBytes
 import util.ProfilePhotoStorage
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,5 +40,17 @@ class AccountPhotoUrlTest {
         val result = resolveAccountPhotoUrl(null, storage)
         assertTrue(result is Result.Success)
         assertNull((result as Result.Success).data)
+    }
+
+    @Test
+    fun `encoder unavailable is 503 and a rejected format stays 400`() {
+        val encoder = profilePhotoErrorStatus(
+            "${ProfilePhotoBytes.ENCODER_UNAVAILABLE}: MozJPEG cjpeg is missing"
+        )
+        assertEquals(HttpStatusCode.ServiceUnavailable, encoder)
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            profilePhotoErrorStatus(ProfilePhotoBytes.HEIC_REJECTED)
+        )
     }
 }

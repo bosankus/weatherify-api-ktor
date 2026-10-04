@@ -92,13 +92,13 @@ class ProfilePhotoStorageTest {
         val users = FakeUsers()
         val actions = ProfilePhotoActions(storage, users)
 
-        val first = actions.upload("user@example.com", byteArrayOf(1, 2, 3), "image/png")
+        val first = actions.upload("user@example.com", byteArrayOf(1, 2, 3), "image/gif")
         assertTrue(first is Result.Success)
         val key1 = (first as Result.Success).data.objectKey
         assertEquals(key1, users.user?.photoObject)
         assertTrue(storage.objects.containsKey(key1))
 
-        val second = actions.upload("user@example.com", byteArrayOf(9, 9), "image/jpeg")
+        val second = actions.upload("user@example.com", byteArrayOf(9, 9), "image/gif")
         assertTrue(second is Result.Success)
         val key2 = (second as Result.Success).data.objectKey
         assertEquals(key1, key2)
@@ -175,8 +175,28 @@ class ProfilePhotoStorageTest {
         val storage = FakeStorage()
         val users = FakeUsers().apply { failPhotoUpdate = true }
         val actions = ProfilePhotoActions(storage, users)
-        val result = actions.upload("user@example.com", byteArrayOf(1, 2, 3), "image/png")
+        val result = actions.upload("user@example.com", byteArrayOf(1, 2, 3), "image/gif")
         assertTrue(result is Result.Error)
+        assertTrue(storage.objects.isEmpty())
+        assertNull(users.user?.photoObject)
+    }
+
+    @Test
+    fun `jpeg or png encoder failure stores nothing`() = runBlocking {
+        val storage = FakeStorage()
+        val users = FakeUsers()
+        val actions = ProfilePhotoActions(storage, users)
+        val jpeg = actions.upload(
+            "user@example.com",
+            byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0),
+            "image/jpeg",
+            "broken.jpg"
+        )
+        assertTrue(jpeg is Result.Error)
+        assertTrue((jpeg as Result.Error).message.contains("unavailable", ignoreCase = true))
+        val png = actions.upload("user@example.com", byteArrayOf(1, 2, 3, 4), "image/png", "broken.png")
+        assertTrue(png is Result.Error)
+        assertTrue((png as Result.Error).message.contains("unavailable", ignoreCase = true))
         assertTrue(storage.objects.isEmpty())
         assertNull(users.user?.photoObject)
     }

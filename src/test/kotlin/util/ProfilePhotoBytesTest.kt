@@ -89,6 +89,42 @@ class ProfilePhotoBytesTest {
         }
     }
 
+
+    @Test
+    fun `missing or failed encoders do not return the original jpeg or png`() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00)
+        val png = byteArrayOf(1, 2, 3, 4)
+        val missingJpeg = assertFailsWith<ProfilePhotoEncoderUnavailableException> {
+            ProfilePhotoBytes.prepare(jpeg, "image/jpeg", "a.jpg", locate = { null })
+        }
+        assertTrue(missingJpeg.message!!.contains("unavailable", ignoreCase = true))
+        assertTrue(missingJpeg.message!!.contains("cjpeg is missing"))
+        val missingPng = assertFailsWith<ProfilePhotoEncoderUnavailableException> {
+            ProfilePhotoBytes.prepare(png, "image/png", "a.png", locate = { null })
+        }
+        assertTrue(missingPng.message!!.contains("OxiPNG is missing"))
+        val notMozjpeg = assertFailsWith<ProfilePhotoEncoderUnavailableException> {
+            ProfilePhotoBytes.prepare(jpeg, "image/jpeg", locate = { name ->
+                if (name == "cjpeg") java.io.File("/bin/true") else null
+            })
+        }
+        assertTrue(notMozjpeg.message!!.contains("not MozJPEG"))
+        val brokenJpeg = assertFailsWith<ProfilePhotoEncoderUnavailableException> {
+            ProfilePhotoBytes.prepare(jpeg, "image/jpeg", "broken.jpg")
+        }
+        assertTrue(brokenJpeg.message!!.contains("unavailable", ignoreCase = true))
+        val brokenPng = assertFailsWith<ProfilePhotoEncoderUnavailableException> {
+            ProfilePhotoBytes.prepare(png, "image/png", "broken.png")
+        }
+        assertTrue(brokenPng.message!!.contains("unavailable", ignoreCase = true))
+    }
+
+    @Test
+    fun `webp and gif ignore a missing encoder`() {
+        val gif = "GIF89a".encodeToByteArray() + byteArrayOf(1, 2, 3)
+        val prepared = ProfilePhotoBytes.prepare(gif, "image/gif", "a.gif", locate = { null })
+        assertTrue(prepared.bytes.contentEquals(gif))
+    }
     private fun heicStub(): ByteArray {
         val bytes = ByteArray(24)
         bytes[3] = 24
