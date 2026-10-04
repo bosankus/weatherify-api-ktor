@@ -50,6 +50,34 @@ RUN echo "================================" && \
         exit 1; \
     fi
 
+# Profile-photo encoders. Built on Alpine so they run in the musl runtime image.
+# cjpeg -version must contain "mozjpeg". OxiPNG is the upstream musl binary.
+FROM eclipse-temurin:17-jre-alpine AS encoders
+
+RUN apk add --no-cache build-base cmake nasm curl tar
+
+WORKDIR /tmp
+
+ARG MOZJPEG_VERSION=4.1.5
+RUN curl -fsSL -o mozjpeg.tar.gz "https://github.com/mozilla/mozjpeg/archive/refs/tags/v${MOZJPEG_VERSION}.tar.gz" \
+ && tar -xzf mozjpeg.tar.gz \
+ && cmake -S "mozjpeg-${MOZJPEG_VERSION}" -B mozjpeg-build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/opt/mozjpeg \
+      -DENABLE_SHARED=1 \
+      -DENABLE_STATIC=0 \
+      -DPNG_SUPPORTED=0 \
+ && cmake --build mozjpeg-build --parallel \
+ && cmake --install mozjpeg-build
+
+ARG OXIPNG_VERSION=10.2.1
+RUN curl -fsSL -o oxipng.tar.gz "https://github.com/oxipng/oxipng/releases/download/v${OXIPNG_VERSION}/oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+ && tar -xzf oxipng.tar.gz \
+ && install -m 0755 "oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-musl/oxipng" /opt/mozjpeg/bin/oxipng \
+ && test -x /opt/mozjpeg/bin/djpeg \
+ && LD_LIBRARY_PATH=/opt/mozjpeg/lib /opt/mozjpeg/bin/cjpeg -version 2>&1 | grep -qi mozjpeg \
+ && /opt/mozjpeg/bin/oxipng --version
+
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine
 
@@ -57,6 +85,11 @@ WORKDIR /app
 
 # Copy the built fat JAR from builder
 COPY --from=builder /app/build/libs/weatherify-api-all.jar ./app.jar
+
+# MozJPEG (cjpeg, djpeg) and OxiPNG for ProfilePhotoBytes. Cloud Run is amd64.
+COPY --from=encoders /opt/mozjpeg/bin/cjpeg /opt/mozjpeg/bin/djpeg /opt/mozjpeg/bin/oxipng /usr/local/bin/
+COPY --from=encoders /opt/mozjpeg/lib/ /usr/local/lib/
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 # Set environment variables
 ENV DB_NAME="weatherify-app-db"
