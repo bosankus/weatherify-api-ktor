@@ -5,7 +5,7 @@ Weatherify API.
 
 The project targets Google Cloud Run and provides:
 
-- GitHub Actions workflows for PR validation and automated deployment.
+- A GitHub Actions workflow for PR and push validation. Deploy is manual.
 - A Dockerfile for containerized builds.
 - A Makefile for common local tasks.
 
@@ -22,18 +22,13 @@ Key files
 
 - Dockerfile — Multi-stage Docker build (Gradle build + JRE runtime)
 - .github/workflows/build-and-test.yml — CI for PRs and pushes
-- .github/workflows/auto-deploy-on-main.yml — Auto deploy to Cloud Run on push to main
 - Makefile — Local convenience commands
 - .editorconfig — Consistent formatting defaults
 
 ## Deployment
 
-Pushes to main trigger the auto-deploy workflow which:
+There is no GitHub deploy workflow. Deploy from a machine already logged into the GCP project:
 
-1. Builds a Docker image via Cloud Build
-2. Deploys to Cloud Run
-
-Manual deployment:
 
 ```bash
 # Build and push image
@@ -74,61 +69,9 @@ Steps:
 
 No deployment is performed in this CI workflow.
 
-### 2) Auto Deploy on Main (CD)
+### 2) Deploy
 
-File: .github/workflows/auto-deploy-on-main.yml
-
-Trigger:
-
-- Push to main
-
-Behavior:
-
-- Authenticates to GCP using Workload Identity Federation (no JSON key)
-- Builds Docker image via Cloud Build
-- Deploys to Cloud Run
-
-Required GitHub Actions secrets:
-
-- GCP_WORKLOAD_IDENTITY_PROVIDER — Resource name of your WIF provider
-- GCP_SERVICE_ACCOUNT_EMAIL — Email of the GCP service account used by GitHub Actions
-- GCP_PROJECT_ID — Target project ID
-
-#### Setting up Workload Identity Federation (one-time)
-
-1. Create a service account, e.g. github-deployer@PROJECT_ID.iam.gserviceaccount.com
-2. Grant minimal roles to this service account:
-    - roles/run.admin
-    - roles/cloudbuild.builds.editor
-    - roles/iam.serviceAccountUser
-    - roles/storage.admin or roles/storage.objectAdmin (to write artifacts if needed)
-3. Create a workload identity pool and provider for GitHub in your project (via gcloud or Console).
-   Example with gcloud:
-
-   gcloud iam workload-identity-pools create github-pool \
-   --project=PROJECT_ID --location=global --display-name="GitHub Pool"
-
-   gcloud iam workload-identity-pools providers create-oidc github-provider \
-   --project=PROJECT_ID --location=global --workload-identity-pool=github-pool \
-   --display-name="GitHub Provider" --issuer-uri="https://token.actions.githubusercontent.com" \
-   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository"
-
-4. Allow the GitHub repo to impersonate the service account:
-
-   gcloud iam service-accounts add-iam-policy-binding \
-   github-deployer@PROJECT_ID.iam.gserviceaccount.com \
-   --project=PROJECT_ID \
-   --role=roles/iam.workloadIdentityUser \
-   --member="principalSet:
-   //iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/attribute.repository/OWNER/REPO"
-
-5. Set the GitHub repository secrets with:
-    - GCP_WORKLOAD_IDENTITY_PROVIDER:
-      projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-    - GCP_SERVICE_ACCOUNT_EMAIL: github-deployer@PROJECT_ID.iam.gserviceaccount.com
-    - GCP_PROJECT_ID: your-project-id
-
-6. Run the Deploy workflow from the Actions tab.
+GitHub Actions does not deploy. The old main-branch workflow depended on Workload Identity Federation and has been removed. Use the manual gcloud commands in the Deployment section. The Syncling deploy workflow used the same GitHub secrets and was removed with it.
 
 ## Makefile (local dev)
 
@@ -178,33 +121,13 @@ Make sure these are done so the provided scripts and workflows run automatically
 - Check the Dockerfile for GCP_PROJECT_ID, DB_NAME, WEATHER_URL, AIR_POLLUTION_URL,
   JWT_* values and adjust as needed.
 
-5) GitHub Actions → Workload Identity Federation
-
-- Create a service account (e.g., github-deployer@PROJECT_ID.iam.gserviceaccount.com)
-- Grant minimal roles:
-    - roles/run.admin
-    - roles/cloudbuild.builds.editor
-    - roles/iam.serviceAccountUser
-    - roles/secretmanager.secretAccessor (only if you plan to access secrets in CI; not required for
-      build-only)
-- Configure a Workload Identity Pool/Provider and bind your repo as described above.
-- Add repository secrets:
-    - GCP_WORKLOAD_IDENTITY_PROVIDER
-    - GCP_SERVICE_ACCOUNT_EMAIL
-    - GCP_PROJECT_ID
-
-6) Branch protection/trigger alignment
-
-- The auto-deploy workflow triggers on pushes to main. Ensure your default branch is named main, or
-  adjust .github/workflows/auto-deploy-on-main.yml accordingly.
-
-Once done:
+5) Branch protection
 
 - PRs and pushes run CI (.github/workflows/build-and-test.yml) automatically.
-- Pushes to main also auto-deploy to Cloud Run.
+- A push to main does not deploy.
 
 ## Troubleshooting
 
 - Gradle cache issues in Actions: rerun without cache by changing cache key or clearing caches.
-- Permission denied deploying: verify roles on the service account and WIF binding for the repo.
+- Permission denied deploying: the gcloud account running the manual deploy needs Cloud Build and Cloud Run access on the project.
 - Container fails to start on Cloud Run: check logs with `gcloud run services logs read weatherify-api`.
