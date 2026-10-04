@@ -61,6 +61,20 @@ interface UserRepository {
         pageSize: Int? = null
     ): Result<Pair<List<User>, Long>>
 
+
+    /**
+     * Store the GCS object name for the user's profile photo.
+     * @param email The email of the user.
+     * @param photoObject UUID object key in the photos bucket (not a URL).
+     */
+    suspend fun updatePhotoObjectByEmail(email: String, photoObject: String): Result<Boolean>
+
+    /**
+     * Clear the profile photo object name for the user.
+     * @param email The email of the user.
+     */
+    suspend fun clearPhotoObjectByEmail(email: String): Result<Boolean>
+
     /**
      * Delete a user by email.
      * @param email The email of the user to delete.

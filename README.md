@@ -238,11 +238,11 @@ Quick start:
     --region=asia-southeast1 \
     --allow-unauthenticated
   ```
-- GitHub Actions: PRs and pushes run Build and Test workflow automatically; pushes to main auto-deploy to Cloud Run.
+- GitHub Actions: PRs and pushes run Build and Test only. Nothing deploys from GitHub.
 
 Notes:
 
-- Deploy workflow uses Workload Identity Federation. Add repository secrets: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT_EMAIL`, `GCP_PROJECT_ID`.
+- Cloud Run deploy is manual, from a machine already logged into the GCP project, using the gcloud commands above.
 - Shadow JAR name is `weatherify-api-all.jar`, copied into the Docker image via `Dockerfile`.
 
 ## Contributing

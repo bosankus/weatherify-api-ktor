@@ -4,6 +4,7 @@ import com.androidplay.core.mongo.IndexSpec
 import com.androidplay.weatherify.db.WeatherifyDb
 import com.androidplay.weatherify.repository.FeedbackRepository
 import com.androidplay.weatherify.repository.NoteRepository
+import com.androidplay.weatherify.repository.PlaceEventRepository
 import com.androidplay.weatherify.repository.PaymentRepository
 import com.androidplay.weatherify.repository.RefundRepository
 import com.androidplay.weatherify.repository.SavedLocationRepository
@@ -11,6 +12,7 @@ import com.androidplay.weatherify.repository.ServiceCatalogRepository
 import com.androidplay.weatherify.repository.UserRepository
 import com.androidplay.weatherify.repository.mongo.FeedbackRepositoryImpl
 import com.androidplay.weatherify.repository.mongo.NoteRepositoryImpl
+import com.androidplay.weatherify.repository.mongo.PlaceEventRepositoryImpl
 import com.androidplay.weatherify.repository.mongo.PaymentRepositoryImpl
 import com.androidplay.weatherify.repository.mongo.RefundRepositoryImpl
 import com.androidplay.weatherify.repository.mongo.SavedLocationRepositoryImpl
@@ -29,6 +31,7 @@ fun weatherifyModule() = module {
     single<RefundRepository> { RefundRepositoryImpl(get()) }
     single<SavedLocationRepository> { SavedLocationRepositoryImpl(get()) }
     single<NoteRepository> { NoteRepositoryImpl(get()) }
+    single<PlaceEventRepository> { PlaceEventRepositoryImpl(get()) }
     single<ServiceCatalogRepository> { ServiceCatalogRepositoryImpl(get()) }
 }
 
@@ -58,5 +61,7 @@ fun weatherifyIndexes(): List<IndexSpec> {
         IndexSpec("services", Document(mapOf("status" to 1, "createdAt" to -1))),
         IndexSpec("service_history", Document("serviceId", 1)),
         IndexSpec("service_history", Document("changedAt", -1)),
+        IndexSpec("place_events", Document(mapOf("userEmail" to 1, "lat" to 1, "lon" to 1, "startsAt" to 1))),
+        IndexSpec("place_events", Document("userEmail", 1)),
     )
 }

@@ -73,7 +73,9 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
                 registrationSource = doc.getString("registrationSource"),
                 isPremium = (doc.get("isPremium") as? Boolean) ?: false,
                 premiumExpiresAt = doc.getString("premiumExpiresAt"),
-                fcmToken = doc.getString("fcmToken")
+                fcmToken = doc.getString("fcmToken"),
+                photoObject = doc.getString("photoObject"),
+                photoUrl = doc.getString("photoUrl")
             )
 
             logger.debug("User found: $email")
@@ -145,6 +147,7 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
             user.registrationSource?.let { updates["registrationSource"] = it }
             user.premiumExpiresAt?.let { updates["premiumExpiresAt"] = it }
             user.fcmToken?.let { updates["fcmToken"] = it }
+            user.photoObject?.let { updates["photoObject"] = it }
 
             val filter = databaseModule.createFilter("email", user.email)
             val updateBson = databaseModule.createSetUpdates(updates)
@@ -423,4 +426,71 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
             Result.error("Failed to clear FCM token: ${e.message}", e)
         }
     }
+
+    override suspend fun updatePhotoObjectByEmail(email: String, photoObject: String): Result<Boolean> {
+        logger.debug("Updating photoObject for user email: $email")
+        if (email.isBlank() || photoObject.isBlank()) {
+            val msg = "Invalid input: email and photoObject are required"
+            logger.warn(msg)
+            return Result.error(msg)
+        }
+        return try {
+            val collection = databaseModule.getUsersCollection()
+            val filter = databaseModule.createFilter("email", email)
+            val update = databaseModule.createSetUpdate("photoObject", photoObject)
+            val result = collection.updateOne(filter, update)
+            when {
+                result.matchedCount == 0L -> {
+                    val msg = "User not found for email: $email"
+                    logger.warn(msg)
+                    Result.error(msg)
+                }
+                else -> {
+                    if (result.modifiedCount > 0) {
+                        logger.info("photoObject updated for user email: $email")
+                    } else {
+                        logger.info("photoObject value unchanged for user email: $email")
+                    }
+                    Result.success(true)
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to update photoObject for user email: $email", e)
+            Result.error("Failed to update photoObject: ${e.message}", e)
+        }
+    }
+
+    override suspend fun clearPhotoObjectByEmail(email: String): Result<Boolean> {
+        logger.debug("Clearing photoObject for user email: $email")
+        if (email.isBlank()) {
+            val msg = "Invalid input: email is required"
+            logger.warn(msg)
+            return Result.error(msg)
+        }
+        return try {
+            val collection = databaseModule.getUsersCollection()
+            val filter = databaseModule.createFilter("email", email)
+            val update = databaseModule.createUnsetUpdate("photoObject")
+            val result = collection.updateOne(filter, update)
+            when {
+                result.matchedCount == 0L -> {
+                    val msg = "User not found for email: $email"
+                    logger.warn(msg)
+                    Result.error(msg)
+                }
+                else -> {
+                    if (result.modifiedCount > 0) {
+                        logger.info("photoObject cleared for user email: $email")
+                    } else {
+                        logger.info("photoObject already empty for user email: $email")
+                    }
+                    Result.success(true)
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to clear photoObject for user email: $email", e)
+            Result.error("Failed to clear photoObject: ${e.message}", e)
+        }
+    }
+
 }

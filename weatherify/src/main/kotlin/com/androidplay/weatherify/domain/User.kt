@@ -34,7 +34,17 @@ data class User(
     val registrationSource: String? = null,
     val isPremium: Boolean = false,
     val premiumExpiresAt: String? = null,
-    val fcmToken: String? = null
+    val fcmToken: String? = null,
+    /**
+     * GCS object name for the profile photo (UUID only). Never a URL.
+     * GET /account returns a signed URL derived from this field as photoUrl.
+     */
+    val photoObject: String? = null,
+    /**
+     * Legacy field. Do not store URLs here; use [photoObject].
+     * Kept nullable for older documents; responses never echo this value.
+     */
+    val photoUrl: String? = null
 )
 
 /** User roles for access control */

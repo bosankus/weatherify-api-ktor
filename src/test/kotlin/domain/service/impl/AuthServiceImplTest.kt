@@ -25,6 +25,12 @@ class AuthServiceImplTest {
         override suspend fun clearFcmTokenByEmail(email: String): Result<Boolean> =
             com.androidplay.core.common.Result.Success(true)
 
+        override suspend fun updatePhotoObjectByEmail(email: String, photoObject: String): Result<Boolean> =
+            com.androidplay.core.common.Result.Success(true)
+
+        override suspend fun clearPhotoObjectByEmail(email: String): Result<Boolean> =
+            com.androidplay.core.common.Result.Success(true)
+
         override suspend fun getAllUsers(
             filter: Map<String, Any>?,
             sortBy: String?,
