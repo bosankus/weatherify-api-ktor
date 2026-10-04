@@ -65,6 +65,7 @@ RUN curl -fsSL -o mozjpeg.tar.gz "https://github.com/mozilla/mozjpeg/archive/ref
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/opt/mozjpeg \
+      -DCMAKE_INSTALL_LIBDIR=lib \
       -DENABLE_SHARED=1 \
       -DENABLE_STATIC=0 \
       -DPNG_SUPPORTED=0 \
@@ -75,6 +76,7 @@ ARG OXIPNG_VERSION=10.2.1
 RUN curl -fsSL -o oxipng.tar.gz "https://github.com/oxipng/oxipng/releases/download/v${OXIPNG_VERSION}/oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
  && tar -xzf oxipng.tar.gz \
  && install -m 0755 "oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-musl/oxipng" /opt/mozjpeg/bin/oxipng \
+ && test -f /opt/mozjpeg/lib/libjpeg.so.62 \
  && test -x /opt/mozjpeg/bin/djpeg \
  && LD_LIBRARY_PATH=/opt/mozjpeg/lib /opt/mozjpeg/bin/cjpeg -version 2>&1 | grep -qi mozjpeg \
  && /opt/mozjpeg/bin/oxipng --version
