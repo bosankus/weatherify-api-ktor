@@ -19,6 +19,7 @@ import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import util.AuthHelper.getAuthenticatedAdminOrRespond
 import util.Constants
+import util.ProfilePhotoStorage
 
 /**
  * Admin User management routes (IAM)
@@ -34,6 +35,7 @@ data class AccountProfileResponse(
 
 fun Route.userRoute() {
     val userRepository: UserRepository by application.inject()
+    val photoStorage: ProfilePhotoStorage by application.inject()
 
     authenticate("jwt-auth") {
         get("/account") {
@@ -50,10 +52,13 @@ fun Route.userRoute() {
                 return@get
             }
             when (val result = userRepository.findUserByEmail(email)) {
-                is Result.Success -> call.respondSuccess(
-                    "Account",
-                    AccountProfileResponse(email = email, photoUrl = result.data?.photoUrl)
-                )
+                is Result.Success -> {
+                    val photoUrl = resolveAccountPhotoUrl(result.data?.photoObject, photoStorage)
+                    call.respondSuccess(
+                        "Account",
+                        AccountProfileResponse(email = email, photoUrl = photoUrl)
+                    )
+                }
                 is Result.Error -> call.respondError(
                     result.message,
                     Unit,

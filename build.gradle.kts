@@ -70,12 +70,13 @@ dependencies {
 
     // Firebase Admin SDK for push notifications
     implementation(libs.firebase.admin) {
-        // Exclude GCP storage and Firestore — not used, just push notifications
-        exclude(group = "com.google.cloud", module = "google-cloud-storage")
+        // Firestore unused; storage is declared explicitly below for profile photos.
         exclude(group = "com.google.cloud", module = "google-cloud-firestore")
         // Exclude duplicate Guava (pulled by multiple GCP libs — Ktor's HttpClient handles HTTP)
         exclude(group = "com.google.guava", module = "listenablefuture")
     }
+    // Profile photo upload/signed URL (Firebase Storage bucket weatherify-mvvm.firebasestorage.app)
+    implementation("com.google.cloud:google-cloud-storage:2.43.1")
     // firebase-admin's ApiClientUtils.getDefaultJsonFactory() calls JacksonFactory directly.
     // Previously pulled in transitively via google-cloud-storage / google-cloud-firestore (now excluded),
     // so it must be declared explicitly or FirebaseOptions.build() throws NoClassDefFoundError at startup.

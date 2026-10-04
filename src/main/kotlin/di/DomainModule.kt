@@ -5,6 +5,8 @@ import domain.service.*
 import domain.service.impl.*
 import domain.service.NominatimService
 import org.koin.dsl.module
+import util.GcsProfilePhotoStorage
+import util.ProfilePhotoStorage
 
 val domainModule = module {
     single<AuthService> { AuthServiceImpl(get()) }
@@ -21,6 +23,7 @@ val domainModule = module {
     single { SavedLocationService(get(), get(), get()) }
     single { NoteService(get()) }
     single { PlaceEventService(get()) }
+    single<ProfilePhotoStorage> { GcsProfilePhotoStorage() }
 
     single { ServiceCatalogSeedingService(get()) }
     single { ServiceCatalogCache(get(), cacheDurationMinutes = 15) }

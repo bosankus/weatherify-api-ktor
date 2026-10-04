@@ -44,7 +44,10 @@ object PrivacyPolicyRoutesRegistrar : RouteRegistrar {
 
 object UserRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
-        with(root) { userRoute() }
+        with(root) {
+            userRoute()
+            accountPhotoRoute()
+        }
     }
 }
 

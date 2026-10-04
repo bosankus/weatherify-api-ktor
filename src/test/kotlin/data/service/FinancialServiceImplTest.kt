@@ -600,6 +600,26 @@ private class MockUserRepository : UserRepository {
         return if (shouldReturnError) Result.error(errorMessage) else Result.success(true)
     }
 
+    override suspend fun updatePhotoObjectByEmail(email: String, photoObject: String): Result<Boolean> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val user = users[email] ?: return Result.error("User not found")
+            users[email] = user.copy(photoObject = photoObject)
+            Result.success(true)
+        }
+    }
+
+    override suspend fun clearPhotoObjectByEmail(email: String): Result<Boolean> {
+        return if (shouldReturnError) {
+            Result.error(errorMessage)
+        } else {
+            val user = users[email] ?: return Result.error("User not found")
+            users[email] = user.copy(photoObject = null)
+            Result.success(true)
+        }
+    }
+
     override suspend fun getAllUsers(
         filter: Map<String, Any>?,
         sortBy: String?,
