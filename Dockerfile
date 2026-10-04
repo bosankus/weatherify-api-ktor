@@ -65,7 +65,7 @@ RUN curl -fsSL -o mozjpeg.tar.gz "https://github.com/mozilla/mozjpeg/archive/ref
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/opt/mozjpeg \
-      -DCMAKE_INSTALL_LIBDIR=lib \
+      -DCMAKE_INSTALL_LIBDIR=/opt/mozjpeg/lib \
       -DENABLE_SHARED=1 \
       -DENABLE_STATIC=0 \
       -DPNG_SUPPORTED=0 \
