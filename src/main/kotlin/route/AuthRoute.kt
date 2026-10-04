@@ -5,6 +5,9 @@ import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
+import config.SessionDecision
+import config.SessionPolicy
+import config.SessionPurpose
 import config.TokenRefreshResult
 import com.androidplay.core.common.Result
 import com.androidplay.weatherify.repository.UserRepository
@@ -71,7 +74,8 @@ fun Route.authRoute() {
                 role = UserRole.USER,
                 isActive = true,
                 isPremium = false,
-                fcmToken = request.firebaseToken
+                fcmToken = request.firebaseToken,
+                sessionGeneration = 0
             )
 
             val created = userRepository.createUser(user)
@@ -82,7 +86,7 @@ fun Route.authRoute() {
             }
 
             logger.info("User registered successfully: ${request.email}")
-            val token = JwtConfig.generateToken(user.email, user.role)
+            val token = JwtConfig.generateToken(user.email, user.role, user.sessionGeneration)
             call.setAuthCookie(token, logger)
             analytics.event("sign_up", mapOf("method" to "email_password"), user.email, call.request.headers["User-Agent"])
             call.respondLoginSuccess(Constants.Messages.LOGIN_SUCCESS, token, user)
@@ -107,7 +111,14 @@ fun Route.authRoute() {
                 return@handleAuth
             }
 
-            val token = JwtConfig.generateToken(user.email, user.role)
+            val nextGeneration = SessionPolicy.generationForLogin(user.sessionGeneration)
+            val persisted = userRepository.updateUser(user.copy(sessionGeneration = nextGeneration))
+                .unwrapOrRespondError(call, "start session") ?: return@handleAuth
+            if (!persisted) {
+                call.respondError("Failed to start session", Unit, HttpStatusCode.InternalServerError)
+                return@handleAuth
+            }
+            val token = JwtConfig.generateToken(user.email, user.role, nextGeneration)
             logger.info("Login successful for user: ${request.email}")
             call.setAuthCookie(token, logger)
             analytics.event("login", mapOf("method" to "email_password"), user.email, call.request.headers["User-Agent"])
@@ -158,21 +169,28 @@ fun Route.authRoute() {
                 }
                 is TokenRefreshResult.StillValid -> {
                     logger.info("Token not expired for user: ${refreshResult.email}")
-                    val user = (userRepository.findUserByEmail(refreshResult.email) as? Result.Success)?.data
-                    call.respondLoginSuccess(Constants.Messages.TOKEN_NOT_EXPIRED, request.token, user)
+                    val user = userRepository.findUserByEmail(refreshResult.email)
+                        .requireUser(call, "find user during token refresh") ?: return@handleAuth
+                    when (val decision = refreshDecision(user, refreshResult.sessionGeneration, tokenExpired = false)) {
+                        SessionDecision.ALLOW ->
+                            call.respondLoginSuccess(Constants.Messages.TOKEN_NOT_EXPIRED, request.token, user)
+                        else -> call.respondRefreshRejected(decision)
+                    }
                 }
                 is TokenRefreshResult.Expired -> {
                     val email = refreshResult.email
                     val user = userRepository.findUserByEmail(email)
                         .requireUser(call, "find user during token refresh") ?: return@handleAuth
-                    if (!user.isActive) {
-                        call.respondError(Constants.Messages.ACCOUNT_INACTIVE, Unit, HttpStatusCode.Forbidden)
-                        return@handleAuth
+                    when (val decision = refreshDecision(user, refreshResult.sessionGeneration, tokenExpired = true)) {
+                        SessionDecision.ALLOW -> {
+                            val generation = SessionPolicy.effectiveGeneration(user.sessionGeneration)
+                            val newToken = JwtConfig.generateToken(email, user.role, generation)
+                            logger.info("Token refreshed successfully for user: $email")
+                            analytics.event("token_refresh", emptyMap(), email, call.request.headers["User-Agent"])
+                            call.respondLoginSuccess(Constants.Messages.TOKEN_REFRESH_SUCCESS, newToken, user)
+                        }
+                        else -> call.respondRefreshRejected(decision)
                     }
-                    val newToken = JwtConfig.generateToken(email, user.role)
-                    logger.info("Token refreshed successfully for user: $email")
-                    analytics.event("token_refresh", emptyMap(), email, call.request.headers["User-Agent"])
-                    call.respondLoginSuccess(Constants.Messages.TOKEN_REFRESH_SUCCESS, newToken, user)
                 }
             }
         }
@@ -186,6 +204,31 @@ fun Route.authRoute() {
                 val email = call.principal<JWTPrincipal>()
                     ?.payload?.getClaim(Constants.Auth.JWT_CLAIM_EMAIL)?.asString()
                 logger.info("Logout request received for user: $email")
+                if (!email.isNullOrBlank()) {
+                    when (val found = userRepository.findUserByEmail(email)) {
+                        is Result.Success -> {
+                            val user = found.data
+                            if (user != null) {
+                                val nextGeneration = SessionPolicy.generationForLogout(user.sessionGeneration)
+                                val revoked = userRepository.updateUser(
+                                    user.copy(sessionGeneration = nextGeneration)
+                                )
+                                if (revoked is Result.Error || (revoked is Result.Success && !revoked.data)) {
+                                    call.respondError(
+                                        Constants.Messages.AUTHENTICATION_ERROR,
+                                        Unit,
+                                        HttpStatusCode.InternalServerError
+                                    )
+                                    return@handleAuth
+                                }
+                            }
+                        }
+                        is Result.Error -> {
+                            call.respondResultError(found.message, "revoke session")
+                            return@handleAuth
+                        }
+                    }
+                }
                 analytics.event("logout", emptyMap(), email, call.request.headers["User-Agent"])
                 call.performLogout()
             }
@@ -326,6 +369,29 @@ private fun classifyException(e: Exception): String {
         "network" in msg || "connection" in msg -> Constants.Messages.NETWORK_ERROR
         "auth" in msg || "token" in msg || "secret" in msg -> Constants.Messages.AUTHENTICATION_ERROR
         else -> Constants.Messages.UNKNOWN_ERROR
+    }
+}
+
+private fun refreshDecision(user: User, tokenGeneration: Int?, tokenExpired: Boolean): SessionDecision =
+    SessionPolicy.evaluate(
+        userPresent = true,
+        isActive = user.isActive,
+        storedGeneration = user.sessionGeneration,
+        tokenGeneration = tokenGeneration,
+        purpose = SessionPurpose.REFRESH,
+        tokenExpired = tokenExpired,
+    )
+
+private suspend fun ApplicationCall.respondRefreshRejected(decision: SessionDecision) {
+    when (decision) {
+        SessionDecision.REJECT_INACTIVE ->
+            respondError(Constants.Messages.ACCOUNT_INACTIVE, Unit, HttpStatusCode.Forbidden)
+        SessionDecision.ALLOW -> Unit
+        else -> respondError(
+            Constants.Messages.TOKEN_INVALID,
+            mapOf("errorCode" to "TOKEN_INVALID"),
+            HttpStatusCode.BadRequest
+        )
     }
 }
 

@@ -21,6 +21,8 @@ object Constants {
         const val DEFAULT_JWT_EXPIRATION = "3600000"
         const val JWT_CLAIM_EMAIL = "email"
         const val JWT_CLAIM_ROLE = "role"
+        /** Integer claim. Absent on tokens issued before session generations existed. */
+        const val JWT_CLAIM_SESSION_GENERATION = "sessionGeneration"
         const val JWT_SECRET_NAME = "jwt-secret"
         const val DB_CONNECTION_STRING_SECRET = "db-connection-string"
         const val RAZORPAY_SECRET = "razorpay-secret"

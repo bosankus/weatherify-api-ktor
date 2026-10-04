@@ -1,6 +1,7 @@
 package com.syncling.di
 
 import com.androidplay.core.mongo.IndexSpec
+import com.androidplay.core.mongo.withExplicitName
 import com.syncling.repository.*
 import com.syncling.repository.mongo.*
 import com.syncling.repository.mongo.MongoCdnPublishRepository
@@ -178,5 +179,5 @@ fun synclingIndexes(): List<IndexSpec> {
         IndexSpec("figma_previews", Document(mapOf("projectId" to 1, "figmaFileKey" to 1, "figmaFrameId" to 1)), unique),
         // Figma sync preferences: one row per project.
         IndexSpec("figma_settings", Document("projectId", 1), unique),
-    )
+    ).map { it.withExplicitName() }
 }

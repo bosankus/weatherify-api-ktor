@@ -1,15 +1,22 @@
 package util
 
 import bose.ankush.data.model.ApiResponse
+import com.androidplay.core.common.Result
 import com.androidplay.weatherify.domain.UserRole
+import com.androidplay.weatherify.repository.UserRepository
 import com.auth0.jwt.interfaces.DecodedJWT
+import com.auth0.jwt.interfaces.Payload
 import config.JwtConfig
+import config.SessionDecision
+import config.SessionPolicy
+import config.SessionPurpose
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.response.*
 import kotlinx.serialization.json.Json
+import org.koin.ktor.ext.get
 import org.slf4j.LoggerFactory
 
 object AuthHelper {
@@ -59,67 +66,126 @@ object AuthHelper {
         }
     }
 
+    private fun roleFromClaim(roleString: String?): UserRole {
+        return try {
+            if (roleString.isNullOrBlank()) {
+                UserRole.USER
+            } else {
+                UserRole.valueOf(roleString.uppercase())
+            }
+        } catch (e: Exception) {
+            logger.warn("Invalid role in JWT: $roleString, defaulting to USER. Issue: ${e.message}")
+            UserRole.USER
+        }
+    }
+
     private fun extractUserFromJWT(decodedJWT: DecodedJWT, token: String): AuthenticatedUser? {
         return try {
             val email = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
             val roleString = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_ROLE).asString()
-            val isActive = decodedJWT.getClaim("isActive")?.asBoolean() ?: true
+            // isActive is not read from the token. The user document is the source of truth.
 
             if (email.isNullOrBlank()) {
                 logger.warn("JWT token missing email claim")
                 return null
             }
 
-            val role =
-                try {
-                    if (roleString.isNullOrBlank()) {
-                        UserRole.USER // Default role
-                    } else {
-                        UserRole.valueOf(roleString.uppercase())
-                    }
-                } catch (e: Exception) {
-                    logger.warn("Invalid role in JWT: $roleString, defaulting to USER. Issue: ${e.message}")
-                    UserRole.USER
-                }
-
-            AuthenticatedUser(email = email, role = role, isActive = isActive, token = token)
+            AuthenticatedUser(
+                email = email,
+                role = roleFromClaim(roleString),
+                isActive = true,
+                token = token
+            )
         } catch (e: Exception) {
             logger.warn("Failed to extract user from JWT: ${e.message}")
             null
         }
     }
 
-    fun ApplicationCall.authenticateUser(): AuthResult {
-        val principal = principal<JWTPrincipal>()
-        if (principal != null) {
-            val email = principal.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-            val roleString = principal.payload.getClaim(Constants.Auth.JWT_CLAIM_ROLE).asString()
-            val isActive = principal.payload.getClaim("isActive")?.asBoolean() ?: true
-
-            if (!email.isNullOrBlank()) {
-                val role =
-                    try {
-                        if (roleString.isNullOrBlank()) {
-                            UserRole.USER // Default role
-                        } else {
-                            UserRole.valueOf(roleString.uppercase())
-                        }
-                    } catch (e: Exception) {
-                        logger.warn("Invalid role in JWT: $roleString, defaulting to USER. Issue: ${e.message}")
-                        UserRole.USER
-                    }
-
-                val user =
+    /**
+     * Signature is already checked. Load the user and apply [SessionPolicy].
+     * Role stays the JWT role. isActive and session generation come from the document.
+     */
+    private suspend fun ApplicationCall.authorizeStoredUser(
+        email: String,
+        role: UserRole,
+        token: String,
+        tokenGeneration: Int?,
+    ): AuthResult {
+        val userRepository = try {
+            application.get<UserRepository>()
+        } catch (e: Exception) {
+            logger.error("User repository unavailable during authentication: ${e.message}")
+            return AuthResult.Failure(
+                "Authentication failed. Please try again.",
+                HttpStatusCode.InternalServerError
+            )
+        }
+        return when (val result = userRepository.findUserByEmail(email)) {
+            is Result.Error -> {
+                logger.error("Failed to load user during authentication: ${result.message}")
+                AuthResult.Failure(
+                    "Authentication failed. Please try again.",
+                    HttpStatusCode.InternalServerError
+                )
+            }
+            is Result.Success -> when (
+                SessionPolicy.evaluate(
+                    userPresent = result.data != null,
+                    isActive = result.data?.isActive == true,
+                    storedGeneration = result.data?.sessionGeneration,
+                    tokenGeneration = tokenGeneration,
+                    purpose = SessionPurpose.AUTHENTICATED_CALL,
+                    tokenExpired = false,
+                )
+            ) {
+                SessionDecision.ALLOW -> AuthResult.Success(
                     AuthenticatedUser(
                         email = email,
                         role = role,
-                        isActive = isActive,
-                        token = "from-principal"
+                        isActive = true,
+                        token = token
                     )
+                )
+                SessionDecision.REJECT_INACTIVE -> AuthResult.Failure(
+                    "Account is inactive. Please contact support.",
+                    HttpStatusCode.Forbidden
+                )
+                else -> AuthResult.Failure(
+                    "Invalid or expired token. Please login again.",
+                    HttpStatusCode.Unauthorized
+                )
+            }
+        }
+    }
 
-                if (user.isActive) {
-                    return AuthResult.Success(user)
-                }
+    /** True when this already-verified token may still call authenticated routes. */
+    suspend fun ApplicationCall.sessionStillValid(payload: Payload): Boolean {
+        val email = payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+        if (email.isNullOrBlank()) return false
+        val role = roleFromClaim(payload.getClaim(Constants.Auth.JWT_CLAIM_ROLE).asString())
+        return authorizeStoredUser(
+            email = email,
+            role = role,
+            token = "checked",
+            tokenGeneration = JwtConfig.sessionGeneration(payload),
+        ) is AuthResult.Success
+    }
+
+    suspend fun ApplicationCall.authenticateUser(): AuthResult {
+        val principal = principal<JWTPrincipal>()
+        if (principal != null) {
+            val email = principal.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
+            if (!email.isNullOrBlank()) {
+                val role = roleFromClaim(
+                    principal.payload.getClaim(Constants.Auth.JWT_CLAIM_ROLE).asString()
+                )
+                return authorizeStoredUser(
+                    email = email,
+                    role = role,
+                    token = "from-principal",
+                    tokenGeneration = JwtConfig.sessionGeneration(principal.payload),
+                )
             }
         }
 
@@ -147,17 +213,15 @@ object AuthHelper {
             )
         }
 
-        if (!user.isActive) {
-            return AuthResult.Failure(
-                "Account is inactive. Please contact support.",
-                HttpStatusCode.Forbidden
-            )
-        }
-
-        return AuthResult.Success(user)
+        return authorizeStoredUser(
+            email = user.email,
+            role = user.role,
+            token = token,
+            tokenGeneration = JwtConfig.sessionGeneration(decodedJWT),
+        )
     }
 
-    fun ApplicationCall.authenticateUserWithRole(requiredRole: UserRole): AuthResult {
+    suspend fun ApplicationCall.authenticateUserWithRole(requiredRole: UserRole): AuthResult {
         return when (val authResult = authenticateUser()) {
             is AuthResult.Success -> {
                 if (authResult.user.role == requiredRole || authResult.user.role == UserRole.ADMIN
@@ -175,7 +239,7 @@ object AuthHelper {
         }
     }
 
-    fun ApplicationCall.authenticateAdmin(): AuthResult {
+    suspend fun ApplicationCall.authenticateAdmin(): AuthResult {
         return authenticateUserWithRole(UserRole.ADMIN)
     }
 

@@ -3,15 +3,21 @@ package bose.ankush.base
 import bose.ankush.data.model.ApiResponse
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.androidplay.core.common.Result
 import com.androidplay.core.secrets.getSecretValue
+import com.androidplay.weatherify.repository.UserRepository
 import config.Environment
 import config.JwtConfig
+import config.SessionDecision
+import config.SessionPolicy
+import config.SessionPurpose
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.auth.HttpAuthHeader
 import com.syncling.routes.apiToken
 import io.ktor.server.application.Application
+import org.koin.ktor.ext.inject
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.jwt.JWTPrincipal
@@ -27,6 +33,7 @@ import util.Constants
 fun Application.configureAuthentication() {
     val logger = LoggerFactory.getLogger("Authentication")
     val synclingJwtSecret = getSecretValue("jwt-secret")
+    val userRepository by inject<UserRepository>()
 
     install(Authentication) {
         jwt("jwt-auth") {
@@ -44,12 +51,31 @@ fun Application.configureAuthentication() {
             validate { credential ->
                 try {
                     val email = credential.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                    if (email.isNotEmpty()) {
+                    if (email.isNullOrBlank()) {
+                        logger.warn("Authentication failed: Empty email claim in token")
+                        return@validate null
+                    }
+                    val user = when (val loaded = userRepository.findUserByEmail(email)) {
+                        is Result.Success -> loaded.data
+                        is Result.Error -> {
+                            logger.error("Authentication failed loading user: ${loaded.message}")
+                            return@validate null
+                        }
+                    }
+                    val decision = SessionPolicy.evaluate(
+                        userPresent = user != null,
+                        isActive = user?.isActive == true,
+                        storedGeneration = user?.sessionGeneration,
+                        tokenGeneration = JwtConfig.sessionGeneration(credential.payload),
+                        purpose = SessionPurpose.AUTHENTICATED_CALL,
+                        tokenExpired = false,
+                    )
+                    if (decision != SessionDecision.ALLOW) {
+                        logger.info("Authentication rejected for {}: {}", email, decision)
+                        null
+                    } else {
                         logger.debug("Authentication successful for user: $email")
                         JWTPrincipal(credential.payload)
-                    } else {
-                        logger.warn("Authentication failed: Empty email claim in token")
-                        null
                     }
                 } catch (e: Exception) {
                     logger.error("Authentication failed: ${e.message}")

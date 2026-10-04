@@ -74,6 +74,12 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
                 isPremium = (doc.get("isPremium") as? Boolean) ?: false,
                 premiumExpiresAt = doc.getString("premiumExpiresAt"),
                 fcmToken = doc.getString("fcmToken"),
+                sessionGeneration = when (val rawGeneration = doc.get("sessionGeneration")) {
+                    is Int -> rawGeneration
+                    is Long -> rawGeneration.toInt()
+                    is Number -> rawGeneration.toInt()
+                    else -> null
+                },
                 photoObject = doc.getString("photoObject"),
                 photoUrl = doc.getString("photoUrl")
             )
@@ -147,6 +153,9 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
             user.registrationSource?.let { updates["registrationSource"] = it }
             user.premiumExpiresAt?.let { updates["premiumExpiresAt"] = it }
             user.fcmToken?.let { updates["fcmToken"] = it }
+            // Only set when present. A null (legacy document, or a caller that did not
+            // load the field) must not wipe a generation that login or logout stored.
+            user.sessionGeneration?.let { updates["sessionGeneration"] = it }
             user.photoObject?.let { updates["photoObject"] = it }
 
             val filter = databaseModule.createFilter("email", user.email)
