@@ -36,6 +36,13 @@ data class User(
     val premiumExpiresAt: String? = null,
     val fcmToken: String? = null,
     /**
+     * Server-side session generation. Absent on older documents; that is treated as 0.
+     * Login writes 0 when the field is missing and increments it otherwise.
+     * Logout increments it so a token that carries the claim can no longer be used or refreshed.
+     * Not part of any API response body.
+     */
+    val sessionGeneration: Int? = null,
+    /**
      * GCS object name for the profile photo (UUID only). Never a URL.
      * GET /account returns a signed URL derived from this field as photoUrl.
      */

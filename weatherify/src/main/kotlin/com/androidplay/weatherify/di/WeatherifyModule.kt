@@ -1,6 +1,7 @@
 package com.androidplay.weatherify.di
 
 import com.androidplay.core.mongo.IndexSpec
+import com.androidplay.core.mongo.withExplicitName
 import com.androidplay.weatherify.db.WeatherifyDb
 import com.androidplay.weatherify.repository.FeedbackRepository
 import com.androidplay.weatherify.repository.NoteRepository
@@ -63,5 +64,5 @@ fun weatherifyIndexes(): List<IndexSpec> {
         IndexSpec("service_history", Document("changedAt", -1)),
         IndexSpec("place_events", Document(mapOf("userEmail" to 1, "lat" to 1, "lon" to 1, "startsAt" to 1))),
         IndexSpec("place_events", Document("userEmail", 1)),
-    )
+    ).map { it.withExplicitName() }
 }

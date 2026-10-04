@@ -14,10 +14,16 @@ import java.util.Date
 
 /** Result of a token-refresh eligibility check. */
 sealed class TokenRefreshResult {
-    /** Token was expired but otherwise valid; contains the email claim. */
-    data class Expired(val email: String) : TokenRefreshResult()
-    /** Token is still valid and does not need refreshing; contains the email claim. */
-    data class StillValid(val email: String) : TokenRefreshResult()
+    /**
+     * Token was expired but otherwise valid.
+     * [sessionGeneration] is null when the token has no generation claim (legacy).
+     */
+    data class Expired(val email: String, val sessionGeneration: Int?) : TokenRefreshResult()
+    /**
+     * Token is still valid and does not need refreshing.
+     * [sessionGeneration] is null when the token has no generation claim (legacy).
+     */
+    data class StillValid(val email: String, val sessionGeneration: Int?) : TokenRefreshResult()
     /** Token is malformed, has a bad signature, wrong issuer/audience, or unparseable. */
     object Invalid : TokenRefreshResult()
 }
@@ -46,14 +52,34 @@ object JwtConfig {
      * @param role The user's role
      * @return A signed JWT token
      */
-    fun generateToken(email: String, role: UserRole?): String {
-        return JWT.create()
+    /**
+     * @param sessionGeneration when non-null, stored as an integer claim. Omit it only for
+     * tokens that must stay compatible with the pre-generation shape (tests, or a caller
+     * that has not loaded the user). Login, register, and refresh pass the value.
+     */
+    fun generateToken(email: String, role: UserRole?, sessionGeneration: Int? = null): String {
+        val builder = JWT.create()
             .withAudience(Environment.getJwtAudience())
             .withIssuer(Environment.getJwtIssuer())
             .withClaim(Constants.Auth.JWT_CLAIM_EMAIL, email)
             .withClaim(Constants.Auth.JWT_CLAIM_ROLE, role?.name)
             .withExpiresAt(Date(System.currentTimeMillis() + Environment.getJwtExpiration()))
-            .sign(algorithm)
+        if (sessionGeneration != null) {
+            builder.withClaim(Constants.Auth.JWT_CLAIM_SESSION_GENERATION, sessionGeneration)
+        }
+        return builder.sign(algorithm)
+    }
+
+    /** Null when the claim is absent. Present integer claims are returned as-is. */
+    fun sessionGeneration(payload: Payload): Int? {
+        val claim = payload.getClaim(Constants.Auth.JWT_CLAIM_SESSION_GENERATION) ?: return null
+        if (claim.isNull || claim.isMissing) return null
+        return try {
+            claim.asInt()
+        } catch (e: Exception) {
+            logger.warn("Ignoring unreadable sessionGeneration claim: ${e.message}")
+            null
+        }
     }
 
     /**
@@ -101,7 +127,7 @@ object JwtConfig {
                 TokenRefreshResult.Invalid
             } else {
                 logger.debug("Token is still valid for user: $email")
-                TokenRefreshResult.StillValid(email)
+                TokenRefreshResult.StillValid(email, sessionGeneration(decoded))
             }
         } catch (_: TokenExpiredException) {
             // Signature, issuer and audience were valid — only expiry failed.
@@ -114,7 +140,7 @@ object JwtConfig {
                     TokenRefreshResult.Invalid
                 } else {
                     logger.debug("Token is expired, eligible for refresh: $email")
-                    TokenRefreshResult.Expired(email)
+                    TokenRefreshResult.Expired(email, sessionGeneration(decoded))
                 }
             } catch (e: Exception) {
                 logger.warn("Failed to decode expired token: ${e.message}")

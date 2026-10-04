@@ -18,6 +18,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import util.AuthHelper.getAuthenticatedAdminOrRespond
+import util.AuthHelper.getAuthenticatedUserOrRespond
 import util.Constants
 import util.ProfilePhotoStorage
 
@@ -79,8 +80,10 @@ fun Route.userRoute() {
 
     // Wrap all admin routes under /admin prefix
     route("/admin") {
-        // FCM token registration endpoint (email-based)
+        // FCM token registration. Same auth as the other user routes: JWT cookie or bearer.
+        // The caller must be that user, or an admin. Path, body, and success JSON are unchanged.
         post("/user/{email}/fcm-token") {
+            val caller = call.getAuthenticatedUserOrRespond() ?: return@post
             try {
                 val email = call.parameters["email"]?.trim()
                 if (email.isNullOrEmpty()) {
@@ -88,6 +91,15 @@ fun Route.userRoute() {
                         "Validation process failed: Missing user email in path",
                         Unit,
                         HttpStatusCode.BadRequest
+                    )
+                    return@post
+                }
+
+                if (!fcmRegistrationAllowed(caller.email, email, caller.role == UserRole.ADMIN)) {
+                    call.respondError(
+                        "Insufficient privileges.",
+                        Unit,
+                        HttpStatusCode.Forbidden
                     )
                     return@post
                 }
@@ -704,3 +716,12 @@ data class NotificationRequest(
     val title: String? = null,
     val body: String? = null
 )
+
+/**
+ * Self-service FCM registration, or an admin updating any user.
+ * Email comparison is case-insensitive; the path value is still what is stored.
+ */
+fun fcmRegistrationAllowed(callerEmail: String, pathEmail: String, callerIsAdmin: Boolean): Boolean {
+    if (callerIsAdmin) return true
+    return callerEmail.trim().equals(pathEmail.trim(), ignoreCase = true)
+}

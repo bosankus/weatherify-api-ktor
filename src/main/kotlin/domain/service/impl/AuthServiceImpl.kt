@@ -2,6 +2,7 @@ package domain.service.impl
 
 import bose.ankush.util.PasswordUtil
 import config.JwtConfig
+import config.SessionPolicy
 import com.androidplay.core.common.Result
 import com.androidplay.weatherify.repository.UserRepository
 import domain.service.AuthService
@@ -42,8 +43,21 @@ class AuthServiceImpl(private val userRepository: UserRepository) : AuthService 
                 } else if (!user.isActive) {
                     Result.error(Constants.Messages.ACCOUNT_INACTIVE)
                 } else {
-                    val token = JwtConfig.generateToken(user.email, user.role)
-                    Result.success(token)
+                    val nextGeneration = SessionPolicy.generationForLogin(user.sessionGeneration)
+                    when (val saved = userRepository.updateUser(user.copy(sessionGeneration = nextGeneration))) {
+                        is Result.Error -> Result.error(
+                            saved.message.ifBlank { Constants.Messages.AUTHENTICATION_ERROR },
+                            saved.exception
+                        )
+                        is Result.Success -> {
+                            if (!saved.data) {
+                                Result.error("Failed to start session")
+                            } else {
+                                val token = JwtConfig.generateToken(user.email, user.role, nextGeneration)
+                                Result.success(token)
+                            }
+                        }
+                    }
                 }
             }
 

@@ -37,6 +37,7 @@ import util.AuthHelper.authenticateAdmin
 import util.AuthHelper.getAuthenticatedAdminOrRespond
 import util.AuthHelper.isAdminToken
 import util.AuthHelper.isTokenValid
+import util.AuthHelper.sessionStillValid
 import util.Constants
 import java.time.LocalDate
 import java.time.Year
@@ -701,7 +702,9 @@ fun Route.adminAuthRoute() {
                 call.request.cookies["jwt_token"]
             }
 
-            if (token != null && isTokenValid(token) && isAdminToken(token)) {
+            if (token != null && isTokenValid(token) && isAdminToken(token) &&
+                call.sessionStillValid(JwtConfig.verifier.verify(token))
+            ) {
                 logger.info("Admin user already authenticated, redirecting to dashboard")
 
                 // Set jwt_token cookie if it came from header
@@ -893,11 +896,17 @@ fun Route.adminAuthRoute() {
             var isAdmin = false
             var userEmail: String? = null
 
-            if (jwtToken != null) {
+            var presentedToken: String? = jwtToken
+            if (presentedToken != null) {
                 try {
-                    val decodedJWT = JwtConfig.verifier.verify(jwtToken)
+                    val decodedJWT = JwtConfig.verifier.verify(presentedToken)
                     userEmail = decodedJWT.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                    isAdmin = JwtConfig.isAdmin(decodedJWT)
+                    val sessionOk = call.sessionStillValid(decodedJWT)
+                    isAdmin = JwtConfig.isAdmin(decodedJWT) && sessionOk
+                    if (!sessionOk) {
+                        // Inactive, logged-out, or generation mismatch: do not treat the cookie as a session.
+                        presentedToken = null
+                    }
                 } catch (e: Exception) {
                     // Invalid or expired token, clear cookie to break redirect loop
                     val isHttps = (
@@ -928,7 +937,7 @@ fun Route.adminAuthRoute() {
                 logger.info("Admin user authenticated: $userEmail, redirecting to dashboard")
                 call.respondRedirect("/dashboard", permanent = false)
                 return@get
-            } else if (jwtToken != null) {
+            } else if (presentedToken != null) {
                 // Token exists but not admin, force login with error
                 logger.warn("Non-admin or invalid JWT tried to access /admin: $userEmail")
                 call.respondRedirect("/login?error=admin_required", permanent = false)
