@@ -20,6 +20,7 @@ val routeModule = module {
     single<RouteRegistrar>(named("pollingengine")) { PollingEngineRoutesRegistrar }
     single<RouteRegistrar>(named("locations")) { SavedLocationRoutesRegistrar }
     single<RouteRegistrar>(named("notes")) { NoteRoutesRegistrar }
+    single<RouteRegistrar>(named("placeEvents")) { PlaceEventRoutesRegistrar }
     single<RouteRegistrar>(named("liveWeather")) { LiveWeatherRoutesRegistrar }
     single<List<RouteRegistrar>> {
         listOf(
@@ -38,6 +39,7 @@ val routeModule = module {
             get(named("pollingengine")),
             get(named("locations")),
             get(named("notes")),
+            get(named("placeEvents")),
             get(named("liveWeather"))
         )
     }

@@ -73,7 +73,8 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
                 registrationSource = doc.getString("registrationSource"),
                 isPremium = (doc.get("isPremium") as? Boolean) ?: false,
                 premiumExpiresAt = doc.getString("premiumExpiresAt"),
-                fcmToken = doc.getString("fcmToken")
+                fcmToken = doc.getString("fcmToken"),
+                photoUrl = doc.getString("photoUrl")
             )
 
             logger.debug("User found: $email")
@@ -145,6 +146,7 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
             user.registrationSource?.let { updates["registrationSource"] = it }
             user.premiumExpiresAt?.let { updates["premiumExpiresAt"] = it }
             user.fcmToken?.let { updates["fcmToken"] = it }
+            user.photoUrl?.let { updates["photoUrl"] = it }
 
             val filter = databaseModule.createFilter("email", user.email)
             val updateBson = databaseModule.createSetUpdates(updates)

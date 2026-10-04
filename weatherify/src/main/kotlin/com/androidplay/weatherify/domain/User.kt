@@ -34,7 +34,9 @@ data class User(
     val registrationSource: String? = null,
     val isPremium: Boolean = false,
     val premiumExpiresAt: String? = null,
-    val fcmToken: String? = null
+    val fcmToken: String? = null,
+    /** Profile photo URL, when the account has one. Null when unset. */
+    val photoUrl: String? = null
 )
 
 /** User roles for access control */

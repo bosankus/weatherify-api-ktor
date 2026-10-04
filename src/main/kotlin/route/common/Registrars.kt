@@ -2,6 +2,7 @@ package bose.ankush.route.common
 
 import bose.ankush.route.*
 import domain.service.SavedLocationService
+import domain.service.PlaceEventService
 import io.ktor.server.routing.*
 import org.koin.java.KoinJavaComponent.get
 
@@ -101,3 +102,8 @@ object LiveWeatherRoutesRegistrar : RouteRegistrar {
     }
 }
 
+object PlaceEventRoutesRegistrar : RouteRegistrar {
+    override fun register(root: Route) {
+        with(root) { placeEventRoute(get(PlaceEventService::class.java)) }
+    }
+}

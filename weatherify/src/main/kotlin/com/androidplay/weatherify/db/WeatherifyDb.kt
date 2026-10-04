@@ -44,6 +44,7 @@ class WeatherifyDb(private val database: MongoDatabase) {
     fun getServicesCollection(): MongoCollection<ServiceConfig> = getCollection("services")
     fun getServiceHistoryCollection(): MongoCollection<ServiceHistory> = getCollection("service_history")
     fun getNotesCollection(): MongoCollection<Note> = getCollection("notes")
+    fun getPlaceEventsCollection(): MongoCollection<PlaceEvent> = getCollection("place_events")
 
     fun createQuery(field: String, value: Any): Document = Document(field, value)
 

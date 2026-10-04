@@ -20,6 +20,7 @@ val domainModule = module {
     single { NominatimService(get()) }
     single { SavedLocationService(get(), get(), get()) }
     single { NoteService(get()) }
+    single { PlaceEventService(get()) }
 
     single { ServiceCatalogSeedingService(get()) }
     single { ServiceCatalogCache(get(), cacheDurationMinutes = 15) }

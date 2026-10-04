@@ -11,11 +11,14 @@ import domain.service.UnregisteredFcmTokenException
 import domain.service.WeatherAggregatorService
 import domain.service.live.LiveEntitlementResolver
 import io.ktor.http.*
+import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import util.AuthHelper.getAuthenticatedAdminOrRespond
+import util.Constants
 
 /**
  * Admin User management routes (IAM)
@@ -23,8 +26,42 @@ import util.AuthHelper.getAuthenticatedAdminOrRespond
  * - Update user role
  * - Update user active status
  */
+@Serializable
+data class AccountProfileResponse(
+    val email: String,
+    val photoUrl: String? = null
+)
+
 fun Route.userRoute() {
     val userRepository: UserRepository by application.inject()
+
+    authenticate("jwt-auth") {
+        get("/account") {
+            val email = call.principal<JWTPrincipal>()
+                ?.payload
+                ?.getClaim(Constants.Auth.JWT_CLAIM_EMAIL)
+                ?.asString()
+            if (email.isNullOrBlank()) {
+                call.respondError(
+                    "Authentication failed: missing account",
+                    Unit,
+                    HttpStatusCode.Unauthorized
+                )
+                return@get
+            }
+            when (val result = userRepository.findUserByEmail(email)) {
+                is Result.Success -> call.respondSuccess(
+                    "Account",
+                    AccountProfileResponse(email = email, photoUrl = result.data?.photoUrl)
+                )
+                is Result.Error -> call.respondError(
+                    result.message,
+                    Unit,
+                    HttpStatusCode.InternalServerError
+                )
+            }
+        }
+    }
     val notificationService: NotificationService by application.inject()
     val weatherAggregatorService: WeatherAggregatorService by application.inject()
     val liveEntitlementResolver: LiveEntitlementResolver by application.inject()
