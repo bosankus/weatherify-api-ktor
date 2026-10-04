@@ -18,22 +18,29 @@ import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import util.Constants
 import util.ProfilePhotoActions
+import util.ProfilePhotoBytes
 import util.ProfilePhotoStorage
+import util.GcsProfilePhotoStorage
 
 @Serializable
 data class AccountPhotoResponse(
     val photoUrl: String? = null
 )
 
-private val ALLOWED_PHOTO_TYPES = setOf(
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/webp",
-    "image/gif"
-)
-
 private const val MAX_PHOTO_BYTES = 5 * 1024 * 1024
+
+internal fun profilePhotoErrorStatus(message: String): HttpStatusCode = when {
+    message.contains("not found", ignoreCase = true) -> HttpStatusCode.NotFound
+    message.contains(ProfilePhotoBytes.HEIC_REJECTED, ignoreCase = false) ||
+        message.contains("Unsupported content type", ignoreCase = true) ||
+        message.contains("Unsupported photo", ignoreCase = true) ->
+        HttpStatusCode.BadRequest
+    message.contains("unavailable", ignoreCase = true) ||
+        message.contains("not configured", ignoreCase = true) ||
+        message.contains("Failed to sign", ignoreCase = true) ->
+        HttpStatusCode.ServiceUnavailable
+    else -> HttpStatusCode.InternalServerError
+}
 
 /**
  * Authenticated profile photo routes.
@@ -69,24 +76,18 @@ fun Route.accountPhotoRoute() {
 
                 when (
                     val result = withContext(Dispatchers.IO) {
-                        actions.upload(email, upload.bytes, upload.contentType)
+                        actions.upload(email, upload.bytes, upload.contentType, upload.filename)
                     }
                 ) {
                     is Result.Success -> call.respondSuccess(
                         "Profile photo updated",
                         AccountPhotoResponse(photoUrl = result.data.photoUrl)
                     )
-                    is Result.Error -> {
-                        val status = when {
-                            result.message.contains("not found", ignoreCase = true) ->
-                                HttpStatusCode.NotFound
-                            result.message.contains("unavailable", ignoreCase = true) ||
-                                result.message.contains("not configured", ignoreCase = true) ->
-                                HttpStatusCode.ServiceUnavailable
-                            else -> HttpStatusCode.InternalServerError
-                        }
-                        call.respondError(result.message, Unit, status)
-                    }
+                    is Result.Error -> call.respondError(
+                        result.message,
+                        Unit,
+                        profilePhotoErrorStatus(result.message)
+                    )
                 }
             }
 
@@ -99,17 +100,11 @@ fun Route.accountPhotoRoute() {
                         if (result.data == null) "No profile photo" else "Profile photo",
                         AccountPhotoResponse(photoUrl = result.data)
                     )
-                    is Result.Error -> {
-                        val status = when {
-                            result.message.contains("not found", ignoreCase = true) ->
-                                HttpStatusCode.NotFound
-                            result.message.contains("unavailable", ignoreCase = true) ||
-                                result.message.contains("not configured", ignoreCase = true) ->
-                                HttpStatusCode.ServiceUnavailable
-                            else -> HttpStatusCode.InternalServerError
-                        }
-                        call.respondError(result.message, Unit, status)
-                    }
+                    is Result.Error -> call.respondError(
+                        result.message,
+                        Unit,
+                        profilePhotoErrorStatus(result.message)
+                    )
                 }
             }
 
@@ -122,17 +117,11 @@ fun Route.accountPhotoRoute() {
                         "Profile photo deleted",
                         AccountPhotoResponse(photoUrl = null)
                     )
-                    is Result.Error -> {
-                        val status = when {
-                            result.message.contains("not found", ignoreCase = true) ->
-                                HttpStatusCode.NotFound
-                            result.message.contains("unavailable", ignoreCase = true) ||
-                                result.message.contains("not configured", ignoreCase = true) ->
-                                HttpStatusCode.ServiceUnavailable
-                            else -> HttpStatusCode.InternalServerError
-                        }
-                        call.respondError(result.message, Unit, status)
-                    }
+                    is Result.Error -> call.respondError(
+                        result.message,
+                        Unit,
+                        profilePhotoErrorStatus(result.message)
+                    )
                 }
             }
         }
@@ -157,12 +146,14 @@ private suspend fun RoutingCall.jwtEmailOrUnauthorized(): String? {
 
 private data class PhotoUpload(
     val bytes: ByteArray,
-    val contentType: String
+    val contentType: String,
+    val filename: String?
 )
 
 private suspend fun receivePhotoBytes(call: RoutingCall): PhotoUpload {
     var bytes: ByteArray? = null
     var contentType = "application/octet-stream"
+    var filename: String? = null
 
     call.receiveMultipart().forEachPart { part ->
         try {
@@ -172,6 +163,7 @@ private suspend fun receivePhotoBytes(call: RoutingCall): PhotoUpload {
                     if (name == null || name == "file" || name == "photo" || name == "image") {
                         contentType = part.contentType?.toString()?.substringBefore(";")?.trim()
                             ?: "application/octet-stream"
+                        filename = part.originalFileName
                         val data = part.provider().toByteArray()
                         if (data.size > MAX_PHOTO_BYTES) {
                             throw IllegalArgumentException(
@@ -192,27 +184,32 @@ private suspend fun receivePhotoBytes(call: RoutingCall): PhotoUpload {
     if (data == null || data.isEmpty()) {
         throw IllegalArgumentException("Multipart file field 'file' or 'photo' is required")
     }
-    val normalizedType = contentType.lowercase()
-    if (normalizedType !in ALLOWED_PHOTO_TYPES && !normalizedType.startsWith("image/")) {
+    if (ProfilePhotoBytes.isHeic(data, contentType, filename)) {
+        throw IllegalArgumentException(ProfilePhotoBytes.HEIC_REJECTED)
+    }
+    if (ProfilePhotoBytes.isSvg(data, contentType, filename) || !ProfilePhotoBytes.isAllowed(contentType)) {
         throw IllegalArgumentException("Unsupported content type: $contentType")
     }
-    return PhotoUpload(bytes = data, contentType = contentType)
+    return PhotoUpload(bytes = data, contentType = contentType, filename = filename)
 }
 
 /**
- * Resolve a signed photo URL for GET /account. Returns null when unset or storage is down
- * (never returns an object name or gs:// path).
+ * Resolve a signed photo URL for GET /account.
+ * Null only when the user has no photo. Signing or storage failure is an error
+ * (the route maps that to 503), never a silent null and never an object name.
  */
 suspend fun resolveAccountPhotoUrl(
     photoObject: String?,
     photoStorage: ProfilePhotoStorage
-): String? {
+): Result<String?> {
     val key = photoObject?.trim().orEmpty()
-    if (key.isEmpty()) return null
-    if (!photoStorage.isAvailable()) return null
+    if (key.isEmpty()) return Result.success(null)
+    if (!photoStorage.isAvailable()) {
+        return Result.error(GcsProfilePhotoStorage.UNAVAILABLE)
+    }
     return try {
-        withContext(Dispatchers.IO) { photoStorage.signedUrl(key) }
-    } catch (_: Exception) {
-        null
+        Result.success(withContext(Dispatchers.IO) { photoStorage.signedUrl(key) })
+    } catch (e: Exception) {
+        Result.error("Failed to sign profile photo URL: ${e.message}", e)
     }
 }

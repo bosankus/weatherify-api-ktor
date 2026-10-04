@@ -37,6 +37,7 @@ class ProfilePhotoStorageTest {
             passwordHash = "hash",
             photoObject = null
         )
+        var failPhotoUpdate: Boolean = false
 
         override suspend fun findUserByEmail(email: String): Result<User?> =
             Result.success(if (user?.email == email) user else null)
@@ -49,6 +50,7 @@ class ProfilePhotoStorageTest {
             Result.success(true)
 
         override suspend fun updatePhotoObjectByEmail(email: String, photoObject: String): Result<Boolean> {
+            if (failPhotoUpdate) return Result.error("Database operation failed")
             val current = user ?: return Result.error("User not found")
             user = current.copy(photoObject = photoObject)
             return Result.success(true)
@@ -149,5 +151,48 @@ class ProfilePhotoStorageTest {
         assertNotNull(url)
         assertTrue(url!!.startsWith("https://"))
         assertNotEquals("only-the-key", url)
+    }
+
+    @Test
+    fun `upload does not store heic`() = runBlocking {
+        val storage = FakeStorage()
+        val users = FakeUsers()
+        val actions = ProfilePhotoActions(storage, users)
+        val heic = ByteArray(24).also {
+            it[3] = 24
+            "ftyp".encodeToByteArray().copyInto(it, 4)
+            "heic".encodeToByteArray().copyInto(it, 8)
+        }
+        val result = actions.upload("user@example.com", heic, "image/heic", "IMG_0001.HEIC")
+        assertTrue(result is Result.Error)
+        assertTrue((result as Result.Error).message.contains("JPEG"))
+        assertTrue(storage.objects.isEmpty())
+        assertNull(users.user?.photoObject)
+    }
+
+    @Test
+    fun `failed user update deletes a newly written object`() = runBlocking {
+        val storage = FakeStorage()
+        val users = FakeUsers().apply { failPhotoUpdate = true }
+        val actions = ProfilePhotoActions(storage, users)
+        val result = actions.upload("user@example.com", byteArrayOf(1, 2, 3), "image/png")
+        assertTrue(result is Result.Error)
+        assertTrue(storage.objects.isEmpty())
+        assertNull(users.user?.photoObject)
+    }
+
+    @Test
+    fun `failed user update keeps an existing object`() = runBlocking {
+        val storage = FakeStorage()
+        val users = FakeUsers().apply {
+            user = user!!.copy(photoObject = "kept-key")
+            failPhotoUpdate = true
+        }
+        storage.objects["kept-key"] = byteArrayOf(4)
+        val actions = ProfilePhotoActions(storage, users)
+        val result = actions.upload("user@example.com", byteArrayOf(7, 7), "image/gif")
+        assertTrue(result is Result.Error)
+        assertTrue(storage.objects.containsKey("kept-key"))
+        assertEquals("kept-key", users.user?.photoObject)
     }
 }

@@ -160,7 +160,8 @@ class ProfilePhotoActions(
     suspend fun upload(
         email: String,
         bytes: ByteArray,
-        contentType: String
+        contentType: String,
+        filename: String? = null
     ): com.androidplay.core.common.Result<UploadResult> {
         if (!storage.isAvailable()) {
             return com.androidplay.core.common.Result.error(GcsProfilePhotoStorage.UNAVAILABLE)
@@ -171,22 +172,42 @@ class ProfilePhotoActions(
             is com.androidplay.core.common.Result.Error ->
                 return com.androidplay.core.common.Result.error(found.message, found.exception)
         }
-        val objectKey = ProfilePhotoKeys.reuseOrCreate(user.photoObject)
+        val prepared = try {
+            ProfilePhotoBytes.prepare(bytes, contentType, filename)
+        } catch (e: ProfilePhotoRejectedException) {
+            return com.androidplay.core.common.Result.error(e.message ?: "Unsupported photo")
+        }
+        val previousKey = user.photoObject?.trim().orEmpty()
+        val objectKey = ProfilePhotoKeys.reuseOrCreate(previousKey)
+        val createdNewObject = previousKey.isEmpty()
         return try {
-            storage.upload(objectKey, bytes, contentType)
+            storage.upload(objectKey, prepared.bytes, prepared.contentType)
             when (val updated = userRepository.updatePhotoObjectByEmail(email, objectKey)) {
                 is com.androidplay.core.common.Result.Success -> {
                     val url = storage.signedUrl(objectKey)
                     com.androidplay.core.common.Result.success(UploadResult(objectKey, url))
                 }
-                is com.androidplay.core.common.Result.Error ->
+                is com.androidplay.core.common.Result.Error -> {
+                    if (createdNewObject) {
+                        deleteOrphan(objectKey)
+                    }
                     com.androidplay.core.common.Result.error(updated.message, updated.exception)
+                }
             }
         } catch (e: Exception) {
             com.androidplay.core.common.Result.error(
                 "Failed to store profile photo: ${e.message}",
                 e
             )
+        }
+    }
+
+    private fun deleteOrphan(objectKey: String) {
+        try {
+            storage.delete(objectKey)
+        } catch (e: Exception) {
+            org.slf4j.LoggerFactory.getLogger(ProfilePhotoActions::class.java)
+                .warn("Failed to delete orphan profile photo object: ${e.message}")
         }
     }
 

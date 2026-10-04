@@ -53,11 +53,17 @@ fun Route.userRoute() {
             }
             when (val result = userRepository.findUserByEmail(email)) {
                 is Result.Success -> {
-                    val photoUrl = resolveAccountPhotoUrl(result.data?.photoObject, photoStorage)
-                    call.respondSuccess(
-                        "Account",
-                        AccountProfileResponse(email = email, photoUrl = photoUrl)
-                    )
+                    when (val photo = resolveAccountPhotoUrl(result.data?.photoObject, photoStorage)) {
+                        is Result.Success -> call.respondSuccess(
+                            "Account",
+                            AccountProfileResponse(email = email, photoUrl = photo.data)
+                        )
+                        is Result.Error -> call.respondError(
+                            photo.message,
+                            Unit,
+                            profilePhotoErrorStatus(photo.message)
+                        )
+                    }
                 }
                 is Result.Error -> call.respondError(
                     result.message,
