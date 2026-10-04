@@ -101,8 +101,3 @@ object LiveWeatherRoutesRegistrar : RouteRegistrar {
     }
 }
 
-object BotAtlassianRoutesRegistrar : RouteRegistrar {
-    override fun register(root: Route) {
-        with(root) { botAtlassianRoute() }
-    }
-}

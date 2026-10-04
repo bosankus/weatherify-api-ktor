@@ -11,7 +11,6 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.response.*
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.security.MessageDigest
 
 object AuthHelper {
     private val logger = LoggerFactory.getLogger("AuthHelper")
@@ -210,47 +209,6 @@ object AuthHelper {
         }
     }
 
-
-    // Bot shared-secret gate for /bot/atlassian/... (APE-10).
-    // Accepts Authorization: Bearer <secret> or X-Bot-Token: <secret>.
-    // Constant-time comparison; responds 401 when missing/wrong.
-    suspend fun ApplicationCall.requireBotSharedSecretOrRespond(expectedSecret: String): Boolean {
-        if (expectedSecret.isBlank() || expectedSecret == DUMMY_BOT_SHARED_SECRET) {
-            logger.error("Bot shared secret is not configured")
-            respondAuthError(
-                "Bot authentication is not configured on this server.",
-                HttpStatusCode.Unauthorized,
-            )
-            return false
-        }
-        val provided = extractBotSharedSecret()
-        if (provided.isNullOrBlank() || !constantTimeEquals(provided, expectedSecret)) {
-            logger.info("Bot shared-secret authentication failed")
-            respondAuthError(
-                "Bot authentication required. Provide Authorization Bearer or X-Bot-Token.",
-                HttpStatusCode.Unauthorized,
-            )
-            return false
-        }
-        return true
-    }
-
-    private fun ApplicationCall.extractBotSharedSecret(): String? {
-        val authHeader = request.headers["Authorization"]
-        if (authHeader != null && authHeader.startsWith("Bearer ", ignoreCase = true)) {
-            val token = authHeader.substring(7).trim()
-            if (token.isNotEmpty()) return token
-        }
-        return request.headers["X-Bot-Token"]?.trim()?.takeIf { it.isNotEmpty() }
-    }
-
-    private const val DUMMY_BOT_SHARED_SECRET = "dummy_bot_atlassian_shared_secret"
-
-    private fun constantTimeEquals(a: String, b: String): Boolean {
-        val aBytes = a.toByteArray(Charsets.UTF_8)
-        val bBytes = b.toByteArray(Charsets.UTF_8)
-        return MessageDigest.isEqual(aBytes, bBytes)
-    }
 
     fun isTokenValid(token: String?): Boolean {
         if (token.isNullOrBlank()) return false
