@@ -62,6 +62,7 @@ ARG MOZJPEG_VERSION=4.1.5
 RUN curl -fsSL -o mozjpeg.tar.gz "https://github.com/mozilla/mozjpeg/archive/refs/tags/v${MOZJPEG_VERSION}.tar.gz" \
  && tar -xzf mozjpeg.tar.gz \
  && cmake -S "mozjpeg-${MOZJPEG_VERSION}" -B mozjpeg-build \
+      -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/opt/mozjpeg \
       -DENABLE_SHARED=1 \
