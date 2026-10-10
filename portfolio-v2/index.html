@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ankush Bose · Lead Android Engineer</title>
+<meta name="description" content="Ankush Bose, Lead Android Engineer in India. Nine years building Kotlin, Jetpack Compose and Kotlin Multiplatform apps used by millions.">
+<meta name="theme-color" content="#b5c1cb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0f11" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="profile">
+<meta property="og:site_name" content="Ankush Bose">
+<meta property="og:title" content="Ankush Bose · Lead Android / KMP Engineer">
+<meta property="og:description" content="9+ years architecting native Android and Kotlin Multiplatform apps for millions of users. India.">
+<!-- Preview card is generated from portfolio-og/card.html (make portfolio-og). Bump ?v= when it changes so chat apps refetch. -->
+<meta property="og:image" content="https://bose.androidplay.in/assets/og.jpg?v=1">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="Ankush Bose, Lead Android / KMP Engineer, India">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ankush Bose · Lead Android / KMP Engineer">
+<meta name="twitter:description" content="9+ years architecting native Android and Kotlin Multiplatform apps for millions of users. India.">
+<meta name="twitter:image" content="https://bose.androidplay.in/assets/og.jpg?v=1">
+<meta property="og:url" content="https://bose.androidplay.in/">
+<link rel="canonical" href="https://bose.androidplay.in/">
+<script>
+  // Apply a saved theme before first paint so there's no flash.
+  try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Inter+Tight:wght@200;400&family=Space+Grotesk:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --frame:  #b5c1cb;
+    --paper:  #fbfbfc;
+    --ink:    #0c0c0c;
+    --body:   #4b4b4b;
+    --rule:   #c4c4c4;
+    --card:   #ffffff;
+    --dot:    #b9b9b9;
+    --accent: #ffd42e;
+    --on-accent: #0c0c0c;
+    --shadow: rgba(30, 45, 60, .18);
+    --gap:  clamp(28px, 4vw, 52px);
+    --padx: clamp(20px, 7vw, 120px);
+    --cols: minmax(0, 1fr) 1px minmax(0, 1.35fr);
+    --name: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+    --mono: "Space Mono", ui-monospace, Menlo, monospace;
+    --text: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --frame: #0d0f11; --paper: #16181b; --ink: #ededed; --body: #a4a6a9; --rule: #34373b;
+      --card: #202327; --dot: #4a4d52; --shadow: rgba(0, 0, 0, .55);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --frame: #0d0f11; --paper: #16181b; --ink: #ededed; --body: #a4a6a9; --rule: #34373b;
+    --card: #202327; --dot: #4a4d52; --shadow: rgba(0, 0, 0, .55);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--frame);
+    color: var(--ink);
+    font: 400 16px/1.75 var(--text);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    transition: background-color .4s ease, color .4s ease;
+  }
+  a { color: inherit; text-decoration: none; }
+  a:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  ::selection { background: var(--accent); color: var(--on-accent); }
+
+  .sheet {
+    max-width: 1240px;
+    margin: clamp(0px, min(5vw, 4vh), 56px) auto;
+    padding: clamp(28px, min(7vw, 6vh), 88px) var(--padx) clamp(32px, 4vw, 56px);
+    background: var(--paper);
+    border-radius: clamp(0px, 2.4vw, 32px);
+    box-shadow: 0 30px 80px -40px var(--shadow);
+    position: relative;
+    transition: background-color .4s ease;
+  }
+  .band { display: grid; grid-template-columns: var(--cols); column-gap: var(--gap); }
+
+  /* ---------- Theme toggle ---------- */
+  .theme {
+    position: absolute; top: clamp(14px, 2vw, 28px); right: clamp(14px, 2vw, 28px); z-index: 3;
+    width: 40px; height: 40px; display: grid; place-items: center;
+    border: 1px solid var(--rule); border-radius: 50%;
+    background: transparent; color: var(--ink); cursor: pointer;
+    transition: border-color .25s ease, transform .5s cubic-bezier(.2, .7, .2, 1);
+  }
+  .theme:hover { border-color: var(--ink); transform: rotate(-20deg); }
+  .theme:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+  .theme svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+  .theme .moon { display: none; }
+  :root[data-theme="dark"] .theme .sun { display: none; }
+  :root[data-theme="dark"] .theme .moon { display: block; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .theme .sun { display: none; }
+    :root:not([data-theme="light"]) .theme .moon { display: block; }
+  }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    column-gap: var(--gap);
+    align-items: center;
+  }
+  /* Name set the same way as v1: spaced caps, with a hairline-thin surname */
+  .first {
+    font: 400 clamp(22px, min(3vw, 5vh), 40px)/1 "Inter Tight", var(--name);
+    letter-spacing: .32em;
+    text-transform: uppercase;
+  }
+  .last {
+    font: 200 clamp(56px, min(7.6vw, 13vh), 116px)/1 "Inter Tight", var(--name);
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    margin: .16em 0 0 -.097em;   /* cancels the B's left side-bearing so it lines up with the A above */
+    white-space: nowrap;
+  }
+
+  /* The visual: yellow lozenge, cut-out portrait popping above it, dot grid, floating card + icon */
+  /* width capped by viewport height so the whole visual sits in the first screen */
+  .visual { position: relative; aspect-ratio: 1.55 / 1; width: min(100%, 82vh); justify-self: end; }
+  .visual .shape {
+    position: absolute; left: 0; bottom: 0; width: 64%; height: 76%;
+    background: var(--accent);
+    border-radius: clamp(40px, 6vw, 84px) 0 clamp(40px, 6vw, 84px) 0;
+  }
+  .visual .photo {
+    position: absolute; left: 17%; bottom: 0; height: 104%; width: auto;
+    filter: grayscale(1) contrast(1.05);
+  }
+  .visual .dots {
+    position: absolute; right: 9%; top: 14%; width: 22%; height: 74%;
+    background-image: radial-gradient(circle, var(--dot) 1.6px, transparent 2px);
+    background-size: 33.33% 25%;
+  }
+  /* anchored bottom-right so it sits over the shoulder, clear of the face */
+  .visual .callout {
+    position: absolute; right: 0; bottom: 9%;
+    display: flex; align-items: center; gap: clamp(12px, 1.6vw, 22px);
+  }
+  .visual .card {
+    padding: clamp(12px, 1.4vw, 20px) clamp(16px, 2.2vw, 30px);
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px -18px var(--shadow), 0 1px 0 rgba(0,0,0,.02);
+    font: 500 clamp(13px, 1.25vw, 18px)/1.3 var(--text);
+    white-space: nowrap;
+    transition: background-color .4s ease;
+  }
+  .visual .badge {
+    position: relative; flex: none;
+    width: clamp(48px, 5vw, 66px); aspect-ratio: 1;
+    display: grid; place-items: center;
+    background: var(--accent); color: var(--on-accent);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px -4px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  .visual .badge svg { width: 56%; height: 56%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .visual .badge:hover { text-decoration: none; transform: translateY(-2px); }
+  .visual .badge { transition: transform .3s ease; }
+  .visual .badge .tip {
+    position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+    font: 400 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap;
+    color: var(--body); opacity: 0; transition: opacity .25s ease;
+  }
+  .visual .badge:hover .tip, .visual .badge:focus-visible .tip { opacity: 1; }
+  @media (prefers-reduced-motion: no-preference) {
+    .visual .badge { animation: bob 4s ease-in-out infinite; }
+    @keyframes bob { 50% { translate: 0 -5px; } }
+  }
+
+  /* ---------- Links + profile ---------- */
+  .intro { margin-top: clamp(48px, 8vh, 110px); }
+  .links { list-style: none; }
+  .links li { position: relative; padding-left: 20px; margin-bottom: 8px; color: var(--body); font-size: clamp(15px, 1.3vw, 18px); }
+  .links li::before { content: "•"; position: absolute; left: 2px; color: var(--ink); }
+  .links b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font: 700 clamp(17px, 2vw, 26px)/1 var(--name);
+    letter-spacing: .5em;
+    text-transform: uppercase;
+    margin-bottom: clamp(24px, 2.6vw, 36px);
+  }
+  .lede { color: var(--body); font-size: clamp(15px, 1.35vw, 18px); max-width: 58ch; line-height: 1.85; }
+  .lede + .lede { margin-top: 12px; }
+
+  /* ---------- Lower body ---------- */
+  .lower { margin-top: clamp(64px, 8vw, 110px); }
+  .lower section { margin-bottom: clamp(56px, 6vw, 88px); }
+  .rule { background: var(--rule); }
+  .meta {
+    font: 400 clamp(14px, 1.3vw, 17px)/1.6 var(--name);
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .item { margin-top: 26px; }
+  .item b { display: block; font-weight: 600; line-height: 1.6; }
+  .item span { color: var(--body); }
+  .skills dt { font: 500 13px/1.4 var(--name); letter-spacing: .2em; text-transform: uppercase; margin-top: 22px; }
+  .skills dd { color: var(--body); font-size: 15px; margin-top: 4px; }
+
+  .job { position: relative; margin-bottom: clamp(40px, 4vw, 56px); }
+  .job::before {
+    content: ""; position: absolute; top: .42em; left: calc(-1 * var(--gap) - 6px);
+    width: 13px; height: 13px; border: 2px solid var(--ink); border-radius: 3px; background: var(--paper);
+  }
+  .job:first-child::before { background: var(--accent); }
+  .job h3 { font: 700 clamp(14px, 1.35vw, 17px)/1.5 var(--name); letter-spacing: .14em; text-transform: uppercase; margin-top: 2px; }
+  .job .where { margin-bottom: 14px; }
+  .job p:not(.meta) { color: var(--body); }
+  .job ul { list-style: none; margin-top: 6px; }
+  .job li { color: var(--body); position: relative; padding-left: 20px; margin-top: 6px; }
+  .job li::before { content: "•"; position: absolute; left: 3px; color: var(--ink); }
+
+  .work a { display: block; padding: 16px 0 18px; border-top: 1px solid var(--rule); }
+  .work a:last-child { border-bottom: 1px solid var(--rule); }
+  .work a:hover { text-decoration: none; }
+  .work .name { font: 700 15px/1.5 var(--name); letter-spacing: .14em; text-transform: uppercase; display: flex; justify-content: space-between; }
+  .work .name i { font-style: normal; font-weight: 400; transition: transform .25s ease; }
+  .work a:hover .name i { transform: translate(3px, -3px); }
+  .work p { color: var(--body); font-size: 15px; }
+
+  footer {
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px 24px;
+    padding-top: 28px; border-top: 1px solid var(--rule);
+    font: 400 12px/1.6 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--body);
+  }
+  footer nav { display: flex; gap: 24px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise 1s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 90ms); }
+    @keyframes rise { from { opacity: 0; transform: translateY(16px); } }
+  }
+
+  /* ---------- Phones / narrow ---------- */
+  @media (max-width: 820px) {
+    .hero, .band { grid-template-columns: 1fr; }
+    .rule { display: none; }
+    .visual { margin-top: 40px; max-height: none; }
+    .visual { width: 100%; }
+    .visual .callout { right: 0; bottom: -6%; gap: 10px; }
+    .visual .dots { right: 2%; }
+    .intro { margin-top: 48px; }
+    .intro .links { margin-bottom: 40px; }
+    .timeline { border-left: 1px solid var(--rule); padding-left: 26px; margin-left: 6px; }
+    .job::before { left: -33px; }
+  }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <button class="theme" id="theme" type="button" aria-label="Switch to dark mode">
+    <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+  </button>
+
+  <!-- Name + visual -->
+  <header class="hero">
+    <div class="reveal">
+      <p class="first" aria-hidden="true">Ankush</p>
+      <h1 class="last"><span class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Ankush </span>Bose</h1>
+    </div>
+
+    <div class="visual reveal" style="--i:2">
+      <div class="shape" aria-hidden="true"></div>
+      <div class="dots" aria-hidden="true"></div>
+      <img class="photo" src="assets/ankush.png" alt="Ankush Bose, smiling, in a black t-shirt" width="860" height="960" fetchpriority="high">
+      <div class="callout">
+      <p class="card">Lead Android / KMP Engineer • India</p>
+      <a class="badge" href="assets/Ankush_Bose_Resume.pdf" download="Ankush_Bose_Resume.pdf" aria-label="Download résumé (PDF)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9.5 14.5 12 17l2.5-2.5"/></svg>
+        <span class="tip">Résumé</span>
+      </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Links + profile -->
+  <section class="band intro reveal" style="--i:3" aria-labelledby="profile">
+    <ul class="links">
+      <li><b>GitHub</b> - <a href="https://github.com/bosankus" rel="me">bosankus</a></li>
+      <li><b>Email</b> - <a href="mailto:ankushbose5@gmail.com">ankushbose5@gmail.com</a></li>    </ul>
+    <div class="rule" aria-hidden="true" style="background:none"></div>
+    <div>
+      <h2 id="profile">Profile</h2>
+      <p class="lede">Lead Android Engineer with 9+ years architecting native Android and Kotlin Multiplatform applications for millions of users. I build for scale without the bloat, prioritize modular, testable architectures that teams can maintain with confidence.</p>
+      <p class="lede">Lately, I’ve been leaning deep into Kotlin DSLs, designing expressive, type-safe builders that make codebase logic read like the domain itself.</p>
+    </div>
+  </section>
+
+  <!-- Education / skills  |  Experience / work -->
+  <div class="band lower">
+    <div>
+      <section class="reveal" style="--i:4">
+        <h2>Education</h2>
+        <p class="meta">2013 — 2017</p>
+        <div class="item">
+          <b>B.Tech in Electrical Engineering<br>at WBUT</b>
+          <span>Kolkata, India</span>
+        </div>
+        <div class="item">
+          <b>Android Kotlin Developer Nanodegree</b>
+          <span>Udacity</span>
+        </div>
+        <div class="item">
+          <b>Secure Coding, Orange Belt</b>
+          <span>Secure Code Warrior</span>
+        </div>
+      </section>
+
+      <section class="skills reveal" style="--i:5">
+        <h2>Skills</h2>
+        <dl>
+          <dt>Android</dt>
+          <dd>Kotlin, Jetpack Compose, Coroutines &amp; Flow, Room, WorkManager, Navigation, Wear OS</dd>
+          <dt>Multiplatform</dt>
+          <dd>Kotlin Multiplatform, Compose Multiplatform, Ktor</dd>
+          <dt>Architecture</dt>
+          <dd>MVVM, MVI, Clean Architecture, SOLID</dd>
+          <dt>Quality</dt>
+          <dd>JUnit, MockK, Espresso, Compose UI tests, ATDD, SonarQube</dd>
+          <dt>Delivery</dt>
+          <dd>CI/CD, Jenkins, TeamCity, Firebase, Play Console</dd>
+          <dt>AI-assisted</dt>
+          <dd>Claude and GitHub Copilot for code review, tests and docs</dd>
+        </dl>
+      </section>
+    </div>
+
+    <div class="rule" aria-hidden="true"></div>
+
+    <div>
+      <section class="reveal" style="--i:4">
+        <h2>Experience</h2>
+        <div class="timeline">
+          <article class="job">
+            <p class="meta">2024 — Now</p>
+            <h3>Android Tech Lead at Wipro</h3>
+            <p class="meta where">Stellantis &amp; Bangalore, IN</p>
+            <p>Leading the onboarding domain of a connected-car app with 1M+ downloads.</p>
+            <ul>
+              <li>Onboarding flows across FCA and PSA brands, including Opel, Lancia and Jeep.</li>
+              <li>Vehicle-to-user pairing over QR with ML Kit, Coroutines and Flow.</li>
+              <li>Set the team's standards for AI-assisted review, testing and docs.</li>
+            </ul>
+          </article>
+
+          <article class="job">
+            <p class="meta">2021 — 2024</p>
+            <h3>Senior Consultant at Capgemini</h3>
+            <p class="meta where">HSBC UK &amp; Kolkata, IN</p>
+            <p>Mobile banking app with 5M+ downloads.</p>
+            <ul>
+              <li>Built a language SDK that switches between 10+ languages at runtime, with no restart.</li>
+              <li>Created the Customer Domain Model plugin, the single source of truth for user state.</li>
+              <li>Drove ATDD, CI/CD and SonarQube quality gates across teams.</li>
+            </ul>
+          </article>
+
+          <article class="job">
+            <p class="meta">2019 — 2021</p>
+            <h3>Senior Associate at WNS</h3>
+            <p class="meta where">Bangalore, IN</p>
+            <ul>
+              <li>Moved a Java codebase to Kotlin, and MVC to MVVM with Jetpack.</li>
+              <li>Mentored three junior Android developers.</li>
+            </ul>
+          </article>
+
+          <article class="job">
+            <p class="meta">2019</p>
+            <h3>Android Engineer at Ontrack</h3>
+            <p class="meta where">Bangalore, IN</p>
+            <ul>
+              <li>MVC to MVVM with Navigation, WorkManager and Hilt; rebuilt the UI from Adobe XD designs.</li>
+            </ul>
+          </article>
+
+          <article class="job">
+            <p class="meta">2017 — 2019</p>
+            <h3>Risk Control Analyst at Amazon</h3>
+            <p class="meta where">Bangalore, IN</p>
+            <p>Where it started: analysing transaction patterns for financial-crime risk.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="work reveal" style="--i:5">
+        <h2>Open Source</h2>
+        <a href="https://github.com/bosankus/Compose-Weatherify">
+          <span class="name">Compose-Weatherify <i>↗</i></span>
+          <p>Jetpack Compose weather app built on the OpenWeatherMap API.</p>
+        </a>
+        <a href="https://github.com/bosankus/weatherify-api-ktor">
+          <span class="name">weatherify-api-ktor <i>↗</i></span>
+          <p>The Ktor and MongoDB backend behind it.</p>
+        </a>
+        <a href="https://github.com/bosankus/PollingEngine">
+          <span class="name">PollingEngine <i>↗</i></span>
+          <p>A Kotlin engine for polling with retries.</p>
+        </a>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    <span>© <span id="yr">2026</span> Ankush Bose</span>
+    <nav>
+      <a href="mailto:ankushbose5@gmail.com">Email</a>
+      <a href="https://github.com/bosankus">GitHub</a>
+      <a href="assets/Ankush_Bose_Resume.pdf" download="Ankush_Bose_Resume.pdf">Résumé ↓</a>
+    </nav>
+  </footer>
+</main>
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('theme');
+    var media = matchMedia('(prefers-color-scheme: dark)');
+    function isDark() { return root.dataset.theme ? root.dataset.theme === 'dark' : media.matches; }
+    function label() { btn.setAttribute('aria-label', isDark() ? 'Switch to light mode' : 'Switch to dark mode'); }
+    btn.addEventListener('click', function () {
+      root.dataset.theme = isDark() ? 'light' : 'dark';
+      try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+      label();
+    });
+    media.addEventListener('change', label);
+    label();
+  })();
+</script>
+</body>
+</html>

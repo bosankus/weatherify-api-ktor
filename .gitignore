@@ -21,3 +21,6 @@ serviceAccountKey.json
 
 # Gemini
 .gemini/
+
+# Cloudflare Wrangler local cache
+.wrangler/

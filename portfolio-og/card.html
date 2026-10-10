@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Link-preview card for bose.androidplay.in. Rendered to portfolio-v2/assets/og.jpg by `make portfolio-og`. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500&family=Inter+Tight:wght@200;400&family=Space+Mono&display=block" rel="stylesheet">
+<style>
+  :root { --paper: #fbfbfc; --ink: #0c0c0c; --dot: #b9b9b9; --accent: #ffd42e; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: var(--paper); color: var(--ink); }
+  body { position: relative; -webkit-font-smoothing: antialiased; }
+
+  .name { position: absolute; left: 84px; top: 200px; }
+  .first { font: 400 40px/1 "Inter Tight", sans-serif; letter-spacing: .32em; text-transform: uppercase; }
+  .last  { font: 200 128px/1 "Inter Tight", sans-serif; letter-spacing: .24em; text-transform: uppercase; margin: 20px 0 0 -.097em; } /* aligns B's ink with the A */
+  /* QR + address, bottom-left: scannable when the preview is shown on another screen */
+  .scan  { position: absolute; left: 84px; bottom: 56px; display: flex; align-items: center; gap: 22px; }
+  .qr    { width: 128px; height: 128px; padding: 10px; background: #fff; border-radius: 14px;
+           box-shadow: 0 10px 30px -16px rgba(30, 45, 60, .35); }
+  .qr svg { display: block; width: 100%; height: 100%; }
+  .scan-label { font: 400 14px/1 "Space Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: #6b6b6b; }
+  .url   { margin-top: 12px; font: 400 20px/1 "Space Mono", monospace; letter-spacing: .04em; color: var(--ink); }
+
+  .visual { position: absolute; left: 560px; top: 40px; width: 600px; height: 540px; }
+  .shape  { position: absolute; left: 0; bottom: 0; width: 64%; height: 72%; background: var(--accent); border-radius: 84px 0 84px 0; }
+  .photo  { position: absolute; left: 16%; bottom: 0; height: 100%; filter: grayscale(1) contrast(1.05); }
+  .dots   { position: absolute; right: 6%; top: 14%; width: 21%; height: 70%;
+            background-image: radial-gradient(circle, var(--dot) 2px, transparent 2.5px); background-size: 33.33% 25%; }
+  .callout { position: absolute; right: 24px; bottom: 9%; }
+  .card   { padding: 20px 28px; background: #fff; border-radius: 16px; white-space: nowrap;
+            box-shadow: 0 18px 40px -18px rgba(30, 45, 60, .25); font: 500 22px/1.3 "Instrument Sans", sans-serif; }
+</style>
+</head>
+<body>
+  <div class="name">
+    <p class="first">Ankush</p>
+    <p class="last">Bose</p>
+  </div>
+  <div class="scan">
+    <div class="qr" id="qr" aria-hidden="true"></div>
+    <div>
+      <p class="scan-label">Scan to open</p>
+      <p class="url">bose.androidplay.in</p>
+    </div>
+  </div>
+
+  <div class="visual">
+    <div class="shape"></div>
+    <div class="dots"></div>
+    <img class="photo" src="../portfolio-v2/assets/ankush.png" alt="">
+    <div class="callout">
+      <p class="card">Lead Android / KMP Engineer • India</p>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+  // Error-correction level M; drawn as one SVG path so it stays sharp at 2x.
+  var qr = qrcode(0, 'M');
+  qr.addData('https://bose.androidplay.in/');
+  qr.make();
+  var n = qr.getModuleCount(), d = '';
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) d += 'M' + c + ' ' + r + 'h1v1h-1z';
+  document.getElementById('qr').innerHTML =
+    '<svg viewBox="0 0 ' + n + ' ' + n + '" shape-rendering="crispEdges"><path fill="#0c0c0c" d="' + d + '"/></svg>';
+</script>
+</body>
+</html>
