@@ -1,5 +1,6 @@
 package bose.ankush.route
 
+import bose.ankush.base.clientIp
 import bose.ankush.data.model.*
 import com.androidplay.weatherify.domain.*
 import bose.ankush.route.common.respondError
@@ -308,8 +309,7 @@ fun Route.paymentRoute() {
         val verifiedAt = Instant.now().toString()
 
         // Admin tracking context
-        val ip = call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
-            ?: call.request.headers["X-Real-IP"]
+        val ip = call.clientIp()
         val ua = call.request.headers["User-Agent"]
 
         // Create payment record

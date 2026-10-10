@@ -71,6 +71,7 @@ class ProfilePhotoStorageTest {
         ): Result<Pair<List<User>, Long>> = Result.success(emptyList<User>() to 0L)
 
         override suspend fun deleteUserByEmail(email: String): Result<Boolean> = Result.success(true)
+        override suspend fun markUserDeleted(email: String, deletedAt: String): Result<Boolean> = Result.success(true)
     }
 
     @Test

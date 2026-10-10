@@ -42,6 +42,9 @@ class AuthServiceImplTest {
 
         override suspend fun deleteUserByEmail(email: String): Result<Boolean> =
             com.androidplay.core.common.Result.Success(true)
+
+        override suspend fun markUserDeleted(email: String, deletedAt: String): Result<Boolean> =
+            com.androidplay.core.common.Result.Success(true)
     }
 
     // Create an instance of AuthServiceImpl with the mock repository

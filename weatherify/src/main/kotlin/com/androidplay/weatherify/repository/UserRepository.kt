@@ -81,4 +81,12 @@ interface UserRepository {
      * @return Result indicating success or failure.
      */
     suspend fun deleteUserByEmail(email: String): Result<Boolean>
+
+    /**
+     * Soft-delete a user: deactivate the account and subscription, wipe credentials and
+     * personal/device data, and stamp [deletedAt]. The document itself is retained.
+     * @param email The email of the user.
+     * @param deletedAt ISO-8601 UTC deletion time; also becomes the subscription cut-off.
+     */
+    suspend fun markUserDeleted(email: String, deletedAt: String): Result<Boolean>
 }

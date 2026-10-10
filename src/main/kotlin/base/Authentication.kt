@@ -45,6 +45,10 @@ fun Application.configureAuthentication() {
                 try {
                     val email = credential.payload.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
                     if (email.isNotEmpty()) {
+                        if (!UserStatusGate.isAllowed(email)) {
+                            logger.warn("Authentication rejected: account missing, inactive or deleted: $email")
+                            return@validate null
+                        }
                         logger.debug("Authentication successful for user: $email")
                         JWTPrincipal(credential.payload)
                     } else {

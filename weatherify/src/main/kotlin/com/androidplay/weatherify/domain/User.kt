@@ -44,7 +44,9 @@ data class User(
      * Legacy field. Do not store URLs here; use [photoObject].
      * Kept nullable for older documents; responses never echo this value.
      */
-    val photoUrl: String? = null
+    val photoUrl: String? = null,
+    /** ISO-8601 UTC time the account was deleted by its owner; non-null marks a tombstone. */
+    val deletedAt: String? = null
 )
 
 /** User roles for access control */

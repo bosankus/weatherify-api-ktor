@@ -7,7 +7,13 @@ import bose.ankush.util.PasswordUtil
 import config.JwtConfig
 import config.TokenRefreshResult
 import com.androidplay.core.common.Result
+import com.androidplay.weatherify.repository.SavedLocationRepository
 import com.androidplay.weatherify.repository.UserRepository
+import domain.service.WeatherAggregatorService
+import domain.service.live.LiveEntitlementResolver
+import kotlinx.serialization.Serializable
+import util.ProfilePhotoActions
+import util.ProfilePhotoStorage
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -16,6 +22,8 @@ import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import bose.ankush.base.AUTH_RATE_LIMIT
+import bose.ankush.base.UserStatusGate
+import bose.ankush.base.clientIp
 import org.koin.ktor.ext.inject
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -25,6 +33,11 @@ import java.time.Instant
 fun Route.authRoute() {
     val userRepository: UserRepository by application.inject()
     val analytics: util.Analytics by application.inject()
+    val savedLocationRepository: SavedLocationRepository by application.inject()
+    val weatherAggregatorService: WeatherAggregatorService by application.inject()
+    val liveEntitlementResolver: LiveEntitlementResolver by application.inject()
+    val photoStorage: ProfilePhotoStorage by application.inject()
+    val photoActions = ProfilePhotoActions(photoStorage, userRepository)
     val logger = LoggerFactory.getLogger("AuthRoute")
 
     rateLimit(AUTH_RATE_LIMIT) {
@@ -45,9 +58,18 @@ fun Route.authRoute() {
             }
 
             when (val result = userRepository.findUserByEmail(email)) {
-                is Result.Success -> if (result.data != null) {
-                    call.respondError(Constants.Messages.USER_ALREADY_EXISTS, Unit, HttpStatusCode.Conflict)
-                    return@handleAuth
+                is Result.Success -> {
+                    val existing = result.data
+                    if (existing != null && existing.deletedAt == null) {
+                        call.respondError(Constants.Messages.USER_ALREADY_EXISTS, Unit, HttpStatusCode.Conflict)
+                        return@handleAuth
+                    }
+                    if (existing != null) {
+                        // Tombstone from a previously deleted account: replace it with the fresh registration.
+                        logger.info("Replacing deleted-account tombstone for $email on re-registration")
+                        userRepository.deleteUserByEmail(email)
+                            .unwrapOrRespondError(call, "clear deleted account") ?: return@handleAuth
+                    }
                 }
                 is Result.Error -> {
                     call.respondResultError(result.message, "check if user exists")
@@ -55,8 +77,7 @@ fun Route.authRoute() {
                 }
             }
 
-            val ipAddress = call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
-                ?: call.request.local.remoteHost
+            val ipAddress = call.clientIp()
 
             val user = User(
                 email = email,
@@ -159,6 +180,10 @@ fun Route.authRoute() {
                 is TokenRefreshResult.StillValid -> {
                     logger.info("Token not expired for user: ${refreshResult.email}")
                     val user = (userRepository.findUserByEmail(refreshResult.email) as? Result.Success)?.data
+                    if (user?.deletedAt != null) {
+                        call.respondError(Constants.Messages.USER_NOT_REGISTERED, Unit, HttpStatusCode.Unauthorized)
+                        return@handleAuth
+                    }
                     call.respondLoginSuccess(Constants.Messages.TOKEN_NOT_EXPIRED, request.token, user)
                 }
                 is TokenRefreshResult.Expired -> {
@@ -181,6 +206,64 @@ fun Route.authRoute() {
     } // end rateLimit(AUTH_RATE_LIMIT)
 
     authenticate("jwt-auth") {
+        // Self-service account deletion (required by Play Store data-deletion policy).
+        // Soft delete: the user document is kept as a deactivated tombstone with deletedAt set,
+        // and payment/refund records are retained for financial record-keeping.
+        rateLimit(AUTH_RATE_LIMIT) {
+            delete(Constants.Api.DELETE_ACCOUNT_ENDPOINT) {
+                call.handleAuth(logger, "account deletion") {
+                    val email = call.principal<JWTPrincipal>()
+                        ?.payload?.getClaim(Constants.Auth.JWT_CLAIM_EMAIL)?.asString()
+                        ?.lowercase()?.trim()
+                    if (email.isNullOrEmpty()) {
+                        call.respondError("Invalid authentication token", Unit, HttpStatusCode.Unauthorized)
+                        return@handleAuth
+                    }
+
+                    val request = try {
+                        call.receive<DeleteAccountRequest>()
+                    } catch (_: Exception) {
+                        call.respondError(
+                            "${Constants.Messages.VALIDATION_ERROR}: Request body must contain 'password'",
+                            Unit, HttpStatusCode.BadRequest
+                        )
+                        return@handleAuth
+                    }
+
+                    val user = userRepository.findUserByEmail(email)
+                        .requireUser(call, "find user for deletion") ?: return@handleAuth
+
+                    if (!PasswordUtil.verifyPassword(request.password, user.passwordHash)) {
+                        // 403, not 401: the session is fine, only the confirmation is wrong. A 401
+                        // would make clients try a token refresh or log the user out.
+                        call.respondError(
+                            "Incorrect password",
+                            mapOf("errorCode" to "INVALID_PASSWORD"),
+                            HttpStatusCode.Forbidden
+                        )
+                        return@handleAuth
+                    }
+
+                    // Dependent data first, tombstoning last, so a failure leaves a retryable account.
+                    savedLocationRepository.deleteAllLocationsByUser(email)
+                        .unwrapOrRespondError(call, "delete saved locations") ?: return@handleAuth
+                    if (!user.photoObject.isNullOrBlank()) {
+                        photoActions.delete(email)
+                            .unwrapOrRespondError(call, "delete profile photo") ?: return@handleAuth
+                    }
+                    userRepository.markUserDeleted(email, Instant.now().toString())
+                        .unwrapOrRespondError(call, "delete user") ?: return@handleAuth
+
+                    weatherAggregatorService.invalidateUserCache(email)
+                    liveEntitlementResolver.invalidate(email)
+                    UserStatusGate.invalidate(email)
+                    logger.info("Account deleted for user: $email")
+                    analytics.event("account_deleted", emptyMap(), email, call.request.headers["User-Agent"])
+                    call.performLogout(Constants.Messages.ACCOUNT_DELETED)
+                }
+            }
+        }
+
         post(Constants.Api.LOGOUT_ENDPOINT) {
             call.handleAuth(logger, "logout") {
                 val email = call.principal<JWTPrincipal>()
@@ -222,10 +305,11 @@ private suspend fun Result<User?>.requireUser(
 ): User? {
     return when (this) {
         is Result.Success -> {
-            if (data == null) {
+            val user = data
+            if (user == null || user.deletedAt != null) {
                 call.respondError(Constants.Messages.USER_NOT_REGISTERED, Unit, HttpStatusCode.Unauthorized)
                 null
-            } else data
+            } else user
         }
         is Result.Error -> {
             call.respondResultError(message, context)
@@ -329,7 +413,7 @@ private fun classifyException(e: Exception): String {
     }
 }
 
-private suspend fun ApplicationCall.performLogout() {
+private suspend fun ApplicationCall.performLogout(message: String = Constants.Messages.LOGOUT_SUCCESS) {
     response.cookies.append(
         Cookie(
             name = "jwt_token",
@@ -341,5 +425,8 @@ private suspend fun ApplicationCall.performLogout() {
             extensions = mapOf("SameSite" to "Strict")
         )
     )
-    respondSuccess<Unit>(Constants.Messages.LOGOUT_SUCCESS, Unit, HttpStatusCode.OK)
+    respondSuccess<Unit>(message, Unit, HttpStatusCode.OK)
 }
+
+@Serializable
+data class DeleteAccountRequest(val password: String)

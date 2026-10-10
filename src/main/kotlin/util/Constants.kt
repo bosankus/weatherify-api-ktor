@@ -19,6 +19,8 @@ object Constants {
         const val DEFAULT_JWT_ISSUER = "jwt-issuer"
         const val DEFAULT_JWT_AUDIENCE = "jwt-audience"
         const val DEFAULT_JWT_EXPIRATION = "3600000"
+        /** Expired access tokens older than this can no longer be exchanged at /refresh-token (7 days). */
+        const val MAX_REFRESH_AGE_MILLIS = 7L * 24 * 60 * 60 * 1000
         const val JWT_CLAIM_EMAIL = "email"
         const val JWT_CLAIM_ROLE = "role"
         const val JWT_SECRET_NAME = "jwt-secret"
@@ -40,6 +42,7 @@ object Constants {
         const val REGISTER_ENDPOINT = "/register"
         const val REFRESH_TOKEN_ENDPOINT = "/refresh-token"
         const val LOGOUT_ENDPOINT = "/logout"
+        const val DELETE_ACCOUNT_ENDPOINT = "/account"
         const val HOME_ENDPOINT = "/"
         const val CREATE_ORDER_ENDPOINT = "/create-order"
         const val STORE_PAYMENT_ENDPOINT = "/store-payment"
@@ -70,6 +73,7 @@ object Constants {
         const val USER_NOT_REGISTERED = "Invalid email or password"
         const val ACCOUNT_INACTIVE = "Account is inactive"
         const val LOGOUT_SUCCESS = "Logged out successfully"
+        const val ACCOUNT_DELETED = "Account deleted successfully"
         const val FEEDBACK_SUBMITTED = "Feedback submitted successfully"
         const val FEEDBACK_RETRIEVED = "Feedback retrieved successfully"
         const val FEEDBACK_NOT_FOUND = "Feedback not found"

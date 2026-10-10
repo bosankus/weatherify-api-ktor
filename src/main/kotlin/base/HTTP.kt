@@ -27,46 +27,40 @@ import kotlinx.serialization.modules.SerializersModule
 import org.slf4j.LoggerFactory
 
 val AUTH_RATE_LIMIT = RateLimitName("auth")
+val WEATHER_RATE_LIMIT = RateLimitName("weather")
+val LIVE_RATE_LIMIT = RateLimitName("live")
+val PAYMENT_RATE_LIMIT = RateLimitName("payment")
+val FEEDBACK_RATE_LIMIT = RateLimitName("feedback")
+val API_RATE_LIMIT = RateLimitName("api")
+val ADMIN_RATE_LIMIT = RateLimitName("admin")
 
 fun Application.configureHTTP() {
     val logger = LoggerFactory.getLogger("HTTP")
 
+    // Every limiter is keyed by the spoof-resistant client address (see ClientIp.kt). The
+    // auth/manual_sync/github_webhook/razorpay_webhook/bundle_fetch limiters are also used by
+    // the embedded Syncling routes.
     install(RateLimit) {
-        register(AUTH_RATE_LIMIT) {
-            rateLimiter(limit = 10, refillPeriod = 1.minutes)
-            requestKey { call ->
-                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
-                    ?: call.request.local.remoteHost
-            }
+        fun limiter(name: RateLimitName, limit: Int) = register(name) {
+            rateLimiter(limit = limit, refillPeriod = 1.minutes)
+            requestKey { call -> call.clientIp() }
         }
-        register(RateLimitName("manual_sync")) {
-            rateLimiter(limit = 5, refillPeriod = 1.minutes)
-            requestKey { call ->
-                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
-                    ?: call.request.local.remoteHost
-            }
-        }
-        register(RateLimitName("github_webhook")) {
-            rateLimiter(limit = 10, refillPeriod = 1.minutes)
-            requestKey { call ->
-                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
-                    ?: call.request.local.remoteHost
-            }
-        }
-        register(RateLimitName("razorpay_webhook")) {
-            rateLimiter(limit = 30, refillPeriod = 1.minutes)
-            requestKey { call ->
-                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
-                    ?: call.request.local.remoteHost
-            }
-        }
-        register(RateLimitName("bundle_fetch")) {
-            rateLimiter(limit = 60, refillPeriod = 1.minutes)
-            requestKey { call ->
-                call.request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
-                    ?: call.request.local.remoteHost
-            }
-        }
+
+        limiter(AUTH_RATE_LIMIT, limit = 10)
+        limiter(RateLimitName("manual_sync"), limit = 5)
+        limiter(RateLimitName("github_webhook"), limit = 10)
+        limiter(RateLimitName("razorpay_webhook"), limit = 30)
+        limiter(RateLimitName("bundle_fetch"), limit = 60)
+
+        // Weatherify routes. Weather and live make upstream calls per request, so they are the
+        // tightest read limits; payments and feedback are write paths worth guarding hard.
+        limiter(WEATHER_RATE_LIMIT, limit = 30)
+        limiter(LIVE_RATE_LIMIT, limit = 20)
+        limiter(PAYMENT_RATE_LIMIT, limit = 10)
+        limiter(FEEDBACK_RATE_LIMIT, limit = 5)
+        limiter(API_RATE_LIMIT, limit = 60)
+        // The admin dashboard fires several XHRs per page load.
+        limiter(ADMIN_RATE_LIMIT, limit = 120)
     }
 
     install(Compression) {

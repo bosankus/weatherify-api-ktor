@@ -635,6 +635,9 @@ private class MockUserRepository : UserRepository {
         }
     }
 
+    override suspend fun markUserDeleted(email: String, deletedAt: String): Result<Boolean> =
+        Result.success(true)
+
     override suspend fun deleteUserByEmail(email: String): Result<Boolean> {
         return if (shouldReturnError) {
             Result.error(errorMessage)

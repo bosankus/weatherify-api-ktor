@@ -1,6 +1,7 @@
 package bose.ankush.route
 
 import com.androidplay.weatherify.domain.UserRole
+import bose.ankush.base.UserStatusGate
 import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
@@ -313,6 +314,7 @@ fun Route.userRoute() {
                         when (val updRes = userRepository.updateUser(updated)) {
                             is Result.Success -> {
                                 if (updRes.data) {
+                                    UserStatusGate.invalidate(email)
                                     call.respondSuccess<StatusUpdateResponseDTO>(
                                         if (req.isActive) "User activated" else "User deactivated",
                                         StatusUpdateResponseDTO(
@@ -618,6 +620,7 @@ fun Route.userRoute() {
                 when (val result = userRepository.deleteUserByEmail(email)) {
                     is Result.Success -> {
                         if (result.data) {
+                            UserStatusGate.invalidate(email)
                             call.respondSuccess("User deleted", mapOf("email" to email))
                         } else {
                             call.respondError("Failed to delete user", Unit, HttpStatusCode.InternalServerError)

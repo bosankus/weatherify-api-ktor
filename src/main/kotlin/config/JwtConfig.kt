@@ -109,7 +109,11 @@ object JwtConfig {
             try {
                 val decoded = JWT.decode(token)
                 val email = decoded.getClaim(Constants.Auth.JWT_CLAIM_EMAIL).asString()
-                if (email.isNullOrBlank()) {
+                val expiredForMillis = System.currentTimeMillis() - (decoded.expiresAt?.time ?: 0L)
+                if (expiredForMillis > Constants.Auth.MAX_REFRESH_AGE_MILLIS) {
+                    logger.warn("Expired token too old to refresh (expired ${expiredForMillis / 3_600_000}h ago)")
+                    TokenRefreshResult.Invalid
+                } else if (email.isNullOrBlank()) {
                     logger.warn("Expired token missing email claim")
                     TokenRefreshResult.Invalid
                 } else {

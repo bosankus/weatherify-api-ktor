@@ -6,6 +6,7 @@ import com.mongodb.client.model.Aggregates
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Projections
 import com.mongodb.client.model.Sorts
+import com.mongodb.client.model.Updates
 import com.androidplay.weatherify.db.WeatherifyDb
 import com.androidplay.core.common.Result
 import com.androidplay.weatherify.repository.UserRepository
@@ -191,6 +192,37 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
             }
         } catch (e: Exception) {
             logger.error("Failed to delete user: $email", e)
+            Result.error("Failed to delete user: ${e.message}", e)
+        }
+    }
+
+    override suspend fun markUserDeleted(email: String, deletedAt: String): Result<Boolean> {
+        return try {
+            val filter = databaseModule.createFilter("email", email)
+            val update = Updates.combine(
+                Updates.set("isActive", false),
+                Updates.set("isPremium", false),
+                Updates.set("premiumExpiresAt", deletedAt),
+                Updates.set("passwordHash", ""),
+                Updates.set("deletedAt", deletedAt),
+                Updates.unset("fcmToken"),
+                Updates.unset("deviceModel"),
+                Updates.unset("operatingSystem"),
+                Updates.unset("osVersion"),
+                Updates.unset("appVersion"),
+                Updates.unset("ipAddress"),
+                Updates.unset("photoObject"),
+                Updates.unset("photoUrl")
+            )
+            val result = databaseModule.getUsersCollection().updateOne(filter, update)
+            if (result.matchedCount == 0L) {
+                Result.error("User not found: $email")
+            } else {
+                logger.info("User soft-deleted: $email")
+                Result.success(true)
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to soft-delete user: $email", e)
             Result.error("Failed to delete user: ${e.message}", e)
         }
     }

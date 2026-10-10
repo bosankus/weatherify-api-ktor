@@ -46,6 +46,16 @@ class SavedLocationRepositoryImpl(private val databaseModule: WeatherifyDb) : Sa
         }
     }
 
+    override suspend fun deleteAllLocationsByUser(email: String): Result<Long> {
+        return try {
+            val query = databaseModule.createQuery("userEmail", email)
+            val result = databaseModule.getSavedLocationsCollection().deleteMany(query)
+            Result.success(result.deletedCount)
+        } catch (e: Exception) {
+            Result.error("Failed to delete locations for user: ${e.message}", e)
+        }
+    }
+
     override suspend fun locationExists(email: String, name: String, city: String, state: String, country: String): Result<Boolean> {
         return try {
             val query = databaseModule.createQuery(
