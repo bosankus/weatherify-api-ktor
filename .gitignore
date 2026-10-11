@@ -24,3 +24,6 @@ serviceAccountKey.json
 
 # Cloudflare Wrangler local cache
 .wrangler/
+
+# Master portrait: local only, never commit (the repo is public)
+portfolio-og/source/

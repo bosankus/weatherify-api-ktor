@@ -75,20 +75,15 @@ class ProfilePhotoStorageTest {
     }
 
     @Test
-    fun `reuseOrCreate mints uuid when missing`() {
-        val key = ProfilePhotoKeys.reuseOrCreate(null)
-        assertTrue(key.isNotBlank())
-        assertEquals(36, key.length)
+    fun `create mints a distinct uuid each time`() {
+        val first = ProfilePhotoKeys.create()
+        val second = ProfilePhotoKeys.create()
+        assertEquals(36, first.length)
+        assertNotEquals(first, second)
     }
 
     @Test
-    fun `reuseOrCreate keeps existing key`() {
-        assertEquals("same-key", ProfilePhotoKeys.reuseOrCreate("same-key"))
-        assertEquals("same-key", ProfilePhotoKeys.reuseOrCreate("  same-key  "))
-    }
-
-    @Test
-    fun `upload reuses object key on second upload`() = runBlocking {
+    fun `second upload writes a new key and deletes the previous object`() = runBlocking {
         val storage = FakeStorage()
         val users = FakeUsers()
         val actions = ProfilePhotoActions(storage, users)
@@ -102,9 +97,11 @@ class ProfilePhotoStorageTest {
         val second = actions.upload("user@example.com", byteArrayOf(9, 9), "image/gif")
         assertTrue(second is Result.Success)
         val key2 = (second as Result.Success).data.objectKey
-        assertEquals(key1, key2)
-        assertEquals(1, storage.objects.size)
-        assertTrue(storage.objects[key1].contentEquals(byteArrayOf(9, 9)))
+        assertNotEquals(key1, key2)
+        assertEquals(key2, users.user?.photoObject)
+        assertEquals(setOf(key2), storage.objects.keys)
+        assertTrue(storage.objects[key2].contentEquals(byteArrayOf(9, 9)))
+        assertTrue(second.data.photoUrl.substringBefore('?').endsWith(key2))
     }
 
     @Test
@@ -213,7 +210,8 @@ class ProfilePhotoStorageTest {
         val actions = ProfilePhotoActions(storage, users)
         val result = actions.upload("user@example.com", byteArrayOf(7, 7), "image/gif")
         assertTrue(result is Result.Error)
-        assertTrue(storage.objects.containsKey("kept-key"))
+        assertEquals(setOf("kept-key"), storage.objects.keys)
+        assertTrue(storage.objects["kept-key"].contentEquals(byteArrayOf(4)))
         assertEquals("kept-key", users.user?.photoObject)
     }
 }

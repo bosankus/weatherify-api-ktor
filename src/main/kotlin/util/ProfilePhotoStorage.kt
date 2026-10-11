@@ -30,14 +30,13 @@ interface ProfilePhotoStorage {
 }
 
 /**
- * Object-key policy for profile photos: reuse an existing non-blank key, otherwise mint a UUID.
+ * Object-key policy for profile photos: every upload gets a fresh UUID, never the previous key.
+ * Clients cache the photo by object path (the signed URL's query changes on every fetch), so a
+ * changed photo must have a changed path or other devices keep showing the old one.
  * Unit-tested; no I/O.
  */
 object ProfilePhotoKeys {
-    fun reuseOrCreate(existing: String?): String {
-        val trimmed = existing?.trim().orEmpty()
-        return if (trimmed.isNotEmpty()) trimmed else UUID.randomUUID().toString()
-    }
+    fun create(): String = UUID.randomUUID().toString()
 }
 
 /**
@@ -149,7 +148,8 @@ class GcsProfilePhotoStorage(
 
 /**
  * Orchestrates profile photo upload / signed URL / delete against storage + user row.
- * Object key is reused on update; delete removes the GCS object and clears [photoObject].
+ * Each upload writes a new object and deletes the previous one once the user row points at the
+ * new key; delete removes the GCS object and clears [photoObject].
  */
 class ProfilePhotoActions(
     private val storage: ProfilePhotoStorage,
@@ -182,19 +182,21 @@ class ProfilePhotoActions(
             )
         }
         val previousKey = user.photoObject?.trim().orEmpty()
-        val objectKey = ProfilePhotoKeys.reuseOrCreate(previousKey)
-        val createdNewObject = previousKey.isEmpty()
+        val objectKey = ProfilePhotoKeys.create()
         return try {
             storage.upload(objectKey, prepared.bytes, prepared.contentType)
             when (val updated = userRepository.updatePhotoObjectByEmail(email, objectKey)) {
                 is com.androidplay.core.common.Result.Success -> {
+                    // Only now is the previous object unreferenced; deleting it earlier could
+                    // leave the user row pointing at nothing.
+                    if (previousKey.isNotEmpty()) {
+                        deleteOrphan(previousKey)
+                    }
                     val url = storage.signedUrl(objectKey)
                     com.androidplay.core.common.Result.success(UploadResult(objectKey, url))
                 }
                 is com.androidplay.core.common.Result.Error -> {
-                    if (createdNewObject) {
-                        deleteOrphan(objectKey)
-                    }
+                    deleteOrphan(objectKey)
                     com.androidplay.core.common.Result.error(updated.message, updated.exception)
                 }
             }

@@ -48,6 +48,7 @@ object UserRoutesRegistrar : RouteRegistrar {
     override fun register(root: Route) {
         root.rateLimit(ADMIN_RATE_LIMIT) { userRoute() }
         root.rateLimit(API_RATE_LIMIT) { accountPhotoRoute() }
+        root.rateLimit(API_RATE_LIMIT) { accountPushTokenRoute() }
     }
 }
 

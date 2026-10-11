@@ -35,6 +35,37 @@ Copies the PDF to `portfolio-v2/assets/Ankush_Bose_Resume.pdf` and deploys.
 If browsers keep showing the old file, bump the `?v=` on the résumé links in
 `index.html` (e.g. `assets/Ankush_Bose_Resume.pdf?v=2`).
 
+## Live Medium post ("Latest on Medium" card, left column under the links)
+
+`portfolio-v2/_worker.js` is a Cloudflare Pages advanced-mode worker. It serves
+`/api/medium` — the latest posts from `https://medium.com/feed/@bosankus` as JSON,
+cached at the edge for an hour — and passes every other request to the static site.
+Pages never serves `_worker.js` itself.
+
+New Medium posts appear on the site automatically within an hour; no redeploy needed.
+The card shows the newest post. `index.html` carries a built-in copy of it, which stays on screen if the feed
+can't be reached. Refresh that copy now and then so the fallback isn't stale.
+
+Plain `python3 -m http.server` doesn't run the worker (you'll only see the built-in post).
+To preview with the live feed:
+
+```bash
+npx wrangler pages dev "$(git rev-parse --show-toplevel)/portfolio-v2" --port 8788
+```
+
+## Photo protection
+
+- The full-size cut-out lives at `portfolio-og/source/ankush-master.png` — **local only**,
+  git-ignored (the repo is public). Keep a backup of it somewhere safe.
+- The site ships `portfolio-v2/assets/portrait.png`, resized to 720px tall (just enough for
+  retina at the largest display size). Regenerate after changing the master:
+  `sips -Z 720 portfolio-og/source/ankush-master.png --out portfolio-v2/assets/portrait.png`
+- `_worker.js` returns 403 for `/assets/portrait.png` when it's opened directly in a tab or
+  embedded by another site, and marks it `noindex, noimageindex`.
+- The page blocks right-click, drag and iOS long-press save on the photo.
+
+Nothing stops DevTools or a screenshot — this raises the effort, it can't make copying impossible.
+
 ## Link preview image (WhatsApp, LinkedIn, X)
 
 The share card is `portfolio-v2/assets/og.jpg`, rendered from `portfolio-og/card.html`

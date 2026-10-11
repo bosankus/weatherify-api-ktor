@@ -206,6 +206,7 @@ class UserRepositoryImpl(private val databaseModule: WeatherifyDb) : UserReposit
                 Updates.set("passwordHash", ""),
                 Updates.set("deletedAt", deletedAt),
                 Updates.unset("fcmToken"),
+                Updates.unset("pushTokens"),
                 Updates.unset("deviceModel"),
                 Updates.unset("operatingSystem"),
                 Updates.unset("osVersion"),

@@ -3,8 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ankush Bose · Lead Android Engineer</title>
-<meta name="description" content="Ankush Bose, Lead Android Engineer in India. Nine years building Kotlin, Jetpack Compose and Kotlin Multiplatform apps used by millions.">
+<title>Ankush Bose · Lead Android / KMP Engineer</title>
+<meta name="description" content="Ankush Bose, Lead Android Engineer in India. 9+ years architecting native Android and Kotlin Multiplatform apps for millions of users.">
+<meta name="author" content="Ankush Bose">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="icon" href="assets/favicon.png" type="image/png" sizes="64x64">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<!-- Tells search engines this page is about a person and links the profiles that belong to them. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "ProfilePage",
+      "@id": "https://bose.androidplay.in/#page",
+      "url": "https://bose.androidplay.in/",
+      "name": "Ankush Bose · Lead Android / KMP Engineer",
+      "inLanguage": "en",
+      "dateModified": "2026-10-11",
+      "mainEntity": { "@id": "https://bose.androidplay.in/#person" }
+    },
+    {
+      "@type": "Person",
+      "@id": "https://bose.androidplay.in/#person",
+      "name": "Ankush Bose",
+      "url": "https://bose.androidplay.in/",
+      "image": "https://bose.androidplay.in/assets/og.jpg",
+      "jobTitle": "Lead Android Engineer",
+      "description": "Lead Android Engineer with 9+ years architecting native Android and Kotlin Multiplatform applications for millions of users.",
+      "worksFor": { "@type": "Organization", "name": "Wipro" },
+      "alumniOf": { "@type": "CollegeOrUniversity", "name": "West Bengal University of Technology" },
+      "address": { "@type": "PostalAddress", "addressCountry": "IN" },
+      "knowsAbout": ["Android", "Kotlin", "Kotlin Multiplatform", "Compose Multiplatform", "Jetpack Compose", "Coroutines", "Kotlin DSL", "Clean Architecture", "MVVM", "MVI", "Ktor"],
+      "sameAs": [
+        "https://github.com/bosankus",
+        "https://www.linkedin.com/in/boseankus/",
+        "https://medium.com/@bosankus"
+      ]
+    }
+  ]
+}
+</script>
 <meta name="theme-color" content="#b5c1cb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d0f11" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="profile">
@@ -140,7 +179,13 @@
   .visual .photo {
     position: absolute; left: 17%; bottom: 0; height: 104%; width: auto;
     filter: grayscale(1) contrast(1.05);
+    /* No drag-to-desktop, no text-style selection, no iOS long-press "Save image" */
+    -webkit-user-drag: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    pointer-events: none;
   }
+  /* Transparent shield over the photo: a right-click lands here, not on the image */
+  .visual .shield { position: absolute; left: 0; top: -6%; width: 70%; height: 106%; z-index: 1; }
+  .visual .callout { z-index: 2; }
   .visual .dots {
     position: absolute; right: 9%; top: 14%; width: 22%; height: 74%;
     background-image: radial-gradient(circle, var(--dot) 1.6px, transparent 2px);
@@ -233,6 +278,37 @@
   .work a:hover .name i { transform: translate(3px, -3px); }
   .work p { color: var(--body); font-size: 15px; }
 
+  /* Writing: latest Medium post as a floating card under the links (same card look as the hero callout).
+     Cover stays greyscale like the portrait and turns to colour on hover. */
+  .writing { margin-top: clamp(24px, 3.5vh, 40px); max-width: 400px; }
+  .writing-label { font: 400 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--body); margin-bottom: 14px; }
+  .writing-label span { color: var(--ink); }
+  .post-card {
+    display: grid; grid-template-columns: 112px 1fr; overflow: hidden;
+    background: var(--card); border-radius: 16px;
+    box-shadow: 0 18px 40px -18px var(--shadow), 0 1px 0 rgba(0,0,0,.02);
+    transition: transform .3s cubic-bezier(.2, .7, .2, 1), box-shadow .3s ease, background-color .4s ease;
+  }
+  .post-card:hover { text-decoration: none; transform: translateY(-3px); box-shadow: 0 26px 48px -20px var(--shadow); }
+  .post-card img {
+    display: block; width: 100%; height: 100%; min-height: 112px; object-fit: cover;
+    filter: grayscale(1) contrast(1.05); transition: filter .4s ease;
+    background: var(--rule);
+  }
+  .post-card:hover img { filter: none; }
+  .post-body { padding: 14px 18px 14px; border-left: 3px solid var(--accent); align-self: center; }
+  .post-meta { font: 400 12px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--body); }
+  .post-title { font: 700 clamp(15px, 1.3vw, 17px)/1.35 var(--name); margin: 4px 0 6px; }
+  .post-title i { font-style: normal; font-weight: 400; display: inline-block; transition: transform .25s ease; }
+  .post-card:hover .post-title i { transform: translate(3px, -3px); }
+  .post-tags { font: 400 12px/1.4 var(--mono); color: var(--body); }
+  .more {
+    display: inline-block; margin-top: 14px;
+    font: 500 12px/1.4 var(--name); letter-spacing: .14em; text-transform: uppercase;
+    padding-bottom: 3px; background: linear-gradient(var(--accent), var(--accent)) left bottom / 100% 2px no-repeat;
+  }
+  .more:hover { text-decoration: none; }
+
   footer {
     display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px 24px;
     padding-top: 28px; border-top: 1px solid var(--rule);
@@ -254,7 +330,7 @@
     .visual .callout { right: 0; bottom: -6%; gap: 10px; }
     .visual .dots { right: 2%; }
     .intro { margin-top: 48px; }
-    .intro .links { margin-bottom: 40px; }
+    .intro .writing { margin-bottom: 48px; max-width: 420px; }
     .timeline { border-left: 1px solid var(--rule); padding-left: 26px; margin-left: 6px; }
     .job::before { left: -33px; }
   }
@@ -277,7 +353,8 @@
     <div class="visual reveal" style="--i:2">
       <div class="shape" aria-hidden="true"></div>
       <div class="dots" aria-hidden="true"></div>
-      <img class="photo" src="assets/ankush.png" alt="Ankush Bose, smiling, in a black t-shirt" width="860" height="960" fetchpriority="high">
+      <img class="photo" src="assets/portrait.png" alt="Ankush Bose, smiling, in a black t-shirt" width="645" height="720" fetchpriority="high" draggable="false">
+      <div class="shield" aria-hidden="true"></div>
       <div class="callout">
       <p class="card">Lead Android / KMP Engineer • India</p>
       <a class="badge" href="assets/Ankush_Bose_Resume.pdf" download="Ankush_Bose_Resume.pdf" aria-label="Download résumé (PDF)">
@@ -290,9 +367,27 @@
 
   <!-- Links + profile -->
   <section class="band intro reveal" style="--i:3" aria-labelledby="profile">
-    <ul class="links">
-      <li><b>GitHub</b> - <a href="https://github.com/bosankus" rel="me">bosankus</a></li>
-      <li><b>Email</b> - <a href="mailto:ankushbose5@gmail.com">ankushbose5@gmail.com</a></li>    </ul>
+    <div>
+      <ul class="links">
+        <li><b>GitHub</b> - <a href="https://github.com/bosankus" rel="me">bosankus</a></li>
+        <li><b>LinkedIn</b> - <a href="https://www.linkedin.com/in/boseankus/" rel="me">boseankus</a></li>
+        <li><b>Email</b> - <a href="mailto:ankushbose5@gmail.com">ankushbose5@gmail.com</a></li>
+      </ul>
+
+      <!-- Latest Medium post as a card. Built-in copy below; replaced live from /api/medium (_worker.js). -->
+      <aside class="writing" aria-label="Latest writing">
+        <p class="writing-label">Latest on Medium <span id="post-count"></span></p>
+        <a class="post-card" id="post-card" href="https://medium.com/@bosankus/reactive-programming-with-kotlin-flow-03ff3978de72">
+          <img src="https://cdn-images-1.medium.com/max/400/0*WjhL4uK3snlr1foH" alt="" width="112" height="112">
+          <div class="post-body">
+            <p class="post-meta">Mar 2024 · 3 min read</p>
+            <p class="post-title">Reactive programming with Kotlin flow <i aria-hidden="true">↗</i></p>
+            <p class="post-tags">#kotlin #android #flow</p>
+          </div>
+        </a>
+        <a class="more" href="https://medium.com/@bosankus">All posts ↗</a>
+      </aside>
+    </div>
     <div class="rule" aria-hidden="true" style="background:none"></div>
     <div>
       <h2 id="profile">Profile</h2>
@@ -417,16 +512,48 @@
   </div>
 
   <footer>
-    <span>© <span id="yr">2026</span> Ankush Bose</span>
+    <span>© <span id="yr">2026</span> Ankush Bose · Photos may not be reused</span>
     <nav>
       <a href="mailto:ankushbose5@gmail.com">Email</a>
       <a href="https://github.com/bosankus">GitHub</a>
+      <a href="https://www.linkedin.com/in/boseankus/">LinkedIn</a>
       <a href="assets/Ankush_Bose_Resume.pdf" download="Ankush_Bose_Resume.pdf">Résumé ↓</a>
     </nav>
   </footer>
 </main>
 <script>
   document.getElementById('yr').textContent = new Date().getFullYear();
+
+  // Block the context menu ("Save image as…") over the hero photo area.
+  document.querySelector('.visual').addEventListener('contextmenu', function (e) {
+    if (!e.target.closest('a')) e.preventDefault();
+  });
+
+  // Live Medium: newest post fills the card. On any failure the built-in post stays as it is.
+  (function () {
+    var card = document.getElementById('post-card');
+    if (!card || !window.fetch) return;
+    function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function month(iso) { return new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); }
+    fetch('/api/medium')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.posts || !data.posts.length) return;
+        var p = data.posts[0];
+        var img = p.image ? p.image.replace('/max/1024/', '/max/400/') : '';
+        card.href = p.url;
+        card.innerHTML =
+          (img ? '<img src="' + esc(img) + '" alt="" width="112" height="112">' : '') +
+          '<div class="post-body"><p class="post-meta">' + esc(month(p.published)) + ' · ' + p.readMinutes + ' min read</p>' +
+          '<p class="post-title">' + esc(p.title) + ' <i aria-hidden="true">↗</i></p>' +
+          (p.tags.length ? '<p class="post-tags">' + p.tags.map(function (t) { return '#' + esc(t); }).join(' ') + '</p>' : '') +
+          '</div>';
+        if (data.posts.length > 1) {
+          document.getElementById('post-count').textContent = '· ' + data.posts.length + ' posts';
+        }
+      })
+      .catch(function () {});
+  })();
 
   (function () {
     var root = document.documentElement;

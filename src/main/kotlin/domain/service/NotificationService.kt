@@ -17,6 +17,14 @@ interface NotificationService {
      * @return Result with message ID on success, or error message on failure
      */
     suspend fun sendNotification(token: String, title: String, body: String): Result<String>
+
+    /**
+     * Send a silent, data-only message to [tokens]: no notification is shown. Android delivers it
+     * at high priority; iOS gets it as a background (content-available) push.
+     *
+     * @return the tokens FCM reported as unregistered, for the caller to forget
+     */
+    suspend fun sendData(tokens: List<String>, data: Map<String, String>): Result<List<String>>
 }
 
 class UnregisteredFcmTokenException(message: String) : Exception(message)
@@ -62,6 +70,43 @@ class NotificationServiceImpl : NotificationService {
             }
         } catch (e: Exception) {
             logger.error("Failed to send notification to token: $token", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun sendData(tokens: List<String>, data: Map<String, String>): Result<List<String>> {
+        if (tokens.isEmpty()) return Result.success(emptyList())
+        if (!FirebaseAdmin.isInitialized()) {
+            return Result.failure(Exception("Firebase Admin SDK is not initialized"))
+        }
+        return try {
+            val message = MulticastMessage.builder()
+                .addAllTokens(tokens)
+                .putAllData(data)
+                .setAndroidConfig(
+                    AndroidConfig.builder().setPriority(AndroidConfig.Priority.HIGH).build()
+                )
+                .setApnsConfig(
+                    ApnsConfig.builder()
+                        .putHeader("apns-push-type", "background")
+                        .putHeader("apns-priority", "5")
+                        .setAps(Aps.builder().setContentAvailable(true).build())
+                        .build()
+                )
+                .build()
+            val batch = FirebaseMessaging.getInstance().sendEachForMulticast(message)
+            val unregistered = batch.responses.mapIndexedNotNull { index, response ->
+                tokens[index].takeIf {
+                    response.exception?.messagingErrorCode == MessagingErrorCode.UNREGISTERED
+                }
+            }
+            logger.info(
+                "Data push sent: ${batch.successCount} ok, ${batch.failureCount} failed, " +
+                    "${unregistered.size} unregistered"
+            )
+            Result.success(unregistered)
+        } catch (e: Exception) {
+            logger.error("Failed to send data push", e)
             Result.failure(e)
         }
     }

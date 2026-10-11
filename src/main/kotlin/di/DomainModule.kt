@@ -18,6 +18,8 @@ val domainModule = module {
     single<FinancialService> { FinancialServiceImpl(get(), get(), get(), get()) }
     single<BillService> { BillServiceImpl(get(), get(), get(), get()) }
     single<NotificationService> { NotificationServiceImpl() }
+    single<PushTokenStore> { MongoPushTokenStore(get()) }
+    single { AccountChangeNotifier(get(), get()) }
     single<ServiceCatalogService> { ServiceCatalogServiceImpl(get(), get()) }
     single { NominatimService(get()) }
     single { SavedLocationService(get(), get(), get()) }

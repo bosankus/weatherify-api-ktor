@@ -4,6 +4,7 @@ import bose.ankush.route.common.respondError
 import bose.ankush.route.common.respondSuccess
 import com.androidplay.core.common.Result
 import com.androidplay.weatherify.repository.UserRepository
+import domain.service.AccountChangeNotifier
 import io.ktor.http.*
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
@@ -13,6 +14,7 @@ import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import io.ktor.utils.io.toByteArray
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
@@ -44,16 +46,20 @@ internal fun profilePhotoErrorStatus(message: String): HttpStatusCode = when {
 
 /**
  * Authenticated profile photo routes.
- * - POST   /account/photo — multipart upload (field: file|photo|image); reuses object key
+ * - POST   /account/photo — multipart upload (field: file|photo|image); new object key per upload
  * - GET    /account/photo — signed URL (15 minutes)
  * - DELETE /account/photo — delete GCS object and clear photoObject on the user
+ * A successful upload or delete sends a silent push to the account's devices.
  *
  * User document stores photoObject (UUID). Responses expose photoUrl as a signed URL only.
  */
 fun Route.accountPhotoRoute() {
     val userRepository: UserRepository by application.inject()
     val photoStorage: ProfilePhotoStorage by application.inject()
+    val notifier: AccountChangeNotifier by application.inject()
     val actions = ProfilePhotoActions(photoStorage, userRepository)
+    // After the response: the other devices refetch GET /account and see the new path.
+    val notifyDevices = { email: String -> application.launch { notifier.photoChanged(email) } }
 
     authenticate("jwt-auth") {
         route("/account/photo") {
@@ -79,10 +85,13 @@ fun Route.accountPhotoRoute() {
                         actions.upload(email, upload.bytes, upload.contentType, upload.filename)
                     }
                 ) {
-                    is Result.Success -> call.respondSuccess(
-                        "Profile photo updated",
-                        AccountPhotoResponse(photoUrl = result.data.photoUrl)
-                    )
+                    is Result.Success -> {
+                        call.respondSuccess(
+                            "Profile photo updated",
+                            AccountPhotoResponse(photoUrl = result.data.photoUrl)
+                        )
+                        notifyDevices(email)
+                    }
                     is Result.Error -> call.respondError(
                         result.message,
                         Unit,
@@ -113,10 +122,13 @@ fun Route.accountPhotoRoute() {
                 when (
                     val result = withContext(Dispatchers.IO) { actions.delete(email) }
                 ) {
-                    is Result.Success -> call.respondSuccess(
-                        "Profile photo deleted",
-                        AccountPhotoResponse(photoUrl = null)
-                    )
+                    is Result.Success -> {
+                        call.respondSuccess(
+                            "Profile photo deleted",
+                            AccountPhotoResponse(photoUrl = null)
+                        )
+                        notifyDevices(email)
+                    }
                     is Result.Error -> call.respondError(
                         result.message,
                         Unit,
