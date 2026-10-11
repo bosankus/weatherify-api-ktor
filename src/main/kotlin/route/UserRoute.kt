@@ -1,5 +1,7 @@
 package bose.ankush.route
 
+import com.androidplay.weatherify.domain.ServiceType
+import com.androidplay.weatherify.domain.User
 import com.androidplay.weatherify.domain.UserRole
 import bose.ankush.base.UserStatusGate
 import bose.ankush.route.common.respondError
@@ -7,8 +9,8 @@ import bose.ankush.route.common.respondSuccess
 import bose.ankush.util.PasswordUtil
 import com.androidplay.core.common.Result
 import com.androidplay.weatherify.repository.UserRepository
-import domain.service.NotificationService
-import domain.service.UnregisteredFcmTokenException
+import domain.service.NoPushTokenException
+import domain.service.UserPushNotifier
 import domain.service.WeatherAggregatorService
 import domain.service.live.LiveEntitlementResolver
 import io.ktor.http.*
@@ -16,6 +18,8 @@ import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import util.AuthHelper.getAuthenticatedAdminOrRespond
@@ -74,7 +78,7 @@ fun Route.userRoute() {
             }
         }
     }
-    val notificationService: NotificationService by application.inject()
+    val pushNotifier: UserPushNotifier by application.inject()
     val weatherAggregatorService: WeatherAggregatorService by application.inject()
     val liveEntitlementResolver: LiveEntitlementResolver by application.inject()
 
@@ -412,6 +416,12 @@ fun Route.userRoute() {
                                     // immediately instead of after their TTL expires.
                                     weatherAggregatorService.invalidateUserCache(email)
                                     liveEntitlementResolver.invalidate(email)
+                                    val expiresAt = req.premiumExpiresAt
+                                    if (req.isPremium && expiresAt != null && !user.hasActivePremium()) {
+                                        application.launch(Dispatchers.IO) {
+                                            pushNotifier.premiumActivated(updated, premiumServiceName(), expiresAt)
+                                        }
+                                    }
                                     call.respondSuccess<PremiumUpdateResponseDTO>(
                                         if (req.isPremium) "Premium enabled" else "Premium disabled",
                                         PremiumUpdateResponseDTO(
@@ -472,39 +482,38 @@ fun Route.userRoute() {
                             call.respondError("User not found", Unit, HttpStatusCode.NotFound)
                             return@post
                         }
-                        val token = user.fcmToken?.trim()
-                        if (token.isNullOrEmpty()) {
-                            call.respondError(
-                                "No FCM token registered for this user",
-                                Unit,
-                                HttpStatusCode.BadRequest
-                            )
-                            return@post
-                        }
-
-                        // Send notification using Firebase Admin SDK
                         val title = req.title?.takeIf { it.isNotBlank() } ?: "Promotion"
                         val body = req.body?.takeIf { it.isNotBlank() } ?: "Enjoy new features in our app!"
+                        val image = req.image?.trim()?.takeIf { it.startsWith("https://") }
 
-                        val result = notificationService.sendNotification(token, title, body)
+                        val result = pushNotifier.notify(user, title, body, image)
 
                         result.fold(
-                            onSuccess = { messageId ->
-                                call.respondSuccess(
-                                    "Notification sent successfully",
-                                    mapOf(
-                                        "email" to email,
-                                        "messageId" to messageId
-                                    )
-                                )
-                            },
-                            onFailure = { error ->
-                                if (error is UnregisteredFcmTokenException) {
-                                    userRepository.clearFcmTokenByEmail(email)
+                            onSuccess = { fanout ->
+                                if (fanout.successCount == 0) {
                                     call.respondError(
-                                        "FCM token is unregistered and has been cleared",
+                                        "No device accepted the notification " +
+                                            "(${fanout.unregistered.size} unregistered tokens cleared)",
                                         Unit,
                                         HttpStatusCode.Gone
+                                    )
+                                } else {
+                                    call.respondSuccess(
+                                        "Notification sent successfully",
+                                        mapOf(
+                                            "email" to email,
+                                            "devices" to fanout.successCount.toString(),
+                                            "failed" to fanout.failureCount.toString()
+                                        )
+                                    )
+                                }
+                            },
+                            onFailure = { error ->
+                                if (error is NoPushTokenException) {
+                                    call.respondError(
+                                        "No FCM token registered for this user",
+                                        Unit,
+                                        HttpStatusCode.BadRequest
                                     )
                                 } else {
                                     call.respondError(
@@ -705,5 +714,25 @@ data class PremiumUpdateResponseDTO(
 @Serializable
 data class NotificationRequest(
     val title: String? = null,
-    val body: String? = null
+    val body: String? = null,
+    /** Optional https picture shown in the notification. */
+    val image: String? = null
 )
+
+/** Premium that hasn't run out; a lapsed premium counts as unpaid. */
+private fun User.hasActivePremium(): Boolean {
+    if (!isPremium) return false
+    val expiry = premiumExpiresAt ?: return true
+    return try {
+        java.time.Instant.parse(expiry).isAfter(java.time.Instant.now())
+    } catch (_: Exception) {
+        true
+    }
+}
+
+/** The display name of the premium service, as payments show it. */
+private suspend fun premiumServiceName(): String =
+    when (val result = util.ServiceTypeResolver.resolveServiceType(ServiceType.PREMIUM_ONE)) {
+        is Result.Success -> result.data.displayName
+        is Result.Error -> "Premium"
+    }

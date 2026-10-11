@@ -34,7 +34,7 @@ class RefundServiceImpl(
     private val paymentRepository: PaymentRepository,
     private val userRepository: UserRepository,
     private val emailService: EmailService,
-    private val notificationService: domain.service.NotificationService
+    private val pushNotifier: domain.service.UserPushNotifier
 ) : RefundService, RazorpayEventHandler {
 
     private val logger = LoggerFactory.getLogger(RefundServiceImpl::class.java)
@@ -1009,7 +1009,7 @@ class RefundServiceImpl(
 
     /**
      * Send push notification for refund status update.
-     * Fetches user's FCM token and sends notification if available.
+     * Goes to every device the user is signed in on.
      */
     private suspend fun sendRefundPushNotification(
         userEmail: String,
@@ -1024,12 +1024,6 @@ class RefundServiceImpl(
             val userData = userResult.getOrNull()
                     if (userData != null) {
                 val user = userData
-                val fcmToken = user.fcmToken
-
-                if (fcmToken.isNullOrBlank()) {
-                    logger.debug("No FCM token found for user $userEmail, skipping push notification")
-                    return
-                }
 
                 // Build notification content based on status
                 val (title, body) = when (status.lowercase()) {
@@ -1072,18 +1066,7 @@ class RefundServiceImpl(
                     }
                 }
 
-                // Send push notification
-                val notificationResult = notificationService.sendNotification(
-                    token = fcmToken,
-                    title = title,
-                    body = body
-                )
-
-                if (notificationResult.isSuccess) {
-                    logger.info("Push notification sent successfully to $userEmail for refund $status")
-                } else {
-                    logger.warn("Failed to send push notification to $userEmail: ${notificationResult.exceptionOrNull()?.message}")
-                }
+                pushNotifier.notifyQuietly(user, title, body)
             } else {
                 logger.warn("Could not find user $userEmail for push notification")
             }

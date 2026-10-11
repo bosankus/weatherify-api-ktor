@@ -20,6 +20,7 @@ val domainModule = module {
     single<NotificationService> { NotificationServiceImpl() }
     single<PushTokenStore> { MongoPushTokenStore(get()) }
     single { AccountChangeNotifier(get(), get()) }
+    single { UserPushNotifier(get(), get(), get()) }
     single<ServiceCatalogService> { ServiceCatalogServiceImpl(get(), get()) }
     single { NominatimService(get()) }
     single { SavedLocationService(get(), get(), get()) }

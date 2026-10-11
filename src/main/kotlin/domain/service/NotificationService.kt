@@ -19,6 +19,17 @@ interface NotificationService {
     suspend fun sendNotification(token: String, title: String, body: String): Result<String>
 
     /**
+     * Send a visible notification to every one of [tokens] (all of a user's devices). [imageUrl],
+     * when set, is shown as the notification's picture on Android and iOS.
+     */
+    suspend fun sendNotification(
+        tokens: List<String>,
+        title: String,
+        body: String,
+        imageUrl: String? = null,
+    ): Result<NotificationFanout>
+
+    /**
      * Send a silent, data-only message to [tokens]: no notification is shown. Android delivers it
      * at high priority; iOS gets it as a background (content-available) push.
      *
@@ -26,6 +37,13 @@ interface NotificationService {
      */
     suspend fun sendData(tokens: List<String>, data: Map<String, String>): Result<List<String>>
 }
+
+/** How a multi-device send went; [unregistered] tokens are dead and should be forgotten. */
+data class NotificationFanout(
+    val successCount: Int,
+    val failureCount: Int,
+    val unregistered: List<String>,
+)
 
 class UnregisteredFcmTokenException(message: String) : Exception(message)
 
@@ -70,6 +88,57 @@ class NotificationServiceImpl : NotificationService {
             }
         } catch (e: Exception) {
             logger.error("Failed to send notification to token: $token", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun sendNotification(
+        tokens: List<String>,
+        title: String,
+        body: String,
+        imageUrl: String?,
+    ): Result<NotificationFanout> {
+        if (tokens.isEmpty()) return Result.success(NotificationFanout(0, 0, emptyList()))
+        if (!FirebaseAdmin.isInitialized()) {
+            return Result.failure(Exception("Firebase Admin SDK is not initialized"))
+        }
+        return try {
+            val notification = Notification.builder()
+                .setTitle(title)
+                .setBody(body)
+                .apply { if (imageUrl != null) setImage(imageUrl) }
+                .build()
+            val builder = MulticastMessage.builder()
+                .addAllTokens(tokens)
+                .setNotification(notification)
+                .setAndroidConfig(
+                    AndroidConfig.builder().setPriority(AndroidConfig.Priority.HIGH).build()
+                )
+            // iOS only shows the picture when the notification service extension may modify it.
+            if (imageUrl != null) {
+                builder.setApnsConfig(
+                    ApnsConfig.builder()
+                        .setAps(Aps.builder().setMutableContent(true).build())
+                        .setFcmOptions(ApnsFcmOptions.builder().setImage(imageUrl).build())
+                        .build()
+                )
+            }
+            val batch = FirebaseMessaging.getInstance().sendEachForMulticast(builder.build())
+            val unregistered = batch.responses.mapIndexedNotNull { index, response ->
+                tokens[index].takeIf {
+                    response.exception?.messagingErrorCode == MessagingErrorCode.UNREGISTERED
+                }
+            }
+            batch.responses.forEachIndexed { index, response ->
+                response.exception?.let { logger.warn("Notification to ${tokens[index]} failed: ${it.messagingErrorCode}") }
+            }
+            logger.info(
+                "Notification sent: ${batch.successCount} ok, ${batch.failureCount} failed, " +
+                    "${unregistered.size} unregistered"
+            )
+            Result.success(NotificationFanout(batch.successCount, batch.failureCount, unregistered))
+        } catch (e: Exception) {
+            logger.error("Failed to send notification to ${tokens.size} devices", e)
             Result.failure(e)
         }
     }

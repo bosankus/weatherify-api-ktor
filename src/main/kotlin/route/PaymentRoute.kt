@@ -9,7 +9,7 @@ import bose.ankush.util.SignatureUtil
 import com.androidplay.core.secrets.getSecretValue
 import com.androidplay.core.common.Result
 import domain.service.BillService
-import domain.service.NotificationService
+import domain.service.UserPushNotifier
 import domain.service.WeatherAggregatorService
 import domain.service.live.LiveEntitlementResolver
 import io.ktor.client.*
@@ -33,7 +33,6 @@ import util.Constants
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import java.util.*
 
 private val paymentLogger = LoggerFactory.getLogger("PaymentRoute")
@@ -89,7 +88,7 @@ private suspend fun fetchRazorpayOrderDetails(
 /** Payment routes: create order and verify payment */
 fun Route.paymentRoute() {
     val billService: BillService by application.inject()
-    val notificationService: NotificationService by application.inject()
+    val pushNotifier: UserPushNotifier by application.inject()
     val userRepository: UserRepository by application.inject()
     val paymentRepository: PaymentRepository by application.inject()
     val analyticsCache: data.service.PaymentAnalyticsCache by application.inject()
@@ -374,6 +373,7 @@ fun Route.paymentRoute() {
         analyticsCache.invalidateAll()
 
         // Activate premium and compute expiry from matched pricing tier
+        var activatedExpiresAt: String? = null
         if (matchedTier != null) {
             val baseInstant = try {
                 Instant.parse(verifiedAt)
@@ -397,6 +397,7 @@ fun Route.paymentRoute() {
                     is Result.Success -> {
                         weatherAggregatorService.invalidateUserCache(userEmail)
                         liveEntitlementResolver.invalidate(userEmail)
+                        activatedExpiresAt = premiumExpiresAt
                         paymentLogger.info("Premium activated for $userEmail, expires at $premiumExpiresAt")
                     }
                     is Result.Error -> {
@@ -428,50 +429,12 @@ fun Route.paymentRoute() {
                 paymentLogger.warn("Failed to send payment bill email to $userEmail", e)
             }
 
-            try {
-                val fcmToken = dbUser.fcmToken
-                if (!fcmToken.isNullOrBlank()) {
-                    val serviceName = serviceConfig?.displayName
-                        ?: payment.serviceType?.name
-                        ?: "Service"
-                    val expiryText = serviceConfig?.pricingTiers
-                        ?.firstOrNull { it.isDefault }
-                        ?.let { tier ->
-                            val baseInstant = try {
-                                Instant.parse(payment.verifiedAt ?: payment.createdAt)
-                            } catch (_: Exception) {
-                                Instant.now()
-                            }
-                            val baseDate = ZonedDateTime.ofInstant(baseInstant, ZoneId.of("UTC"))
-                            val expiryDate = when (tier.durationType) {
-                                DurationType.DAYS -> baseDate.plusDays(tier.duration.toLong())
-                                DurationType.MONTHS -> baseDate.plusMonths(tier.duration.toLong())
-                                DurationType.YEARS -> baseDate.plusYears(tier.duration.toLong())
-                            }
-                            DateTimeFormatter.ofPattern("MMM dd, yyyy").format(expiryDate)
-                        } ?: "N/A"
-
-                    val title = "Subscription activated"
-                    val body = "$serviceName subscribed successfully. Expires on $expiryText."
-
-                    val notificationResult = notificationService.sendNotification(
-                        token = fcmToken,
-                        title = title,
-                        body = body
-                    )
-
-                    if (notificationResult.isSuccess) {
-                        paymentLogger.info("Payment push notification sent to $userEmail")
-                    } else {
-                        paymentLogger.warn(
-                            "Failed to send payment push notification to $userEmail: ${notificationResult.exceptionOrNull()?.message}"
-                        )
-                    }
-                } else {
-                    paymentLogger.debug("No FCM token for $userEmail; skipping payment notification")
-                }
-            } catch (e: Exception) {
-                paymentLogger.warn("Failed to send payment push notification to $userEmail", e)
+            val serviceName = serviceConfig?.displayName ?: payment.serviceType?.name ?: "Service"
+            val expiresAt = activatedExpiresAt
+            if (expiresAt != null) {
+                pushNotifier.premiumActivated(dbUser, serviceName, expiresAt)
+            } else {
+                pushNotifier.notifyQuietly(dbUser, "Payment received", "Your payment for $serviceName was received.")
             }
         }
 

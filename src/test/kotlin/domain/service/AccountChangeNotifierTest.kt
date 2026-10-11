@@ -29,6 +29,13 @@ class AccountChangeNotifierTest {
         override suspend fun sendNotification(token: String, title: String, body: String): Result<String> =
             Result.success("id")
 
+        override suspend fun sendNotification(
+            tokens: List<String>,
+            title: String,
+            body: String,
+            imageUrl: String?,
+        ): Result<NotificationFanout> = error("not used")
+
         override suspend fun sendData(tokens: List<String>, data: Map<String, String>): Result<List<String>> {
             sent += tokens to data
             return result
