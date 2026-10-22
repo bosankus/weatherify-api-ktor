@@ -63,5 +63,22 @@ fun weatherifyIndexes(): List<IndexSpec> {
         IndexSpec("service_history", Document("changedAt", -1)),
         IndexSpec("place_events", Document(mapOf("userEmail" to 1, "lat" to 1, "lon" to 1, "startsAt" to 1))),
         IndexSpec("place_events", Document("userEmail", 1)),
+        // Offline sync: GET /place-events/sync scans one user's rows in (updatedAt, _id) order.
+        // Explicit name equal to Mongo's default so MongoIndexer never drops and rebuilds it.
+        IndexSpec(
+            "place_events",
+            Document(linkedMapOf<String, Any>("userEmail" to 1, "updatedAt" to 1, "_id" to 1)),
+            IndexOptions().name("userEmail_1_updatedAt_1__id_1")
+        ),
+        // Idempotent client-generated ids. Partial on string clientId: no existing row has one,
+        // so the build cannot fail on current data, and rows without a client id are not indexed.
+        IndexSpec(
+            "place_events",
+            Document("clientId", 1),
+            IndexOptions()
+                .name("clientId_1")
+                .unique(true)
+                .partialFilterExpression(Document("clientId", Document("\$type", "string")))
+        ),
     )
 }
