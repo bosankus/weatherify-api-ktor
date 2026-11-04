@@ -280,10 +280,20 @@
 
   /* Writing: Medium posts as an auto-scrolling rail of cards (same card look as the hero callout).
      Covers keep their full 16:9 frame, stay greyscale like the portrait and turn to colour on hover.
-     The rail loops forever; hover or keyboard focus pauses it. Reduced motion gets a plain swipeable row. */
+     The rail loops forever and can be dragged, swiped or stepped with the arrows; hover pauses it. Reduced motion: no auto-advance. */
   .writing { margin-top: clamp(24px, 3.5vh, 40px); min-width: 0; }
   .writing-label { font: 400 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--body); margin-bottom: 14px; }
   .writing-label span { color: var(--ink); }
+  .writing-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .writing-head .writing-label { margin-bottom: 0; }
+  .rail-nav { display: flex; gap: 6px; }
+  .rail-nav[hidden] { display: none; }
+  .rail-nav button {
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    background: transparent; color: var(--ink); border: 1px solid var(--rule); cursor: pointer;
+    font: 400 15px/1 var(--name); transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+  }
+  .rail-nav button:hover, .rail-nav button:focus-visible { background: var(--accent); border-color: var(--accent); color: var(--on-accent); outline: none; }
   .post-rail {
     overflow: hidden;
     /* room for the card shadow + hover lift, which overflow:hidden would otherwise clip */
@@ -292,17 +302,12 @@
             mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
   }
   .post-rail.single { -webkit-mask-image: none; mask-image: none; }
-  .post-track { display: flex; gap: 18px; width: max-content; }
-  @media (prefers-reduced-motion: no-preference) {
-    .post-track.loop { animation: rail var(--dur, 40s) linear infinite; }
-    .post-rail:hover .post-track, .post-rail:focus-within .post-track { animation-play-state: paused; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .post-rail { overflow-x: auto; scroll-snap-type: x mandatory; }
-    .post-card { scroll-snap-align: start; }
-  }
-  /* The track holds the posts twice; sliding by one set (half the track + half a gap) loops seamlessly. */
-  @keyframes rail { to { transform: translateX(calc(-50% - 9px)); } }
+  /* Moved by script: auto-advance plus drag / swipe / horizontal wheel / arrow buttons. */
+  .post-rail.live { touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
+  .post-rail.dragging { cursor: grabbing; }
+  .post-rail.dragging .post-card { pointer-events: none; }
+  .post-track { display: flex; gap: 18px; width: max-content; will-change: transform; }
+  .post-card img { -webkit-user-drag: none; }
   .post-card {
     flex: 0 0 clamp(236px, 22vw, 272px);
     display: flex; flex-direction: column; overflow: hidden;
@@ -400,7 +405,13 @@
 
       <!-- Medium posts as a looping rail. Built-in card below; replaced live from /api/medium (_worker.js). -->
       <aside class="writing" aria-label="Latest writing">
-        <p class="writing-label">Latest on Medium <span id="post-count"></span></p>
+        <div class="writing-head">
+          <p class="writing-label">Latest on Medium <span id="post-count"></span></p>
+          <div class="rail-nav" id="rail-nav" hidden>
+            <button type="button" id="rail-prev" aria-label="Previous posts">←</button>
+            <button type="button" id="rail-next" aria-label="Next posts">→</button>
+          </div>
+        </div>
         <div class="post-rail single" id="post-rail">
           <div class="post-track" id="post-track">
             <a class="post-card" href="https://medium.com/@bosankus/reactive-programming-with-kotlin-flow-03ff3978de72">
@@ -579,20 +590,121 @@
       .then(function (data) {
         if (!data || !data.posts || !data.posts.length) return;
         var posts = data.posts;
-        var html = posts.map(function (p) { return card(p, false); }).join('');
+        track.innerHTML = posts.map(function (p) { return card(p, false); }).join('');
         if (posts.length > 1) {
           document.getElementById('post-count').textContent = '· ' + posts.length + ' posts';
           rail.classList.remove('single');
-          if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            // Second copy makes the loop seamless; it's hidden from screen readers and tab order.
-            html += posts.map(function (p) { return card(p, true); }).join('');
-            track.style.setProperty('--dur', (posts.length * 7) + 's');
-            track.classList.add('loop');
-          }
+          startRail(posts.map(function (p) { return card(p, true); }).join(''));
         }
-        track.innerHTML = html;
       })
       .catch(function () {});
+
+    // The rail is a translated track holding the posts, followed by enough hidden copies to wrap
+    // around seamlessly. `pos` is the offset into one set; it auto-advances slowly and any manual
+    // input (drag, swipe, horizontal wheel/trackpad, arrows) moves it directly, then auto resumes.
+    function startRail(cloneHtml) {
+      var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var SPEED = 40, RESUME_MS = 1800, GAP = 18;
+      var setW = 0, pos = 0, last = 0, idleUntil = 0, hovering = false, focused = false;
+      var drag = null, vel = 0, tween = null;
+
+      function measure() {
+        // width of one set = distance from the first original to the first copy
+        var first = track.firstElementChild;
+        var copy = track.querySelector(':scope > .post-card[aria-hidden="true"]');
+        if (!first || !copy) return;
+        setW = copy.offsetLeft - first.offsetLeft;
+        while (track.scrollWidth < setW + rail.clientWidth + setW) track.insertAdjacentHTML('beforeend', cloneHtml);
+      }
+      track.insertAdjacentHTML('beforeend', cloneHtml);
+      rail.classList.add('live');
+      document.getElementById('rail-nav').hidden = false;
+      measure();
+      addEventListener('resize', measure);
+
+      function wrap(x) { return setW ? ((x % setW) + setW) % setW : 0; }
+      function nudge() { idleUntil = performance.now() + RESUME_MS; }
+      function step() { var c = track.firstElementChild; return (c ? c.offsetWidth : 260) + GAP; }
+      function glide(by) {
+        tween = { from: pos, to: pos + by, t0: performance.now(), dur: 450 };
+        vel = 0; nudge();
+      }
+
+      function frame(now) {
+        var dt = last ? Math.min(now - last, 64) / 1000 : 0; last = now;
+        if (tween) {
+          var k = Math.min(1, (now - tween.t0) / tween.dur), e = 1 - Math.pow(1 - k, 3);
+          pos = tween.from + (tween.to - tween.from) * e;
+          if (k === 1) tween = null;
+        } else if (!drag) {
+          if (Math.abs(vel) > 5) { pos += vel * dt; vel *= Math.pow(0.04, dt); nudge(); }   // fling
+          else if (!reduce && !hovering && !focused && now > idleUntil) pos += SPEED * dt;
+        }
+        pos = wrap(pos);
+        track.style.transform = 'translate3d(' + (-pos) + 'px,0,0)';
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+
+      rail.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') hovering = true; });
+      rail.addEventListener('pointerleave', function () { hovering = false; });
+
+      // Drag (mouse) and swipe (touch). A click only counts as a click if the pointer barely moved.
+      rail.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        drag = { x: e.clientX, pos: pos, moved: false, lx: e.clientX, lt: performance.now(), id: e.pointerId };
+        tween = null; vel = 0;
+      });
+      rail.addEventListener('pointermove', function (e) {
+        if (!drag || e.pointerId !== drag.id) return;
+        var dx = e.clientX - drag.x;
+        if (!drag.moved && Math.abs(dx) > 6) {
+          drag.moved = true; rail.classList.add('dragging');
+          try { rail.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+        if (!drag.moved) return;
+        var now = performance.now(), dtm = Math.max(now - drag.lt, 1);
+        vel = 0.8 * vel + 0.2 * (-(e.clientX - drag.lx) / dtm * 1000);
+        drag.lx = e.clientX; drag.lt = now;
+        pos = drag.pos - dx;
+      });
+      function endDrag(e) {
+        if (!drag || (e && e.pointerId !== drag.id)) return;
+        if (drag.moved) {
+          // swallow the click that follows a drag so it doesn't open a post
+          // (only for that one click: disarm shortly after, since touch drags often fire no click at all)
+          var stop = function (ev) { ev.preventDefault(); ev.stopPropagation(); };
+          rail.addEventListener('click', stop, true);
+          setTimeout(function () { rail.removeEventListener('click', stop, true); rail.classList.remove('dragging'); }, 60);
+        } else vel = 0;
+        if (performance.now() - drag.lt > 80) vel = 0;   // held still before letting go: no fling
+        drag = null; nudge();
+      }
+      rail.addEventListener('pointerup', endDrag);
+      rail.addEventListener('pointercancel', endDrag);
+
+      // Trackpad horizontal swipe, or shift + mouse wheel. Plain vertical wheel still scrolls the page.
+      rail.addEventListener('wheel', function (e) {
+        var dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : (e.shiftKey ? e.deltaY : 0);
+        if (!dx) return;
+        e.preventDefault();
+        tween = null; vel = 0;
+        pos += e.deltaMode === 1 ? dx * 16 : dx;
+        nudge();
+      }, { passive: false });
+
+      document.getElementById('rail-prev').addEventListener('click', function () { glide(-step()); });
+      document.getElementById('rail-next').addEventListener('click', function () { glide(step()); });
+
+      // Keyboard: keep the focused card in view and hold still while focus is inside.
+      rail.addEventListener('focusin', function (e) {
+        focused = true;
+        var c = e.target.closest('.post-card');
+        if (c) { tween = null; pos = c.offsetLeft - track.firstElementChild.offsetLeft; }
+      });
+      rail.addEventListener('focusout', function () { focused = false; nudge(); });
+      rail.addEventListener('dragstart', function (e) { e.preventDefault(); });
+    }
   })();
 
   (function () {
