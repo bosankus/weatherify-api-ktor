@@ -7,7 +7,7 @@
 const MEDIUM_USER = 'bosankus';
 const FEED_URL = `https://medium.com/feed/@${MEDIUM_USER}`;
 const CACHE_SECONDS = 3600;
-const MAX_POSTS = 6;
+const MAX_POSTS = 10;
 
 export default {
   async fetch(request, env, ctx) {

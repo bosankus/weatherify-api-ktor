@@ -278,30 +278,54 @@
   .work a:hover .name i { transform: translate(3px, -3px); }
   .work p { color: var(--body); font-size: 15px; }
 
-  /* Writing: latest Medium post as a floating card under the links (same card look as the hero callout).
-     Cover stays greyscale like the portrait and turns to colour on hover. */
-  .writing { margin-top: clamp(24px, 3.5vh, 40px); max-width: 400px; }
+  /* Writing: Medium posts as an auto-scrolling rail of cards (same card look as the hero callout).
+     Covers keep their full 16:9 frame, stay greyscale like the portrait and turn to colour on hover.
+     The rail loops forever; hover or keyboard focus pauses it. Reduced motion gets a plain swipeable row. */
+  .writing { margin-top: clamp(24px, 3.5vh, 40px); min-width: 0; }
   .writing-label { font: 400 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--body); margin-bottom: 14px; }
   .writing-label span { color: var(--ink); }
+  .post-rail {
+    overflow: hidden;
+    /* room for the card shadow + hover lift, which overflow:hidden would otherwise clip */
+    padding: 8px 0 40px; margin: -8px 0 -26px;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  }
+  .post-rail.single { -webkit-mask-image: none; mask-image: none; }
+  .post-track { display: flex; gap: 18px; width: max-content; }
+  @media (prefers-reduced-motion: no-preference) {
+    .post-track.loop { animation: rail var(--dur, 40s) linear infinite; }
+    .post-rail:hover .post-track, .post-rail:focus-within .post-track { animation-play-state: paused; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .post-rail { overflow-x: auto; scroll-snap-type: x mandatory; }
+    .post-card { scroll-snap-align: start; }
+  }
+  /* The track holds the posts twice; sliding by one set (half the track + half a gap) loops seamlessly. */
+  @keyframes rail { to { transform: translateX(calc(-50% - 9px)); } }
   .post-card {
-    display: grid; grid-template-columns: 112px 1fr; overflow: hidden;
+    flex: 0 0 clamp(236px, 22vw, 272px);
+    display: flex; flex-direction: column; overflow: hidden;
     background: var(--card); border-radius: 16px;
     box-shadow: 0 18px 40px -18px var(--shadow), 0 1px 0 rgba(0,0,0,.02);
     transition: transform .3s cubic-bezier(.2, .7, .2, 1), box-shadow .3s ease, background-color .4s ease;
   }
   .post-card:hover { text-decoration: none; transform: translateY(-3px); box-shadow: 0 26px 48px -20px var(--shadow); }
   .post-card img {
-    display: block; width: 100%; height: 100%; min-height: 112px; object-fit: cover;
+    display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover;
     filter: grayscale(1) contrast(1.05); transition: filter .4s ease;
     background: var(--rule);
   }
-  .post-card:hover img { filter: none; }
-  .post-body { padding: 14px 18px 14px; border-left: 3px solid var(--accent); align-self: center; }
+  .post-card:hover img, .post-card:focus-visible img { filter: none; }
+  .post-body { flex: 1; padding: 12px 16px 14px; border-top: 3px solid var(--accent); }
   .post-meta { font: 400 12px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--body); }
-  .post-title { font: 700 clamp(15px, 1.3vw, 17px)/1.35 var(--name); margin: 4px 0 6px; }
+  .post-title {
+    font: 700 clamp(15px, 1.3vw, 16px)/1.35 var(--name); margin: 4px 0 6px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
   .post-title i { font-style: normal; font-weight: 400; display: inline-block; transition: transform .25s ease; }
   .post-card:hover .post-title i { transform: translate(3px, -3px); }
-  .post-tags { font: 400 12px/1.4 var(--mono); color: var(--body); }
+  .post-tags { font: 400 12px/1.4 var(--mono); color: var(--body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .more {
     display: inline-block; margin-top: 14px;
     font: 500 12px/1.4 var(--name); letter-spacing: .14em; text-transform: uppercase;
@@ -374,17 +398,21 @@
         <li><b>Email</b> - <a href="mailto:ankushbose5@gmail.com">ankushbose5@gmail.com</a></li>
       </ul>
 
-      <!-- Latest Medium post as a card. Built-in copy below; replaced live from /api/medium (_worker.js). -->
+      <!-- Medium posts as a looping rail. Built-in card below; replaced live from /api/medium (_worker.js). -->
       <aside class="writing" aria-label="Latest writing">
         <p class="writing-label">Latest on Medium <span id="post-count"></span></p>
-        <a class="post-card" id="post-card" href="https://medium.com/@bosankus/reactive-programming-with-kotlin-flow-03ff3978de72">
-          <img src="https://cdn-images-1.medium.com/max/400/0*WjhL4uK3snlr1foH" alt="" width="112" height="112">
-          <div class="post-body">
-            <p class="post-meta">Mar 2024 · 3 min read</p>
-            <p class="post-title">Reactive programming with Kotlin flow <i aria-hidden="true">↗</i></p>
-            <p class="post-tags">#kotlin #android #flow</p>
+        <div class="post-rail single" id="post-rail">
+          <div class="post-track" id="post-track">
+            <a class="post-card" href="https://medium.com/@bosankus/reactive-programming-with-kotlin-flow-03ff3978de72">
+              <img src="https://cdn-images-1.medium.com/max/600/0*WjhL4uK3snlr1foH" alt="" width="272" height="153">
+              <div class="post-body">
+                <p class="post-meta">Mar 2024 · 3 min read</p>
+                <p class="post-title">Reactive programming with Kotlin flow <i aria-hidden="true">↗</i></p>
+                <p class="post-tags">#kotlin #android #flow</p>
+              </div>
+            </a>
           </div>
-        </a>
+        </div>
         <a class="more" href="https://medium.com/@bosankus">All posts ↗</a>
       </aside>
     </div>
@@ -529,28 +557,40 @@
     if (!e.target.closest('a')) e.preventDefault();
   });
 
-  // Live Medium: newest post fills the card. On any failure the built-in post stays as it is.
+  // Live Medium: every post from the feed goes into the rail, which then loops.
+  // On any failure the built-in card stays as it is.
   (function () {
-    var card = document.getElementById('post-card');
-    if (!card || !window.fetch) return;
+    var rail = document.getElementById('post-rail');
+    var track = document.getElementById('post-track');
+    if (!track || !window.fetch) return;
     function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
     function month(iso) { return new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); }
+    function card(p, clone) {
+      var img = p.image ? p.image.replace(/\/max\/\d+\//, '/max/600/') : '';
+      return '<a class="post-card" href="' + esc(p.url) + '"' + (clone ? ' aria-hidden="true" tabindex="-1"' : '') + '>' +
+        (img ? '<img src="' + esc(img) + '" alt="" width="272" height="153" loading="lazy">' : '') +
+        '<div class="post-body"><p class="post-meta">' + esc(month(p.published)) + ' · ' + p.readMinutes + ' min read</p>' +
+        '<p class="post-title">' + esc(p.title) + ' <i aria-hidden="true">↗</i></p>' +
+        (p.tags.length ? '<p class="post-tags">' + p.tags.map(function (t) { return '#' + esc(t); }).join(' ') + '</p>' : '') +
+        '</div></a>';
+    }
     fetch('/api/medium')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data || !data.posts || !data.posts.length) return;
-        var p = data.posts[0];
-        var img = p.image ? p.image.replace('/max/1024/', '/max/400/') : '';
-        card.href = p.url;
-        card.innerHTML =
-          (img ? '<img src="' + esc(img) + '" alt="" width="112" height="112">' : '') +
-          '<div class="post-body"><p class="post-meta">' + esc(month(p.published)) + ' · ' + p.readMinutes + ' min read</p>' +
-          '<p class="post-title">' + esc(p.title) + ' <i aria-hidden="true">↗</i></p>' +
-          (p.tags.length ? '<p class="post-tags">' + p.tags.map(function (t) { return '#' + esc(t); }).join(' ') + '</p>' : '') +
-          '</div>';
-        if (data.posts.length > 1) {
-          document.getElementById('post-count').textContent = '· ' + data.posts.length + ' posts';
+        var posts = data.posts;
+        var html = posts.map(function (p) { return card(p, false); }).join('');
+        if (posts.length > 1) {
+          document.getElementById('post-count').textContent = '· ' + posts.length + ' posts';
+          rail.classList.remove('single');
+          if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            // Second copy makes the loop seamless; it's hidden from screen readers and tab order.
+            html += posts.map(function (p) { return card(p, true); }).join('');
+            track.style.setProperty('--dur', (posts.length * 7) + 's');
+            track.classList.add('loop');
+          }
         }
+        track.innerHTML = html;
       })
       .catch(function () {});
   })();
